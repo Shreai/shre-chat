@@ -1,0 +1,558 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Agent Activity Pulse ──────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+@keyframes execution-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 4px currentColor; }
+  50% { transform: scale(1.08); box-shadow: 0 0 12px currentColor, 0 0 24px currentColor; }
+}
+
+/* ── WebSocket Reconnection Banner ───────────────────────────────── */
+@keyframes ws-reconnect-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.ws-reconnect-pulse {
+  animation: ws-reconnect-pulse 1.5s ease-in-out infinite;
+}
+
+.ws-reconnect-banner {
+  animation: ws-banner-slide-in 0.2s ease-out;
+}
+
+@keyframes ws-banner-slide-in {
+  from { opacity: 0; transform: translateY(-100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Theme Variables ──────────────────────────────────────────────── */
+
+:root {
+  /* Dark theme — navy blue palette */
+  --c-bg-1: #0a1628;
+  --c-bg-2: #081220;
+  --c-bg-3: #060e1a;
+  --c-bg-glass: rgba(10, 22, 40, 0.88);
+  --c-bg-input: rgba(15, 30, 55, 0.7);
+  --c-bg-hover: rgba(30, 64, 120, 0.2);
+  --c-bg-active: rgba(37, 99, 235, 0.18);
+  --c-bg-card: rgba(30, 58, 108, 0.15);
+  --c-bg-badge: rgba(37, 99, 235, 0.25);
+  --c-msg-user: rgba(37, 99, 235, 0.14);
+  --c-msg-ai: rgba(30, 58, 108, 0.12);
+
+  --c-text-1: #f0f4fa;
+  --c-text-2: #c5d2e8;
+  --c-text-3: rgba(165, 185, 215, 0.7);
+  --c-text-4: rgba(145, 170, 210, 0.5);
+  --c-text-5: rgba(130, 155, 200, 0.35);
+
+  --c-border-1: rgba(37, 80, 160, 0.4);
+  --c-border-2: rgba(37, 80, 160, 0.22);
+
+  --c-accent: #2563eb;
+  --c-accent-hover: #3b82f6;
+  --c-accent-soft: rgba(37, 99, 235, 0.25);
+  --c-scrollbar: rgba(37, 99, 235, 0.25);
+
+  /* Semantic status colors */
+  --c-success: #22c55e;
+  --c-success-soft: #4ade80;
+  --c-success-bg: rgba(34, 197, 94, 0.15);
+  --c-warning: #f59e0b;
+  --c-warning-soft: #fbbf24;
+  --c-warning-bg: rgba(245, 158, 11, 0.1);
+  --c-danger: #ef4444;
+  --c-danger-soft: #f87171;
+  --c-danger-bg: rgba(239, 68, 68, 0.15);
+  --c-info: #3b82f6;
+  --c-info-soft: #60a5fa;
+  --c-info-bg: rgba(59, 130, 246, 0.1);
+  --c-amber: #f59e0b;
+  --c-amber-bg: rgba(245, 158, 11, 0.1);
+  --c-orange: #fb923c;
+  --c-orange-bg: rgba(251, 146, 60, 0.1);
+  --c-yellow: #facc15;
+  --c-yellow-bg: rgba(250, 204, 21, 0.08);
+  --c-emerald: #34d399;
+  --c-emerald-bg: rgba(52, 211, 153, 0.12);
+  --c-purple: #a78bfa;
+  --c-purple-bg: rgba(167, 139, 250, 0.12);
+  --c-slate: #94a3b8;
+  --c-slate-bg: rgba(148, 163, 184, 0.12);
+  --c-on-accent: #ffffff;
+  --c-on-dark: #000000;
+  --c-terminal-accent: #6cb4ee;
+
+  /* ── @shre/ui-kit bridge — maps --color-* for S* components ── */
+  --color-primary: var(--c-accent);
+  --color-primary-hover: var(--c-accent-hover);
+  --color-primary-foreground: var(--c-on-accent);
+  --color-background: var(--c-bg-1);
+  --color-surface: var(--c-bg-2);
+  --color-surface-raised: var(--c-bg-3);
+  --color-text: var(--c-text-1);
+  --color-text-secondary: var(--c-text-2);
+  --color-text-muted: var(--c-text-3);
+  --color-border: var(--c-border-1);
+  --color-border-strong: var(--c-border-2);
+  --color-error: var(--c-danger);
+  --color-success: var(--c-success);
+  --color-warning: var(--c-warning);
+  --color-info: var(--c-info);
+  --color-secondary-light: var(--c-bg-card);
+}
+
+.light {
+  /* Silver / slate light theme with navy accents */
+  --c-bg-1: #f1f3f8;
+  --c-bg-2: #ffffff;
+  --c-bg-3: #e8ebf2;
+  --c-bg-glass: rgba(255, 255, 255, 0.94);
+  --c-bg-input: #eef0f6;
+  --c-bg-hover: rgba(37, 99, 235, 0.05);
+  --c-bg-active: rgba(37, 99, 235, 0.09);
+  --c-bg-card: rgba(37, 99, 235, 0.04);
+  --c-bg-badge: rgba(37, 99, 235, 0.1);
+  --c-msg-user: rgba(37, 99, 235, 0.06);
+  --c-msg-ai: rgba(30, 58, 108, 0.03);
+
+  --c-text-1: #111827;
+  --c-text-2: #374151;
+  --c-text-3: #6b7280;
+  --c-text-4: #9ca3af;
+  --c-text-5: #c0c7d2;
+
+  --c-border-1: rgba(37, 99, 235, 0.1);
+  --c-border-2: rgba(37, 99, 235, 0.06);
+
+  --c-accent: #2563eb;
+  --c-accent-hover: #3b82f6;
+  --c-accent-soft: rgba(37, 99, 235, 0.12);
+  --c-scrollbar: rgba(37, 99, 235, 0.12);
+
+  /* Semantic status colors — light theme */
+  --c-success: #16a34a;
+  --c-success-soft: #22c55e;
+  --c-success-bg: rgba(22, 163, 74, 0.1);
+  --c-warning: #d97706;
+  --c-warning-soft: #f59e0b;
+  --c-warning-bg: rgba(217, 119, 6, 0.08);
+  --c-danger: #dc2626;
+  --c-danger-soft: #ef4444;
+  --c-danger-bg: rgba(220, 38, 38, 0.1);
+  --c-info: #2563eb;
+  --c-info-soft: #3b82f6;
+  --c-info-bg: rgba(37, 99, 235, 0.08);
+  --c-amber: #d97706;
+  --c-amber-bg: rgba(217, 119, 6, 0.08);
+  --c-orange: #ea580c;
+  --c-orange-bg: rgba(234, 88, 12, 0.08);
+  --c-yellow: #ca8a04;
+  --c-yellow-bg: rgba(202, 138, 4, 0.06);
+  --c-emerald: #059669;
+  --c-emerald-bg: rgba(5, 150, 105, 0.1);
+  --c-purple: #7c3aed;
+  --c-purple-bg: rgba(124, 58, 237, 0.08);
+  --c-slate: #64748b;
+  --c-slate-bg: rgba(100, 116, 139, 0.08);
+  --c-on-accent: #ffffff;
+  --c-on-dark: #000000;
+  --c-terminal-accent: #3b82f6;
+
+  /* ── @shre/ui-kit bridge — maps --color-* for S* components ── */
+  --color-primary: var(--c-accent);
+  --color-primary-hover: var(--c-accent-hover);
+  --color-primary-foreground: var(--c-on-accent);
+  --color-background: var(--c-bg-1);
+  --color-surface: var(--c-bg-2);
+  --color-surface-raised: var(--c-bg-3);
+  --color-text: var(--c-text-1);
+  --color-text-secondary: var(--c-text-2);
+  --color-text-muted: var(--c-text-3);
+  --color-border: var(--c-border-1);
+  --color-border-strong: var(--c-border-2);
+  --color-error: var(--c-danger);
+  --color-success: var(--c-success);
+  --color-warning: var(--c-warning);
+  --color-info: var(--c-info);
+  --color-secondary-light: var(--c-bg-card);
+}
+
+/* ── Theme transition (dark ↔ light) ─────────────────────────────── */
+/* Only apply transitions during theme switch — not globally.
+   The .theme-transitioning class is added/removed by JS during toggle. */
+
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease,
+              box-shadow 200ms ease !important;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--c-bg-1);
+  color: var(--c-text-1);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: -0.011em;
+}
+
+/* Shre desktop app — title bar drag region */
+.shre-drag {
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.shre-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Ensure text is selectable and copyable in message area */
+.prose-chat, .prose-chat *, .whitespace-pre-wrap {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}
+
+/* Shre desktop — traffic light (close/min/max) safe area */
+.titlebar-safe { height: 0px; }
+.shre-desktop .titlebar-safe { height: 38px; min-height: 38px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-scrollbar); border-radius: 4px; }
+
+/* Hide scrollbar utility */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Markdown prose in chat bubbles ──────────────────────────────── */
+
+.prose-chat {
+  line-height: 1.65;
+}
+
+.prose-chat p {
+  margin: 0.4em 0;
+}
+.prose-chat p:first-child { margin-top: 0; }
+.prose-chat p:last-child { margin-bottom: 0; }
+
+.prose-chat h1, .prose-chat h2, .prose-chat h3,
+.prose-chat h4, .prose-chat h5, .prose-chat h6 {
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+  color: var(--c-text-1);
+}
+.prose-chat h1 { font-size: 1.25em; }
+.prose-chat h2 { font-size: 1.15em; }
+.prose-chat h3 { font-size: 1.05em; }
+
+.prose-chat strong { font-weight: 600; color: var(--c-text-1); }
+.prose-chat em { font-style: italic; }
+
+.prose-chat a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-chat a:hover { color: var(--c-accent-hover); }
+
+.prose-chat code {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", monospace;
+  font-size: 0.88em;
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--c-bg-active);
+  color: var(--c-text-1);
+}
+
+.prose-chat pre {
+  margin: 0.6em 0;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  background: var(--c-bg-3);
+  border: 1px solid var(--c-border-2);
+  overflow-x: auto;
+}
+.prose-chat pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+/* ── highlight.js syntax highlighting (theme-adaptive) ──────────── */
+.hljs-lang-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 0.65em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15em 0.5em;
+  border-radius: 8px 0 6px 0;
+  background: var(--c-bg-active);
+  color: var(--c-text-5);
+  user-select: none;
+  pointer-events: none;
+}
+
+.hljs { color: var(--c-text-2); }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag { color: #c678dd; }
+.hljs-string,
+.hljs-title.class_.inherited__,
+.hljs-template-variable,
+.hljs-template-tag { color: #98c379; }
+.hljs-number,
+.hljs-literal,
+.hljs-type,
+.hljs-params { color: #d19a66; }
+.hljs-comment,
+.hljs-doctag { color: #5c6370; font-style: italic; }
+.hljs-title,
+.hljs-section,
+.hljs-title.function_ { color: #61afef; }
+.hljs-attr,
+.hljs-attribute { color: #d19a66; }
+.hljs-variable,
+.hljs-variable.language_ { color: #e06c75; }
+.hljs-regexp,
+.hljs-link { color: #56b6c2; }
+.hljs-symbol,
+.hljs-bullet { color: #c678dd; }
+.hljs-meta,
+.hljs-meta .hljs-keyword { color: #61afef; }
+.hljs-deletion { color: #e06c75; background: rgba(224,108,117,0.1); }
+.hljs-addition { color: #98c379; background: rgba(152,195,121,0.1); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+
+/* Light-mode overrides — use .light class (matches app toggle), not prefers-color-scheme */
+.light .hljs { color: #383a42; }
+.light .hljs-keyword,
+.light .hljs-selector-tag,
+.light .hljs-built_in,
+.light .hljs-name,
+.light .hljs-tag { color: #a626a4; }
+.light .hljs-string,
+.light .hljs-template-variable,
+.light .hljs-template-tag { color: #50a14f; }
+.light .hljs-number,
+.light .hljs-literal,
+.light .hljs-type,
+.light .hljs-params { color: #986801; }
+.light .hljs-comment,
+.light .hljs-doctag { color: #a0a1a7; font-style: italic; }
+.light .hljs-title,
+.light .hljs-section,
+.light .hljs-title.function_ { color: #4078f2; }
+.light .hljs-attr,
+.light .hljs-attribute { color: #986801; }
+.light .hljs-variable,
+.light .hljs-variable.language_ { color: #e45649; }
+.light .hljs-regexp,
+.light .hljs-link { color: #0184bc; }
+.light .hljs-symbol,
+.light .hljs-bullet { color: #a626a4; }
+.light .hljs-meta,
+.light .hljs-meta .hljs-keyword { color: #4078f2; }
+.light .hljs-deletion { color: #e45649; background: rgba(228,86,73,0.1); }
+.light .hljs-addition { color: #50a14f; background: rgba(80,161,79,0.1); }
+
+.prose-chat ul, .prose-chat ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+.prose-chat ul { list-style-type: disc; }
+.prose-chat ol { list-style-type: decimal; }
+.prose-chat li { margin: 0.15em 0; }
+.prose-chat li > ul, .prose-chat li > ol { margin: 0.1em 0; }
+
+.prose-chat blockquote {
+  margin: 0.5em 0;
+  padding: 0.3em 0.8em;
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-bg-hover);
+  border-radius: 0 6px 6px 0;
+  color: var(--c-text-2);
+}
+
+.prose-chat hr {
+  margin: 0.8em 0;
+  border: none;
+  border-top: 1px solid var(--c-border-2);
+}
+
+.prose-chat table {
+  margin: 0.5em 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+.prose-chat th, .prose-chat td {
+  padding: 0.35em 0.6em;
+  border: 1px solid var(--c-border-2);
+  text-align: left;
+}
+.prose-chat th {
+  font-weight: 600;
+  background: var(--c-bg-active);
+}
+.prose-chat tr:nth-child(even) td {
+  background: var(--c-bg-hover);
+}
+
+.prose-chat input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--c-accent);
+}
+
+/* ── Message enter animation ─────────────────────────────────────── */
+
+@keyframes msg-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.msg-enter {
+  animation: msg-enter 200ms ease-out;
+}
+
+/* ── Voice recording pulse ring ──────────────────────────────────── */
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  100% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+/* Safe area for iOS — use padding on left/right only.
+   Top/bottom safe areas are handled by individual components
+   (StatusBar, input area) to avoid double-padding with 100dvh. */
+@supports (padding-left: env(safe-area-inset-left)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Mobile safe area for input area on iOS notch phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ── Mobile responsive overrides ─────────────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Sidebar: slide-over panel on mobile */
+  .sidebar-mobile-slide {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    height: 100%; /* fallback */
+    z-index: 55;
+    transform: translateX(0);
+    transition: transform 300ms ease;
+  }
+  .sidebar-mobile-slide.sidebar-hidden {
+    transform: translateX(-100%);
+  }
+
+  /* Message bubbles: less padding on mobile */
+  .prose-chat {
+    line-height: 1.55;
+  }
+  .msg-bubble-mobile {
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Input area: larger touch targets */
+  .mobile-input-area textarea {
+    min-height: 44px;
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+  .mobile-input-area button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Hide non-essential header buttons on small screens */
+  .mobile-hide {
+    display: none !important;
+  }
+}
+
+/* Swipe gesture visual feedback */
+.swipe-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  z-index: 60;
+  background: linear-gradient(to right, var(--c-accent), transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.swipe-indicator.swipe-active {
+  opacity: 0.6;
+}
+
+/* Mobile sidebar backdrop */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 52;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.sidebar-backdrop.sidebar-backdrop-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Mobile bottom sheet input — stick to bottom with safe area */
+@media (max-width: 768px) {
+  .mobile-input-sticky {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+  }
+}
+
+/* Virtual keyboard layout fix — use visualViewport height when available
+   (set by App.tsx), falls back to 100dvh, then 100%. This prevents the
+   virtual keyboard from hiding the input area on mobile. */
+@media (max-width: 768px) {
+  html, body, #root {
+    height: var(--vv-height, 100dvh);
+  }
+}

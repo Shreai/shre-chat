@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1f3d"/>
+      <stop offset="100%" stop-color="#070d1a"/>
+    </linearGradient>
+    <radialGradient id="face-g" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#bfdbfe"/>
+      <stop offset="40%" stop-color="#93c5fd"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </radialGradient>
+    <linearGradient id="body-g" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="40%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="limb-g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <radialGradient id="eye-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#93c5fd"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </radialGradient>
+    <radialGradient id="amb2" cx="50%" cy="45%" r="45%">
+      <stop offset="0%" stop-color="#2563eb" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="drop2" x="-15%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow-f" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="hair-g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="skirt-g" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg2)"/>
+  <ellipse cx="256" cy="260" rx="170" ry="170" fill="url(#amb2)"/>
+
+  <g filter="url(#drop2)">
+    <!-- Antenna -->
+    <line x1="256" y1="52" x2="256" y2="80" stroke="#60a5fa" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="256" cy="46" r="8" fill="url(#eye-glow)" filter="url(#glow-f)"/>
+
+    <!-- Hair — soft feminine curves on sides -->
+    <path d="M 190 115 C 180 75, 210 55, 256 58 C 302 55, 332 75, 322 115 L 330 155 C 335 180, 330 200, 315 210 L 312 145 C 310 115, 290 90, 256 88 C 222 90, 202 115, 200 145 L 197 210 C 182 200, 177 180, 182 155 Z" fill="url(#hair-g)"/>
+    <!-- Hair highlight -->
+    <path d="M 215 75 C 230 65, 250 62, 256 62" stroke="white" stroke-width="2" opacity="0.2" fill="none" stroke-linecap="round"/>
+
+    <!-- Head — rounded rectangle, robot-style -->
+    <rect x="198" y="82" width="116" height="105" rx="28" fill="url(#face-g)"/>
+    <!-- Face plate highlight -->
+    <ellipse cx="240" cy="105" rx="25" ry="18" fill="white" opacity="0.12" transform="rotate(-10, 240, 105)"/>
+
+    <!-- Eyes — glowing LED -->
+    <g filter="url(#glow-f)">
+      <ellipse cx="232" cy="132" rx="14" ry="12" fill="#0a1628"/>
+      <ellipse cx="232" cy="132" rx="10" ry="9" fill="url(#eye-glow)"/>
+      <circle cx="228" cy="128" r="3" fill="white" opacity="0.8"/>
+
+      <ellipse cx="280" cy="132" rx="14" ry="12" fill="#0a1628"/>
+      <ellipse cx="280" cy="132" rx="10" ry="9" fill="url(#eye-glow)"/>
+      <circle cx="276" cy="128" r="3" fill="white" opacity="0.8"/>
+    </g>
+
+    <!-- Eyelashes — feminine detail -->
+    <path d="M 218 122 L 214 116" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+    <path d="M 224 119 L 222 113" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+    <path d="M 266 122 L 264 116" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+    <path d="M 272 119 L 270 113" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Mouth — small friendly smile -->
+    <path d="M 240 158 Q 256 170 272 158" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Blush marks -->
+    <ellipse cx="215" cy="150" rx="10" ry="6" fill="#c084fc" opacity="0.15"/>
+    <ellipse cx="297" cy="150" rx="10" ry="6" fill="#c084fc" opacity="0.15"/>
+
+    <!-- Neck -->
+    <rect x="242" y="187" width="28" height="18" rx="4" fill="url(#limb-g)"/>
+
+    <!-- Body — feminine torso shape -->
+    <path d="M 218 205 C 215 205, 208 215, 210 240 L 215 280 L 297 280 L 302 240 C 304 215, 297 205, 294 205 Z" fill="url(#body-g)"/>
+    <!-- Chest plate detail -->
+    <ellipse cx="256" cy="240" rx="22" ry="18" fill="none" stroke="#93c5fd" stroke-width="1.5" opacity="0.3"/>
+    <!-- Heart/core light -->
+    <circle cx="256" cy="240" r="8" fill="url(#eye-glow)" opacity="0.5" filter="url(#glow-f)"/>
+    <!-- Body highlight -->
+    <path d="M 225 210 L 222 265" stroke="white" stroke-width="2" opacity="0.08" stroke-linecap="round"/>
+
+    <!-- Arms -->
+    <!-- Left arm -->
+    <rect x="178" y="210" width="26" height="50" rx="12" fill="url(#limb-g)"/>
+    <rect x="175" y="255" width="22" height="38" rx="10" fill="url(#limb-g)"/>
+    <!-- Left hand — small sphere -->
+    <circle cx="186" cy="300" r="14" fill="url(#face-g)"/>
+    <ellipse cx="183" cy="296" rx="5" ry="4" fill="white" opacity="0.12"/>
+
+    <!-- Right arm -->
+    <rect x="308" y="210" width="26" height="50" rx="12" fill="url(#limb-g)"/>
+    <rect x="315" y="255" width="22" height="38" rx="10" fill="url(#limb-g)"/>
+    <!-- Right hand waving -->
+    <circle cx="326" cy="300" r="14" fill="url(#face-g)"/>
+    <ellipse cx="323" cy="296" rx="5" ry="4" fill="white" opacity="0.12"/>
+
+    <!-- Skirt — A-line, feminine -->
+    <path d="M 212 278 L 175 380 L 337 380 L 300 278 Z" fill="url(#skirt-g)"/>
+    <!-- Skirt highlight -->
+    <path d="M 222 280 L 190 370" stroke="white" stroke-width="1.5" opacity="0.1" stroke-linecap="round"/>
+    <!-- Skirt panel lines -->
+    <path d="M 256 278 L 256 378" stroke="#1e3a8a" stroke-width="1" opacity="0.15"/>
+
+    <!-- Legs — mechanical -->
+    <rect x="210" y="378" width="24" height="55" rx="10" fill="url(#limb-g)"/>
+    <rect x="278" y="378" width="24" height="55" rx="10" fill="url(#limb-g)"/>
+    <!-- Knee joints -->
+    <circle cx="222" cy="405" r="5" fill="#93c5fd" opacity="0.3"/>
+    <circle cx="290" cy="405" r="5" fill="#93c5fd" opacity="0.3"/>
+
+    <!-- Feet -->
+    <ellipse cx="222" cy="440" rx="18" ry="8" fill="url(#limb-g)"/>
+    <ellipse cx="290" cy="440" rx="18" ry="8" fill="url(#limb-g)"/>
+  </g>
+
+  <!-- Floor glow -->
+  <ellipse cx="256" cy="455" rx="90" ry="10" fill="#3b82f6" opacity="0.1"/>
+
+  <!-- Floating particles -->
+  <circle cx="385" cy="100" r="3" fill="#c084fc" opacity="0.6"/>
+  <circle cx="130" cy="150" r="2.5" fill="#93c5fd" opacity="0.5"/>
+  <circle cx="400" cy="380" r="2" fill="#bfdbfe" opacity="0.4"/>
+  <circle cx="120" cy="400" r="2" fill="#c084fc" opacity="0.3"/>
+</svg>

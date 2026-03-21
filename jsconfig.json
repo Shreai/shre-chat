@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "module": "es2022",
+    "moduleResolution": "node",
+    "target": "es2022",
+    "strict": false,
+    "noEmit": true
+  },
+  "include": ["routes/**/*.js", "serve.js"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1f3d"/>
+      <stop offset="100%" stop-color="#070d1a"/>
+    </linearGradient>
+    <linearGradient id="fig" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="35%" stop-color="#60a5fa"/>
+      <stop offset="70%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <radialGradient id="head-g" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </radialGradient>
+    <radialGradient id="amb" cx="50%" cy="45%" r="45%">
+      <stop offset="0%" stop-color="#2563eb" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="drop" x="-20%" y="-10%" width="140%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <linearGradient id="skirt" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <ellipse cx="256" cy="260" rx="160" ry="160" fill="url(#amb)"/>
+
+  <!-- Figure -->
+  <g filter="url(#drop)">
+    <!-- Head — 3D sphere -->
+    <circle cx="256" cy="115" r="48" fill="url(#head-g)"/>
+    <ellipse cx="244" cy="102" rx="18" ry="14" fill="white" opacity="0.15" transform="rotate(-15, 244, 102)"/>
+
+    <!-- Body / torso -->
+    <path d="M 232 163 L 232 220 L 280 220 L 280 163 Z" fill="url(#fig)" rx="4"/>
+    <!-- Torso highlight -->
+    <rect x="238" y="168" width="8" height="45" rx="4" fill="white" opacity="0.08"/>
+
+    <!-- Arms -->
+    <path d="M 232 170 L 185 230" stroke="url(#fig)" stroke-width="22" stroke-linecap="round"/>
+    <path d="M 280 170 L 327 230" stroke="url(#fig)" stroke-width="22" stroke-linecap="round"/>
+    <!-- Arm highlights -->
+    <path d="M 230 172 L 188 228" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" opacity="0.2"/>
+    <path d="M 278 172 L 324 228" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" opacity="0.15"/>
+
+    <!-- Skirt / dress — triangular, iconic -->
+    <path d="M 220 218 L 160 390 L 352 390 L 292 218 Z" fill="url(#skirt)"/>
+    <!-- Skirt highlight -->
+    <path d="M 230 218 L 180 380" stroke="white" stroke-width="2" opacity="0.1" stroke-linecap="round"/>
+    <!-- Skirt depth shadow -->
+    <path d="M 280 218 L 340 385" stroke="#0c1a3a" stroke-width="2" opacity="0.2" stroke-linecap="round"/>
+
+    <!-- Legs -->
+    <path d="M 220 388 L 210 460" stroke="url(#fig)" stroke-width="22" stroke-linecap="round"/>
+    <path d="M 292 388 L 302 460" stroke="url(#fig)" stroke-width="22" stroke-linecap="round"/>
+    <!-- Leg highlights -->
+    <path d="M 217 390 L 208 455" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" opacity="0.15"/>
+  </g>
+
+  <!-- Floor reflection -->
+  <ellipse cx="256" cy="475" rx="80" ry="8" fill="#3b82f6" opacity="0.08"/>
+
+  <!-- Sparkle accents -->
+  <circle cx="380" cy="100" r="3" fill="#93c5fd" opacity="0.7"/>
+  <circle cx="140" cy="140" r="2.5" fill="#60a5fa" opacity="0.5"/>
+  <circle cx="395" cy="400" r="2" fill="#bfdbfe" opacity="0.4"/>
+</svg>

@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1f3d"/>
+      <stop offset="100%" stop-color="#070d1a"/>
+    </linearGradient>
+    <!-- Binocular eye housing -->
+    <radialGradient id="eye-housing" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#a0aec0"/>
+      <stop offset="40%" stop-color="#718096"/>
+      <stop offset="100%" stop-color="#2d3748"/>
+    </radialGradient>
+    <!-- Eye lens -->
+    <radialGradient id="lens" cx="45%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="20%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="80%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#0a1628"/>
+    </radialGradient>
+    <radialGradient id="lens-r" cx="45%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="20%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="80%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#0a1628"/>
+    </radialGradient>
+    <!-- Body metal -->
+    <linearGradient id="body" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#a0aec0"/>
+      <stop offset="30%" stop-color="#718096"/>
+      <stop offset="70%" stop-color="#4a5568"/>
+      <stop offset="100%" stop-color="#2d3748"/>
+    </linearGradient>
+    <linearGradient id="body-dark" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#718096"/>
+      <stop offset="100%" stop-color="#1a202c"/>
+    </linearGradient>
+    <!-- Neck / periscope -->
+    <linearGradient id="neck-g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a0aec0"/>
+      <stop offset="100%" stop-color="#4a5568"/>
+    </linearGradient>
+    <radialGradient id="amb" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="drop" x="-15%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="inner-shadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+      <feOffset dy="2" result="offset"/>
+      <feFlood flood-color="#000" flood-opacity="0.3"/>
+      <feComposite in2="offset" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <ellipse cx="256" cy="230" rx="200" ry="180" fill="url(#amb)"/>
+
+  <g filter="url(#drop)">
+    <!-- === EYES (WALL-E binocular style) === -->
+
+    <!-- Eye bridge / connector bar -->
+    <rect x="195" y="155" width="122" height="28" rx="14" fill="url(#neck-g)"/>
+    <!-- Bridge highlight -->
+    <rect x="200" y="157" width="112" height="6" rx="3" fill="white" opacity="0.08"/>
+
+    <!-- Left eye housing — cylinder -->
+    <ellipse cx="195" cy="168" rx="62" ry="62" fill="url(#eye-housing)" filter="url(#inner-shadow)"/>
+    <!-- Left eye rim -->
+    <ellipse cx="195" cy="168" rx="62" ry="62" fill="none" stroke="#2d3748" stroke-width="4"/>
+    <ellipse cx="195" cy="168" rx="58" ry="58" fill="none" stroke="#a0aec0" stroke-width="1" opacity="0.3"/>
+    <!-- Left lens -->
+    <circle cx="195" cy="168" r="44" fill="#0a1628"/>
+    <circle cx="195" cy="168" r="40" fill="url(#lens)"/>
+    <!-- Left iris ring -->
+    <circle cx="195" cy="168" r="28" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.5"/>
+    <circle cx="195" cy="168" r="18" fill="#0a1628" opacity="0.6"/>
+    <!-- Left eye shine -->
+    <circle cx="182" cy="152" r="10" fill="white" opacity="0.7"/>
+    <circle cx="206" cy="178" r="5" fill="white" opacity="0.25"/>
+    <!-- Left eye glow -->
+    <circle cx="195" cy="168" r="42" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.15" filter="url(#glow)"/>
+
+    <!-- Right eye housing — cylinder -->
+    <ellipse cx="317" cy="168" rx="62" ry="62" fill="url(#eye-housing)" filter="url(#inner-shadow)"/>
+    <ellipse cx="317" cy="168" rx="62" ry="62" fill="none" stroke="#2d3748" stroke-width="4"/>
+    <ellipse cx="317" cy="168" rx="58" ry="58" fill="none" stroke="#a0aec0" stroke-width="1" opacity="0.3"/>
+    <!-- Right lens -->
+    <circle cx="317" cy="168" r="44" fill="#0a1628"/>
+    <circle cx="317" cy="168" r="40" fill="url(#lens-r)"/>
+    <circle cx="317" cy="168" r="28" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.5"/>
+    <circle cx="317" cy="168" r="18" fill="#0a1628" opacity="0.6"/>
+    <!-- Right eye shine -->
+    <circle cx="304" cy="152" r="10" fill="white" opacity="0.7"/>
+    <circle cx="328" cy="178" r="5" fill="white" opacity="0.25"/>
+    <circle cx="317" cy="168" r="42" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.15" filter="url(#glow)"/>
+
+    <!-- Eyebrow plates — tilted for expression (curious/friendly) -->
+    <path d="M 145 115 L 175 108 L 230 115 L 225 122 L 170 116 L 145 122 Z" fill="#4a5568"/>
+    <path d="M 367 115 L 337 108 L 282 115 L 287 122 L 342 116 L 367 122 Z" fill="#4a5568"/>
+
+    <!-- === NECK === -->
+    <rect x="235" y="228" width="42" height="40" rx="4" fill="url(#neck-g)"/>
+    <!-- Neck segments -->
+    <line x1="238" y1="240" x2="274" y2="240" stroke="#2d3748" stroke-width="1.5"/>
+    <line x1="238" y1="252" x2="274" y2="252" stroke="#2d3748" stroke-width="1.5"/>
+
+    <!-- === BODY (cube/box shape like WALL-E) === -->
+    <rect x="155" y="268" width="202" height="155" rx="12" fill="url(#body)"/>
+    <!-- Body panel lines -->
+    <line x1="165" y1="310" x2="347" y2="310" stroke="#2d3748" stroke-width="1.5"/>
+    <line x1="165" y1="370" x2="347" y2="370" stroke="#2d3748" stroke-width="1.5"/>
+    <!-- Body highlight -->
+    <rect x="165" y="275" width="182" height="8" rx="4" fill="white" opacity="0.06"/>
+    <!-- Chest emblem — heart/power core -->
+    <rect x="230" y="320" width="52" height="42" rx="6" fill="#1a202c"/>
+    <rect x="234" y="324" width="44" height="34" rx="4" fill="#0a1628" stroke="#2d3748" stroke-width="1"/>
+    <circle cx="256" cy="341" r="12" fill="#3b82f6" opacity="0.6" filter="url(#glow)"/>
+    <circle cx="256" cy="341" r="6" fill="#93c5fd" opacity="0.8"/>
+    <!-- Solar panel texture on body -->
+    <g opacity="0.06">
+      <line x1="165" y1="290" x2="347" y2="290" stroke="white" stroke-width="0.5"/>
+      <line x1="165" y1="330" x2="225" y2="330" stroke="white" stroke-width="0.5"/>
+      <line x1="287" y1="330" x2="347" y2="330" stroke="white" stroke-width="0.5"/>
+      <line x1="165" y1="350" x2="225" y2="350" stroke="white" stroke-width="0.5"/>
+      <line x1="287" y1="350" x2="347" y2="350" stroke="white" stroke-width="0.5"/>
+      <line x1="165" y1="390" x2="347" y2="390" stroke="white" stroke-width="0.5"/>
+    </g>
+
+    <!-- === ARMS === -->
+    <!-- Left arm -->
+    <rect x="120" y="285" width="30" height="65" rx="8" fill="url(#body-dark)"/>
+    <rect x="115" y="345" width="28" height="45" rx="10" fill="url(#body-dark)"/>
+    <!-- Left hand — gripper -->
+    <path d="M 118 388 L 108 410 M 140 388 L 148 410" stroke="#718096" stroke-width="6" stroke-linecap="round"/>
+    <!-- Left arm joint -->
+    <circle cx="135" cy="348" r="6" fill="#4a5568" stroke="#2d3748" stroke-width="1.5"/>
+
+    <!-- Right arm — waving up -->
+    <rect x="362" y="270" width="30" height="60" rx="8" fill="url(#body-dark)" transform="rotate(-20, 377, 300)"/>
+    <rect x="368" y="225" width="26" height="50" rx="10" fill="url(#body-dark)" transform="rotate(-15, 381, 250)"/>
+    <!-- Right hand -->
+    <path d="M 370 220 L 362 200 M 392 225 L 400 205" stroke="#718096" stroke-width="6" stroke-linecap="round" transform="rotate(-15, 381, 215)"/>
+    <circle cx="377" cy="275" r="6" fill="#4a5568" stroke="#2d3748" stroke-width="1.5" transform="rotate(-20, 377, 275)"/>
+
+    <!-- === TREADS === -->
+    <!-- Left tread -->
+    <rect x="145" y="420" width="85" height="40" rx="18" fill="#2d3748"/>
+    <rect x="149" y="424" width="77" height="32" rx="14" fill="none" stroke="#4a5568" stroke-width="2"/>
+    <!-- Tread wheels -->
+    <circle cx="170" cy="440" r="10" fill="#1a202c" stroke="#4a5568" stroke-width="1.5"/>
+    <circle cx="205" cy="440" r="10" fill="#1a202c" stroke="#4a5568" stroke-width="1.5"/>
+    <circle cx="170" cy="440" r="4" fill="#4a5568"/>
+    <circle cx="205" cy="440" r="4" fill="#4a5568"/>
+
+    <!-- Right tread -->
+    <rect x="282" y="420" width="85" height="40" rx="18" fill="#2d3748"/>
+    <rect x="286" y="424" width="77" height="32" rx="14" fill="none" stroke="#4a5568" stroke-width="2"/>
+    <circle cx="307" cy="440" r="10" fill="#1a202c" stroke="#4a5568" stroke-width="1.5"/>
+    <circle cx="342" cy="440" r="10" fill="#1a202c" stroke="#4a5568" stroke-width="1.5"/>
+    <circle cx="307" cy="440" r="4" fill="#4a5568"/>
+    <circle cx="342" cy="440" r="4" fill="#4a5568"/>
+  </g>
+
+  <!-- Eye glow reflection on ground -->
+  <ellipse cx="256" cy="470" rx="100" ry="8" fill="#3b82f6" opacity="0.06"/>
+
+  <!-- Floating dust particles -->
+  <circle cx="90" cy="100" r="2" fill="#93c5fd" opacity="0.4"/>
+  <circle cx="420" cy="80" r="2.5" fill="#93c5fd" opacity="0.35"/>
+  <circle cx="440" cy="360" r="2" fill="#60a5fa" opacity="0.3"/>
+  <circle cx="80" cy="350" r="1.5" fill="#bfdbfe" opacity="0.3"/>
+</svg>
