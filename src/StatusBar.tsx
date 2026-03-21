@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useApp } from "./store";
+import { createPortal } from "react-dom";
+import { useApp, getAgent } from "./store";
 
 // ── Notification types ──────────────────────────────────────────────
 
@@ -25,6 +26,24 @@ const NOTIF_ICONS: Record<string, string> = {
 // Important notification types that also show as system messages in chat
 const IMPORTANT_TYPES = new Set(["task.failed", "service.unhealthy", "agent.quality_alert"]);
 
+// ── Notification filter categories ──────────────────────────────────
+type NotifFilter = "all" | "tasks" | "agents" | "services";
+
+const NOTIF_FILTERS: { key: NotifFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "tasks", label: "Tasks" },
+  { key: "agents", label: "Agents" },
+  { key: "services", label: "Services" },
+];
+
+function notifMatchesFilter(n: Notification, filter: NotifFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "services") return n.type?.startsWith("service.") || false;
+  if (filter === "agents") return n.type?.startsWith("agent.") || n.type?.startsWith("fleet.") || false;
+  if (filter === "tasks") return n.type?.startsWith("task.") || false;
+  return true;
+}
+
 // ── Types ────────────────────────────────────────────────────────────
 
 interface StatusBarData {
@@ -32,7 +51,6 @@ interface StatusBarData {
   activeTasks: number;
   reminders: { total: number; overdue: number };
   agentStatus: "idle" | "busy";
-  // V2 fields
   gatewayConnected: boolean;
   activeAgents: number;
   pendingTasks: number;
@@ -64,7 +82,7 @@ function formatCountdown(ms: number): string {
 // ── Component ────────────────────────────────────────────────────────
 
 export function StatusBar() {
-  const { state } = useApp();
+  const { state, actions } = useApp();
   const [data, setData] = useState<StatusBarData>(EMPTY_DATA);
   const [recording, setRecording] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -74,11 +92,16 @@ export function StatusBar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  const [notifFilter, setNotifFilter] = useState<NotifFilter>("all");
   const bellRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const lastNotifCheck = useRef(0);
 
   // Derive busy from streaming state
   const agentBusy = state.streaming || data.agentStatus === "busy";
+
+  // Current agent info
+  const currentAgent = getAgent(state.activeAgentId);
 
   // Fetch status bar data
   const fetchStatus = useCallback(async () => {
@@ -110,7 +133,6 @@ export function StatusBar() {
       if (res.ok) {
         const json = await res.json();
         const newCount = json.count || 0;
-        // If new unread notifications appeared, dispatch event for important ones
         if (newCount > unreadCount && unreadCount > 0) {
           fetchNotifications();
         }
@@ -119,7 +141,7 @@ export function StatusBar() {
     } catch { /* non-critical */ }
   }, [unreadCount]);
 
-  // Fetch full notification list (for dropdown)
+  // Fetch full notification list
   const fetchNotifications = useCallback(async () => {
     try {
       const token = sessionStorage.getItem("shre-auth-token") || localStorage.getItem("shre-auth-token");
@@ -128,8 +150,6 @@ export function StatusBar() {
         const json = await res.json();
         const items: Notification[] = json.notifications || [];
         setNotifications(items);
-
-        // Inject important new notifications as system messages in chat
         const lastCheck = lastNotifCheck.current;
         for (const n of items) {
           if (n.createdAt > lastCheck && !n.read && IMPORTANT_TYPES.has(n.type)) {
@@ -153,7 +173,7 @@ export function StatusBar() {
     } catch { /* non-critical */ }
   }, []);
 
-  // Dismiss (delete) a single notification
+  // Dismiss a single notification
   const dismissNotif = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -180,17 +200,19 @@ export function StatusBar() {
     } catch { /* non-critical */ }
   }, [notifications]);
 
-  // Close bell dropdown on outside click
+  // Close notification panel on outside click
   useEffect(() => {
     if (!bellOpen) return;
     const handler = (e: MouseEvent) => {
-      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
+      const target = e.target as Node;
+      if (bellRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setBellOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [bellOpen]);
 
-  // Fetch on mount (deferred by 2s to not block initial render), then every 60s
+  // Fetch on mount (deferred by 2s), then every 60s
   useEffect(() => {
     const initial = setTimeout(() => { fetchStatus(); fetchUnreadCount(); }, 2000);
     const id = setInterval(() => { fetchStatus(); fetchUnreadCount(); }, 60_000);
@@ -207,16 +229,13 @@ export function StatusBar() {
   const toggleMic = useCallback(() => {
     setRecording((prev) => {
       const next = !prev;
-      if (next) {
-        window.dispatchEvent(new CustomEvent("shre-voice-start"));
-      } else {
-        window.dispatchEvent(new CustomEvent("shre-voice-stop"));
-      }
+      if (next) window.dispatchEvent(new CustomEvent("shre-voice-start"));
+      else window.dispatchEvent(new CustomEvent("shre-voice-stop"));
       return next;
     });
   }, []);
 
-  // Listen for external voice-stop events (e.g., ChatView finished processing)
+  // Listen for external voice-stop events
   useEffect(() => {
     const handler = () => setRecording(false);
     window.addEventListener("shre-voice-stop", handler);
@@ -224,62 +243,50 @@ export function StatusBar() {
   }, []);
 
   // Countdown for next event
-  const countdown = data.nextEvent
-    ? formatCountdown(data.nextEvent.startsAt - now)
-    : null;
+  const countdown = data.nextEvent ? formatCountdown(data.nextEvent.startsAt - now) : null;
 
   // Connection status color
   const connColor = data.gatewayConnected ? "#22c55e" : "#ef4444";
-  const connLabel = data.gatewayConnected ? "Connected" : "Disconnected";
 
   return (
     <div className="status-bar" style={styles.bar}>
-      {/* Connection status indicator */}
-      <div
-        className="status-bar-item flex"
-        style={styles.item}
-        title={`Gateway: ${connLabel}`}
+      {/* Hamburger — sidebar toggle */}
+      <button
+        onClick={() => actions.setSidebarOpen(!state.sidebarOpen)}
+        className="shrink-0 p-1 rounded-lg transition-colors hover:bg-white/5"
+        style={{ color: "var(--c-text-3)" }}
+        aria-label={state.sidebarOpen ? "Close sidebar" : "Open sidebar"}
       >
-        {data.gatewayConnected ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
-            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
-            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-            <circle cx="12" cy="20" r="1" fill="#22c55e" />
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <line x1="1" y1="1" x2="23" y2="23" />
-            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
-            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
-            <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
-            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
-            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-            <circle cx="12" cy="20" r="1" fill="#ef4444" />
-          </svg>
-        )}
-        <span style={{ ...styles.label, fontSize: 11, color: connColor }}>
-          {connLabel}
+        <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
+        </svg>
+      </button>
+
+      {/* Connection dot + Agent name + Chat icon */}
+      <div className="status-bar-item flex items-center" style={{ ...styles.item, gap: 6 }}>
+        <span
+          className="shrink-0"
+          style={{
+            width: 7, height: 7, borderRadius: "50%",
+            background: connColor,
+            boxShadow: data.gatewayConnected ? `0 0 6px ${connColor}` : "none",
+          }}
+          title={data.gatewayConnected ? "Connected" : "Disconnected"}
+        />
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--c-text-1)", lineHeight: 1 }}>
+          {currentAgent.name}
         </span>
+        <svg className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+        </svg>
       </div>
 
       {/* Active agents badge */}
       {data.activeAgents > 0 && (
         <div className="status-bar-item hidden md:flex" style={styles.item} title={`${data.activeAgents} active agent${data.activeAgents !== 1 ? "s" : ""}`}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
           <span style={styles.badge}>{data.activeAgents}</span>
         </div>
@@ -288,18 +295,8 @@ export function StatusBar() {
       {/* Pending tasks badge */}
       {data.pendingTasks > 0 && (
         <div className="status-bar-item hidden md:flex" style={styles.item} title={`${data.pendingTasks} pending task${data.pendingTasks !== 1 ? "s" : ""}`}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--c-accent)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
           </svg>
           <span style={{ ...styles.badge, color: "var(--c-accent)" }}>{data.pendingTasks}</span>
         </div>
@@ -308,65 +305,21 @@ export function StatusBar() {
       {/* Next event countdown */}
       {data.nextEvent && (
         <div className="status-bar-item hidden md:flex" style={styles.item}>
-          <svg
-            className="shrink-0"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
+          <svg className="shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
+            <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          <span style={styles.label} className="truncate max-w-[140px]">
-            {data.nextEvent.title}
-          </span>
+          <span style={styles.label} className="truncate max-w-[140px]">{data.nextEvent.title}</span>
           <span style={styles.countdown}>{countdown}</span>
-        </div>
-      )}
-
-      {/* Active tasks badge (due today) */}
-      {data.activeTasks > 0 && (
-        <div className="status-bar-item hidden md:flex" style={styles.item}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
-          <span style={styles.badge}>{data.activeTasks}</span>
         </div>
       )}
 
       {/* Reminders badge */}
       {data.reminders.total > 0 && (
-        <div className="status-bar-item flex" style={styles.item}>
+        <div className="status-bar-item hidden md:flex" style={styles.item}>
           <div style={{ position: "relative" }}>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
             {data.reminders.overdue > 0 && <span style={styles.redDot} />}
           </div>
@@ -374,18 +327,87 @@ export function StatusBar() {
         </div>
       )}
 
-      {/* Notification bell */}
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Agent status dot */}
+      <div className="status-bar-item hidden md:flex" style={styles.item} title={agentBusy ? "Agent busy" : "Agent idle"}>
+        <span
+          style={{
+            width: 7, height: 7, borderRadius: "50%",
+            background: agentBusy ? "#22c55e" : "var(--c-text-5)",
+            boxShadow: agentBusy ? "0 0 8px #22c55e" : "none",
+            transition: "all 0.3s ease",
+            animation: agentBusy ? "pulse 1.5s ease-in-out infinite" : "none",
+          }}
+        />
+        <span style={{ ...styles.label, fontSize: 10 }}>{agentBusy ? "busy" : "idle"}</span>
+      </div>
+
+      {/* Router / OpenClaw toggle */}
+      <button
+        onClick={() => {
+          const curr = localStorage.getItem("shre-openclaw-mode") === "true";
+          const next = !curr;
+          localStorage.setItem("shre-openclaw-mode", String(next));
+          window.dispatchEvent(new StorageEvent("storage", { key: "shre-openclaw-mode", newValue: String(next) }));
+          setData((d) => ({ ...d }));
+        }}
+        style={{
+          ...styles.pillBtn,
+          background: localStorage.getItem("shre-openclaw-mode") === "true" ? "rgba(168,85,247,0.15)" : "rgba(59,130,246,0.1)",
+          color: localStorage.getItem("shre-openclaw-mode") === "true" ? "#a855f7" : "#3b82f6",
+          border: `1px solid ${localStorage.getItem("shre-openclaw-mode") === "true" ? "rgba(168,85,247,0.25)" : "rgba(59,130,246,0.2)"}`,
+        }}
+        title={localStorage.getItem("shre-openclaw-mode") === "true" ? "OpenClaw mode — click to switch to Router" : "Router mode — click to switch to OpenClaw"}
+      >
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: localStorage.getItem("shre-openclaw-mode") === "true" ? "#a855f7" : "#3b82f6" }} />
+        {localStorage.getItem("shre-openclaw-mode") === "true" ? "OC" : "R"}
+      </button>
+
+      {/* Language selector */}
+      <select
+        value={localStorage.getItem("shre-user-language") || ""}
+        onChange={(e) => {
+          const lang = e.target.value;
+          if (lang) localStorage.setItem("shre-user-language", lang);
+          else localStorage.removeItem("shre-user-language");
+          setData((d) => ({ ...d }));
+        }}
+        style={{
+          ...styles.pillBtn,
+          background: "rgba(59,130,246,0.1)",
+          color: "var(--c-text-secondary, #94a3b8)",
+          border: "1px solid rgba(59,130,246,0.2)",
+          cursor: "pointer",
+          appearance: "none" as const,
+          WebkitAppearance: "none" as const,
+        }}
+        title="Chat language preference"
+      >
+        <option value="">EN</option>
+        <option value="es">ES</option>
+        <option value="hi">HI</option>
+        <option value="gu">GU</option>
+        <option value="zh">ZH</option>
+        <option value="fr">FR</option>
+        <option value="pt">PT</option>
+        <option value="de">DE</option>
+        <option value="ar">AR</option>
+        <option value="ja">JA</option>
+      </select>
+
+      {/* Notification bell — opens right slider */}
       <div ref={bellRef} style={{ position: "relative" }}>
         <button
           onClick={() => { setBellOpen(!bellOpen); if (!bellOpen) fetchNotifications(); }}
           className="status-bar-item flex"
-          style={{ ...styles.item, cursor: "pointer", background: "none", border: "none", padding: "2px 4px", position: "relative" }}
+          style={{ ...styles.iconBtn, position: "relative" }}
           title={`${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}`}
           aria-label="Notifications"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
           {unreadCount > 0 && (
             <span style={{
@@ -401,114 +423,180 @@ export function StatusBar() {
             </span>
           )}
         </button>
+      </div>
 
-        {/* Notification dropdown */}
-        {bellOpen && (
-          <div className="notif-dropdown" style={{
-            position: "fixed", zIndex: 200,
-            display: "flex", flexDirection: "column",
-            background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)",
-            borderRadius: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-            width: 320, maxHeight: "min(420px, calc(100dvh - 60px))",
-            ...(() => {
-              const rect = bellRef.current?.getBoundingClientRect();
-              if (!rect) return {};
-              const top = rect.bottom + 6;
-              const vw = window.innerWidth;
-              if (vw <= 480) return { top, left: 8, right: 8, width: "auto" };
-              const right = Math.max(8, vw - rect.right);
-              return { top, right };
-            })(),
-          }}>
-            {/* Header with clear all */}
+      {/* Mic button */}
+      <button
+        onClick={toggleMic}
+        style={{
+          ...styles.micBtn,
+          background: recording ? "var(--c-accent, #6366f1)" : "var(--c-bg-hover, rgba(255,255,255,0.08))",
+          animation: recording ? "mic-pulse 1.5s ease-in-out infinite" : "none",
+        }}
+        title={recording ? "Stop recording" : "Start voice input"}
+        aria-label={recording ? "Stop recording" : "Start voice input"}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={recording ? "#fff" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+        </svg>
+      </button>
+
+      {/* ── Notification Slide-in Panel (right side) ── */}
+      {createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 199,
+              background: "rgba(0,0,0,0.3)",
+              opacity: bellOpen ? 1 : 0,
+              pointerEvents: bellOpen ? "auto" : "none",
+              transition: "opacity 0.25s ease",
+            }}
+            onClick={() => setBellOpen(false)}
+          />
+          {/* Panel */}
+          <div
+            ref={panelRef}
+            style={{
+              position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 200,
+              width: 360, maxWidth: "90vw",
+              transform: bellOpen ? "translateX(0)" : "translateX(100%)",
+              transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              background: "var(--c-bg-2)",
+              borderLeft: "1px solid var(--c-border-1)",
+              boxShadow: bellOpen ? "-8px 0 30px rgba(0,0,0,0.3)" : "none",
+              display: "flex", flexDirection: "column",
+            }}
+          >
+            {/* Panel header */}
             <div style={{
-              padding: "10px 12px", borderBottom: "1px solid var(--c-border-2)",
-              display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0,
+              padding: "16px 16px 12px",
+              borderBottom: "1px solid var(--c-border-2)",
+              flexShrink: 0,
             }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--c-text-1)" }}>
-                Notifications
-              </span>
-              {notifications.length > 0 && (
-                <button
-                  onClick={clearAll}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    fontSize: 11, color: "var(--c-text-3)", padding: "2px 6px",
-                    borderRadius: 4, transition: "color 0.15s",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-danger, #ef4444)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-text-3)"; }}
-                >
-                  Clear all
-                </button>
-              )}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>Notifications</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {notifications.length > 0 && (
+                    <button
+                      onClick={clearAll}
+                      style={{
+                        background: "none", border: "none", cursor: "pointer",
+                        fontSize: 11, color: "var(--c-text-3)", padding: "4px 8px",
+                        borderRadius: 6, transition: "color 0.15s",
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-danger, #ef4444)"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-text-3)"; }}
+                    >
+                      Clear all
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setBellOpen(false)}
+                    style={{
+                      background: "var(--c-bg-hover)", border: "none", cursor: "pointer",
+                      width: 28, height: 28, borderRadius: 8,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--c-text-3)",
+                    }}
+                    aria-label="Close notifications"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {/* Filter tabs */}
+              <div style={{ display: "flex", gap: 4 }}>
+                {NOTIF_FILTERS.map(f => {
+                  const count = f.key === "all" ? notifications.length : notifications.filter(n => notifMatchesFilter(n, f.key)).length;
+                  const active = notifFilter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => setNotifFilter(f.key)}
+                      style={{
+                        flex: 1, padding: "5px 0", fontSize: 11, fontWeight: active ? 600 : 400,
+                        background: active ? "var(--c-accent, #6366f1)" : "var(--c-bg-card, var(--c-bg-1))",
+                        color: active ? "#fff" : "var(--c-text-3)",
+                        border: `1px solid ${active ? "transparent" : "var(--c-border-2)"}`,
+                        borderRadius: 6, cursor: "pointer", transition: "all 0.15s",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+                      }}
+                    >
+                      {f.label}
+                      {count > 0 && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700,
+                          background: active ? "rgba(255,255,255,0.25)" : "var(--c-bg-hover)",
+                          padding: "1px 5px", borderRadius: 8, lineHeight: "14px",
+                        }}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            {/* Scrollable notification list */}
+
+            {/* Notification list */}
             <div style={{ overflowY: "auto", flex: 1 }}>
-              {notifications.length === 0 ? (
-                <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 12, color: "var(--c-text-3)" }}>
-                  No notifications yet
+              {notifications.filter(n => notifMatchesFilter(n, notifFilter)).length === 0 ? (
+                <div style={{ padding: "48px 16px", textAlign: "center" }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--c-text-5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 12px" }}>
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  <div style={{ fontSize: 13, color: "var(--c-text-3)" }}>
+                    {notifFilter === "all" ? "No notifications yet" : `No ${notifFilter} notifications`}
+                  </div>
                 </div>
               ) : (
-                notifications.map(n => (
+                notifications.filter(n => notifMatchesFilter(n, notifFilter)).map(n => (
                   <div
                     key={n.id}
                     onClick={() => { if (!n.read) markRead(n.id); }}
                     style={{
-                      padding: "10px 12px", cursor: "pointer",
+                      padding: "12px 16px", cursor: "pointer",
                       borderBottom: "1px solid var(--c-border-2)",
-                      background: n.read ? "transparent" : "var(--c-accent-soft, rgba(99,141,255,0.1))",
+                      background: n.read ? "transparent" : "var(--c-accent-soft, rgba(99,141,255,0.08))",
                       transition: "background 0.15s",
                     }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--c-bg-hover)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = n.read ? "transparent" : "var(--c-accent-soft, rgba(99,141,255,0.1))"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = n.read ? "transparent" : "var(--c-accent-soft, rgba(99,141,255,0.08))"; }}
                   >
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                      {/* Severity dot */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                       <span style={{
-                        width: 8, height: 8, borderRadius: "50%", flexShrink: 0, marginTop: 4,
+                        width: 8, height: 8, borderRadius: "50%", flexShrink: 0, marginTop: 5,
                         background: n.type?.includes("failed") || n.type?.includes("unhealthy")
                           ? "var(--c-danger, #ef4444)"
-                          : n.type?.includes("quality") || n.type?.includes("void") || n.type?.includes("discount")
-                            ? "#f59e0b"
-                            : "var(--c-accent)",
-                        boxShadow: n.type?.includes("failed") || n.type?.includes("unhealthy")
-                          ? "0 0 4px rgba(239,68,68,0.5)"
-                          : "none",
+                          : n.type?.includes("quality") ? "#f59e0b" : "var(--c-accent)",
                       }} />
-                      <span style={{ fontSize: 14, flexShrink: 0, marginTop: 0 }}>
-                        {NOTIF_ICONS[n.type] || "\ud83d\udd14"}
-                      </span>
+                      <span style={{ fontSize: 15, flexShrink: 0 }}>{NOTIF_ICONS[n.type] || "\ud83d\udd14"}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: 12, fontWeight: n.read ? 400 : 600,
-                          color: "var(--c-text-1)", lineHeight: 1.4,
-                          wordBreak: "break-word",
-                        }}>
+                        <div style={{ fontSize: 13, fontWeight: n.read ? 400 : 600, color: "var(--c-text-1)", lineHeight: 1.4 }}>
                           {n.title}
                         </div>
                         {n.body && (
-                          <div style={{
-                            fontSize: 11, color: "var(--c-text-2)", marginTop: 3, lineHeight: 1.4,
-                            whiteSpace: "pre-wrap", wordBreak: "break-word",
-                          }}>
+                          <div style={{ fontSize: 12, color: "var(--c-text-2)", marginTop: 4, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                             {n.body}
                           </div>
                         )}
-                        <div style={{ fontSize: 10, color: "var(--c-text-3)", marginTop: 4 }}>
+                        <div style={{ fontSize: 10, color: "var(--c-text-3)", marginTop: 5 }}>
                           {new Date(n.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                           {n.source && <span> &middot; {n.source}</span>}
                         </div>
                       </div>
-                      {/* Dismiss button */}
                       <button
                         onClick={(e) => dismissNotif(n.id, e)}
                         style={{
                           background: "none", border: "none", cursor: "pointer",
-                          color: "var(--c-text-3)", padding: "2px", flexShrink: 0,
-                          borderRadius: 4, transition: "color 0.15s",
+                          color: "var(--c-text-3)", padding: "4px", flexShrink: 0,
+                          borderRadius: 6, transition: "color 0.15s",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          marginTop: 1,
                         }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-danger)"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-text-3)"; }}
@@ -516,8 +604,7 @@ export function StatusBar() {
                         aria-label="Dismiss notification"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                       </button>
                     </div>
@@ -526,106 +613,20 @@ export function StatusBar() {
               )}
             </div>
           </div>
-        )}
-      </div>
+        </>,
+        document.body,
+      )}
 
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
-      {/* Agent status dot */}
-      <div
-        className="status-bar-item hidden md:flex"
-        style={styles.item}
-        title={agentBusy ? "Agent busy" : "Agent idle"}
-      >
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: agentBusy ? "#22c55e" : "var(--c-text-5)",
-            boxShadow: agentBusy ? "0 0 8px #22c55e" : "none",
-            transition: "all 0.3s ease",
-            animation: agentBusy ? "pulse 1.5s ease-in-out infinite" : "none",
-          }}
-        />
-        <span style={{ ...styles.label, fontSize: 11 }}>
-          {agentBusy ? "busy" : "idle"}
-        </span>
-      </div>
-
-      {/* Router / OpenClaw toggle (next to mic) */}
-      <button
-        onClick={() => {
-          const curr = localStorage.getItem("shre-openclaw-mode") === "true";
-          const next = !curr;
-          localStorage.setItem("shre-openclaw-mode", String(next));
-          window.dispatchEvent(new StorageEvent("storage", { key: "shre-openclaw-mode", newValue: String(next) }));
-          // Force re-render
-          setData((d) => ({ ...d }));
-        }}
-        style={{
-          ...styles.micBtn,
-          width: "auto",
-          padding: "0 6px",
-          fontSize: 9,
-          gap: 3,
-          display: "flex",
-          alignItems: "center",
-          background: localStorage.getItem("shre-openclaw-mode") === "true"
-            ? "rgba(168,85,247,0.15)" : "rgba(59,130,246,0.1)",
-          color: localStorage.getItem("shre-openclaw-mode") === "true"
-            ? "#a855f7" : "#3b82f6",
-          border: `1px solid ${localStorage.getItem("shre-openclaw-mode") === "true" ? "rgba(168,85,247,0.25)" : "rgba(59,130,246,0.2)"}`,
-        }}
-        title={localStorage.getItem("shre-openclaw-mode") === "true"
-          ? "OpenClaw mode — click to switch to Router"
-          : "Router mode — click to switch to OpenClaw"}
-      >
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: localStorage.getItem("shre-openclaw-mode") === "true" ? "#a855f7" : "#3b82f6" }} />
-        {localStorage.getItem("shre-openclaw-mode") === "true" ? "OC" : "R"}
-      </button>
-
-      {/* Mic button */}
-      <button
-        onClick={toggleMic}
-        style={{
-          ...styles.micBtn,
-          background: recording
-            ? "var(--c-accent, #6366f1)"
-            : "var(--c-bg-hover, rgba(255,255,255,0.08))",
-          animation: recording ? "mic-pulse 1.5s ease-in-out infinite" : "none",
-        }}
-        title={recording ? "Stop recording" : "Start voice input"}
-        aria-label={recording ? "Stop recording" : "Start voice input"}
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={recording ? "#fff" : "currentColor"}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-          <line x1="12" y1="19" x2="12" y2="23" />
-          <line x1="8" y1="23" x2="16" y2="23" />
-        </svg>
-      </button>
-
-      {/* Inline styles for animations */}
+      {/* Inline styles */}
       <style>{`
         .status-bar {
           position: relative;
           z-index: 50;
           display: flex;
           align-items: center;
-          gap: 12px;
-          min-height: 40px;
-          padding: 0 12px;
+          gap: 10px;
+          min-height: 38px;
+          padding: 0 10px;
           padding-top: env(safe-area-inset-top, 0px);
           flex-shrink: 0;
           background: color-mix(in srgb, var(--c-bg-2, #0f0f1a) 80%, transparent);
@@ -636,48 +637,13 @@ export function StatusBar() {
           color: var(--c-text-2, #a1a1aa);
           user-select: none;
         }
-        /* In PWA mode, the App nav bar already handles safe-area-inset-top */
-        .pwa-mode .status-bar {
-          padding-top: 0;
-        }
-
+        .pwa-mode .status-bar { padding-top: 0; }
         @keyframes mic-pulse {
-          0%, 100% {
-            box-shadow: 0 0 0 0 var(--c-accent, rgba(99, 102, 241, 0.6));
-          }
-          50% {
-            box-shadow: 0 0 0 8px transparent;
-          }
+          0%, 100% { box-shadow: 0 0 0 0 var(--c-accent, rgba(99, 102, 241, 0.6)); }
+          50% { box-shadow: 0 0 0 8px transparent; }
         }
-
         @media (max-width: 767px) {
-          .status-bar {
-            padding: 0 8px;
-            gap: 8px;
-          }
-        }
-
-        .notif-dropdown {
-          width: 380px;
-          max-height: min(480px, calc(100dvh - 60px));
-        }
-        @media (max-width: 480px) {
-          .notif-dropdown {
-            width: auto;
-            max-height: min(420px, calc(100dvh - 60px));
-            border-radius: 12px;
-          }
-        }
-        @media (min-width: 481px) and (max-width: 767px) {
-          .notif-dropdown {
-            width: 360px;
-          }
-        }
-
-        @media (orientation: landscape) and (max-height: 500px) {
-          .notif-dropdown {
-            max-height: calc(100dvh - 52px);
-          }
+          .status-bar { padding: 0 6px; gap: 6px; }
         }
       `}</style>
     </div>
@@ -690,23 +656,23 @@ const styles: Record<string, React.CSSProperties> = {
   bar: {},
   item: {
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     fontSize: 12,
     whiteSpace: "nowrap",
   },
   label: {
     color: "var(--c-text-3, #71717a)",
-    fontSize: 12,
+    fontSize: 11,
     lineHeight: 1,
   },
   countdown: {
     color: "var(--c-accent, #6366f1)",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     fontVariantNumeric: "tabular-nums",
   },
   badge: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     fontVariantNumeric: "tabular-nums",
     color: "var(--c-text-2, #a1a1aa)",
@@ -721,9 +687,32 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--c-danger, #ef4444)",
     boxShadow: "0 0 4px #ef4444",
   },
+  iconBtn: {
+    cursor: "pointer",
+    background: "none",
+    border: "none",
+    padding: "4px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "var(--c-text-2, #a1a1aa)",
+    flexShrink: 0,
+  },
+  pillBtn: {
+    height: 22,
+    padding: "0 6px",
+    fontSize: 9,
+    gap: 3,
+    display: "flex",
+    alignItems: "center",
+    borderRadius: 6,
+    border: "none",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
   micBtn: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: "50%",
     border: "none",
     display: "flex",

@@ -1,0 +1,166 @@
+{
+  "service": "shre-chat",
+  "version": "1.0",
+  "port": 5510,
+  "protocol": "http",
+  "description": "Web-based chat interface — proxies to shre-router, manages sessions, suggestions, voice, tasks, reports, and notifications",
+
+  "endpoints": {
+    "GET /api/health": {
+      "returns": "HealthResponse",
+      "auth": false,
+      "description": "Liveness check"
+    },
+    "POST /api/auth/login": {
+      "accepts": { "username": "string", "password": "string" },
+      "returns": "AuthResult",
+      "auth": false,
+      "description": "User login"
+    },
+    "GET /api/auth/check": {
+      "returns": "{ authenticated: boolean }",
+      "auth": false,
+      "description": "Check authentication status"
+    },
+    "POST /api/verify-identity": {
+      "accepts": { "code": "string" },
+      "returns": "{ verified: boolean }",
+      "auth": false,
+      "description": "Identity verification gate via vault"
+    },
+    "POST /api/router/v1/chat": {
+      "accepts": "ChatRequest",
+      "returns": "SSE Stream",
+      "auth": true,
+      "description": "Chat proxy to shre-router (SSE streaming)"
+    },
+    "POST /api/cli/chat": {
+      "accepts": "ChatRequest",
+      "returns": "SSE Stream",
+      "auth": true,
+      "description": "CLI chat endpoint"
+    },
+    "GET /api/sessions/:agentId": {
+      "returns": "Session[]",
+      "auth": true,
+      "description": "List chat sessions for an agent"
+    },
+    "GET /api/sessions/:agentId/:sessionId": {
+      "returns": "Session",
+      "auth": true,
+      "description": "Get a specific chat session with messages"
+    },
+    "POST /api/sessions/:agentId/:sessionId/compact": {
+      "returns": "{ ok: boolean }",
+      "auth": true,
+      "description": "Compact a session (summarize old messages)"
+    },
+    "GET /api/search": {
+      "returns": "SearchResult[]",
+      "auth": true,
+      "description": "Search across chat sessions"
+    },
+    "GET /api/feed": {
+      "returns": "FeedItem[]",
+      "auth": true,
+      "description": "Activity feed"
+    },
+    "GET /api/agents": {
+      "returns": "Agent[]",
+      "auth": true,
+      "description": "List available agents"
+    },
+    "POST /api/model": {
+      "accepts": { "model": "string" },
+      "returns": "{ ok: boolean }",
+      "auth": true,
+      "description": "Switch active model"
+    },
+    "GET /api/model": {
+      "returns": "{ model: string }",
+      "auth": true,
+      "description": "Get current model"
+    },
+    "POST /api/transcribe": {
+      "accepts": "audio/webm",
+      "returns": "{ text: string }",
+      "auth": true,
+      "description": "Speech-to-text via shre-router/Whisper"
+    },
+    "POST /api/tts": {
+      "accepts": { "text": "string" },
+      "returns": "audio/mpeg",
+      "auth": true,
+      "description": "Text-to-speech"
+    },
+    "POST /api/tts/stream": {
+      "accepts": { "text": "string" },
+      "returns": "SSE audio stream",
+      "auth": true,
+      "description": "Streaming text-to-speech"
+    },
+    "POST /api/run": {
+      "accepts": "RunRequest",
+      "returns": "RunResult",
+      "auth": true,
+      "description": "Execute a run (task delegation)"
+    },
+    "GET /api/contacts/search": {
+      "returns": "Contact[]",
+      "auth": true,
+      "description": "Search contacts (proxy to shre-contacts)"
+    },
+    "POST /api/share": {
+      "accepts": { "sessionId": "string", "agentId": "string" },
+      "returns": "{ shareId: string, url: string }",
+      "auth": true,
+      "description": "Create a shareable link for a chat session"
+    },
+    "GET /api/share/:shareId": {
+      "returns": "SharedSession",
+      "auth": false,
+      "description": "View a shared chat session"
+    },
+    "GET /api/costs/:path": {
+      "returns": "CostData",
+      "auth": true,
+      "description": "Cost data proxy to shre-meter"
+    },
+    "GET /api/task-timeline": {
+      "returns": "TaskTimeline",
+      "auth": true,
+      "description": "Task timeline proxy to shre-tasks"
+    },
+    "WS /ws/terminal": {
+      "returns": "PTY stream",
+      "auth": true,
+      "description": "WebSocket terminal (PTY)"
+    },
+    "WS /ws/notifications": {
+      "returns": "JSON notifications",
+      "auth": true,
+      "description": "WebSocket notification stream (reminders, status updates)"
+    }
+  },
+
+  "events": {
+    "publishes": [
+      { "type": "task.complete", "schema": { "sessionId": "string", "agentId": "string" } },
+      { "type": "reminder.due", "schema": { "reminders": "Reminder[]" } }
+    ],
+    "subscribes": []
+  },
+
+  "cortex_types": [],
+
+  "depends_on": {
+    "services": ["shre-router", "sqlite"],
+    "optional": ["shre-tasks", "shre-fleet", "shre-meter", "shre-contacts", "openclaw-gateway", "redis"]
+  },
+
+  "health": {
+    "liveness": "GET /api/health",
+    "readiness": "GET /api/health",
+    "response": { "status": "string", "service": "string", "port": "number" }
+  }
+}

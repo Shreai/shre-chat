@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useApp, type ThemeCustom } from "./store";
 
 const ACCENT_PRESETS: { name: string; color: string }[] = [
@@ -38,6 +39,7 @@ export function ThemeCustomizer() {
   const { themeCustom } = state;
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   // On mount: fetch server prefs and apply if present (overrides localStorage)
   useEffect(() => {
@@ -53,13 +55,14 @@ export function ThemeCustomizer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Close on outside click
+  // Close on outside click (check both the portal panel and the button wrapper)
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      const inPanel = panelRef.current?.contains(target);
+      const inWrapper = wrapperRef.current?.contains(target);
+      if (!inPanel && !inWrapper) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -83,7 +86,7 @@ export function ThemeCustomizer() {
   const btnRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative" ref={wrapperRef}>
       <button
         ref={btnRef}
         onClick={() => setOpen(!open)}
@@ -103,26 +106,29 @@ export function ThemeCustomizer() {
         </svg>
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="fixed w-56 rounded-xl shadow-xl z-[200]"
+          ref={panelRef}
+          className="fixed w-64 rounded-xl shadow-xl z-[200]"
           style={{
             background: "var(--c-bg-2)",
             border: "1px solid var(--c-border-1)",
-            padding: "12px",
+            padding: "14px",
+            maxHeight: "calc(100vh - 24px)",
+            overflowY: "auto",
             ...(() => {
               const rect = btnRef.current?.getBoundingClientRect();
               if (!rect) return { bottom: 60, left: 12 };
-              const panelW = 224;
+              const panelW = 256;
               let left = rect.left;
-              if (left + panelW > window.innerWidth - 8) {
-                left = window.innerWidth - panelW - 8;
+              if (left + panelW > window.innerWidth - 12) {
+                left = window.innerWidth - panelW - 12;
               }
               left = Math.max(8, left);
-              return {
-                bottom: window.innerHeight - rect.top + 6,
-                left,
-              };
+              // Position above button; clamp to viewport
+              let bottom = window.innerHeight - rect.top + 8;
+              if (bottom < 12) bottom = 12;
+              return { bottom, left };
             })(),
           }}
         >
@@ -224,7 +230,8 @@ export function ThemeCustomizer() {
           >
             Reset to default
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -3,12 +3,21 @@ import { SBadge } from "@shre/ui-kit";
 import { mib007Link } from "./chat-utils";
 
 interface Agent {
-  name: string;
+  id: string;
+  displayName: string;
+  name?: string; // legacy fallback
+  title?: string;
   department?: string;
   tier?: string;
+  bio?: string;
   skills?: string[];
-  stats?: { totalTasks: number; successRate: number; avgCompletionTimeSec: number };
-  costs?: { totalCostUsd: number };
+  strengths?: string[];
+  humanAbilityRating?: number;
+  avatarEmoji?: string;
+  avatarColor?: string;
+  isActive?: boolean;
+  stats?: { totalTasks?: number; successRate?: number; avgCompletionTimeSec?: number };
+  costs?: { totalCostUsd?: number };
   identity?: { emoji?: string; title?: string };
 }
 
@@ -38,10 +47,12 @@ export function MarketplaceView() {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const data = await fetchApi<Agent[]>("/api/marketplace/agents");
+      const raw = await fetchApi<{ agents?: Agent[] } | Agent[]>("/api/marketplace/agents");
       if (cancelled) return;
-      if (!data) setError("Could not load agent catalog. Is shre-hr running?");
-      setAgents(data ?? []);
+      if (!raw) { setError("Could not load agent catalog. Is shre-hr running?"); setLoading(false); return; }
+      // shre-hr returns { total, active, agents: [...] } — unwrap if needed
+      const data = Array.isArray(raw) ? raw : (raw.agents ?? []);
+      setAgents(data);
       setLoading(false);
     }
     load();
@@ -120,9 +131,13 @@ export function MarketplaceView() {
         {error && <SBadge variant="destructive" className="w-full justify-center rounded-lg px-4 py-3 text-sm">{error}</SBadge>}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map(agent => (
+          {filtered.map(agent => {
+            const agentName = agent.displayName || agent.name || agent.id;
+            const agentEmoji = agent.avatarEmoji || agent.identity?.emoji || "🤖";
+            const skillCount = agent.strengths?.length || agent.skills?.length || 0;
+            return (
             <button
-              key={agent.name}
+              key={agent.id || agentName}
               onClick={() => setSelected(agent)}
               className="text-left rounded-lg p-3 transition-colors"
               style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)" }}
@@ -130,9 +145,9 @@ export function MarketplaceView() {
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--c-border-2)"; }}
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">{agent.identity?.emoji || "🤖"}</span>
+                <span className="text-lg">{agentEmoji}</span>
                 <div>
-                  <div className="text-[12px] font-semibold" style={{ color: "var(--c-text-1)" }}>{agent.name}</div>
+                  <div className="text-[12px] font-semibold" style={{ color: "var(--c-text-1)" }}>{agentName}</div>
                   {agent.tier && (
                     <span className="text-[9px] font-bold uppercase px-1 rounded" style={{ background: tierColor(agent.tier) + "22", color: tierColor(agent.tier) }}>
                       {agent.tier}
@@ -153,11 +168,12 @@ export function MarketplaceView() {
                 </div>
                 <div>
                   <div className="text-[10px]" style={{ color: "var(--c-text-5)" }}>Skills</div>
-                  <div className="text-[12px] font-bold" style={{ color: "var(--c-text-2)" }}>{agent.skills?.length ?? 0}</div>
+                  <div className="text-[12px] font-bold" style={{ color: "var(--c-text-2)" }}>{skillCount}</div>
                 </div>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -174,17 +190,20 @@ export function MarketplaceView() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-4">
-              <span className="text-3xl">{selected.identity?.emoji || "🤖"}</span>
+              <span className="text-3xl">{selected.avatarEmoji || selected.identity?.emoji || "🤖"}</span>
               <div>
-                <h2 className="text-base font-bold" style={{ color: "var(--c-text-1)" }}>{selected.name}</h2>
-                <p className="text-[11px]" style={{ color: "var(--c-text-4)" }}>{selected.identity?.title || selected.department || ""}</p>
+                <h2 className="text-base font-bold" style={{ color: "var(--c-text-1)" }}>{selected.displayName || selected.name || selected.id}</h2>
+                <p className="text-[11px]" style={{ color: "var(--c-text-4)" }}>{selected.title || selected.department || ""}</p>
               </div>
             </div>
-            {selected.skills && selected.skills.length > 0 && (
+            {selected.bio && (
+              <p className="text-[11px] mb-3" style={{ color: "var(--c-text-3)" }}>{selected.bio}</p>
+            )}
+            {((selected.strengths && selected.strengths.length > 0) || (selected.skills && selected.skills.length > 0)) && (
               <div className="mb-3">
-                <h3 className="text-[10px] font-semibold uppercase mb-1" style={{ color: "var(--c-text-5)" }}>Skills</h3>
+                <h3 className="text-[10px] font-semibold uppercase mb-1" style={{ color: "var(--c-text-5)" }}>Strengths</h3>
                 <div className="flex flex-wrap gap-1">
-                  {selected.skills.map(s => (
+                  {(selected.strengths || selected.skills || []).map(s => (
                     <span key={s} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: "var(--c-bg-2)", color: "var(--c-text-3)" }}>
                       {s}
                     </span>
@@ -204,7 +223,7 @@ export function MarketplaceView() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => window.open(mib007Link(`agents/${selected.name}`), "_blank")}
+                onClick={() => window.open(mib007Link(`agents/${selected.id}`), "_blank")}
                 className="flex-1 py-2 rounded-lg text-[12px] font-semibold text-center"
                 style={{ background: "var(--c-accent, #6366f1)", color: "#fff" }}
               >

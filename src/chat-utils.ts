@@ -204,11 +204,13 @@ export function mib007Link(view: string, params?: string): string {
   return params ? `${base}?${params}` : base;
 }
 
+const isRemote = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+
 export const ECOSYSTEM_APPS = [
-  { id: "mib007", name: "MIB007", icon: "M", url: MIB007_BASE, color: "from-blue-500 to-cyan-500", description: "Agents & Issues" },
-  { id: "shre-platform", name: "Shre AI", icon: "S", url: `https://localhost:${ports.services?.["mib-desktop"]?.port ?? 5500}`, color: "from-violet-500 to-fuchsia-500", description: "Dashboard" },
-  { id: "openclaw", name: "OpenClaw", icon: "O", url: `http://localhost:${ports.infrastructure?.["openclaw-gateway"]?.port ?? 18789}`, color: "from-amber-500 to-orange-500", description: "AI Gateway" },
-  { id: "cortexdb", name: "CortexDB", icon: "C", url: `http://localhost:${ports.infrastructure?.["cortexdb-dashboard"]?.port ?? 3400}`, color: "from-emerald-500 to-teal-500", description: "Knowledge DB" },
+  { id: "mib007", name: "MIB007", icon: "M", url: MIB007_BASE, color: "from-blue-500 to-cyan-500", description: "Agents & Issues", localOnly: false },
+  { id: "shre-platform", name: "Shre AI", icon: "S", url: isRemote ? "" : `https://localhost:${ports.services?.["mib-desktop"]?.port ?? 5500}`, color: "from-violet-500 to-fuchsia-500", description: "Dashboard", localOnly: true },
+  { id: "openclaw", name: "OpenClaw", icon: "O", url: isRemote ? "" : `http://localhost:${ports.infrastructure?.["openclaw-gateway"]?.port ?? 18789}`, color: "from-amber-500 to-orange-500", description: "AI Gateway", localOnly: true },
+  { id: "cortexdb", name: "CortexDB", icon: "C", url: isRemote ? "" : `http://localhost:${ports.infrastructure?.["cortexdb-dashboard"]?.port ?? 3400}`, color: "from-emerald-500 to-teal-500", description: "Knowledge DB", localOnly: true },
 ];
 
 export function formatTime(ts?: number): string {
