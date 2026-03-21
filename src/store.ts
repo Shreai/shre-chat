@@ -398,13 +398,18 @@ export function saveSessions(sessions: Session[]) {
 
 // ── Server-side session persistence ──────────────────────────────────
 
-/** Fire-and-forget: push a single session to the server */
-export function syncSessionToServer(session: Session): void {
-  fetch("/api/chat-sessions/" + encodeURIComponent(session.id), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(session),
-  }).catch(() => {}); // never block UI
+/** Push a single session to the server. Returns true on success. */
+export async function syncSessionToServer(session: Session): Promise<boolean> {
+  try {
+    const res = await fetch("/api/chat-sessions/" + encodeURIComponent(session.id), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(session),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Fire-and-forget: delete a session from the server */
@@ -438,19 +443,34 @@ export async function syncWithServer(localSessions: Session[]): Promise<Session[
 const _dirtySessionIds = new Set<string>();
 let _serverSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Mark a session as dirty — will be synced to server within 2s */
+/** Mark a session as dirty — synced to server within 500ms (was 2s).
+ *  Retries once on failure after 3s. */
 export function markSessionDirty(sessionId: string): void {
   _dirtySessionIds.add(sessionId);
   if (_serverSyncTimer !== null) return; // already scheduled
-  _serverSyncTimer = setTimeout(() => {
+  _serverSyncTimer = setTimeout(async () => {
     _serverSyncTimer = null;
     const sessions = loadSessions();
+    const failedIds: string[] = [];
     for (const id of _dirtySessionIds) {
       const s = sessions.find((s) => s.id === id);
-      if (s) syncSessionToServer(s);
+      if (s) {
+        const ok = await syncSessionToServer(s);
+        if (!ok) failedIds.push(id);
+      }
     }
     _dirtySessionIds.clear();
-  }, 2000);
+    // Retry failed syncs once after 3s
+    if (failedIds.length > 0) {
+      setTimeout(() => {
+        const retry = loadSessions();
+        for (const id of failedIds) {
+          const s = retry.find((s) => s.id === id);
+          if (s) syncSessionToServer(s); // best-effort retry
+        }
+      }, 3000);
+    }
+  }, 500);
 }
 
 /** Flush dirty sessions to server immediately (call on beforeunload) */
@@ -476,6 +496,27 @@ export function flushServerSync(): void {
     }
   }
   _dirtySessionIds.clear();
+}
+
+/** Save a session to BOTH localStorage and server immediately (no debounce).
+ *  Call after every user/assistant message to guarantee crash-proof persistence. */
+export function saveSessionImmediate(session: Session): void {
+  // 1. localStorage (sync, instant)
+  const sessions = loadSessions();
+  const idx = sessions.findIndex((s) => s.id === session.id);
+  if (idx >= 0) sessions[idx] = session;
+  else sessions.push(session);
+  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions)); } catch { /* quota */ }
+  if (isIdbReady()) idbSaveSessions(sessions).catch(() => {});
+
+  // 2. Server (async, fire-and-retry)
+  _dirtySessionIds.delete(session.id); // no need for debounced sync
+  syncSessionToServer(session).then((ok) => {
+    if (!ok) {
+      // Retry once after 2s
+      setTimeout(() => syncSessionToServer(session), 2000);
+    }
+  });
 }
 
 /** Debounced saveSessions — delays write by 500ms, coalescing rapid calls.

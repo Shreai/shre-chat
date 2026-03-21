@@ -561,6 +561,30 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
         signal: AbortSignal.timeout(5000),
       }).catch(() => {});
     }
+
+    // Write training_conversation for fine-tuning pipeline (CortexDB universal sink)
+    fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/write`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data_type: "training_conversation",
+        payload: {
+          agentId: agentId || "shre",
+          source,
+          model,
+          role_user: userMessage.slice(0, 8000),
+          role_assistant: assistantResponse.slice(0, 16000),
+          userMessageLength: userMessage.length,
+          assistantResponseLength: assistantResponse.length,
+          quality: null, // Scored later by shre-scorer
+          tenant_id: "platform",
+          timestamp: new Date().toISOString(),
+        },
+        actor: "shre-chat",
+      }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {});
+
   } catch { /* never block */ }
 }
 
@@ -3492,10 +3516,12 @@ process.on("uncaughtException", (err) => {
     process.exit(1);
   }
   log.error("[shre-chat] Uncaught exception", {}, err);
-  process.exit(1);
+  // Graceful shutdown — flush sessions before exiting
+  shutdown("uncaughtException");
 });
 
 process.on("unhandledRejection", (reason) => {
   log.error("[shre-chat] Unhandled rejection", { reason: String(reason) });
+  // Don't exit on unhandled rejections — log and continue
 });
 
