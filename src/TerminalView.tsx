@@ -313,9 +313,9 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
             </button>
             <button
               onClick={onClose}
-              style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
+              style={{ color: "var(--c-danger)", fontSize: 13, background: "none", border: "none", cursor: "pointer", padding: "2px 6px", opacity: 0.8 }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.8"; }}
               title="Close all terminals"
             >
               &#x2715;
