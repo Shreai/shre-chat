@@ -220,24 +220,11 @@ export function Sidebar() {
       }}
     >
       <div className="w-64 flex flex-col h-full">
-        {/* Mobile close button */}
-        <div className="md:hidden flex items-center justify-end px-2 pt-2">
-          <button
-            onClick={() => actions.setSidebarOpen(false)}
-            className="h-11 w-11 rounded-lg flex items-center justify-center transition-colors"
-            style={{ color: "var(--c-text-3)" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            aria-label="Close sidebar"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-          </button>
-        </div>
-        {/* Agent Picker trigger */}
-        <div className="p-3" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
+        {/* Agent Picker trigger + mobile close */}
+        <div className="p-3 flex items-center gap-1" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
           <button
             onClick={() => { setShowAgentPicker(!showAgentPicker); if (!showAgentPicker) preloadAgents(); }}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors"
+            className="flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors min-w-0"
             style={{ color: "var(--c-text-1)" }}
             onMouseEnter={(e) => e.currentTarget.style.background = "var(--c-bg-hover)"}
             onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
@@ -259,7 +246,17 @@ export function Sidebar() {
               </div>
               <div className="text-[11px] font-mono truncate" style={{ color: "var(--c-text-4)" }}>{currentAgent.id}</div>
             </div>
-            <svg className="h-4 w-4" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+            <svg className="h-4 w-4 hidden md:block" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+          <button
+            onClick={() => actions.setSidebarOpen(false)}
+            className="md:hidden h-9 w-9 shrink-0 rounded-lg flex items-center justify-center transition-colors"
+            style={{ color: "var(--c-text-3)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            aria-label="Close sidebar"
+          >
+            <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
 
