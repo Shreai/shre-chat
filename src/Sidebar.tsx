@@ -525,8 +525,23 @@ export function Sidebar() {
               <>
                 <div className="fixed inset-0 z-[60]" onClick={() => setShowMoreMenu(false)} />
                 <div
-                  className="absolute left-0 bottom-10 z-[61] w-56 rounded-xl overflow-hidden shadow-xl"
-                  style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)" }}
+                  className="fixed z-[61] w-56 rounded-xl shadow-xl"
+                  style={{
+                    background: "var(--c-bg-2)",
+                    border: "1px solid var(--c-border-1)",
+                    maxHeight: "min(520px, calc(100dvh - 40px))",
+                    overflowY: "auto",
+                    ...(() => {
+                      const rect = moreMenuRef.current?.getBoundingClientRect();
+                      if (!rect) return { bottom: 60, left: 12 };
+                      const menuH = 520;
+                      const spaceAbove = rect.top;
+                      if (spaceAbove >= menuH) {
+                        return { bottom: window.innerHeight - rect.top + 4, left: rect.left };
+                      }
+                      return { top: Math.max(8, rect.top - Math.min(menuH, spaceAbove - 8)), left: rect.left };
+                    })(),
+                  }}
                 >
                   <div className="py-1">
                     <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Views</div>
