@@ -240,18 +240,25 @@ export function StatusBar() {
         style={styles.item}
         title={`Gateway: ${connLabel}`}
       >
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: "50%",
-            background: connColor,
-            boxShadow: data.gatewayConnected ? `0 0 6px ${connColor}` : "none",
-            transition: "all 0.3s ease",
-            flexShrink: 0,
-          }}
-        />
-        <span style={{ ...styles.label, fontSize: 11 }}>
+        {data.gatewayConnected ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+            <circle cx="12" cy="20" r="1" fill="#22c55e" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <line x1="1" y1="1" x2="23" y2="23" />
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+            <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+            <circle cx="12" cy="20" r="1" fill="#ef4444" />
+          </svg>
+        )}
+        <span style={{ ...styles.label, fontSize: 11, color: connColor }}>
           {connLabel}
         </span>
       </div>

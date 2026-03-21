@@ -360,7 +360,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   ) : isRecording ? (
                     <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
                   ) : (
-                    <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
                   )}
                   {isRecording && voicePhase === "recording" && (
                     <span
@@ -383,7 +383,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   title={isHandsFree ? 'Hands-free ON — say "shre shre" to start' : "Enable hands-free mode"}
                   aria-label={isHandsFree ? "Disable hands-free mode" : "Enable hands-free mode"}
                 >
-                  <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><circle cx="12" cy="12" r="10" strokeDasharray="4 4"/></svg>
+                  <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/><path d="M2 12a10 10 0 0 0 4 4" opacity="0.5"/><path d="M22 12a10 10 0 0 1-4 4" opacity="0.5"/></svg>
                 </button>
               )}
 
