@@ -409,6 +409,7 @@ export function StatusBar() {
             display: "flex", flexDirection: "column",
             background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)",
             borderRadius: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+            width: 320, maxHeight: "min(420px, calc(100dvh - 60px))",
             ...(() => {
               const rect = bellRef.current?.getBoundingClientRect();
               if (!rect) return {};

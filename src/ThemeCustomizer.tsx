@@ -80,9 +80,12 @@ export function ThemeCustomizer() {
   const currentSize = themeCustom.fontSize || "md";
   const currentRadius = themeCustom.borderRadius || "normal";
 
+  const btnRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div className="relative" ref={panelRef}>
       <button
+        ref={btnRef}
         onClick={() => setOpen(!open)}
         className="p-1.5 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
         style={{ color: "var(--c-text-4)" }}
@@ -102,11 +105,19 @@ export function ThemeCustomizer() {
 
       {open && (
         <div
-          className="absolute bottom-full right-0 mb-2 w-56 rounded-xl shadow-xl z-50"
+          className="fixed w-56 rounded-xl shadow-xl z-[200]"
           style={{
             background: "var(--c-bg-2)",
             border: "1px solid var(--c-border-1)",
             padding: "12px",
+            ...(() => {
+              const rect = btnRef.current?.getBoundingClientRect();
+              if (!rect) return { bottom: 60, left: 12 };
+              return {
+                bottom: window.innerHeight - rect.top + 6,
+                left: Math.max(8, rect.left),
+              };
+            })(),
           }}
         >
           {/* Header */}
