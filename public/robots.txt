@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /
+
+# AROS Chat — private application, no indexing
+# Public site: https://nirtek.net
