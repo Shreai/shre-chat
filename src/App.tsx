@@ -99,12 +99,19 @@ const COMPACT_KEY = "shre-compact";
 const WRITE_ENABLED_KEY = "shre-write-enabled";
 
 export function App() {
+  // ── Dev mode: skip auth gate for UI development ──
+  const DEV_BYPASS_AUTH = true;
+
   // ── Auth gate ──────────────────────────────────────────────────
-  const [authState, setAuthState] = useState<{ token: string; user: { username: string; name: string; role: string } } | null>(() => getStoredAuth());
-  const [authChecking, setAuthChecking] = useState(true);
+  const devUser = { token: "dev-token", user: { username: "dev", name: "Developer", role: "admin" } };
+  const [authState, setAuthState] = useState<{ token: string; user: { username: string; name: string; role: string } } | null>(
+    () => DEV_BYPASS_AUTH ? devUser : getStoredAuth()
+  );
+  const [authChecking, setAuthChecking] = useState(!DEV_BYPASS_AUTH);
 
   // Verify stored token on mount
   useEffect(() => {
+    if (DEV_BYPASS_AUTH) return;
     const stored = getStoredAuth();
     if (!stored) { setAuthChecking(false); return; }
     fetch("/api/auth/check", {
@@ -143,15 +150,16 @@ export function App() {
   }, []);
 
   const handleLogout = useCallback(() => {
+    if (DEV_BYPASS_AUTH) return;
     fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_TOKEN_KEY); // clean up any legacy
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
     setAuthState(null);
   }, []);
 
   if (authChecking) {
-    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #0a0a0f)", color: "var(--c-text-4)" }}>Loading...</div>;
+    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #000)", color: "var(--c-text-4)" }}>Loading...</div>;
   }
 
   if (!authState) {
