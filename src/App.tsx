@@ -339,11 +339,49 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
     }).catch(() => {}).finally(() => setSyncing(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Request desktop notification permission once on mount
+  // Request desktop notification permission + auto-subscribe to Web Push
   useEffect(() => {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
+    if (typeof Notification === "undefined") return;
+    const setupPush = async () => {
+      // Request permission if not yet decided
+      if (Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+      // Auto-subscribe to Web Push if permission granted and PushManager available
+      if (Notification.permission === "granted" && "PushManager" in window && "serviceWorker" in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const existing = await reg.pushManager.getSubscription();
+          if (existing) {
+            // Re-register with server (in case server lost it)
+            fetch("/api/push/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ subscription: existing.toJSON() }),
+            }).catch(() => {});
+            return;
+          }
+          // New subscription
+          const vapidRes = await fetch("/api/push/vapid-key");
+          if (!vapidRes.ok) return;
+          const { publicKey } = await vapidRes.json();
+          const padding = "=".repeat((4 - (publicKey.length % 4)) % 4);
+          const base64 = (publicKey + padding).replace(/-/g, "+").replace(/_/g, "/");
+          const raw = atob(base64);
+          const key = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) key[i] = raw.charCodeAt(i);
+          const subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+          fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: subscription.toJSON() }),
+          }).catch(() => {});
+        } catch (err) {
+          console.warn("[push] Auto-subscribe failed:", err);
+        }
+      }
+    };
+    setupPush();
   }, []);
 
   // Flush pending debounced session saves on page unload

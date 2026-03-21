@@ -74,6 +74,65 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// ── Web Push — background notifications (iOS 16.4+, Android, desktop) ──
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "Shre AI", body: event.data.text() };
+  }
+
+  const options = {
+    body: payload.body || "",
+    icon: "/assets/icon-192.png",
+    badge: "/assets/icon-192.png",
+    tag: payload.type || "shre-notification",
+    data: { url: payload.url || "/", type: payload.type },
+    vibrate: [100, 50, 100],
+    renotify: true,
+    actions: payload.type === "reminders_due"
+      ? [{ action: "snooze", title: "Snooze" }, { action: "open", title: "Open" }]
+      : [{ action: "open", title: "Open" }],
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "Shre AI", options)
+  );
+});
+
+// Notification click — open/focus the app
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const url = event.notification.data?.url || "/";
+  const action = event.action;
+
+  if (action === "snooze") {
+    // Snooze: just close the notification (server handles snooze via reminder API)
+    return;
+  }
+
+  // Open or focus the app
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      // If app is already open, focus it and navigate
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin)) {
+          client.focus();
+          if (url !== "/") client.navigate(url);
+          return;
+        }
+      }
+      // Otherwise open a new window
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
 // Listen for update messages from the app
 self.addEventListener("message", (event) => {
   if (event.data === "skipWaiting") self.skipWaiting();
