@@ -286,7 +286,7 @@ export function StatusBar() {
             height="14"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="var(--c-accent, #6366f1)"
+            stroke="var(--c-accent)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -294,7 +294,7 @@ export function StatusBar() {
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          <span style={{ ...styles.badge, color: "var(--c-accent, #6366f1)" }}>{data.pendingTasks}</span>
+          <span style={{ ...styles.badge, color: "var(--c-accent)" }}>{data.pendingTasks}</span>
         </div>
       )}
 
@@ -397,11 +397,20 @@ export function StatusBar() {
 
         {/* Notification dropdown */}
         {bellOpen && (
-          <div style={{
-            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 200,
-            minWidth: 350, maxWidth: 420, maxHeight: 480, display: "flex", flexDirection: "column",
-            background: "var(--c-bg-2, #1a1a2e)", border: "1px solid var(--c-border-1)",
-            borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          <div className="notif-dropdown" style={{
+            position: "fixed", zIndex: 200,
+            display: "flex", flexDirection: "column",
+            background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)",
+            borderRadius: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+            ...(() => {
+              const rect = bellRef.current?.getBoundingClientRect();
+              if (!rect) return {};
+              const top = rect.bottom + 6;
+              const vw = window.innerWidth;
+              if (vw <= 480) return { top, left: 8, right: 8, width: "auto" };
+              const right = Math.max(8, vw - rect.right);
+              return { top, right };
+            })(),
           }}>
             {/* Header with clear all */}
             <div style={{
@@ -478,7 +487,7 @@ export function StatusBar() {
                             {n.body}
                           </div>
                         )}
-                        <div style={{ fontSize: 10, color: "var(--c-text-5)", marginTop: 4 }}>
+                        <div style={{ fontSize: 10, color: "var(--c-text-4)", marginTop: 4 }}>
                           {new Date(n.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                           {n.source && <span> &middot; {n.source}</span>}
                         </div>
@@ -637,6 +646,29 @@ export function StatusBar() {
           .status-bar {
             padding: 0 8px;
             gap: 8px;
+          }
+        }
+
+        .notif-dropdown {
+          width: 380px;
+          max-height: min(480px, calc(100dvh - 60px));
+        }
+        @media (max-width: 480px) {
+          .notif-dropdown {
+            width: auto;
+            max-height: min(420px, calc(100dvh - 60px));
+            border-radius: 12px;
+          }
+        }
+        @media (min-width: 481px) and (max-width: 767px) {
+          .notif-dropdown {
+            width: 360px;
+          }
+        }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+          .notif-dropdown {
+            max-height: calc(100dvh - 52px);
           }
         }
       `}</style>

@@ -137,10 +137,10 @@
   --c-bg-1: #f5f5f7;
   --c-bg-2: #ffffff;
   --c-bg-3: #eeeef0;
-  --c-bg-glass: rgba(245, 245, 247, 0.9);
+  --c-bg-glass: rgba(245, 245, 247, 0.92);
   --c-bg-input: rgba(0, 0, 0, 0.04);
-  --c-bg-hover: rgba(0, 0, 0, 0.04);
-  --c-bg-active: rgba(79, 110, 220, 0.08);
+  --c-bg-hover: rgba(0, 0, 0, 0.05);
+  --c-bg-active: rgba(79, 110, 220, 0.1);
   --c-bg-card: rgba(0, 0, 0, 0.03);
   --c-bg-badge: rgba(79, 110, 220, 0.1);
   --c-bg-main: #fafafa;
@@ -149,13 +149,13 @@
   --c-msg-ai: rgba(0, 0, 0, 0.015);
 
   --c-text-1: #1a1a1e;
-  --c-text-2: #6e6e80;
-  --c-text-3: #a0a0b0;
-  --c-text-4: #c4c4d0;
-  --c-text-5: #dedee5;
+  --c-text-2: #52525b;
+  --c-text-3: #71717a;
+  --c-text-4: #8e8e9a;
+  --c-text-5: #b0b0ba;
 
-  --c-border-1: rgba(0, 0, 0, 0.1);
-  --c-border-2: rgba(0, 0, 0, 0.06);
+  --c-border-1: rgba(0, 0, 0, 0.12);
+  --c-border-2: rgba(0, 0, 0, 0.08);
 
   --c-accent: #4f6edc;
   --c-accent-hover: #3d5cc9;
@@ -543,6 +543,21 @@ h1, h2, h3, h4, h5, h6 {
 
 @media (max-width: 768px) {
   html, body, #root { height: var(--vv-height, 100dvh); }
+}
+
+/* ── Landscape orientation on small devices ────────────────────── */
+@media (orientation: landscape) and (max-height: 500px) {
+  .status-bar { min-height: 32px !important; }
+  .mobile-input-area textarea { min-height: 36px; }
+}
+
+/* ── Safe area padding for notch devices ───────────────────────── */
+@supports (padding-left: env(safe-area-inset-left)) {
+  @media (orientation: landscape) {
+    .sidebar-mobile-slide {
+      padding-left: env(safe-area-inset-left);
+    }
+  }
 }
 
 /* ── Focus ring (Apple style — blue glow) ────────────────────────── */

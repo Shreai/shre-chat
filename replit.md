@@ -34,10 +34,14 @@ Web-based AI-powered chat interface for the Shre platform. Built with React + Vi
 
 ### Design System
 - **Dark palette**: Layered charcoal (#0d0d0f / #161618 / #1e1e22), not true black
-- **Accent**: Periwinkle blue (#638dff), used for buttons, links, active states
-- **Text hierarchy**: Clean neutral grays (#ececf1 → #6b6b76)
-- **CSS vars**: `--c-bg-main`, `--c-bg-sidebar`, `--c-bg-1` through `--c-bg-3`, `--c-text-1` through `--c-text-5`, `--c-accent`, `--c-border-1`/`--c-border-2`
+- **Light palette**: Clean whites (#fafafa / #ffffff / #eeeef0), high-contrast text hierarchy
+- **Accent**: Periwinkle blue (dark: #638dff, light: #4f6edc)
+- **Text hierarchy (dark)**: #ececf1 → #a1a1aa → #6b6b76 → #4a4a55 → #33333d
+- **Text hierarchy (light)**: #1a1a1e → #52525b → #71717a → #8e8e9a → #b0b0ba (WCAG AA compliant)
+- **CSS vars**: `--c-bg-main`, `--c-bg-sidebar`, `--c-bg-1..3`, `--c-text-1..5`, `--c-accent`, `--c-border-1/2`
 - **Slide-out panels**: Model & Agent pickers use z-[70]/z-[71] with backdrop blur overlay and `slide-in-left` animation
+- **Notification dropdown**: Dynamically anchored to bell button via `getBoundingClientRect()`, responsive width (380px desktop, auto on mobile ≤480px)
+- **Responsive breakpoints**: Mobile (≤768px), tablet (769-1024px), landscape orientation (max-height: 500px)
 - **DEV_BYPASS_AUTH**: Flag in `src/App.tsx` — `true` for UI-only dev, `false` for real backend auth
 
 ## Local Stub Packages

@@ -543,7 +543,7 @@ export function Sidebar() {
             <button
               onClick={() => exportSessions(sessions)}
               className="p-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--c-text-4)" }}
+              style={{ color: "var(--c-text-3)" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               title="Export sessions"
@@ -558,7 +558,7 @@ export function Sidebar() {
             <button
               onClick={() => importInputRef.current?.click()}
               className="p-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--c-text-4)" }}
+              style={{ color: "var(--c-text-3)" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               title="Import sessions"
@@ -568,7 +568,7 @@ export function Sidebar() {
             <button
               onClick={() => { actions.toggleWriteEnabled(); }}
               className="p-1.5 rounded-lg transition-colors"
-              style={{ color: state.writeEnabled ? "var(--c-accent)" : "var(--c-text-4)" }}
+              style={{ color: state.writeEnabled ? "var(--c-accent)" : "var(--c-text-3)" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               title={state.writeEnabled ? "Write mode ON (click to go read-only)" : "Read-only mode (click to enable write)"}
@@ -584,7 +584,7 @@ export function Sidebar() {
             <button
               onClick={() => actions.toggleTheme()}
               className="p-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--c-text-4)" }}
+              style={{ color: "var(--c-text-3)" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               title={theme === "dark" ? "Light mode" : "Dark mode"}
@@ -599,9 +599,9 @@ export function Sidebar() {
               <button
                 onClick={actions.logout}
                 className="p-1.5 rounded-lg transition-colors"
-                style={{ color: "var(--c-text-4)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "#f87171"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--c-text-4)"; }}
+                style={{ color: "var(--c-text-3)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "var(--c-danger)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--c-text-3)"; }}
                 title="Sign out"
               >
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
