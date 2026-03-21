@@ -99,8 +99,8 @@ const COMPACT_KEY = "shre-compact";
 const WRITE_ENABLED_KEY = "shre-write-enabled";
 
 export function App() {
-  // ── Dev mode: skip auth gate for UI development ──
-  const DEV_BYPASS_AUTH = true;
+  // ── Dev mode: set to true to skip auth for UI-only work ──
+  const DEV_BYPASS_AUTH = false;
 
   // ── Auth gate ──────────────────────────────────────────────────
   const devUser = { token: "dev-token", user: { username: "dev", name: "Developer", role: "admin" } };
