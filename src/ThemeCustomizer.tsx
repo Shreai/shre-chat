@@ -113,9 +113,15 @@ export function ThemeCustomizer() {
             ...(() => {
               const rect = btnRef.current?.getBoundingClientRect();
               if (!rect) return { bottom: 60, left: 12 };
+              const panelW = 224;
+              let left = rect.left;
+              if (left + panelW > window.innerWidth - 8) {
+                left = window.innerWidth - panelW - 8;
+              }
+              left = Math.max(8, left);
               return {
                 bottom: window.innerHeight - rect.top + 6,
-                left: Math.max(8, rect.left),
+                left,
               };
             })(),
           }}

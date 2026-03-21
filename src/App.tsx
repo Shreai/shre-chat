@@ -305,12 +305,16 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
       el.removeProperty("--font-scale");
       document.body.style.removeProperty("font-size");
     }
-    // Border radius
-    const radiusMap = { sharp: "2px", normal: "8px", round: "16px" };
+    const radiusPresets: Record<string, Record<string, string>> = {
+      sharp: { "--radius-sm": "2px", "--radius-base": "4px", "--radius-lg": "6px", "--radius-xl": "8px", "--radius-full": "10px" },
+      normal: { "--radius-sm": "6px", "--radius-base": "10px", "--radius-lg": "14px", "--radius-xl": "20px", "--radius-full": "9999px" },
+      round: { "--radius-sm": "10px", "--radius-base": "16px", "--radius-lg": "22px", "--radius-xl": "28px", "--radius-full": "9999px" },
+    };
+    const preset = radiusPresets[themeCustom.borderRadius || "normal"];
     if (themeCustom.borderRadius && themeCustom.borderRadius !== "normal") {
-      el.setProperty("--radius-base", radiusMap[themeCustom.borderRadius]);
+      Object.entries(preset).forEach(([k, v]) => el.setProperty(k, v));
     } else {
-      el.removeProperty("--radius-base");
+      Object.keys(preset).forEach(k => el.removeProperty(k));
     }
   }, [themeCustom]);
 
