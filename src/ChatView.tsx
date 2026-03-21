@@ -71,6 +71,8 @@ export function ChatView() {
     return "";
   });
   const [showApps, setShowApps] = useState(false);
+  const [showHeaderMore, setShowHeaderMore] = useState(false);
+  const headerMoreRef = useRef<HTMLDivElement>(null);
   const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -757,180 +759,52 @@ export function ChatView() {
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && <>
       {/* Header with tabs — below traffic lights */}
-      <header className="flex items-center justify-between px-3 py-2 shrink-0 backdrop-blur-sm"
-        style={{ background: "var(--c-bg-glass)", borderBottom: "1px solid var(--c-border-1)", zIndex: 30, position: "relative" }}>
-        <div className="flex items-center gap-2 min-w-0 flex-1 shre-no-drag">
-          <button onClick={() => actions.setSidebarOpen(!state.sidebarOpen)} className="shrink-0 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 rounded"
-            style={{ color: "var(--c-text-4)" }}
+      <header className="flex items-center justify-between px-4 py-2.5 shrink-0 backdrop-blur-xl"
+        style={{ background: "var(--c-bg-glass)", borderBottom: "1px solid var(--c-border-2)", zIndex: 30, position: "relative" }}>
+        <div className="flex items-center gap-3 min-w-0 flex-1 shre-no-drag">
+          <button onClick={() => actions.setSidebarOpen(!state.sidebarOpen)} className="shrink-0 p-1 -ml-1 rounded-lg transition-colors hover:bg-white/5"
+            style={{ color: "var(--c-text-3)" }}
             aria-label={state.sidebarOpen ? "Close sidebar" : "Open sidebar"}>
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+            <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
           </button>
 
-          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center text-sm text-white shrink-0">{currentAgent.emoji}</div>
+          {(() => {
+            const s = sessions.find((x) => x.id === activeSessionId);
+            if (!s) return <span className="text-[13px] font-semibold tracking-tight" style={{ color: "var(--c-text-1)" }}>{currentAgent.name}</span>;
+            return editingTabId === s.id ? (
+              <input
+                autoFocus
+                value={editingTabText}
+                onChange={(e) => setEditingTabText(e.target.value)}
+                onBlur={() => { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); } if (e.key === "Escape") setEditingTabId(null); }}
+                onClick={(e) => e.stopPropagation()}
+                className="max-w-[180px] sm:max-w-[260px] bg-transparent outline-none text-[13px] font-semibold tracking-tight rounded px-1"
+                style={{ color: "var(--c-text-1)", border: "1px solid var(--c-accent)" }}
+              />
+            ) : (
+              <span
+                className="text-[13px] font-semibold tracking-tight truncate max-w-[180px] sm:max-w-[260px] cursor-default"
+                style={{ color: "var(--c-text-1)" }}
+                onDoubleClick={() => { setEditingTabId(s.id); setEditingTabText(s.title); }}
+                title="Double-click to rename"
+              >
+                {s.title}
+              </span>
+            );
+          })()}
 
-          {/* Agent session label — one session per agent, double-click to rename */}
-          <div className="flex items-center min-w-0">
-            {(() => {
-              const s = sessions.find((x) => x.id === activeSessionId);
-              if (!s) return <span className="text-[12px] font-medium" style={{ color: "var(--c-text-2)" }}>{currentAgent.name}</span>;
-              return editingTabId === s.id ? (
-                <input
-                  autoFocus
-                  value={editingTabText}
-                  onChange={(e) => setEditingTabText(e.target.value)}
-                  onBlur={() => { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); } if (e.key === "Escape") setEditingTabId(null); }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="max-w-[120px] sm:max-w-[200px] bg-transparent outline-none text-[12px] font-medium rounded px-0.5"
-                  style={{ color: "var(--c-text-1)", border: "1px solid var(--c-border-1)" }}
-                />
-              ) : (
-                <span
-                  className="text-[12px] font-medium truncate max-w-[120px] sm:max-w-[200px] cursor-default"
-                  style={{ color: "var(--c-text-2)" }}
-                  onDoubleClick={() => { setEditingTabId(s.id); setEditingTabText(s.title); }}
-                  title="Double-click to rename"
-                >
-                  {currentAgent.name} &mdash; {s.title}
-                </span>
-              );
-            })()}
-          </div>
           {cliMode && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: "rgba(168,85,247,0.15)", color: "var(--c-purple)", border: "1px solid rgba(168,85,247,0.25)" }}>CLI</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium" style={{ background: "rgba(168,85,247,0.12)", color: "var(--c-purple)" }}>CLI</span>
           )}
+
+          <span
+            className={`inline-block h-[6px] w-[6px] rounded-full shrink-0 ${wsConnected ? "bg-emerald-400" : wsFailed ? "bg-red-400" : gatewayUp ? "bg-yellow-400" : gatewayUp === false ? "bg-red-400" : "bg-gray-500"}`}
+            title={wsConnected ? "Connected" : wsFailed ? "Connection failed" : gatewayUp ? "HTTP fallback" : gatewayUp === false ? "Offline" : "Connecting..."}
+          />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Conversation token count */}
-          {messages.length > 0 && (
-            <span className="text-[9px] hidden sm:inline" style={{ color: "var(--c-text-5)" }} title="Estimated token count for this conversation">
-              {formatTokenCount(messages.reduce((sum, m) => sum + estimateTokens(m.content), 0))}
-            </span>
-          )}
-          {/* Router / OpenClaw toggle */}
-          <button
-            onClick={() => {
-              const next = !openclawMode;
-              setOpenclawMode(next);
-              localStorage.setItem("shre-openclaw-mode", String(next));
-            }}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] transition-all shrink-0"
-            style={{
-              background: openclawMode ? "rgba(168,85,247,0.15)" : "rgba(59,130,246,0.1)",
-              color: openclawMode ? "var(--c-purple, #a855f7)" : "var(--c-accent, #3b82f6)",
-              border: `1px solid ${openclawMode ? "rgba(168,85,247,0.25)" : "rgba(59,130,246,0.2)"}`,
-            }}
-            title={openclawMode
-              ? "OpenClaw mode: agent workspace with SOUL.md, tools, session memory. Click to switch to Router."
-              : "Router mode: direct LLM via shre-router with RAG, budget, learning. Click to switch to OpenClaw."}
-          >
-            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: openclawMode ? "#a855f7" : "#3b82f6" }} />
-            {openclawMode ? "OpenClaw" : "Router"}
-          </button>
-
-          {/* Connection status */}
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${wsConnected ? "bg-emerald-400" : wsFailed ? "bg-red-400" : gatewayUp ? "bg-yellow-400" : gatewayUp === false ? "bg-red-400" : "bg-gray-400"}`}
-              role="img"
-              aria-label={wsConnected ? "Connected via WebSocket" : wsFailed ? "Connection failed" : gatewayUp ? "Connected via HTTP" : gatewayUp === false ? "Offline" : "Connecting"}
-            />
-            {wsFailed ? (
-              <button
-                onClick={() => { setWsFailed(false); retryConnection().then(() => setWsConnected(true)).catch(() => {}); }}
-                className="text-[9px] px-1.5 py-0.5 rounded transition-colors hover:brightness-125"
-                style={{ color: "var(--c-danger-soft)", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}
-                aria-label="Reconnect to gateway"
-              >
-                Reconnect
-              </button>
-            ) : (
-              <span className="text-[9px]" style={{ color: "var(--c-text-5)" }}>
-                {wsConnected ? "WS" : gatewayUp ? "HTTP" : gatewayUp === false ? "Offline" : "..."}
-              </span>
-            )}
-            {/* Router status dot */}
-            <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${routerUp === true ? "bg-emerald-400" : routerUp === false ? "bg-red-400" : "bg-gray-400"}`}
-              title={routerUp === true ? "Router: online" : routerUp === false ? "Router: offline \u2014 model list may be stale" : "Router: checking..."}
-            />
-            <span className="text-[9px]" style={{ color: routerUp === false ? "var(--c-danger-soft)" : "var(--c-text-5)" }}>
-              {routerUp === true ? "Router" : routerUp === false ? "Router \u2717" : ""}
-            </span>
-          </div>
-
-          {/* Share via link */}
-          {messages.length > 0 && activeSessionId && (
-            <div className="relative">
-              <button
-                onClick={async () => {
-                  if (shareUrl) { setShareUrl(null); return; }
-                  setShareLoading(true);
-                  setShareCopied(false);
-                  try {
-                    const url = await shareSession(activeSessionId);
-                    setShareUrl(url);
-                  } catch {
-                    actions.setStatusLine("Failed to create share link");
-                    setTimeout(() => actions.setStatusLine(null), 3000);
-                  }
-                  setShareLoading(false);
-                }}
-                className="h-7 rounded-lg flex items-center gap-1 px-2 text-[10px] transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                style={{ color: shareUrl ? "var(--c-accent)" : "var(--c-text-4)", background: shareUrl ? "var(--c-bg-active)" : "transparent" }}
-                title="Share conversation"
-                aria-label="Share conversation"
-                disabled={shareLoading}
-              >
-                {shareLoading ? (
-                  <span className="h-3 w-3 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--c-text-4)", borderTopColor: "transparent" }} />
-                ) : (
-                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                )}
-                <span className="hidden sm:inline">Share</span>
-              </button>
-              {shareUrl && (
-                <div
-                  className="absolute right-0 top-9 z-50 w-72 rounded-xl overflow-hidden shadow-xl p-3"
-                  style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)" }}
-                >
-                  <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--c-text-5)" }}>Share link</div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={shareUrl}
-                      className="flex-1 text-[11px] px-2 py-1.5 rounded-lg outline-none truncate"
-                      style={{ background: "var(--c-bg-card)", color: "var(--c-text-2)", border: "1px solid var(--c-border-1)" }}
-                      onFocus={(e) => e.target.select()}
-                    />
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(shareUrl).then(() => {
-                          setShareCopied(true);
-                          setTimeout(() => setShareCopied(false), 2000);
-                        });
-                      }}
-                      className="h-7 px-2.5 rounded-lg text-[10px] font-medium transition-all shrink-0"
-                      style={{
-                        background: shareCopied ? "rgba(34,197,94,0.15)" : "var(--c-accent)",
-                        color: shareCopied ? "var(--c-success-soft)" : "var(--c-on-accent)",
-                        border: shareCopied ? "1px solid rgba(34,197,94,0.3)" : "1px solid transparent",
-                      }}
-                    >
-                      {shareCopied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                  <div className="text-[9px] mt-1.5" style={{ color: "var(--c-text-5)" }}>
-                    Anyone with this link can view a read-only snapshot.
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Model picker */}
+        <div className="flex items-center gap-1 shrink-0">
           <ModelPicker
             open={showModelPicker}
             onToggle={() => setShowModelPicker(!showModelPicker)}
@@ -942,305 +816,335 @@ export function ChatView() {
             pickerRef={modelPickerRef}
           />
 
-          {/* Compare mode toggle */}
-          <div className="relative hidden sm:block" ref={comparePickerRef}>
+          <div className="relative" ref={headerMoreRef}>
             <button
-              onClick={() => {
-                if (!compareMode) {
-                  setCompareMode(true);
-                  if (compareModels.length < 2) setComparePickerOpen(true);
-                } else {
-                  setCompareMode(false);
-                  setCompareStreams({});
-                  setCompareWinner(null);
-                  setComparePickerOpen(false);
-                }
-              }}
-              className="h-7 rounded-lg flex items-center gap-1 px-2 text-[10px] transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-              style={{
-                color: compareMode ? "var(--c-warning)" : "var(--c-text-4)",
-                background: compareMode ? "rgba(245,158,11,0.1)" : "transparent",
-                border: compareMode ? "1px solid rgba(245,158,11,0.3)" : "1px solid transparent",
-              }}
-              title={compareMode ? "Exit compare mode" : "Compare models side-by-side"}
-              aria-label={compareMode ? "Exit compare mode" : "Compare models"}
+              onClick={() => setShowHeaderMore(!showHeaderMore)}
+              className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+              style={{ color: showHeaderMore ? "var(--c-text-1)" : "var(--c-text-3)" }}
+              aria-label="More options"
             >
-              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
-              <span className="hidden sm:inline">Compare</span>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
             </button>
-            {compareMode && (
-              <button
-                onClick={() => setComparePickerOpen(!comparePickerOpen)}
-                className="h-7 rounded-lg flex items-center gap-1 px-1.5 text-[10px] transition-all"
-                style={{ color: "var(--c-warning)" }}
-                title="Select models to compare"
-              >
-                <span>{compareModels.length} models</span>
-                <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-            )}
-            {comparePickerOpen && (
-              <div
-                className="absolute right-0 top-9 z-50 w-72 rounded-xl overflow-hidden shadow-xl"
-                style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)" }}
-              >
-                <div className="px-3 py-2 flex items-center justify-between" style={{ borderBottom: "1px solid var(--c-border-1)" }}>
-                  <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--c-text-5)" }}>Compare Models (pick 2-3)</span>
-                  <span className="text-[10px] font-mono px-1.5 rounded" style={{ background: "var(--c-bg-active)", color: "var(--c-warning)" }}>{compareModels.length}/3</span>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {AVAILABLE_MODELS.map(m => {
-                    const isSel = compareModels.includes(m.id);
-                    const isOffline = m.connected === false;
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => {
-                          if (isOffline && !isSel) return;
-                          if (isSel) {
-                            setCompareModels(prev => prev.filter(id => id !== m.id));
-                          } else if (compareModels.length < 3) {
-                            setCompareModels(prev => [...prev, m.id]);
-                          }
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:brightness-110"
-                        style={{
-                          color: isSel ? "var(--c-warning)" : isOffline ? "var(--c-text-5)" : "var(--c-text-2)",
-                          background: isSel ? "rgba(245,158,11,0.1)" : "var(--c-bg-2)",
-                          opacity: isOffline && !isSel ? 0.4 : !isSel && compareModels.length >= 3 ? 0.4 : 1,
-                          cursor: isOffline && !isSel ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        <span className="w-4 h-4 rounded border flex items-center justify-center text-[10px]"
-                          style={{ borderColor: isSel ? "var(--c-warning)" : "var(--c-border-2)", background: isSel ? "rgba(245,158,11,0.2)" : "transparent" }}>
-                          {isSel && "\u2713"}
-                        </span>
-                        <span>{m.icon}</span>
-                        <span>{m.name}</span>
-                        {isOffline
-                          ? <span className="ml-auto text-[8px] px-1 rounded" style={{ background: "rgba(239,68,68,0.15)", color: "var(--c-danger)" }}>offline</span>
-                          : <span className="ml-auto text-[9px]" style={{ color: "var(--c-text-5)" }}>{m.provider}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="px-3 py-2" style={{ borderTop: "1px solid var(--c-border-1)" }}>
+
+            {showHeaderMore && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowHeaderMore(false)} />
+                <div
+                  className="absolute right-0 top-10 z-50 w-56 rounded-xl overflow-hidden shadow-xl py-1"
+                  style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)" }}
+                >
                   <button
-                    onClick={() => setComparePickerOpen(false)}
-                    className="w-full text-center text-[11px] py-1.5 rounded-lg transition-colors"
-                    style={{ background: compareModels.length >= 2 ? "var(--c-warning)" : "var(--c-bg-active)", color: compareModels.length >= 2 ? "var(--c-on-dark)" : "var(--c-text-4)" }}
-                    disabled={compareModels.length < 2}
+                    onClick={() => {
+                      const next = !openclawMode;
+                      setOpenclawMode(next);
+                      localStorage.setItem("shre-openclaw-mode", String(next));
+                      setShowHeaderMore(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                    style={{ color: "var(--c-text-1)" }}
                   >
-                    {compareModels.length < 2 ? `Select ${2 - compareModels.length} more` : "Ready to compare"}
+                    <span className="inline-block h-2 w-2 rounded-full" style={{ background: openclawMode ? "#a855f7" : "#3b82f6" }} />
+                    {openclawMode ? "Switch to Router" : "Switch to OpenClaw"}
+                  </button>
+
+                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
+
+                  <div className="relative" ref={comparePickerRef}>
+                    <button
+                      onClick={() => {
+                        if (!compareMode) {
+                          setCompareMode(true);
+                          if (compareModels.length < 2) setComparePickerOpen(true);
+                        } else {
+                          setCompareMode(false);
+                          setCompareStreams({});
+                          setCompareWinner(null);
+                          setComparePickerOpen(false);
+                        }
+                        setShowHeaderMore(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                      style={{ color: compareMode ? "var(--c-warning)" : "var(--c-text-1)" }}
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                      {compareMode ? "Exit Compare" : "Compare Models"}
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSystemPromptDraft(activeSession?.systemPrompt || "");
+                      setShowSystemPrompt(true);
+                      setShowHeaderMore(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                    style={{ color: activeSession?.systemPrompt ? "var(--c-accent)" : "var(--c-text-1)" }}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    System Prompt
+                  </button>
+
+                  <button
+                    onClick={() => { actions.toggleCompact(); setShowHeaderMore(false); }}
+                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                    style={{ color: state.compact ? "var(--c-accent)" : "var(--c-text-1)" }}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      {state.compact
+                        ? <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>
+                        : <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>
+                      }
+                    </svg>
+                    {state.compact ? "Comfortable View" : "Compact View"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const next = !notifSound;
+                      setNotifSound(next);
+                      if (next) playNotifSound();
+                      setShowHeaderMore(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                    style={{ color: "var(--c-text-1)" }}
+                  >
+                    {notifSound ? (
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                    ) : (
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    )}
+                    {notifSound ? "Mute Sounds" : "Enable Sounds"}
+                  </button>
+
+                  {messages.length > 0 && (
+                    <>
+                      <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
+
+                      {messages.length >= 4 && (
+                        <button
+                          onClick={async () => {
+                            setShowHeaderMore(false);
+                            if (summarizing) return;
+                            setSummarizing(true);
+                            try {
+                              const convoText = messages
+                                .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+                                .join("\n\n")
+                                .slice(0, 4000);
+                              const res = await fetch("/v1/responses", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  model: "anthropic/claude-haiku",
+                                  input: `Summarize this conversation concisely in bullet points. Include key decisions, questions asked, and conclusions reached.\n\nConversation:\n${convoText}`,
+                                  stream: false,
+                                }),
+                                signal: AbortSignal.timeout(15000),
+                              });
+                              if (!res.ok) throw new Error(`Gateway error: ${res.status}`);
+                              const data = await res.json();
+                              const text = data?.output
+                                ?.filter((o: { type: string }) => o.type === "message")
+                                ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content?.filter((c: { type: string }) => c.type === "output_text")?.map((c: { text: string }) => c.text) ?? [])
+                                ?.join("") || "";
+                              if (!text) throw new Error("Empty summary returned");
+                              setSummaryText(text);
+                              setShowSummary(true);
+                            } catch (err: unknown) {
+                              actions.setStatusLine(`Summary failed: ${err instanceof Error ? err.message : "unknown error"}`);
+                              setTimeout(() => actions.setStatusLine(null), 4000);
+                            } finally {
+                              setSummarizing(false);
+                            }
+                          }}
+                          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                          style={{ color: "var(--c-text-1)" }}
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                          Summarize
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => { setShowAnalytics(true); setShowHeaderMore(false); }}
+                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                        style={{ color: "var(--c-text-1)" }}
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        Analytics
+                      </button>
+
+                      {activeSessionId && (
+                        <button
+                          onClick={async () => {
+                            setShowHeaderMore(false);
+                            setShareLoading(true);
+                            setShareCopied(false);
+                            try {
+                              const url = await shareSession(activeSessionId);
+                              setShareUrl(url);
+                            } catch {
+                              actions.setStatusLine("Failed to create share link");
+                              setTimeout(() => actions.setStatusLine(null), 3000);
+                            }
+                            setShareLoading(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                          style={{ color: "var(--c-text-1)" }}
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                          Share
+                        </button>
+                      )}
+
+                      <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
+
+                      <button
+                        onClick={() => {
+                          const md = messages.map((m) =>
+                            `**${m.role === "user" ? userName : currentAgent.name}** (${formatTime(m.timestamp)}):\n${m.content}`
+                          ).join("\n\n---\n\n");
+                          navigator.clipboard?.writeText(md).then(() => {
+                            actions.setStatusLine("Copied to clipboard");
+                            setTimeout(() => actions.setStatusLine(null), 2000);
+                          });
+                          setShowHeaderMore(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                        style={{ color: "var(--c-text-2)" }}
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+                        Copy as Markdown
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const md = `# ${activeSession?.title || "Chat"}\n\n` + messages.map((m) =>
+                            `## ${m.role === "user" ? userName : currentAgent.name} (${formatTime(m.timestamp)})\n\n${m.content}`
+                          ).join("\n\n---\n\n");
+                          const blob = new Blob([md], { type: "text/markdown" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          actions.setStatusLine("Downloaded as Markdown");
+                          setTimeout(() => actions.setStatusLine(null), 2000);
+                          setShowHeaderMore(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                        style={{ color: "var(--c-text-2)" }}
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Download .md
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const data = {
+                            title: activeSession?.title || "Chat",
+                            agent: currentAgent.id,
+                            exportedAt: new Date().toISOString(),
+                            messages: messages.map((m) => ({
+                              role: m.role,
+                              content: m.content,
+                              timestamp: m.timestamp,
+                              model: m.meta?.model,
+                            })),
+                          };
+                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          actions.setStatusLine("Downloaded as JSON");
+                          setTimeout(() => actions.setStatusLine(null), 2000);
+                          setShowHeaderMore(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                        style={{ color: "var(--c-text-2)" }}
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        Download .json
+                      </button>
+                    </>
+                  )}
+
+                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
+
+                  <button
+                    onClick={() => { setShowApps(!showApps); setShowHeaderMore(false); }}
+                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                    style={{ color: "var(--c-text-1)" }}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
+                      <rect x="1" y="1" width="4" height="4" rx="1" />
+                      <rect x="6" y="1" width="4" height="4" rx="1" />
+                      <rect x="11" y="1" width="4" height="4" rx="1" />
+                      <rect x="1" y="6" width="4" height="4" rx="1" />
+                      <rect x="6" y="6" width="4" height="4" rx="1" />
+                      <rect x="11" y="6" width="4" height="4" rx="1" />
+                    </svg>
+                    Apps
                   </button>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
-                    {/* System prompt editor */}
-          <button
-            onClick={() => {
-              setSystemPromptDraft(activeSession?.systemPrompt || "");
-              setShowSystemPrompt(true);
-            }}
-            className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: activeSession?.systemPrompt ? "var(--c-accent)" : "var(--c-text-4)" }}
-            title={activeSession?.systemPrompt ? "Custom system prompt set (click to edit)" : "Set custom system prompt"}
-            aria-label="System prompt"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </button>
-          {/* Notification sound toggle — hidden on mobile */}
-          <button
-            onClick={() => {
-              const next = !notifSound;
-              setNotifSound(next);
-              if (next) playNotifSound(); // preview the sound
-            }}
-            className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: notifSound ? "var(--c-text-3)" : "var(--c-text-5)" }}
-            title={notifSound ? "Sound on (click to mute)" : "Sound off (click to enable)"}
-            aria-label={notifSound ? "Mute notification sound" : "Enable notification sound"}
-          >
-            {notifSound ? (
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            ) : (
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-            )}
-          </button>
-
-          {/* Summarize conversation — visible when 4+ messages */}
-          {messages.length >= 4 && (
+          {wsFailed && (
             <button
-              onClick={async () => {
-                if (summarizing) return;
-                setSummarizing(true);
-                try {
-                  const convoText = messages
-                    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-                    .join("\n\n")
-                    .slice(0, 4000);
-                  const res = await fetch("/v1/responses", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      model: "anthropic/claude-haiku",
-                      input: `Summarize this conversation concisely in bullet points. Include key decisions, questions asked, and conclusions reached.\n\nConversation:\n${convoText}`,
-                      stream: false,
-                    }),
-                    signal: AbortSignal.timeout(15000),
-                  });
-                  if (!res.ok) throw new Error(`Gateway error: ${res.status}`);
-                  const data = await res.json();
-                  const text = data?.output
-                    ?.filter((o: { type: string }) => o.type === "message")
-                    ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content?.filter((c: { type: string }) => c.type === "output_text")?.map((c: { text: string }) => c.text) ?? [])
-                    ?.join("") || "";
-                  if (!text) throw new Error("Empty summary returned");
-                  setSummaryText(text);
-                  setShowSummary(true);
-                } catch (err: unknown) {
-                  actions.setStatusLine(`Summary failed: ${err instanceof Error ? err.message : "unknown error"}`);
-                  setTimeout(() => actions.setStatusLine(null), 4000);
-                } finally {
-                  setSummarizing(false);
-                }
-              }}
-              disabled={summarizing}
-              className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-              style={{ color: summarizing ? "var(--c-accent)" : "var(--c-text-4)", opacity: summarizing ? 0.6 : 1 }}
-              title="Summarize conversation"
-              aria-label="Summarize conversation"
+              onClick={() => { setWsFailed(false); retryConnection().then(() => setWsConnected(true)).catch(() => {}); }}
+              className="text-[11px] px-2.5 py-1 rounded-lg transition-colors font-medium"
+              style={{ color: "var(--c-danger)", background: "var(--c-danger-bg)" }}
+              aria-label="Reconnect to gateway"
             >
-              {summarizing ? (
-                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" /></svg>
-              ) : (
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-              )}
+              Reconnect
             </button>
           )}
-
-          {/* Session analytics */}
-          {messages.length > 0 && (
-            <button
-              onClick={() => setShowAnalytics(true)}
-              className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-              style={{ color: showAnalytics ? "var(--c-accent)" : "var(--c-text-4)" }}
-              title="Session analytics"
-              aria-label="Session analytics"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            </button>
-          )}
-
-          {/* Export conversation — clipboard + file downloads — hidden on mobile */}
-          {messages.length > 0 && (
-            <>
-            <button
-              onClick={() => {
-                const md = messages.map((m) =>
-                  `**${m.role === "user" ? userName : currentAgent.name}** (${formatTime(m.timestamp)}):\n${m.content}`
-                ).join("\n\n---\n\n");
-                navigator.clipboard?.writeText(md).then(() => {
-                  actions.setStatusLine("Conversation copied to clipboard");
-                  setTimeout(() => actions.setStatusLine(null), 2000);
-                });
-              }}
-              className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-              style={{ color: "var(--c-text-4)" }}
-              title="Copy conversation as markdown"
-              aria-label="Copy conversation"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
-            </button>
-            <button
-              onClick={() => {
-                const md = `# ${activeSession?.title || "Chat"}\n\n` + messages.map((m) =>
-                  `## ${m.role === "user" ? userName : currentAgent.name} (${formatTime(m.timestamp)})\n\n${m.content}`
-                ).join("\n\n---\n\n");
-                const blob = new Blob([md], { type: "text/markdown" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
-                a.click();
-                URL.revokeObjectURL(url);
-                actions.setStatusLine("Downloaded as Markdown");
-                setTimeout(() => actions.setStatusLine(null), 2000);
-              }}
-              className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-              style={{ color: "var(--c-text-4)" }}
-              title="Download as Markdown file"
-              aria-label="Download as Markdown"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <button
-              onClick={() => {
-                const data = {
-                  title: activeSession?.title || "Chat",
-                  agent: currentAgent.id,
-                  exportedAt: new Date().toISOString(),
-                  messages: messages.map((m) => ({
-                    role: m.role,
-                    content: m.content,
-                    timestamp: m.timestamp,
-                    model: m.meta?.model,
-                  })),
-                };
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                actions.setStatusLine("Downloaded as JSON");
-                setTimeout(() => actions.setStatusLine(null), 2000);
-              }}
-              className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-              style={{ color: "var(--c-text-4)" }}
-              title="Download as JSON file"
-              aria-label="Download as JSON"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            </button>
-            </>
-          )}
-
-          {/* Apps */}
-          {/* Compact mode toggle */}
-          <button
-            onClick={() => actions.toggleCompact()}
-            className="h-7 w-7 rounded-lg hidden sm:flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: state.compact ? "var(--c-accent)" : "var(--c-text-4)" }}
-            title={state.compact ? "Compact mode on (click to expand)" : "Compact mode off (click to compress)"}
-            aria-label={state.compact ? "Disable compact mode" : "Enable compact mode"}
-          >
-            {state.compact ? (
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-            ) : (
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-            )}
-          </button>
-          <button
-            onClick={() => setShowApps(!showApps)}
-            className="h-7 w-7 rounded-lg flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: showApps ? "var(--c-text-2)" : "var(--c-text-4)", background: showApps ? "var(--c-bg-active)" : "transparent" }}
-            aria-label="Apps"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="1" y="1" width="4" height="4" rx="1" />
-              <rect x="6" y="1" width="4" height="4" rx="1" />
-              <rect x="11" y="1" width="4" height="4" rx="1" />
-              <rect x="1" y="6" width="4" height="4" rx="1" />
-              <rect x="6" y="6" width="4" height="4" rx="1" />
-              <rect x="11" y="6" width="4" height="4" rx="1" />
-            </svg>
-          </button>
         </div>
       </header>
+
+      {shareUrl && (
+        <div
+          className="shrink-0 flex items-center gap-2 px-4 py-2"
+          style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-2)" }}
+        >
+          <input
+            type="text"
+            readOnly
+            value={shareUrl}
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-lg outline-none truncate"
+            style={{ background: "var(--c-bg-input)", color: "var(--c-text-2)" }}
+            onFocus={(e) => e.target.select()}
+          />
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(shareUrl).then(() => {
+                setShareCopied(true);
+                setTimeout(() => setShareCopied(false), 2000);
+              });
+            }}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all shrink-0"
+            style={{
+              background: shareCopied ? "var(--c-success-bg)" : "var(--c-accent)",
+              color: shareCopied ? "var(--c-success)" : "var(--c-on-accent)",
+            }}
+          >
+            {shareCopied ? "Copied" : "Copy"}
+          </button>
+          <button
+            onClick={() => setShareUrl(null)}
+            className="p-1 rounded-lg transition-colors hover:bg-white/5"
+            style={{ color: "var(--c-text-3)" }}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Reconnection banner ─────────────────────────────────────── */}
       {(wsReconnecting || wsFailed || wsBannerFlash === "connected") && (
