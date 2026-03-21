@@ -44,6 +44,8 @@ export function Sidebar() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const touchStartRef = useRef(0);
   const [bookmarkPanelOpen, setBookmarkPanelOpen] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const bookmarkCount = useMemo(() => getBookmarks().length, [sessions]); // re-check when sessions change
 
   // Track which agents are actively streaming (background work indicator)
@@ -56,6 +58,8 @@ export function Sidebar() {
     };
     return onStreamChange(update);
   }, []);
+
+  useEffect(() => { if (!sidebarOpen) setShowMoreMenu(false); }, [sidebarOpen]);
 
   // Lock body scroll when sidebar is open on mobile
   useEffect(() => {
@@ -478,9 +482,6 @@ export function Sidebar() {
           <NavIconBtn active={view === "chat"} onClick={() => actions.setView("chat")} title="Chat" icon={
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
           } />
-          <NavIconBtn active={view === "feed"} onClick={() => actions.setView("feed")} title="Feed" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1" /></svg>
-          } />
           <NavIconBtn active={view === "activity"} onClick={() => actions.setView("activity")} title="Activity" icon={
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
           } />
@@ -492,7 +493,7 @@ export function Sidebar() {
               <span style={{
                 position: "absolute", top: 2, right: 2,
                 minWidth: 12, height: 12, borderRadius: 6,
-                background: "var(--c-accent, #6366f1)", color: "#fff",
+                background: "var(--c-accent, #638dff)", color: "#fff",
                 fontSize: 8, fontWeight: 700, display: "flex",
                 alignItems: "center", justifyContent: "center",
                 padding: "0 2px", lineHeight: 1, pointerEvents: "none",
@@ -504,67 +505,78 @@ export function Sidebar() {
           <NavIconBtn active={view === "briefing"} onClick={() => actions.setView("briefing")} title="Briefing" icon={
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
           } />
-          <NavIconBtn active={view === "cost-dashboard"} onClick={() => actions.setView("cost-dashboard")} title="Cost Dashboard" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-          } />
-          <NavIconBtn active={view === "marketplace"} onClick={() => actions.setView("marketplace")} title="Marketplace" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z"/><line x1="3" y1="7" x2="21" y2="7"/><path d="M16 11a4 4 0 0 1-8 0"/></svg>
-          } />
-          <NavIconBtn active={view === "admin"} onClick={() => actions.setView("admin")} title="Admin" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          } />
-          <NavIconBtn active={view === "feed-analytics"} onClick={() => actions.setView("feed-analytics")} title="Feed Analytics" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          } />
-          <NavIconBtn active={view === "task-timeline"} onClick={() => actions.setView("task-timeline")} title="Task Timeline" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          } />
-          <NavIconBtn active={view === "finetune"} onClick={() => actions.setView("finetune")} title="Fine-Tuning" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          } />
-          <NavIconBtn active={view === "reports"} onClick={() => actions.setView("reports")} title="Reports" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          } />
-          <NavIconBtn external active={false} onClick={() => window.open(mib007Link("tasks"), "_blank")} title="Tasks (opens MIB007)" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-          } />
-          <NavIconBtn external active={false} onClick={() => window.open(mib007Link("reminders"), "_blank")} title="Reminders (opens MIB007)" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-          } />
-          <NavIconBtn external active={false} onClick={() => window.open(mib007Link("projects"), "_blank")} title="Projects (opens MIB007)" icon={
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
-          } />
+
+          <div style={{ position: "relative" }} ref={moreMenuRef}>
+            <NavIconBtn
+              active={showMoreMenu}
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              title="More"
+              icon={
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                </svg>
+              }
+            />
+
+            {showMoreMenu && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setShowMoreMenu(false)} />
+                <div
+                  className="absolute left-0 bottom-10 z-[61] w-56 rounded-xl overflow-hidden shadow-xl"
+                  style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-1)" }}
+                >
+                  <div className="py-1">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Views</div>
+                    <MoreMenuItem label="Feed" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1" /></svg>} active={view === "feed"} onClick={() => { actions.setView("feed"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Feed Analytics" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>} active={view === "feed-analytics"} onClick={() => { actions.setView("feed-analytics"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Cost Dashboard" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>} active={view === "cost-dashboard"} onClick={() => { actions.setView("cost-dashboard"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Reports" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>} active={view === "reports"} onClick={() => { actions.setView("reports"); setShowMoreMenu(false); }} />
+                  </div>
+
+                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "0 12px" }} />
+
+                  <div className="py-1">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Apps</div>
+                    <MoreMenuItem label="Marketplace" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z"/><line x1="3" y1="7" x2="21" y2="7"/><path d="M16 11a4 4 0 0 1-8 0"/></svg>} active={view === "marketplace"} onClick={() => { actions.setView("marketplace"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Task Timeline" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>} active={view === "task-timeline"} onClick={() => { actions.setView("task-timeline"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Tasks" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>} external onClick={() => { window.open(mib007Link("tasks"), "_blank"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Reminders" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>} external onClick={() => { window.open(mib007Link("reminders"), "_blank"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Projects" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>} external onClick={() => { window.open(mib007Link("projects"), "_blank"); setShowMoreMenu(false); }} />
+                  </div>
+
+                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "0 12px" }} />
+
+                  <div className="py-1">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Tools</div>
+                    <MoreMenuItem label="Admin" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} active={view === "admin"} onClick={() => { actions.setView("admin"); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Fine-Tuning" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>} active={view === "finetune"} onClick={() => { actions.setView("finetune"); setShowMoreMenu(false); }} />
+                  </div>
+
+                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "0 12px" }} />
+
+                  <div className="py-1">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Data</div>
+                    <MoreMenuItem label="Export Sessions" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>} onClick={() => { exportSessions(sessions); setShowMoreMenu(false); }} />
+                    <MoreMenuItem label="Import Sessions" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>} onClick={() => { importInputRef.current?.click(); setShowMoreMenu(false); }} />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Footer — compact icons for settings/export */}
-        <div className="p-2 flex items-center justify-between" style={{ borderTop: "1px solid var(--c-border-2)" }}>
-          <span className="text-[10px] font-mono" style={{ color: "var(--c-text-5)" }}>{currentAgent.id}</span>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => exportSessions(sessions)}
-              className="p-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--c-text-3)" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-              title="Export sessions"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            </button>
-            <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) { importSessions(file, sessions, () => window.location.reload(), (msg) => { actions.setStatusLine(msg); setTimeout(() => actions.setStatusLine(null), 3000); }); }
-              e.target.value = "";
-            }} />
-            <button
-              onClick={() => importInputRef.current?.click()}
-              className="p-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--c-text-3)" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--c-bg-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-              title="Import sessions"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-            </button>
+        <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) { importSessions(file, sessions, () => window.location.reload(), (msg) => { actions.setStatusLine(msg); setTimeout(() => actions.setStatusLine(null), 3000); }); }
+          e.target.value = "";
+        }} />
+
+        {/* Footer — minimal */}
+        <div className="px-3 py-2 flex items-center justify-between" style={{ borderTop: "1px solid var(--c-border-2)" }}>
+          <div className="flex items-center gap-1">
             <button
               onClick={() => { actions.toggleWriteEnabled(); }}
               className="p-1.5 rounded-lg transition-colors"
@@ -595,6 +607,9 @@ export function Sidebar() {
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
               )}
             </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <PoweredByNirlab variant="badge" />
             {actions.logout && (
               <button
                 onClick={actions.logout}
@@ -608,7 +623,6 @@ export function Sidebar() {
               </button>
             )}
           </div>
-          <PoweredByNirlab variant="badge" />
         </div>
       </div>
     </div>
@@ -668,6 +682,24 @@ function NavIconBtn({ active, onClick, title, icon, external }: {
     >
       {icon}
       {external && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full" style={{ background: "var(--c-accent, #60a5fa)" }} />}
+    </button>
+  );
+}
+
+function MoreMenuItem({ label, icon, active, external, onClick }: {
+  label: string; icon: React.ReactNode; active?: boolean; external?: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+      style={{ color: active ? "var(--c-accent)" : "var(--c-text-1)" }}
+    >
+      <span style={{ color: active ? "var(--c-accent)" : "var(--c-text-3)" }}>{icon}</span>
+      {label}
+      {external && (
+        <svg className="h-3 w-3 ml-auto" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      )}
     </button>
   );
 }

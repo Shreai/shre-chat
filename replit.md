@@ -42,6 +42,8 @@ Web-based AI-powered chat interface for the Shre platform. Built with React + Vi
 - **Slide-out panels**: Model & Agent pickers use z-[70]/z-[71] with backdrop blur overlay and `slide-in-left` animation
 - **Notification dropdown**: Dynamically anchored to bell button via `getBoundingClientRect()`, responsive width (380px desktop, auto on mobile ≤480px)
 - **Responsive breakpoints**: Mobile (≤768px), tablet (769-1024px), landscape orientation (max-height: 500px)
+- **Sidebar nav**: 5 core icons (Chat, Activity, Bookmarks, Briefing, More) + categorized "More" popup (Views/Apps/Tools/Data)
+- **Sidebar footer**: Write mode, Identity Verify, Theme Customizer, Theme toggle, Nirlab badge, Logout
 - **DEV_BYPASS_AUTH**: Flag in `src/App.tsx` — `true` for UI-only dev, `false` for real backend auth
 
 ## Local Stub Packages
