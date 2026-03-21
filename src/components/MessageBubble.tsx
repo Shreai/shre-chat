@@ -194,7 +194,7 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
       <button
         onClick={handleCopy}
         className="p-1 rounded transition-colors hover:bg-white/5"
-        style={{ color: copied ? "var(--c-emerald)" : "var(--c-text-3)" }}
+        style={{ color: copied ? "var(--c-emerald)" : "var(--c-text-2)" }}
         title={copied ? "Copied!" : "Copy message"}
       >
         {copied ? (
@@ -206,7 +206,7 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
       <button
         onClick={handleSpeak}
         className="p-1 rounded transition-colors hover:bg-white/5"
-        style={{ color: speaking ? "var(--c-accent)" : "var(--c-text-3)", animation: speaking ? "pulse 1.5s ease-in-out infinite" : "none" }}
+        style={{ color: speaking ? "var(--c-accent)" : "var(--c-text-2)", animation: speaking ? "pulse 1.5s ease-in-out infinite" : "none" }}
         title={speaking ? "Stop speaking" : "Read aloud"}
       >
         {speaking ? (
@@ -218,7 +218,7 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
       <button
         onClick={() => onFeedback("like")}
         className="p-1 rounded transition-colors hover:bg-white/5"
-        style={{ color: feedback === "like" ? "var(--c-emerald)" : "var(--c-text-3)" }}
+        style={{ color: feedback === "like" ? "var(--c-emerald)" : "var(--c-text-2)" }}
         title="Helpful"
       >
         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={feedback === "like" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
@@ -226,7 +226,7 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
       <button
         onClick={() => onFeedback("dislike")}
         className="p-1 rounded transition-colors hover:bg-white/5"
-        style={{ color: feedback === "dislike" ? "var(--c-danger-soft)" : "var(--c-text-3)" }}
+        style={{ color: feedback === "dislike" ? "var(--c-danger-soft)" : "var(--c-text-2)" }}
         title="Not helpful"
       >
         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={feedback === "dislike" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10zM17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
@@ -236,7 +236,7 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
           <button
             onClick={() => setReactionOpen((o) => !o)}
             className="p-1 rounded transition-colors hover:bg-white/5"
-            style={{ color: reactionOpen ? "var(--c-accent)" : "var(--c-text-3)" }}
+            style={{ color: reactionOpen ? "var(--c-accent)" : "var(--c-text-2)" }}
             title="Add reaction"
           >
             <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
@@ -277,8 +277,8 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
       {onRegenerate && (
         <button
           onClick={onRegenerate}
-          className="p-1 rounded transition-colors flex items-center gap-1"
-          style={{ color: "var(--c-text-5)" }}
+          className="p-1 rounded transition-colors flex items-center gap-1 hover:bg-white/5"
+          style={{ color: "var(--c-text-2)" }}
           title="Regenerate response"
         >
           <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -288,8 +288,8 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
       {onBranch && (
         <button
           onClick={onBranch}
-          className="p-1 rounded transition-colors flex items-center gap-1"
-          style={{ color: "var(--c-text-5)" }}
+          className="p-1 rounded transition-colors flex items-center gap-1 hover:bg-white/5"
+          style={{ color: "var(--c-text-2)" }}
           title="Branch conversation here"
         >
           <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v3c0 2 2 3 6 3h3"/><line x1="6" y1="9" x2="6" y2="9"/></svg>
@@ -824,7 +824,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                 <button
                   onClick={() => { setAnnotationEditing(true); setAnnotationDraft(message.annotation || ""); }}
                   className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100"
-                  style={{ color: message.annotation ? "var(--c-accent)" : "var(--c-text-5)" }}
+                  style={{ color: message.annotation ? "var(--c-accent)" : "var(--c-text-2)" }}
                   title={message.annotation ? "Edit annotation" : "Add annotation"}
                 >
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -833,8 +833,8 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
               {onEditStart && (
                 <button
                   onClick={onEditStart}
-                  className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100"
-                  style={{ color: "var(--c-text-5)" }}
+                  className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100 hover:bg-white/5"
+                  style={{ color: "var(--c-text-2)" }}
                   title="Edit message"
                 >
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
@@ -843,8 +843,8 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
               {onBranch && (
                 <button
                   onClick={onBranch}
-                  className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100"
-                  style={{ color: "var(--c-text-5)" }}
+                  className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100 hover:bg-white/5"
+                  style={{ color: "var(--c-text-2)" }}
                   title="Branch conversation here"
                 >
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v3c0 2 2 3 6 3h3"/></svg>
@@ -854,8 +854,8 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                 <div ref={reactionPickerRef} style={{ position: "relative", display: "inline-block" }}>
                   <button
                     onClick={() => setReactionPickerOpen((o) => !o)}
-                    className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100"
-                    style={{ color: reactionPickerOpen ? "var(--c-accent)" : "var(--c-text-5)" }}
+                    className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100 hover:bg-white/5"
+                    style={{ color: reactionPickerOpen ? "var(--c-accent)" : "var(--c-text-2)" }}
                     title="Add reaction"
                   >
                     <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
