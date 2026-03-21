@@ -307,7 +307,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <button
                 onClick={() => fileRef.current?.click()}
                 className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                style={{ color: "var(--c-text-4)" }}
+                style={{ color: "var(--c-text-3)" }}
                 title="Attach file"
                 aria-label="Attach file"
               >
@@ -319,7 +319,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   onClick={() => setShowEmoji(!showEmoji)}
                   className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                  style={{ color: showEmoji ? "var(--c-accent)" : "var(--c-text-4)" }}
+                  style={{ color: showEmoji ? "var(--c-accent)" : "var(--c-text-3)" }}
                   title="Emoji"
                   aria-label="Insert emoji"
                 >
@@ -351,7 +351,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   onClick={isRecording ? onStopRecording : onStartRecording}
                   className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === "recording" ? "bg-red-500/20 text-red-400" : voicePhase === "transcribing" ? "bg-blue-500/20 text-blue-400" : ""}`}
-                  style={isRecording ? {} : { color: "var(--c-text-4)" }}
+                  style={isRecording ? {} : { color: "var(--c-text-3)" }}
                   title={isRecording ? "Tap to stop" : "Voice input"}
                   aria-label={isRecording ? "Stop recording" : "Voice input"}
                 >
@@ -379,7 +379,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   onClick={() => setIsHandsFree(!isHandsFree)}
                   className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isHandsFree ? "bg-green-500/20 text-green-400" : ""}`}
-                  style={isHandsFree ? {} : { color: "var(--c-text-4)" }}
+                  style={isHandsFree ? {} : { color: "var(--c-text-3)" }}
                   title={isHandsFree ? 'Hands-free ON — say "shre shre" to start' : "Enable hands-free mode"}
                   aria-label={isHandsFree ? "Disable hands-free mode" : "Enable hands-free mode"}
                 >
@@ -396,7 +396,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     if (!next) onStopTTS();
                   }}
                   className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? "bg-blue-500/20 text-blue-400" : ""}`}
-                  style={voiceMode ? {} : { color: "var(--c-text-4)" }}
+                  style={voiceMode ? {} : { color: "var(--c-text-3)" }}
                   title={voiceMode ? "Voice mode ON — responses will be spoken" : "Enable voice mode (auto-speak responses)"}
                   aria-label={voiceMode ? "Disable voice mode" : "Enable voice mode"}
                 >
@@ -427,7 +427,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <button
                 onClick={onToggleTerminal}
                 className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${showTerminal ? "bg-violet-500/20 text-violet-400" : ""}`}
-                style={showTerminal ? {} : { color: "var(--c-text-4)" }}
+                style={showTerminal ? {} : { color: "var(--c-text-3)" }}
                 title={showTerminal ? "Close terminal" : "Open terminal"}
                 aria-label={showTerminal ? "Close terminal" : "Open terminal"}
               >
@@ -439,7 +439,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   onClick={onToggleTermViewMode}
                   className="h-7 rounded-lg flex items-center px-1.5 text-[10px] transition-all hover:brightness-125"
-                  style={{ color: termViewMode === "tabs" ? "var(--c-terminal-accent)" : "var(--c-text-4)" }}
+                  style={{ color: termViewMode === "tabs" ? "var(--c-terminal-accent)" : "var(--c-text-3)" }}
                   title={termViewMode === "split" ? "Switch to tab view" : "Switch to split view"}
                 >
                   {termViewMode === "split" ? (

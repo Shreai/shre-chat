@@ -193,51 +193,50 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
     <div className="flex items-center gap-0.5 mt-1 px-1">
       <button
         onClick={handleCopy}
-        className="p-1 rounded transition-colors"
-        style={{ color: copied ? "var(--c-emerald)" : "var(--c-text-5)" }}
+        className="p-1 rounded transition-colors hover:bg-white/5"
+        style={{ color: copied ? "var(--c-emerald)" : "var(--c-text-3)" }}
         title={copied ? "Copied!" : "Copy message"}
       >
         {copied ? (
-          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
         ) : (
-          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         )}
       </button>
-      {/* Speak button — TTS via OpenAI or browser fallback */}
       <button
         onClick={handleSpeak}
-        className="p-1 rounded transition-colors"
-        style={{ color: speaking ? "var(--c-accent)" : "var(--c-text-5)", animation: speaking ? "pulse 1.5s ease-in-out infinite" : "none" }}
+        className="p-1 rounded transition-colors hover:bg-white/5"
+        style={{ color: speaking ? "var(--c-accent)" : "var(--c-text-3)", animation: speaking ? "pulse 1.5s ease-in-out infinite" : "none" }}
         title={speaking ? "Stop speaking" : "Read aloud"}
       >
         {speaking ? (
-          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
         ) : (
-          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         )}
       </button>
       <button
         onClick={() => onFeedback("like")}
-        className="p-1 rounded transition-colors"
-        style={{ color: feedback === "like" ? "var(--c-emerald)" : "var(--c-text-5)" }}
+        className="p-1 rounded transition-colors hover:bg-white/5"
+        style={{ color: feedback === "like" ? "var(--c-emerald)" : "var(--c-text-3)" }}
         title="Helpful"
       >
-        <svg className="h-3 w-3" viewBox="0 0 24 24" fill={feedback === "like" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={feedback === "like" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
       </button>
       <button
         onClick={() => onFeedback("dislike")}
-        className="p-1 rounded transition-colors"
-        style={{ color: feedback === "dislike" ? "var(--c-danger-soft)" : "var(--c-text-5)" }}
+        className="p-1 rounded transition-colors hover:bg-white/5"
+        style={{ color: feedback === "dislike" ? "var(--c-danger-soft)" : "var(--c-text-3)" }}
         title="Not helpful"
       >
-        <svg className="h-3 w-3" viewBox="0 0 24 24" fill={feedback === "dislike" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10zM17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={feedback === "dislike" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10zM17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
       </button>
       {onReaction && (
         <div ref={reactionRef} style={{ position: "relative", display: "inline-block" }}>
           <button
             onClick={() => setReactionOpen((o) => !o)}
-            className="p-1 rounded transition-colors"
-            style={{ color: reactionOpen ? "var(--c-accent)" : "var(--c-text-5)" }}
+            className="p-1 rounded transition-colors hover:bg-white/5"
+            style={{ color: reactionOpen ? "var(--c-accent)" : "var(--c-text-3)" }}
             title="Add reaction"
           >
             <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>

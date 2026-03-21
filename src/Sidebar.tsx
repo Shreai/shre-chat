@@ -220,7 +220,7 @@ export function Sidebar() {
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
-        {/* Agent Picker */}
+        {/* Agent Picker trigger */}
         <div className="p-3" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
           <button
             onClick={() => { setShowAgentPicker(!showAgentPicker); if (!showAgentPicker) preloadAgents(); }}
@@ -239,68 +239,106 @@ export function Sidebar() {
               <div className="text-sm font-semibold flex items-center gap-1.5" style={{ color: "var(--c-text-1)" }}>
                 {currentAgent.name}
                 {streamingAgents.size > 0 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.15)", color: "var(--c-success)", border: "1px solid rgba(34,197,94,0.3)" }}>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ background: "rgba(52,211,153,0.15)", color: "var(--c-success)", border: "1px solid rgba(52,211,153,0.3)" }}>
                     {streamingAgents.size} active
                   </span>
                 )}
               </div>
               <div className="text-[11px] font-mono truncate" style={{ color: "var(--c-text-4)" }}>{currentAgent.id}</div>
             </div>
-            <svg className={`h-4 w-4 transition-transform ${showAgentPicker ? "rotate-180" : ""}`} style={{ color: "var(--c-text-5)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            <svg className="h-4 w-4" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
-
-          {showAgentPicker && (
-            <div className="mt-1 max-h-64 overflow-y-auto rounded-lg" style={{ background: "var(--c-bg-3)", border: "1px solid var(--c-border-1)" }}>
-              {(["core", "department", "council"] as const).map((group) => {
-                const groupAgents = AGENTS.filter((a) => a.group === group);
-                return (
-                  <div key={group}>
-                    <div className="text-[11px] font-semibold uppercase tracking-wider px-3 pt-2.5 pb-1" style={{ color: "var(--c-text-5)" }}>
-                      {group === "core" ? "Core" : group === "department" ? "Department" : "Council"}
-                    </div>
-                    {groupAgents.map((agent) => (
-                      <button
-                        key={agent.id}
-                        onClick={() => {
-                          actions.setActiveAgent(agent.id);
-                          setShowAgentPicker(false);
-                          if (window.innerWidth < 768) actions.setSidebarOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors"
-                        style={{
-                          background: agent.id === activeAgentId ? "var(--c-bg-active)" : "transparent",
-                          color: agent.id === activeAgentId ? "var(--c-text-1)" : "var(--c-text-2)",
-                        }}
-                      >
-                        <span className="text-base relative">
-                          {agent.emoji}
-                          {streamingAgents.has(agent.id) && (
-                            <span
-                              className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
-                              style={{
-                                background: streamingAgents.get(agent.id) === "thinking" ? "#f59e0b" : "#22c55e",
-                                boxShadow: `0 0 6px ${streamingAgents.get(agent.id) === "thinking" ? "#f59e0b" : "#22c55e"}`,
-                                animation: "pulse 1.5s ease-in-out infinite",
-                              }}
-                            />
-                          )}
-                        </span>
-                        <span className="text-[13px] flex-1">{agent.name}</span>
-                        {streamingAgents.has(agent.id) ? (
-                          <span className="text-[10px] font-mono" style={{ color: streamingAgents.get(agent.id) === "thinking" ? "#f59e0b" : "#22c55e" }}>
-                            {streamingAgents.get(agent.id)}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-mono" style={{ color: "var(--c-text-5)" }}>{agent.model.split("/")[1]?.split("-").slice(0, 2).join("-") || agent.model}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
+
+        {/* Agent Picker slide-out panel */}
+        {showAgentPicker && (
+          <>
+          <div
+            className="fixed inset-0 z-[70]"
+            style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(2px)" }}
+            onClick={() => setShowAgentPicker(false)}
+          />
+          <div
+            className="fixed top-0 left-0 h-full z-[71] flex flex-col"
+            style={{
+              width: 280,
+              background: "var(--c-bg-2)",
+              borderRight: "1px solid var(--c-border-2)",
+              boxShadow: "4px 0 24px rgba(0,0,0,0.3)",
+              animation: "slide-in-left 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards",
+            }}
+          >
+          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
+            <span className="text-sm font-semibold" style={{ color: "var(--c-text-1)" }}>Select Agent</span>
+            <button
+              onClick={() => setShowAgentPicker(false)}
+              className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+              style={{ color: "var(--c-text-3)" }}
+              aria-label="Close"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {(["core", "department", "council"] as const).map((group) => {
+              const groupAgents = AGENTS.filter((a) => a.group === group);
+              return (
+                <div key={group}>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: "var(--c-text-4)", background: "var(--c-bg-3)" }}>
+                    {group === "core" ? "Core" : group === "department" ? "Department" : "Council"}
+                  </div>
+                  {groupAgents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => {
+                        actions.setActiveAgent(agent.id);
+                        setShowAgentPicker(false);
+                        if (window.innerWidth < 768) actions.setSidebarOpen(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+                      style={{
+                        background: agent.id === activeAgentId ? "var(--c-accent-soft)" : "transparent",
+                        color: agent.id === activeAgentId ? "var(--c-accent)" : "var(--c-text-2)",
+                      }}
+                      onMouseEnter={(e) => { if (agent.id !== activeAgentId) e.currentTarget.style.background = "var(--c-bg-hover)"; }}
+                      onMouseLeave={(e) => { if (agent.id !== activeAgentId) e.currentTarget.style.background = agent.id === activeAgentId ? "var(--c-accent-soft)" : "transparent"; }}
+                    >
+                      <span className="text-lg relative">
+                        {agent.emoji}
+                        {streamingAgents.has(agent.id) && (
+                          <span
+                            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
+                            style={{
+                              background: streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)",
+                              boxShadow: `0 0 6px ${streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)"}`,
+                              animation: "pulse 1.5s ease-in-out infinite",
+                            }}
+                          />
+                        )}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm">{agent.name}</div>
+                        {streamingAgents.has(agent.id) ? (
+                          <div className="text-[10px] font-mono" style={{ color: streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)" }}>
+                            {streamingAgents.get(agent.id)}
+                          </div>
+                        ) : (
+                          <div className="text-[10px] font-mono truncate" style={{ color: "var(--c-text-4)" }}>{agent.model.split("/")[1]?.split("-").slice(0, 2).join("-") || agent.model}</div>
+                        )}
+                      </div>
+                      {agent.id === activeAgentId && (
+                        <svg className="h-4 w-4 shrink-0" style={{ color: "var(--c-accent)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        </>
+        )}
 
         {/* New Chat button — ChatGPT-style prominent action */}
         <div className="px-3 py-2" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
