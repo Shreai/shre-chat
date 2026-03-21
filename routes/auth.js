@@ -374,7 +374,8 @@ if (!existsSync(USERS_PATH)) {
   const dir = join(homedir(), ".shre", "vault");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(USERS_PATH, JSON.stringify({
-    rapidnir: { hash: hashPassword("rapid@nir"), role: "admin", name: "Nir" }
+    rapidnir: { hash: hashPassword("rapid@nir"), role: "admin", name: "Nir" },
+    niradmin: { hash: hashPassword("Meer@109"), role: "admin", name: "NirAdmin" }
   }, null, 2), { mode: 0o600 });
 }
 
