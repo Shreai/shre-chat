@@ -32,6 +32,8 @@ export function Sidebar() {
   const { state, actions } = useApp();
   const { sessions, activeSessionId, activeAgentId, view, sidebarOpen, theme } = state;
   const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [agentSearch, setAgentSearch] = useState("");
+  const agentSearchRef = useRef<HTMLInputElement>(null);
 
   const currentAgent = getAgent(activeAgentId);
   const preloadedAgents = useRef(new Set<string>());
@@ -60,6 +62,13 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => { if (!sidebarOpen) setShowMoreMenu(false); }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (showAgentPicker) {
+      setAgentSearch("");
+      setTimeout(() => agentSearchRef.current?.focus(), 150);
+    }
+  }, [showAgentPicker]);
 
   // Lock body scroll when sidebar is open on mobile
   useEffect(() => {
@@ -272,21 +281,48 @@ export function Sidebar() {
               animation: "slide-in-left 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards",
             }}
           >
-          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
-            <span className="text-sm font-semibold" style={{ color: "var(--c-text-1)" }}>Select Agent</span>
-            <button
-              onClick={() => setShowAgentPicker(false)}
-              className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-              style={{ color: "var(--c-text-3)" }}
-              aria-label="Close"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+          <div className="px-4 py-3 shrink-0" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold" style={{ color: "var(--c-text-1)" }}>Select Agent</span>
+              <button
+                onClick={() => setShowAgentPicker(false)}
+                className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+                style={{ color: "var(--c-text-3)" }}
+                aria-label="Close"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                ref={agentSearchRef}
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+                placeholder="Search agents..."
+                className="w-full h-8 pl-8 pr-3 rounded-lg text-[12px] outline-none transition-colors"
+                style={{
+                  background: "var(--c-bg-3)",
+                  color: "var(--c-text-1)",
+                  border: "1px solid var(--c-border-2)",
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--c-accent)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--c-border-2)"; }}
+              />
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {(["core", "department", "council"] as const).map((group) => {
-              const groupAgents = AGENTS.filter((a) => a.group === group);
+              const allGroupAgents = AGENTS.filter((a) => a.group === group);
+              const groupAgents = agentSearch.trim()
+                ? allGroupAgents.filter((a) =>
+                    a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                    a.id.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                    a.model.toLowerCase().includes(agentSearch.toLowerCase())
+                  )
+                : allGroupAgents;
+              if (groupAgents.length === 0) return null;
               return (
                 <div key={group}>
                   <div className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: "var(--c-text-4)", background: "var(--c-bg-3)" }}>
@@ -339,6 +375,15 @@ export function Sidebar() {
                 </div>
               );
             })}
+            {agentSearch.trim() && AGENTS.filter((a) =>
+              a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+              a.id.toLowerCase().includes(agentSearch.toLowerCase()) ||
+              a.model.toLowerCase().includes(agentSearch.toLowerCase())
+            ).length === 0 && (
+              <div className="px-4 py-8 text-center text-[12px]" style={{ color: "var(--c-text-4)" }}>
+                No agents match "{agentSearch}"
+              </div>
+            )}
           </div>
         </div>
         </>
