@@ -575,9 +575,12 @@ function isOriginAllowed(req) {
     `http://127.0.0.1:${PORT}`, `https://127.0.0.1:${PORT}`,
     "https://chat.nirtek.net", "http://chat.nirtek.net",
     "https://app.nirtek.net", "http://app.nirtek.net",
+    "https://shre.nirtek.net", "http://shre.nirtek.net",
   ];
   if (origin && allowed.some((a) => origin.startsWith(a))) return true;
   if (referer && allowed.some((a) => referer.startsWith(a))) return true;
+  if (origin && origin.endsWith(".replit.dev")) return true;
+  if (referer && referer.includes(".replit.dev")) return true;
   // Cloudflare tunnel: trust requests where X-Forwarded-Host matches *.nirtek.net
   const fwdHost = req.headers["x-forwarded-host"] || "";
   if (fwdHost.endsWith(".nirtek.net") || fwdHost === "nirtek.net") return true;
