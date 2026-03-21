@@ -39,7 +39,8 @@ Web-based AI-powered chat interface for the Shre platform. Built with React + Vi
 - **Text hierarchy (dark)**: #ececf1 → #a1a1aa → #6b6b76 → #4a4a55 → #33333d
 - **Text hierarchy (light)**: #1a1a1e → #52525b → #71717a → #8e8e9a → #b0b0ba (WCAG AA compliant)
 - **CSS vars**: `--c-bg-main`, `--c-bg-sidebar`, `--c-bg-1..3`, `--c-text-1..5`, `--c-accent`, `--c-border-1/2`
-- **Slide-out panels**: Model & Agent pickers use z-[70]/z-[71] with backdrop blur overlay and `slide-in-left` animation
+- **Model picker**: Dropdown popover beneath header button (z-40/50), search filter, 11 fallback models across 5 providers; mobile: bottom-sheet layout
+- **Agent picker**: Slide-out panel from left (z-[70]/z-[71]) with backdrop blur and `slide-in-left` animation
 - **Notification dropdown**: Dynamically anchored to bell button via `getBoundingClientRect()`, responsive width (380px desktop, auto on mobile ≤480px)
 - **Responsive breakpoints**: Mobile (≤768px), tablet (769-1024px), landscape orientation (max-height: 500px)
 - **Sidebar nav**: 5 core icons (Chat, Activity, Bookmarks, Briefing, More) + categorized "More" popup (Views/Apps/Tools/Data)

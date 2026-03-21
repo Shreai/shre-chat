@@ -113,8 +113,17 @@ export function providerLabel(provider: string): string {
 
 // Fallback models (used until live fetch completes)
 export const FALLBACK_MODELS: Array<{ id: string; name: string; provider: string; icon: string; connected?: boolean }> = [
-  { id: "anthropic/claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "anthropic", icon: "🟣", connected: true },
-  { id: "anthropic/claude-opus-4-6", name: "Claude Opus 4.6", provider: "anthropic", icon: "🟣", connected: true },
+  { id: "anthropic/claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "Anthropic", icon: "🟣", connected: true },
+  { id: "anthropic/claude-opus-4-6", name: "Claude Opus 4.6", provider: "Anthropic", icon: "🟣", connected: true },
+  { id: "anthropic/claude-haiku", name: "Claude Haiku", provider: "Anthropic", icon: "🟣", connected: true },
+  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", icon: "🟢", connected: true },
+  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", icon: "🟢", connected: true },
+  { id: "openai/o1", name: "o1", provider: "OpenAI", icon: "🟢", connected: true },
+  { id: "openai/o3-mini", name: "o3-mini", provider: "OpenAI", icon: "🟢", connected: true },
+  { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google", icon: "🔵", connected: true },
+  { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "Google", icon: "🔵", connected: true },
+  { id: "deepseek/deepseek-r1", name: "DeepSeek R1", provider: "DeepSeek", icon: "🟠", connected: true },
+  { id: "meta/llama-3.3-70b", name: "Llama 3.3 70B", provider: "Meta", icon: "🦙", connected: true },
 ];
 
 export const DEFAULT_CONTEXT_LIMIT = 200000;
