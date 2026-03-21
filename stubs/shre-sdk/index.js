@@ -21,21 +21,32 @@ export function createEventBus(name) {
     emit: (event, data) => {
       (listeners[event] || []).forEach(fn => fn(data));
     },
+    publish: async (event, level, data) => {
+      (listeners[event] || []).forEach(fn => fn(data));
+    },
     on: (event, fn) => {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(fn);
+    },
+    subscribe: async (event, fn) => {
+      if (!listeners[event]) listeners[event] = [];
+      listeners[event].push(fn);
+      return () => { listeners[event] = (listeners[event] || []).filter(f => f !== fn); };
     },
     off: (event, fn) => {
       if (listeners[event]) {
         listeners[event] = listeners[event].filter(f => f !== fn);
       }
     },
+    shutdown: async () => {},
   };
 }
 
 export function createLifecycleEmitter(eventBus, name, opts) {
   return {
     ready: () => console.log(`[${name}] ready on port ${opts?.port}`),
+    started: () => console.log(`[${name}] started`),
+    stopping: (signal) => console.log(`[${name}] stopping (${signal})`),
     shutdown: () => console.log(`[${name}] shutting down`),
   };
 }
@@ -60,9 +71,10 @@ export function infraUrl(name) {
 
 export function createFeedbackPipeline(opts) {
   return {
-    submit: async (feedback) => {
-      console.log('[feedback-pipeline] stub submit:', feedback);
-    },
+    submit: async (feedback) => {},
+    start: () => {},
+    stop: async () => {},
+    reportKnowledgeLearned: async (type, content, source) => {},
   };
 }
 
