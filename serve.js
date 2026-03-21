@@ -580,6 +580,46 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
   } catch { /* never block */ }
 }
 
+/**
+ * Post an agent conversation summary to MIB007 comms so store teams see agent activity.
+ * Discovers the first company + first comms channel, then POSTs the summary.
+ * Fire-and-forget: never blocks the user.
+ */
+async function postAgentSummaryToComms(agentId, summary) {
+  try {
+    // Discover first company
+    const companiesRes = await fetch(`http://127.0.0.1:${MIB007_PORT}/api/companies`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!companiesRes.ok) return;
+    const companies = await companiesRes.json();
+    const companyId = companies?.[0]?.id;
+    if (!companyId) return;
+
+    // Discover first comms channel
+    const channelsRes = await fetch(`http://127.0.0.1:${MIB007_PORT}/api/companies/${companyId}/comms/channels`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!channelsRes.ok) return;
+    const channels = await channelsRes.json();
+    const channelId = channels?.[0]?.id;
+    if (!channelId) return;
+
+    const chatBaseUrl = process.env.SHRE_CHAT_URL || `https://localhost:${PORT}`;
+    await fetch(`http://127.0.0.1:${MIB007_PORT}/api/companies/${companyId}/comms/agent-summary`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channelId,
+        agentId,
+        summary: summary.slice(0, 2000),
+        sessionUrl: `${chatBaseUrl}/?agent=${encodeURIComponent(agentId)}`,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch { /* MIB007 may be down — graceful degradation */ }
+}
+
 // ── CSRF protection — verify origin on mutating requests ──
 function isOriginAllowed(req) {
   const origin = req.headers["origin"] || "";
@@ -2457,6 +2497,9 @@ async function requestHandler(req, res) {
   if (url.pathname.startsWith("/api/router/")) {
     const routerPath = url.pathname.replace("/api/router", "");
     const routerUrl = `${serviceUrl("shre-router")}${routerPath}${url.search}`;
+
+    // Capture request body for post-stream learning pipeline
+    let reqBody = "";
     try {
       const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
       delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
@@ -2468,15 +2511,59 @@ async function requestHandler(req, res) {
           rHeaders["cache-control"] = "no-cache";
           rHeaders["x-accel-buffering"] = "no";
           res.writeHead(routerRes.statusCode ?? 502, rHeaders);
-          routerRes.on("data", (chunk) => res.write(chunk));
-          routerRes.on("end", () => res.end());
+
+          // Buffer SSE chunks for post-stream learning (cap at 50KB to avoid memory pressure)
+          const chunks = [];
+          let totalLen = 0;
+          const MAX_CAPTURE = 50 * 1024;
+
+          routerRes.on("data", (chunk) => {
+            res.write(chunk);
+            if (totalLen < MAX_CAPTURE) {
+              chunks.push(chunk);
+              totalLen += chunk.length;
+            }
+          });
+          routerRes.on("end", () => {
+            res.end();
+            // Fire-and-forget: extract agent response from SSE and run learning pipeline
+            try {
+              const sseText = Buffer.concat(chunks).toString("utf8");
+              const parsed = JSON.parse(reqBody || "{}");
+              const agentId = parsed.agentId || "shre";
+              const userMessage = Array.isArray(parsed.messages)
+                ? (parsed.messages.filter(m => m.role === "user").pop()?.content || "").slice(0, 5000)
+                : "";
+              // Extract assistant text from SSE delta events
+              let assistantResponse = "";
+              for (const line of sseText.split("\n")) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                  const evt = JSON.parse(line.slice(6));
+                  if (evt.type === "delta" && evt.content) assistantResponse += evt.content;
+                  else if (evt.type === "content_block_delta" && evt.delta?.text) assistantResponse += evt.delta.text;
+                } catch { /* not JSON or not a delta */ }
+              }
+              if (userMessage && assistantResponse.length >= 80) {
+                const model = parsed.model || "unknown";
+                logConversationToCortex(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
+                emitConversationComplete(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
+                conversationLearner.learn(userMessage, assistantResponse, "platform", agentId).catch(() => {});
+                extractAndLogSkills(agentId, `User: ${userMessage}\n\nAssistant: ${assistantResponse}`).catch(() => {});
+                // Push agent-summary to MIB007 comms for store-facing agents
+                if (agentId !== "shre" && agentId !== "main") {
+                  postAgentSummaryToComms(agentId, assistantResponse.slice(0, 500)).catch(() => {});
+                }
+              }
+            } catch { /* learning pipeline is best-effort */ }
+          });
         },
       );
       routerReq.on("error", (err) => {
         log.error("[router-proxy] shre-router error:", err.message);
         if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: "shre-router unreachable" })); }
       });
-      req.on("data", (chunk) => routerReq.write(chunk));
+      req.on("data", (chunk) => { routerReq.write(chunk); reqBody += chunk; });
       req.on("end", () => routerReq.end());
     } catch (err) {
       log.error("[router-proxy] proxy failed:", err.message);
