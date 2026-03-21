@@ -204,13 +204,17 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
   const cleanup = useCallback(() => {
     activeRef.current = false;
     if (recRef.current) { try { recRef.current.abort(); } catch {} recRef.current = null; }
-    vad.stop();
+    vad.destroy(); // fully close AudioContext to prevent memory leaks
     ttsAbortRef.current?.abort();
+    ttsAbortRef.current = null;
     aiAbortRef.current?.abort();
+    aiAbortRef.current = null;
     if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ""; ttsAudioRef.current = null; }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") { try { mediaRecorderRef.current.stop(); } catch {} }
+    if (mediaRecorderRef.current) {
+      if (mediaRecorderRef.current.state !== "inactive") { try { mediaRecorderRef.current.stop(); } catch {} }
+      mediaRecorderRef.current = null;
+    }
     releaseMic();
-    mediaRecorderRef.current = null;
     window.speechSynthesis?.cancel();
     dispatch({ type: "CLOSE" });
   }, [vad, releaseMic]);
@@ -442,6 +446,11 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
 
   // ── Audio recording ──
   const startRecording = useCallback(async () => {
+    // Guard: stop any existing recorder before creating a new one
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try { mediaRecorderRef.current.stop(); } catch {}
+      mediaRecorderRef.current = null;
+    }
     const stream = await acquireMic();
     if (!stream) return;
     try {

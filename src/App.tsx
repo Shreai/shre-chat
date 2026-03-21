@@ -37,6 +37,7 @@ import {
   syncWithServer,
   markSessionDirty,
   syncDeleteToServer,
+  saveSessionImmediate,
 } from "./store";
 import type { ActivityStatus, ChatMessage } from "./openclaw";
 import { compactSession, listSessions } from "./openclaw";
@@ -352,6 +353,17 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, []);
 
+  // Periodic background sync — push active session to server every 30s as safety net
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const sid = activeSessionId;
+      if (!sid) return;
+      const s = sessionsRef.current.find((s) => s.id === sid);
+      if (s) saveSessionImmediate(s);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [activeSessionId]);
+
   // Daily session compaction — run once per day on app launch
   useEffect(() => {
     const COMPACT_DATE_KEY = "shre-last-compact";
@@ -498,13 +510,17 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
     switchView: setView,
 
     addMessage: (sessionId, msg) => {
-      updateSessions((prev) =>
-        prev.map((s) =>
+      updateSessions((prev) => {
+        const next = prev.map((s) =>
           s.id === sessionId
             ? { ...s, messages: [...s.messages, msg], updatedAt: Date.now() }
             : s
-        )
-      );
+        );
+        // Crash-proof: immediately persist to localStorage + server after every message
+        const updated = next.find((s) => s.id === sessionId);
+        if (updated) saveSessionImmediate(updated);
+        return next;
+      });
     },
 
     updateSessionTitle: (sessionId, title) => {
@@ -624,13 +640,17 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
     },
 
     replaceSessionMessages: (sessionId: string, msgs: ChatMessage[]) => {
-      updateSessions((prev) =>
-        prev.map((s) =>
+      updateSessions((prev) => {
+        const next = prev.map((s) =>
           s.id === sessionId
             ? { ...s, messages: msgs, updatedAt: Date.now() }
             : s
-        )
-      );
+        );
+        // Crash-proof: persist after stream completion
+        const updated = next.find((s) => s.id === sessionId);
+        if (updated) saveSessionImmediate(updated);
+        return next;
+      });
     },
 
     setMessageFeedback: (sessionId: string, msgIndex: number, feedback: "like" | "dislike" | null) => {

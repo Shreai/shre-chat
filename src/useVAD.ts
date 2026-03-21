@@ -125,11 +125,15 @@ export function useVAD(options: VADOptions = {}) {
       rafRef.current = 0;
     }
     if (sourceRef.current) {
-      sourceRef.current.disconnect();
+      try { sourceRef.current.disconnect(); } catch { /* already disconnected */ }
       sourceRef.current = null;
     }
     analyserRef.current = null;
-    // Keep AudioContext alive for reuse — don't close it
+    dataRef.current = null;
+    // Suspend AudioContext to free resources (cheaper than close, allows resume)
+    if (ctxRef.current && ctxRef.current.state === "running") {
+      ctxRef.current.suspend().catch(() => {});
+    }
   }, []);
 
   /** Check if speech energy is currently above threshold (for barge-in detection) */
@@ -205,5 +209,14 @@ export function useVAD(options: VADOptions = {}) {
     rafRef.current = requestAnimationFrame(poll);
   }, [speechThreshold]);
 
-  return { start, stop, checkEnergy, getAudioContext, startBargeInMonitor };
+  /** Fully close AudioContext — call on component unmount to prevent memory leaks */
+  const destroy = useCallback(() => {
+    stop();
+    if (ctxRef.current) {
+      ctxRef.current.close().catch(() => {});
+      ctxRef.current = null;
+    }
+  }, [stop]);
+
+  return { start, stop, destroy, checkEnergy, getAudioContext, startBargeInMonitor };
 }
