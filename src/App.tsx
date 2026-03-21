@@ -239,14 +239,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
   });
 
   const [activeAgentId, setActiveAgentId] = useState(() => localStorage.getItem(AGENT_KEY) || "shre");
-  const [view, setView] = useState<View>(() => {
-    // Show briefing on first open of the day (unless disabled by user)
-    if (localStorage.getItem("shre-briefing-disabled") === "1") return "chat";
-    const lastBriefing = localStorage.getItem("shre-last-briefing-date");
-    const today = new Date().toDateString();
-    if (lastBriefing !== today) return "briefing";
-    return "chat";
-  });
+  const [view, setView] = useState<View>("chat");
   const [activity, setActivity] = useState(() => loadActivity());
   const [feed, setFeed] = useState(() => loadFeed());
   const [files, setFiles] = useState(() => loadFiles());
@@ -328,17 +321,17 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
   useEffect(() => { initStorage(); }, []);
 
   // Sync sessions with server on mount — recovers history from server-side DB
+  // In dev mode (no backend), this resolves immediately to avoid hanging
   useEffect(() => {
     syncWithServer(loadSessions()).then((merged) => {
       if (merged.length > 0) {
         setSessions(merged);
-        // If we had no active session but server has sessions, activate the latest
         if (!loadActiveSession() && merged.length > 0) {
           setActiveSessionId(merged[0].id);
           saveActiveSession(merged[0].id);
         }
       }
-    });
+    }).catch(() => {}).finally(() => setSyncing(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Request desktop notification permission once on mount
