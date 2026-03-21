@@ -290,6 +290,7 @@ export function ChatComposer(props: ChatComposerProps) {
             placeholder={!writeEnabled ? "Read-only mode — enable Write in settings" : syncing && messages.length === 0 ? "Syncing history..." : compareMode ? `Compare ${compareModelsCount} models...` : streaming ? `Queue a task for ${currentAgentName}...` : cliMode ? "Claude CLI (subscription mode)..." : `Message ${currentAgentName}...`}
             disabled={(syncing && messages.length === 0) || !writeEnabled}
             rows={1}
+            autoCapitalize="off"
             aria-label="Message input"
             className="w-full px-4 pt-3 pb-1 text-sm resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
             style={{ color: "var(--c-text-1)", minHeight: "44px" }}
