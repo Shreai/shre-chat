@@ -1,0 +1,12 @@
+{
+  "name": "shre-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./rag": "./rag.js",
+    "./discovery": "./discovery.js",
+    "./logger": "./logger.js"
+  }
+}
