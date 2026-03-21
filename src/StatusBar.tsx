@@ -425,11 +425,11 @@ export function StatusBar() {
                   onClick={clearAll}
                   style={{
                     background: "none", border: "none", cursor: "pointer",
-                    fontSize: 11, color: "var(--c-text-4)", padding: "2px 6px",
+                    fontSize: 11, color: "var(--c-text-3)", padding: "2px 6px",
                     borderRadius: 4, transition: "color 0.15s",
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-danger, #ef4444)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-text-4)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-text-3)"; }}
                 >
                   Clear all
                 </button>
@@ -438,7 +438,7 @@ export function StatusBar() {
             {/* Scrollable notification list */}
             <div style={{ overflowY: "auto", flex: 1 }}>
               {notifications.length === 0 ? (
-                <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 12, color: "var(--c-text-4)" }}>
+                <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 12, color: "var(--c-text-3)" }}>
                   No notifications yet
                 </div>
               ) : (
@@ -449,11 +449,11 @@ export function StatusBar() {
                     style={{
                       padding: "10px 12px", cursor: "pointer",
                       borderBottom: "1px solid var(--c-border-2)",
-                      background: n.read ? "transparent" : "rgba(99,102,241,0.06)",
+                      background: n.read ? "transparent" : "var(--c-accent-soft, rgba(99,141,255,0.1))",
                       transition: "background 0.15s",
                     }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--c-bg-hover)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = n.read ? "transparent" : "rgba(99,102,241,0.06)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = n.read ? "transparent" : "var(--c-accent-soft, rgba(99,141,255,0.1))"; }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                       {/* Severity dot */}
@@ -463,7 +463,7 @@ export function StatusBar() {
                           ? "var(--c-danger, #ef4444)"
                           : n.type?.includes("quality") || n.type?.includes("void") || n.type?.includes("discount")
                             ? "#f59e0b"
-                            : "var(--c-accent, #6366f1)",
+                            : "var(--c-accent)",
                         boxShadow: n.type?.includes("failed") || n.type?.includes("unhealthy")
                           ? "0 0 4px rgba(239,68,68,0.5)"
                           : "none",
@@ -481,13 +481,13 @@ export function StatusBar() {
                         </div>
                         {n.body && (
                           <div style={{
-                            fontSize: 11, color: "var(--c-text-4)", marginTop: 3, lineHeight: 1.4,
+                            fontSize: 11, color: "var(--c-text-2)", marginTop: 3, lineHeight: 1.4,
                             whiteSpace: "pre-wrap", wordBreak: "break-word",
                           }}>
                             {n.body}
                           </div>
                         )}
-                        <div style={{ fontSize: 10, color: "var(--c-text-4)", marginTop: 4 }}>
+                        <div style={{ fontSize: 10, color: "var(--c-text-3)", marginTop: 4 }}>
                           {new Date(n.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                           {n.source && <span> &middot; {n.source}</span>}
                         </div>
@@ -497,13 +497,13 @@ export function StatusBar() {
                         onClick={(e) => dismissNotif(n.id, e)}
                         style={{
                           background: "none", border: "none", cursor: "pointer",
-                          color: "var(--c-text-5)", padding: "2px", flexShrink: 0,
+                          color: "var(--c-text-3)", padding: "2px", flexShrink: 0,
                           borderRadius: 4, transition: "color 0.15s",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          opacity: 0.5, marginTop: 1,
+                          marginTop: 1,
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; (e.currentTarget as HTMLElement).style.color = "var(--c-danger, #ef4444)"; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "0.5"; (e.currentTarget as HTMLElement).style.color = "var(--c-text-5)"; }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-danger)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-text-3)"; }}
                         title="Dismiss"
                         aria-label="Dismiss notification"
                       >
