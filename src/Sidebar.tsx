@@ -194,7 +194,7 @@ export function Sidebar() {
       aria-hidden="true"
     />
     <div className={`${sidebarOpen ? "w-64" : "w-0"} shrink-0 transition-[width] duration-150 overflow-hidden flex flex-col h-full fixed md:relative z-[55] md:z-auto sidebar-mobile-slide ${!sidebarOpen ? "sidebar-hidden" : ""}`}
-      style={{ background: "var(--c-bg-2)", borderRight: "1px solid var(--c-border-1)" }}
+      style={{ background: "var(--c-bg-sidebar, var(--c-bg-2))", borderRight: "1px solid var(--c-border-2)" }}
       onClick={(e) => e.stopPropagation()}
       onTouchStart={(e) => {
         touchStartRef.current = e.touches[0].clientX;

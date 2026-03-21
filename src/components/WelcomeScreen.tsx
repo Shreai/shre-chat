@@ -29,17 +29,15 @@ export function WelcomeScreen({ agent, agentId, userProfile, onSelectTemplate }:
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center gap-5 pb-20">
-      {/* Agent avatar */}
-      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: "var(--c-bg-active)" }}>
-        <span className="text-3xl">{agent.emoji}</span>
+      <div className="h-14 w-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--c-bg-3)", border: "1px solid var(--c-border-2)" }}>
+        <span className="text-2xl">{agent.emoji}</span>
       </div>
 
-      {/* Personalized greeting */}
       <div>
-        <p className="font-semibold text-base" style={{ color: "var(--c-text-1)" }}>
+        <p className="font-semibold text-lg" style={{ color: "var(--c-text-1)", letterSpacing: "-0.02em" }}>
           {greeting}{firstName ? `, ${firstName}` : ""}
         </p>
-        <p className="text-sm mt-1" style={{ color: "var(--c-text-3)" }}>
+        <p className="text-sm mt-0.5" style={{ color: "var(--c-text-3)" }}>
           {userProfile?.business?.name
             ? `How can ${agent.name} help ${userProfile.business.name} today?`
             : `How can ${agent.name} help you today?`}
@@ -84,26 +82,26 @@ export function WelcomeScreen({ agent, agentId, userProfile, onSelectTemplate }:
         {getTemplatesForAgent(agentId).map((tpl) => (
           <button
             key={tpl.title}
-            className="text-left px-4 py-3 rounded-xl transition-all duration-150"
+            className="text-left px-4 py-3.5 rounded-xl transition-all duration-150"
             style={{
-              border: "1px solid var(--c-border-2)",
-              background: "var(--c-bg-card)",
+              border: "1px solid var(--c-border-1)",
+              background: "var(--c-bg-3)",
               cursor: "pointer",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--c-bg-active)";
+              e.currentTarget.style.background = "var(--c-bg-hover)";
+              e.currentTarget.style.borderColor = "var(--c-accent)";
               e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--c-bg-card)";
+              e.currentTarget.style.background = "var(--c-bg-3)";
+              e.currentTarget.style.borderColor = "var(--c-border-1)";
               e.currentTarget.style.transform = "none";
-              e.currentTarget.style.boxShadow = "none";
             }}
             onClick={() => onSelectTemplate(tpl.prompt)}
           >
             <span className="text-base mr-2">{tpl.icon}</span>
-            <span className="text-xs font-medium" style={{ color: "var(--c-text-2)" }}>{tpl.title}</span>
+            <span className="text-sm font-medium" style={{ color: "var(--c-text-2)" }}>{tpl.title}</span>
           </button>
         ))}
       </div>

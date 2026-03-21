@@ -760,7 +760,7 @@ export function ChatView() {
       {showChat && <>
       {/* Header with tabs — below traffic lights */}
       <header className="flex items-center justify-between px-4 py-2.5 shrink-0 backdrop-blur-xl"
-        style={{ background: "var(--c-bg-glass)", borderBottom: "1px solid var(--c-border-2)", zIndex: 30, position: "relative" }}>
+        style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-2)", zIndex: 30, position: "relative" }}>
         <div className="flex items-center gap-3 min-w-0 flex-1 shre-no-drag">
           <button onClick={() => actions.setSidebarOpen(!state.sidebarOpen)} className="shrink-0 p-1 -ml-1 rounded-lg transition-colors hover:bg-white/5"
             style={{ color: "var(--c-text-3)" }}

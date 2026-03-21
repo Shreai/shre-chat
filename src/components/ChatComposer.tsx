@@ -185,7 +185,7 @@ export function ChatComposer(props: ChatComposerProps) {
       )}
 
       {/* Input area */}
-      <div className="px-2 sm:px-4 py-1 shrink-0 mobile-safe-bottom mobile-input-sticky mobile-input-area relative" style={{ background: "var(--c-bg)", borderTop: "1px solid var(--c-border-2)" }}>
+      <div className="px-2 sm:px-4 py-1 shrink-0 mobile-safe-bottom mobile-input-sticky mobile-input-area relative" style={{ background: "var(--c-bg-2)", borderTop: "1px solid var(--c-border-2)" }}>
         {/* ARIA live region for voice status announcements */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">{voiceAnnouncement}</div>
 

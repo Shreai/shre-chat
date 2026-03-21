@@ -35,66 +35,62 @@
 /* ── Theme Variables — Apple HIG Dark ─────────────────────────────── */
 
 :root {
-  /* Apple dark palette — true black base */
-  --c-bg-1: #000000;
-  --c-bg-2: #1c1c1e;
-  --c-bg-3: #2c2c2e;
-  --c-bg-glass: rgba(28, 28, 30, 0.82);
-  --c-bg-input: rgba(118, 118, 128, 0.12);
-  --c-bg-hover: rgba(255, 255, 255, 0.05);
-  --c-bg-active: rgba(10, 132, 255, 0.14);
-  --c-bg-card: rgba(255, 255, 255, 0.04);
-  --c-bg-badge: rgba(10, 132, 255, 0.18);
-  --c-msg-user: rgba(10, 132, 255, 0.1);
-  --c-msg-ai: rgba(255, 255, 255, 0.03);
+  --c-bg-1: #0d0d0f;
+  --c-bg-2: #161618;
+  --c-bg-3: #1e1e22;
+  --c-bg-glass: rgba(22, 22, 24, 0.88);
+  --c-bg-input: rgba(255, 255, 255, 0.06);
+  --c-bg-hover: rgba(255, 255, 255, 0.06);
+  --c-bg-active: rgba(99, 141, 255, 0.12);
+  --c-bg-card: rgba(255, 255, 255, 0.055);
+  --c-bg-badge: rgba(99, 141, 255, 0.16);
+  --c-bg-main: #111113;
+  --c-bg-sidebar: #131315;
+  --c-msg-user: rgba(99, 141, 255, 0.08);
+  --c-msg-ai: rgba(255, 255, 255, 0.025);
 
-  /* Apple text hierarchy */
-  --c-text-1: rgba(255, 255, 255, 1.0);
-  --c-text-2: rgba(235, 235, 245, 0.6);
-  --c-text-3: rgba(235, 235, 245, 0.3);
-  --c-text-4: rgba(235, 235, 245, 0.18);
-  --c-text-5: rgba(235, 235, 245, 0.1);
+  --c-text-1: #ececf1;
+  --c-text-2: #a1a1aa;
+  --c-text-3: #6b6b76;
+  --c-text-4: #4a4a55;
+  --c-text-5: #33333d;
 
-  /* Apple separator / borders */
-  --c-border-1: rgba(84, 84, 88, 0.65);
-  --c-border-2: rgba(84, 84, 88, 0.35);
+  --c-border-1: rgba(255, 255, 255, 0.1);
+  --c-border-2: rgba(255, 255, 255, 0.065);
 
-  /* iOS System Blue */
-  --c-accent: #0a84ff;
-  --c-accent-hover: #409cff;
-  --c-accent-soft: rgba(10, 132, 255, 0.18);
-  --c-scrollbar: rgba(120, 120, 128, 0.35);
+  --c-accent: #638dff;
+  --c-accent-hover: #7fa3ff;
+  --c-accent-soft: rgba(99, 141, 255, 0.14);
+  --c-scrollbar: rgba(255, 255, 255, 0.12);
 
-  /* Semantic status — Apple system colors */
-  --c-success: #32d74b;
-  --c-success-soft: #4cd964;
-  --c-success-bg: rgba(50, 215, 75, 0.14);
-  --c-warning: #ff9f0a;
-  --c-warning-soft: #ffb340;
-  --c-warning-bg: rgba(255, 159, 10, 0.12);
-  --c-danger: #ff453a;
-  --c-danger-soft: #ff6961;
-  --c-danger-bg: rgba(255, 69, 58, 0.14);
-  --c-info: #0a84ff;
-  --c-info-soft: #409cff;
-  --c-info-bg: rgba(10, 132, 255, 0.12);
-  --c-amber: #ff9f0a;
-  --c-amber-bg: rgba(255, 159, 10, 0.1);
-  --c-orange: #ff6b35;
-  --c-orange-bg: rgba(255, 107, 53, 0.1);
-  --c-yellow: #ffd60a;
-  --c-yellow-bg: rgba(255, 214, 10, 0.08);
-  --c-emerald: #32d74b;
-  --c-emerald-bg: rgba(50, 215, 75, 0.1);
-  --c-purple: #bf5af2;
-  --c-purple-bg: rgba(191, 90, 242, 0.12);
-  --c-slate: rgba(235, 235, 245, 0.3);
-  --c-slate-bg: rgba(120, 120, 128, 0.1);
+  --c-success: #34d399;
+  --c-success-soft: #6ee7b7;
+  --c-success-bg: rgba(52, 211, 153, 0.12);
+  --c-warning: #fbbf24;
+  --c-warning-soft: #fcd34d;
+  --c-warning-bg: rgba(251, 191, 36, 0.1);
+  --c-danger: #f87171;
+  --c-danger-soft: #fca5a5;
+  --c-danger-bg: rgba(248, 113, 113, 0.12);
+  --c-info: #638dff;
+  --c-info-soft: #7fa3ff;
+  --c-info-bg: rgba(99, 141, 255, 0.1);
+  --c-amber: #fbbf24;
+  --c-amber-bg: rgba(251, 191, 36, 0.08);
+  --c-orange: #fb923c;
+  --c-orange-bg: rgba(251, 146, 60, 0.1);
+  --c-yellow: #facc15;
+  --c-yellow-bg: rgba(250, 204, 21, 0.08);
+  --c-emerald: #34d399;
+  --c-emerald-bg: rgba(52, 211, 153, 0.1);
+  --c-purple: #a78bfa;
+  --c-purple-bg: rgba(167, 139, 250, 0.1);
+  --c-slate: #6b6b76;
+  --c-slate-bg: rgba(255, 255, 255, 0.05);
   --c-on-accent: #ffffff;
-  --c-on-dark: #000000;
-  --c-terminal-accent: #32d74b;
+  --c-on-dark: #0d0d0f;
+  --c-terminal-accent: #34d399;
 
-  /* ── @shre/ui-kit bridge ── */
   --color-primary: var(--c-accent);
   --color-primary-hover: var(--c-accent-hover);
   --color-primary-foreground: var(--c-on-accent);
@@ -112,7 +108,6 @@
   --color-info: var(--c-info);
   --color-secondary-light: var(--c-bg-card);
 
-  /* Typography scale */
   --font-size-xs: 11px;
   --font-size-sm: 13px;
   --font-size-base: 15px;
@@ -126,80 +121,75 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
-  /* Radius */
   --radius-sm: 6px;
   --radius-base: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Elevation shadows */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.24);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.7), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.7), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .light {
-  /* Apple light palette */
-  --c-bg-1: #f2f2f7;
+  --c-bg-1: #f5f5f7;
   --c-bg-2: #ffffff;
-  --c-bg-3: #f2f2f7;
-  --c-bg-glass: rgba(242, 242, 247, 0.92);
-  --c-bg-input: rgba(120, 120, 128, 0.12);
+  --c-bg-3: #eeeef0;
+  --c-bg-glass: rgba(245, 245, 247, 0.9);
+  --c-bg-input: rgba(0, 0, 0, 0.04);
   --c-bg-hover: rgba(0, 0, 0, 0.04);
-  --c-bg-active: rgba(0, 122, 255, 0.1);
-  --c-bg-card: rgba(0, 0, 0, 0.02);
-  --c-bg-badge: rgba(0, 122, 255, 0.1);
-  --c-msg-user: rgba(0, 122, 255, 0.07);
-  --c-msg-ai: rgba(0, 0, 0, 0.02);
+  --c-bg-active: rgba(79, 110, 220, 0.08);
+  --c-bg-card: rgba(0, 0, 0, 0.03);
+  --c-bg-badge: rgba(79, 110, 220, 0.1);
+  --c-bg-main: #fafafa;
+  --c-bg-sidebar: #f0f0f2;
+  --c-msg-user: rgba(79, 110, 220, 0.06);
+  --c-msg-ai: rgba(0, 0, 0, 0.015);
 
-  /* Apple light text */
-  --c-text-1: rgba(0, 0, 0, 1.0);
-  --c-text-2: rgba(60, 60, 67, 0.6);
-  --c-text-3: rgba(60, 60, 67, 0.3);
-  --c-text-4: rgba(60, 60, 67, 0.18);
-  --c-text-5: rgba(60, 60, 67, 0.1);
+  --c-text-1: #1a1a1e;
+  --c-text-2: #6e6e80;
+  --c-text-3: #a0a0b0;
+  --c-text-4: #c4c4d0;
+  --c-text-5: #dedee5;
 
-  --c-border-1: rgba(60, 60, 67, 0.29);
-  --c-border-2: rgba(60, 60, 67, 0.16);
+  --c-border-1: rgba(0, 0, 0, 0.1);
+  --c-border-2: rgba(0, 0, 0, 0.06);
 
-  /* iOS System Blue (light) */
-  --c-accent: #007aff;
-  --c-accent-hover: #0a84ff;
-  --c-accent-soft: rgba(0, 122, 255, 0.12);
-  --c-scrollbar: rgba(120, 120, 128, 0.3);
+  --c-accent: #4f6edc;
+  --c-accent-hover: #3d5cc9;
+  --c-accent-soft: rgba(79, 110, 220, 0.1);
+  --c-scrollbar: rgba(0, 0, 0, 0.15);
 
-  /* Semantic — light */
-  --c-success: #34c759;
-  --c-success-soft: #30d158;
-  --c-success-bg: rgba(52, 199, 89, 0.12);
-  --c-warning: #ff9500;
-  --c-warning-soft: #ff9f0a;
-  --c-warning-bg: rgba(255, 149, 0, 0.1);
-  --c-danger: #ff3b30;
-  --c-danger-soft: #ff453a;
-  --c-danger-bg: rgba(255, 59, 48, 0.12);
-  --c-info: #007aff;
-  --c-info-soft: #0a84ff;
-  --c-info-bg: rgba(0, 122, 255, 0.1);
-  --c-amber: #ff9500;
-  --c-amber-bg: rgba(255, 149, 0, 0.08);
-  --c-orange: #ff6200;
-  --c-orange-bg: rgba(255, 98, 0, 0.08);
-  --c-yellow: #ffcc00;
-  --c-yellow-bg: rgba(255, 204, 0, 0.08);
-  --c-emerald: #34c759;
-  --c-emerald-bg: rgba(52, 199, 89, 0.1);
-  --c-purple: #af52de;
-  --c-purple-bg: rgba(175, 82, 222, 0.08);
-  --c-slate: rgba(60, 60, 67, 0.3);
-  --c-slate-bg: rgba(120, 120, 128, 0.1);
+  --c-success: #22c55e;
+  --c-success-soft: #4ade80;
+  --c-success-bg: rgba(34, 197, 94, 0.08);
+  --c-warning: #eab308;
+  --c-warning-soft: #facc15;
+  --c-warning-bg: rgba(234, 179, 8, 0.08);
+  --c-danger: #ef4444;
+  --c-danger-soft: #f87171;
+  --c-danger-bg: rgba(239, 68, 68, 0.08);
+  --c-info: #4f6edc;
+  --c-info-soft: #6985e5;
+  --c-info-bg: rgba(79, 110, 220, 0.08);
+  --c-amber: #d97706;
+  --c-amber-bg: rgba(217, 119, 6, 0.06);
+  --c-orange: #ea580c;
+  --c-orange-bg: rgba(234, 88, 12, 0.06);
+  --c-yellow: #ca8a04;
+  --c-yellow-bg: rgba(202, 138, 4, 0.06);
+  --c-emerald: #22c55e;
+  --c-emerald-bg: rgba(34, 197, 94, 0.06);
+  --c-purple: #8b5cf6;
+  --c-purple-bg: rgba(139, 92, 246, 0.06);
+  --c-slate: #a0a0b0;
+  --c-slate-bg: rgba(0, 0, 0, 0.04);
   --c-on-accent: #ffffff;
-  --c-on-dark: #000000;
-  --c-terminal-accent: #34c759;
+  --c-on-dark: #1a1a1e;
+  --c-terminal-accent: #22c55e;
 
-  /* ── bridge ── */
   --color-primary: var(--c-accent);
   --color-primary-hover: var(--c-accent-hover);
   --color-primary-foreground: var(--c-on-accent);
@@ -217,10 +207,10 @@
   --color-info: var(--c-info);
   --color-secondary-light: var(--c-bg-card);
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.18), 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 /* ── Theme transition (dark ↔ light) ─────────────────────────────── */
@@ -370,18 +360,18 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .hljs { color: var(--c-text-2); }
-.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: #ff6b6b; }
-.hljs-string, .hljs-title.class_.inherited__, .hljs-template-variable, .hljs-template-tag { color: #69db7c; }
-.hljs-number, .hljs-literal, .hljs-type, .hljs-params { color: #ffa94d; }
-.hljs-comment, .hljs-doctag { color: var(--c-text-3); font-style: italic; }
-.hljs-title, .hljs-section, .hljs-title.function_ { color: #74c0fc; }
-.hljs-attr, .hljs-attribute { color: #ffa94d; }
-.hljs-variable, .hljs-variable.language_ { color: #f783ac; }
-.hljs-regexp, .hljs-link { color: #63e6be; }
-.hljs-symbol, .hljs-bullet { color: #da77f2; }
-.hljs-meta, .hljs-meta .hljs-keyword { color: #74c0fc; }
-.hljs-deletion { color: #ff6b6b; background: rgba(255, 69, 58, 0.1); }
-.hljs-addition { color: #69db7c; background: rgba(50, 215, 75, 0.1); }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: #f87171; }
+.hljs-string, .hljs-title.class_.inherited__, .hljs-template-variable, .hljs-template-tag { color: #34d399; }
+.hljs-number, .hljs-literal, .hljs-type, .hljs-params { color: #fbbf24; }
+.hljs-comment, .hljs-doctag { color: var(--c-text-4); font-style: italic; }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: #7fa3ff; }
+.hljs-attr, .hljs-attribute { color: #fb923c; }
+.hljs-variable, .hljs-variable.language_ { color: #f9a8d4; }
+.hljs-regexp, .hljs-link { color: #6ee7b7; }
+.hljs-symbol, .hljs-bullet { color: #a78bfa; }
+.hljs-meta, .hljs-meta .hljs-keyword { color: #7fa3ff; }
+.hljs-deletion { color: #f87171; background: rgba(248, 113, 113, 0.08); }
+.hljs-addition { color: #34d399; background: rgba(52, 211, 153, 0.08); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
 
