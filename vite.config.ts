@@ -3,6 +3,15 @@ import react from "@vitejs/plugin-react";
 
 const apiTarget = process.env.VITE_API_TARGET || "http://127.0.0.1:18789";
 
+const proxyConfig = {
+  target: apiTarget,
+  changeOrigin: true,
+  secure: true,
+  headers: {
+    Origin: apiTarget,
+  },
+};
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -10,23 +19,9 @@ export default defineConfig({
     port: 5000,
     allowedHosts: true,
     proxy: {
-      "/v1": {
-        target: apiTarget,
-        changeOrigin: true,
-        secure: true,
-        ws: true,
-      },
-      "/api": {
-        target: apiTarget,
-        changeOrigin: true,
-        secure: true,
-      },
-      "/ws": {
-        target: apiTarget,
-        changeOrigin: true,
-        secure: true,
-        ws: true,
-      },
+      "/v1": { ...proxyConfig, ws: true },
+      "/api": proxyConfig,
+      "/ws": { ...proxyConfig, ws: true },
     },
   },
   build: {
