@@ -1575,6 +1575,7 @@ export function ChatView() {
       <SuggestionsBar
         lastAssistantMessage={lastAssistantMessage}
         streaming={streaming}
+        messageCount={messages.length}
         onSelect={(text) => {
           setInput(text);
           pendingSuggestionSendRef.current = true;

@@ -3,14 +3,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 // ── Types ────────────────────────────────────────────────────────────
 
 interface SuggestionsBarProps {
-  /** Last assistant message content — used to generate contextual suggestions */
   lastAssistantMessage: string;
-  /** Whether a stream is currently active (hides suggestions during streaming) */
   streaming: boolean;
-  /** Callback when user clicks a suggestion — fills the input and sends */
   onSelect: (suggestion: string) => void;
-  /** Optional: externally provided suggestions (overrides auto-generated) */
   suggestions?: string[];
+  messageCount?: number;
 }
 
 // ── Contextual suggestion patterns ──────────────────────────────────
@@ -115,6 +112,15 @@ const DEFAULT_SUGGESTIONS = [
   "Summarize this conversation",
 ];
 
+const STARTER_SUGGESTIONS = [
+  "What can you help me with?",
+  "Show my tasks for today",
+  "Write an email",
+  "Summarize a document",
+  "Debug my code",
+  "Create a report",
+];
+
 const FADE_TIMEOUT_MS = 30_000; // 30 seconds auto-fade
 const MAX_VISIBLE = 4;
 
@@ -149,24 +155,26 @@ function generateLocalSuggestions(message: string): string[] {
 
 // ── Component ────────────────────────────────────────────────────────
 
-export function SuggestionsBar({ lastAssistantMessage, streaming, onSelect, suggestions: externalSuggestions }: SuggestionsBarProps) {
+export function SuggestionsBar({ lastAssistantMessage, streaming, onSelect, suggestions: externalSuggestions, messageCount = 0 }: SuggestionsBarProps) {
   const [localSuggestions, setLocalSuggestions] = useState<string[]>([]);
   const [visible, setVisible] = useState(false);
   const prevMessageRef = useRef("");
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEmptyChat = messageCount === 0;
 
-  // Generate suggestions when assistant message changes
   useEffect(() => {
-    if (streaming || !lastAssistantMessage) {
-      setVisible(false);
+    if (streaming) { setVisible(false); return; }
+
+    if (isEmptyChat) {
+      setLocalSuggestions(STARTER_SUGGESTIONS);
+      setVisible(true);
       return;
     }
 
-    // Don't regenerate for the same message
+    if (!lastAssistantMessage) { setVisible(false); return; }
     if (lastAssistantMessage === prevMessageRef.current) return;
     prevMessageRef.current = lastAssistantMessage;
 
-    // Use external suggestions if provided, otherwise generate locally
     if (externalSuggestions && externalSuggestions.length > 0) {
       setLocalSuggestions(externalSuggestions);
     } else {
@@ -174,10 +182,8 @@ export function SuggestionsBar({ lastAssistantMessage, streaming, onSelect, sugg
       setLocalSuggestions(generated);
     }
 
-    // Animate in after a short delay
     const timer = setTimeout(() => setVisible(true), 300);
 
-    // Auto-fade after 30 seconds
     if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
     fadeTimerRef.current = setTimeout(() => setVisible(false), FADE_TIMEOUT_MS);
 
@@ -185,36 +191,34 @@ export function SuggestionsBar({ lastAssistantMessage, streaming, onSelect, sugg
       clearTimeout(timer);
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
     };
-  }, [lastAssistantMessage, streaming, externalSuggestions]);
+  }, [lastAssistantMessage, streaming, externalSuggestions, isEmptyChat]);
 
-  // Hide when streaming starts
   useEffect(() => {
     if (streaming) setVisible(false);
   }, [streaming]);
 
-  const displaySuggestions = externalSuggestions && externalSuggestions.length > 0
-    ? externalSuggestions
-    : localSuggestions;
+  const displaySuggestions = isEmptyChat
+    ? STARTER_SUGGESTIONS
+    : (externalSuggestions && externalSuggestions.length > 0 ? externalSuggestions : localSuggestions);
 
   if (displaySuggestions.length === 0 || streaming || !visible) return null;
 
   return (
     <div
-      className="suggestions-bar"
+      className="suggestions-bar scrollbar-none"
       style={{
         display: "flex",
         overflowX: "auto",
         gap: 8,
-        justifyContent: "center",
-        padding: "8px 16px",
-        maxWidth: 720,
-        margin: "0 auto",
+        padding: "6px 16px",
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(8px)",
-        transition: "opacity 0.3s ease, transform 0.3s ease",
+        transform: visible ? "translateY(0)" : "translateY(6px)",
+        transition: "opacity 0.25s ease, transform 0.25s ease",
         WebkitOverflowScrolling: "touch",
         scrollbarWidth: "none",
         msOverflowStyle: "none",
+        maskImage: "linear-gradient(to right, transparent 0, black 16px, black calc(100% - 24px), transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to right, transparent 0, black 16px, black calc(100% - 24px), transparent 100%)",
       }}
     >
       {displaySuggestions.slice(0, MAX_VISIBLE).map((suggestion, i) => (
@@ -222,29 +226,28 @@ export function SuggestionsBar({ lastAssistantMessage, streaming, onSelect, sugg
           key={`${suggestion}-${i}`}
           className="suggestion-chip"
           style={{
-            background: "transparent",
+            background: "var(--c-bg-input)",
             color: "var(--c-text-2)",
             border: "1px solid var(--c-border-2)",
             borderRadius: 9999,
-            padding: "10px 14px",
+            padding: "7px 14px",
             fontSize: 13,
-            minHeight: 40,
+            fontWeight: 500,
+            letterSpacing: "-0.01em",
             cursor: "pointer",
             transition: "all 0.15s ease",
             whiteSpace: "nowrap",
             flexShrink: 0,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--c-bg-hover)";
+            e.currentTarget.style.background = "var(--c-accent-soft)";
             e.currentTarget.style.borderColor = "var(--c-accent)";
-            e.currentTarget.style.color = "var(--c-text-1)";
-            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.color = "var(--c-accent)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.background = "var(--c-bg-input)";
             e.currentTarget.style.borderColor = "var(--c-border-2)";
             e.currentTarget.style.color = "var(--c-text-2)";
-            e.currentTarget.style.transform = "none";
           }}
           onClick={() => {
             setVisible(false);
