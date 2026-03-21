@@ -2531,8 +2531,8 @@ async function requestHandler(req, res) {
     const sections = {};
     const warnings = [];
 
-    // Fetch tasks, agent activity, and calendar in parallel
-    const [taskResult, agentResult, calendarResult] = await Promise.allSettled([
+    // Fetch tasks (via pipeline briefing), agent activity, and calendar in parallel
+    const [taskResult, pipelineResult, agentResult, calendarResult] = await Promise.allSettled([
       // 1. Aggregate tasks from shre-tasks
       (async () => {
         const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks?limit=20&status=pending`, {
@@ -2553,6 +2553,14 @@ async function requestHandler(req, res) {
             due: t.due ? new Date(t.due).toLocaleDateString([], { month: "short", day: "numeric" }) : null,
           })),
         };
+      })(),
+      // 1b. Pipeline briefing from shre-tasks (approvals, objectives, stats)
+      (async () => {
+        const briefRes = await fetch(`${serviceUrl("shre-tasks")}/v1/briefing`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!briefRes.ok) return null;
+        return await briefRes.json();
       })(),
       // 2. Agent activity — scan recent sessions (tail-read optimization)
       (async () => {
@@ -2673,6 +2681,17 @@ async function requestHandler(req, res) {
 
     if (taskResult.status === "fulfilled") sections.tasks = taskResult.value;
     else warnings.push("Tasks service unreachable");
+
+    // Merge pipeline briefing data (pending approvals, active objectives)
+    if (pipelineResult.status === "fulfilled" && pipelineResult.value) {
+      const pipeline = pipelineResult.value;
+      sections.pipeline = {
+        pending_approvals: pipeline.pending_approvals || [],
+        active_objectives: pipeline.active_objectives || [],
+        completed_today: (pipeline.completed_today || []).slice(0, 5),
+        stats: pipeline.stats || {},
+      };
+    }
 
     if (agentResult.status === "fulfilled" && agentResult.value) {
       sections.agents = agentResult.value.agents;
@@ -2971,8 +2990,8 @@ Examples:
     const sections = {};
     const warnings = [];
 
-    // Aggregate from shre-tasks, shre-health, shre-meter in parallel
-    const [taskResult, healthResult, budgetResult] = await Promise.allSettled([
+    // Aggregate from shre-tasks (pipeline briefing + raw tasks), shre-health, shre-meter in parallel
+    const [taskResult, pipelineBriefResult, healthResult, budgetResult] = await Promise.allSettled([
       // 1. Pending tasks from shre-tasks
       (async () => {
         const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks?limit=20&status=pending`, {
@@ -2993,6 +3012,14 @@ Examples:
             due: t.due ? new Date(t.due).toLocaleDateString([], { month: "short", day: "numeric" }) : null,
           })),
         };
+      })(),
+      // 1b. Pipeline briefing (pending approvals, objectives, stats)
+      (async () => {
+        const briefRes = await fetch(`${serviceUrl("shre-tasks")}/v1/briefing`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!briefRes.ok) return null;
+        return await briefRes.json();
       })(),
       // 2. Agent activity from shre-health
       (async () => {
@@ -3016,6 +3043,17 @@ Examples:
       sections.tasks = taskResult.value;
     } else {
       warnings.push("Tasks unavailable");
+    }
+
+    // Merge pipeline briefing data (pending approvals, objectives)
+    if (pipelineBriefResult.status === "fulfilled" && pipelineBriefResult.value) {
+      const pipeline = pipelineBriefResult.value;
+      sections.pipeline = {
+        pending_approvals: pipeline.pending_approvals || [],
+        active_objectives: pipeline.active_objectives || [],
+        completed_today: (pipeline.completed_today || []).slice(0, 5),
+        stats: pipeline.stats || {},
+      };
     }
 
     if (healthResult.status === "fulfilled") {
@@ -3511,6 +3549,25 @@ if (tlsOpts && httpsServer) {
     startWALReplay(60_000); // Retry failed training writes every 60s
   });
 }
+
+// ─── Subscribe to pipeline briefing events ──────────────────────────────────
+eventBus.subscribe("briefing.daily", async (event) => {
+  const digest = event?.data?.digest_markdown;
+  if (digest) {
+    log.info("[briefing] Daily briefing received via event bus");
+    // Broadcast to connected WebSocket clients
+    broadcastNotification("briefing_daily", {
+      digest_markdown: digest,
+      stats: event?.data?.stats || {},
+      date: event?.data?.date || new Date().toISOString().slice(0, 10),
+    });
+    // Invalidate briefing cache so next /api/briefing fetch gets fresh data
+    _briefingCache = null;
+    _briefingCacheTs = 0;
+  }
+}).catch((err) => {
+  log.warn("[briefing] Failed to subscribe to briefing.daily events", {}, err);
+});
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal) {
