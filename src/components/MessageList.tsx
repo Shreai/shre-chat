@@ -275,8 +275,8 @@ export function MessageList(props: MessageListProps) {
         {streaming && (
           <div className="max-w-3xl mx-auto w-full">
             {streamElapsed >= 3 && !streamStall && (
-              <div className="flex items-center gap-1.5 px-3 py-0.5 mb-0.5 text-[10px] text-zinc-500 select-none">
-                <span className="inline-block h-1 w-1 rounded-full bg-zinc-500 animate-pulse" />
+              <div className="flex items-center gap-1.5 px-3 py-0.5 mb-0.5 text-[10px] select-none" style={{ color: "var(--c-text-2)" }}>
+                <span className="inline-block h-1 w-1 rounded-full animate-pulse" style={{ background: "var(--c-text-2)" }} />
                 {streamElapsed < 10 ? `Thinking\u2026 ${streamElapsed}s` : `${streamElapsed}s`}
               </div>
             )}
@@ -355,7 +355,7 @@ export function MessageList(props: MessageListProps) {
                     {(() => {
                       const badges: Record<string, { icon: string; label: string; color: string; bg: string; spin?: boolean }> = {
                         connecting: { icon: "\uD83D\uDD17",  label: "Connecting",              color: "var(--c-slate)", bg: "rgba(148,163,184,0.12)" },
-                        thinking:   { icon: "\uD83E\uDDE0",  label: "Thinking",                color: "var(--c-warning-soft)", bg: "rgba(251,191,36,0.12)" },
+                        thinking:   { icon: "\uD83E\uDDE0",  label: "Thinking",                color: "var(--c-text-2)", bg: "var(--c-bg-hover)" },
                         planning:   { icon: "\uD83D\uDCCB",  label: "Planning strategy",       color: "var(--c-purple)", bg: "rgba(167,139,250,0.12)" },
                         tool_use:   { icon: "\u26A1",  label: activeToolName || "Tool",   color: "var(--c-info-soft)", bg: "rgba(96,165,250,0.12)", spin: true },
                         writing:    { icon: "\u270D\uFE0F",  label: "Writing",                 color: "var(--c-success-soft)", bg: "rgba(74,222,128,0.12)" },

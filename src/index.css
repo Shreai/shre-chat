@@ -46,8 +46,8 @@
   --c-bg-badge: rgba(99, 141, 255, 0.16);
   --c-bg-main: #111113;
   --c-bg-sidebar: #131315;
-  --c-msg-user: rgba(99, 141, 255, 0.08);
-  --c-msg-ai: rgba(255, 255, 255, 0.025);
+  --c-msg-user: rgba(99, 141, 255, 0.10);
+  --c-msg-ai: rgba(255, 255, 255, 0.045);
 
   --c-text-1: #ececf1;
   --c-text-2: #a1a1aa;
@@ -145,8 +145,8 @@
   --c-bg-badge: rgba(79, 110, 220, 0.1);
   --c-bg-main: #fafafa;
   --c-bg-sidebar: #f0f0f2;
-  --c-msg-user: rgba(79, 110, 220, 0.06);
-  --c-msg-ai: rgba(0, 0, 0, 0.015);
+  --c-msg-user: rgba(79, 110, 220, 0.09);
+  --c-msg-ai: rgba(0, 0, 0, 0.035);
 
   --c-text-1: #1a1a1e;
   --c-text-2: #52525b;
