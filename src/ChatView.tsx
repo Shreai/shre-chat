@@ -320,7 +320,7 @@ export function ChatView() {
     showModelPicker, setShowModelPicker, modelPickerRef,
     comparePickerOpen, setComparePickerOpen, comparePickerRef,
     setShareUrl, setSharedSnapshot, setSharedLoading, setSharedError,
-    generateTitle,
+    generateTitle, virtualizer,
   });
 
   const ensureSession = useCallback((): string => {
@@ -759,19 +759,13 @@ export function ChatView() {
 
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && <>
-      {/* Header with tabs — below traffic lights */}
-      <header className="flex items-center justify-between px-4 py-2.5 shrink-0 backdrop-blur-xl"
+      {/* Compact toolbar — model picker + options */}
+      <header className="flex items-center justify-between px-3 py-1.5 shrink-0"
         style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-2)", zIndex: 30, position: "relative" }}>
-        <div className="flex items-center gap-3 min-w-0 flex-1 shre-no-drag">
-          <button onClick={() => actions.setSidebarOpen(!state.sidebarOpen)} className="shrink-0 p-1 -ml-1 rounded-lg transition-colors hover:bg-white/5"
-            style={{ color: "var(--c-text-3)" }}
-            aria-label={state.sidebarOpen ? "Close sidebar" : "Open sidebar"}>
-            <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
-          </button>
-
+        <div className="flex items-center gap-2 min-w-0 flex-1 shre-no-drag">
           {(() => {
             const s = sessions.find((x) => x.id === activeSessionId);
-            if (!s) return <span className="text-[13px] font-semibold tracking-tight" style={{ color: "var(--c-text-1)" }}>{currentAgent.name}</span>;
+            if (!s) return null;
             return editingTabId === s.id ? (
               <input
                 autoFocus
@@ -780,13 +774,13 @@ export function ChatView() {
                 onBlur={() => { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); }}
                 onKeyDown={(e) => { if (e.key === "Enter") { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); } if (e.key === "Escape") setEditingTabId(null); }}
                 onClick={(e) => e.stopPropagation()}
-                className="max-w-[180px] sm:max-w-[260px] bg-transparent outline-none text-[13px] font-semibold tracking-tight rounded px-1"
-                style={{ color: "var(--c-text-1)", border: "1px solid var(--c-accent)" }}
+                className="max-w-[180px] sm:max-w-[260px] bg-transparent outline-none text-[12px] tracking-tight rounded px-1"
+                style={{ color: "var(--c-text-2)", border: "1px solid var(--c-accent)" }}
               />
             ) : (
               <span
-                className="text-[13px] font-semibold tracking-tight truncate max-w-[180px] sm:max-w-[260px] cursor-default"
-                style={{ color: "var(--c-text-1)" }}
+                className="text-[12px] tracking-tight truncate max-w-[180px] sm:max-w-[260px] cursor-default"
+                style={{ color: "var(--c-text-3)" }}
                 onDoubleClick={() => { setEditingTabId(s.id); setEditingTabText(s.title); }}
                 title="Double-click to rename"
               >
@@ -798,11 +792,6 @@ export function ChatView() {
           {cliMode && (
             <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium" style={{ background: "rgba(168,85,247,0.12)", color: "var(--c-purple)" }}>CLI</span>
           )}
-
-          <span
-            className={`inline-block h-[6px] w-[6px] rounded-full shrink-0 ${wsConnected ? "bg-emerald-400" : wsFailed ? "bg-red-400" : gatewayUp ? "bg-yellow-400" : gatewayUp === false ? "bg-red-400" : "bg-gray-500"}`}
-            title={wsConnected ? "Connected" : wsFailed ? "Connection failed" : gatewayUp ? "HTTP fallback" : gatewayUp === false ? "Offline" : "Connecting..."}
-          />
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -908,6 +897,7 @@ export function ChatView() {
                     }}
                     className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
                     style={{ color: "var(--c-text-1)" }}
+                    title={notifSound ? "Mute notification sounds when new messages arrive" : "Play a chime when new messages arrive while tab is in background"}
                   >
                     {notifSound ? (
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
@@ -1182,59 +1172,7 @@ export function ChatView() {
         </div>
       )}
 
-      {/* ── Reconnection banner ─────────────────────────────────────── */}
-      {(wsReconnecting || wsFailed || wsBannerFlash === "connected") && (
-        <div
-          className="shrink-0 flex items-center justify-center gap-2 px-3 py-1.5 text-[11px] font-medium ws-reconnect-banner"
-          style={{
-            background: wsBannerFlash === "connected"
-              ? "rgba(34, 197, 94, 0.12)"
-              : wsFailed
-                ? "rgba(239, 68, 68, 0.12)"
-                : "rgba(234, 179, 8, 0.12)",
-            borderBottom: `1px solid ${
-              wsBannerFlash === "connected"
-                ? "rgba(34, 197, 94, 0.25)"
-                : wsFailed
-                  ? "rgba(239, 68, 68, 0.25)"
-                  : "rgba(234, 179, 8, 0.25)"
-            }`,
-            color: wsBannerFlash === "connected"
-              ? "var(--c-success-soft)"
-              : wsFailed
-                ? "var(--c-danger-soft)"
-                : "var(--c-yellow)",
-          }}
-        >
-          {wsBannerFlash === "connected" ? (
-            <>
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Connected
-            </>
-          ) : wsReconnecting ? (
-            <>
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-yellow-400 ws-reconnect-pulse" />
-              Reconnecting{wsStateInfo.attempt ? ` (attempt ${wsStateInfo.attempt}/${wsStateInfo.maxAttempts})` : ""}...
-            </>
-          ) : wsFailed ? (
-            <>
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
-              {wsStateInfo.errorMessage ? `Connection error: ${wsStateInfo.errorMessage}` : "Connection lost"}
-              <button
-                onClick={() => { setWsFailed(false); retryConnection().then(() => setWsConnected(true)).catch(() => {}); }}
-                className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium transition-colors"
-                style={{
-                  background: "rgba(239, 68, 68, 0.2)",
-                  color: "var(--c-danger-soft)",
-                  border: "1px solid rgba(239, 68, 68, 0.3)",
-                }}
-              >
-                Retry
-              </button>
-            </>
-          ) : null}
-        </div>
-      )}
+      {/* Gateway WS reconnection banner removed — all chat routes via HTTP/SSE through shre-router */}
 
       {/* ── Offline message queue indicator ────────────────────────────── */}
       {offlineQueue.length > 0 && (
@@ -1362,18 +1300,23 @@ export function ChatView() {
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
           <div className="flex gap-3 justify-center">
-            {ECOSYSTEM_APPS.map((app) => (
+            {ECOSYSTEM_APPS.map((app) => {
+              const disabled = !app.url;
+              return (
               <button
                 key={app.id}
-                onClick={() => { window.open(app.url, app.id, "noopener,noreferrer"); setShowApps(false); }}
-                className="flex flex-col items-center gap-1 p-2 rounded-xl transition-all group"
+                onClick={() => { if (!disabled) { window.open(app.url, app.id, "noopener,noreferrer"); setShowApps(false); } }}
+                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all group ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                title={disabled ? `${app.name} — local access only` : app.description}
               >
-                <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${app.color} flex items-center justify-center text-white text-xs font-bold group-hover:scale-105 transition-transform`}>
+                <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${app.color} flex items-center justify-center text-white text-xs font-bold ${disabled ? "" : "group-hover:scale-105"} transition-transform`}>
                   {app.icon}
                 </div>
                 <span className="text-[10px] font-medium" style={{ color: "var(--c-text-2)" }}>{app.name}</span>
+                {disabled && <span className="text-[8px]" style={{ color: "var(--c-text-5)" }}>local only</span>}
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

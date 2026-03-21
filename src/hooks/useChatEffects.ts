@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import type { Virtualizer } from "@tanstack/react-virtual";
 import { setAgent, fetchAllAgentMessages, fetchAvailableModels, type ChatMessage, type RouterModel } from "../openclaw";
 import { isWSConnected, startHealthPoll, stopHealthPoll, onHealthChange, abortChatWS, abortAllStreams, retryConnection } from "../gateway-ws";
 import { loadScrollPositions, saveScrollPositions, type Session } from "../store";
@@ -52,6 +53,7 @@ export interface UseChatEffectsParams {
   setSharedLoading: (v: boolean) => void;
   setSharedError: (v: string | null) => void;
   generateTitle: (text: string) => string;
+  virtualizer: Virtualizer<HTMLDivElement, Element>;
 }
 
 export interface UseChatEffectsReturn {
@@ -88,7 +90,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     showModelPicker, setShowModelPicker, modelPickerRef,
     comparePickerOpen, setComparePickerOpen, comparePickerRef,
     setShareUrl, setSharedSnapshot, setSharedLoading, setSharedError,
-    generateTitle,
+    generateTitle, virtualizer,
   } = params;
 
   const scrollPositionsRef = useRef<Record<string, number>>(loadScrollPositions());
@@ -405,10 +407,14 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   }, [activeSessionId]);
 
   const jumpToLatest = useCallback(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    if (filteredMessages.length > 30 && virtualizer) {
+      virtualizer.scrollToIndex(filteredMessages.length - 1, { align: "end", behavior: "smooth" });
+    } else {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
     setShowJumpToLatest(false);
     userNearBottomRef.current = true;
-  }, []);
+  }, [filteredMessages.length, virtualizer]);
 
   // Pull-to-refresh handlers
   const handlePullStart = useCallback((e: React.TouchEvent) => {
@@ -503,7 +509,12 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
             setShowJumpToLatest(!near && el.scrollHeight > el.clientHeight);
           }
         } else {
-          if (el) el.scrollTop = el.scrollHeight;
+          // Scroll to bottom — use virtualizer for large message lists
+          if (filteredMessages.length > 30 && virtualizer) {
+            virtualizer.scrollToIndex(filteredMessages.length - 1, { align: "end" });
+          } else if (el) {
+            el.scrollTop = el.scrollHeight;
+          }
           userNearBottomRef.current = true;
           setShowJumpToLatest(false);
         }

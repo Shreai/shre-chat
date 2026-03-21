@@ -18,6 +18,16 @@ const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.or
 let currentAgentId = "main";
 let currentAgentModel = "claude-sonnet-4-6";
 
+/** Get user's preferred language from localStorage (set via profile or chat settings) */
+export function getUserLanguage(): string {
+  try { return localStorage.getItem("shre-user-language") || ""; } catch { return ""; }
+}
+
+/** Set user's preferred language */
+export function setUserLanguage(lang: string): void {
+  try { if (lang) localStorage.setItem("shre-user-language", lang); else localStorage.removeItem("shre-user-language"); } catch {}
+}
+
 /** Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6").
  *  OpenClaw gateway expects bare model IDs without provider prefix. */
 export function stripProviderPrefix(modelId: string): string {
@@ -506,6 +516,7 @@ async function streamViaFallback(
       agentId: currentAgentId,
       ...(attachments?.length ? { attachments } : {}),
       ...(openclawMode ? { openclawMode: true } : {}),
+      ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
     }),
     signal,
   });
@@ -547,7 +558,7 @@ async function streamViaFallback(
       for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
         const raw = line.slice(6).trim();
-        if (!raw) continue;
+        if (!raw || raw === "[DONE]") continue;
 
         try {
           const evt = JSON.parse(raw);
@@ -561,6 +572,19 @@ async function streamViaFallback(
             fullText += evt.text;
             callbacks.onToken(evt.text);
             callbacks.onStatus?.("writing");
+          } else if (evt.type === "response.output_text.delta" && evt.delta) {
+            // OpenClaw mode — text deltas in OpenAI Responses API format
+            fullText += evt.delta;
+            callbacks.onToken(evt.delta);
+            callbacks.onStatus?.("writing");
+          } else if (evt.type === "response.in_progress" || evt.type === "response.created") {
+            callbacks.onStatus?.("thinking");
+          } else if (evt.type === "response.completed") {
+            const usage = evt.response?.usage;
+            if (usage && routedModel) {
+              reportUsage(routedModel, usage, Date.now() - fallbackStart);
+            }
+            callbacks.onStatus?.("done");
           } else if (evt.type === "done") {
             callbacks.onStatus?.("done");
             // Report usage — estimate tokens from text if no usage in event

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { connectGateway, onStateChange, onQueueChange, type WSStateInfo, type QueuedMessage } from "../gateway-ws";
+import { type WSStateInfo, type QueuedMessage } from "../gateway-ws";
 
 export interface UseGatewayConnectionReturn {
   wsConnected: boolean;
@@ -26,32 +26,11 @@ export function useGatewayConnection(
   const [wsBannerFlash, setWsBannerFlash] = useState<"connected" | null>(null);
   const [offlineQueue, setOfflineQueue] = useState<QueuedMessage[]>([]);
 
-  // Connect to OpenClaw WebSocket on mount + listen for state changes
+  // Gateway WS disabled — all chat routes through shre-router via HTTP/SSE.
+  // Only subscribe to stream stall events (HTTP-based).
   useEffect(() => {
-    connectGateway()
-      .then(() => setWsConnected(true))
-      .catch(() => setWsConnected(false));
-
-    const unsub = onStateChange((state, info) => {
-      setWsConnected((prev) => { const next = state === "connected"; return prev === next ? prev : next; });
-      setWsFailed((prev) => { const next = state === "failed"; return prev === next ? prev : next; });
-      setWsStateInfo(info);
-      setWsReconnecting(state === "connecting");
-
-      // Flash "Connected" banner briefly on reconnect success
-      if (state === "connected") {
-        setWsBannerFlash("connected");
-        setTimeout(() => setWsBannerFlash(null), 2000);
-      }
-    });
-
-    // Subscribe to offline message queue changes
-    const unsubQueue = onQueueChange((q) => setOfflineQueue(q));
-
-    // Subscribe to stream stall/retry events
     const unsubStall = subscribeStreamStall();
-
-    return () => { unsub(); unsubQueue(); unsubStall(); };
+    return () => { unsubStall(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
