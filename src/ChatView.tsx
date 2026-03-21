@@ -1316,7 +1316,15 @@ export function ChatView() {
 
       {/* Apps drawer */}
       {showApps && (
-        <div className="px-4 py-3 shrink-0" style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-1)" }}>
+        <div className="px-4 py-3 shrink-0 relative" style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-1)" }}>
+          <button
+            onClick={() => setShowApps(false)}
+            className="absolute top-2 right-2 h-6 w-6 rounded-md flex items-center justify-center transition-colors hover:bg-white/10"
+            style={{ color: "var(--c-text-3)" }}
+            aria-label="Close apps"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
           <div className="flex gap-3 justify-center">
             {ECOSYSTEM_APPS.map((app) => (
               <button
