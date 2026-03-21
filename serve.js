@@ -14,6 +14,7 @@ import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline } from "shre-sdk";
 import { createConversationLearner } from "shre-sdk/rag";
+import { writeConversation, startWALReplay } from "shre-sdk/training";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVoiceRoutes } from "./routes/voice.js";
 import { registerIntentRouter } from "./routes/intent-router.js";
@@ -24,6 +25,7 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
 import { registerHandoffRoutes } from "./routes/handoff.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerPushRoutes } from "./routes/push.js";
 
 // ── Trust mkcert CA so Node verifies local TLS certs properly ──
 const _mkcertCA = join(homedir(), "Library", "Application Support", "mkcert", "rootCA.pem");
@@ -562,27 +564,17 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
       }).catch(() => {});
     }
 
-    // Write training_conversation for fine-tuning pipeline (CortexDB universal sink)
-    fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/write`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        data_type: "training_conversation",
-        payload: {
-          agentId: agentId || "shre",
-          source,
-          model,
-          role_user: userMessage.slice(0, 8000),
-          role_assistant: assistantResponse.slice(0, 16000),
-          userMessageLength: userMessage.length,
-          assistantResponseLength: assistantResponse.length,
-          quality: null, // Scored later by shre-scorer
-          tenant_id: "platform",
-          timestamp: new Date().toISOString(),
-        },
-        actor: "shre-chat",
-      }),
-      signal: AbortSignal.timeout(5000),
+    // Durable training write — shre-sdk/training (local backup + CortexDB + WAL retry)
+    // NEVER truncates — full conversation preserved for fine-tuning pipeline
+    writeConversation({
+      source: "shre-chat",
+      agentId: agentId || "shre",
+      messages: [
+        { role: "user", content: userMessage },
+        { role: "assistant", content: assistantResponse },
+      ],
+      model: model || "unknown",
+      tenantId: "platform",
     }).catch(() => {});
 
   } catch { /* never block */ }
@@ -990,6 +982,7 @@ const handleHealth = registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, g
 const handleReports = registerReportRoutes({ log, chatDb });
 const handleHandoff = registerHandoffRoutes({ log, chatDb });
 const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb });
+const { handlePushRoute, sendPushToAll } = registerPushRoutes({ log, chatDb });
 
 // ── Request handler ──────────────────────────────────────────────────
 
@@ -1078,7 +1071,8 @@ async function requestHandler(req, res) {
   const isPublic = PUBLIC_PATHS.has(url.pathname)
     || url.pathname.startsWith("/api/i18n/translations/")
     || url.pathname === "/api/i18n/available"
-    || url.pathname.startsWith("/api/router/");
+    || url.pathname.startsWith("/api/router/")
+    || url.pathname === "/api/push/vapid-key";
   if (url.pathname.startsWith("/api/") && !isPublic) {
     const claims = checkAuth(req);
     if (!claims) {
@@ -1102,6 +1096,8 @@ async function requestHandler(req, res) {
   if (await handleHandoff(req, res, url, _routeUtils)) return;
   // Notification routes
   if (await handleNotifications(req, res, url, _routeUtils)) return;
+  // Web Push routes (subscribe/unsubscribe/vapid-key)
+  if (await handlePushRoute(req, res, url, _routeUtils)) return;
 
   // ── Cost dashboard proxies (shre-meter) ──
   if (url.pathname.startsWith("/api/costs/") && req.method === "GET") {
@@ -3264,6 +3260,29 @@ function broadcastNotification(type, data) {
   for (const ws of notifyClients) {
     try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
   }
+  // Also send via Web Push for background/mobile delivery
+  if (type === "reminders_due") {
+    const reminders = data.reminders || [];
+    for (const r of reminders) {
+      sendPushToAll({
+        title: "Reminder",
+        body: r.title || r.text || "You have a reminder due",
+        type: "reminder",
+        url: "/",
+      }).catch(() => {});
+    }
+  } else if (type === "status_update") {
+    // Don't push routine status updates — too noisy for mobile
+  } else {
+    // Generic notification push
+    const title = data.title || type.replace(/\./g, " ");
+    sendPushToAll({
+      title,
+      body: data.body || data.summary || data.message || "",
+      type,
+      url: "/",
+    }).catch(() => {});
+  }
 }
 
 // Check for due reminders every 30s and push via WebSocket
@@ -3478,6 +3497,7 @@ if (tlsOpts && httpsServer) {
     log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications (no raw OpenClaw proxy)`);
     lifecycle.started();
     feedbackPipeline.start();
+    startWALReplay(60_000); // Retry failed training writes every 60s
   });
 } else {
   _listenServer = server;
@@ -3488,6 +3508,7 @@ if (tlsOpts && httpsServer) {
     log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications (no raw OpenClaw proxy)`);
     lifecycle.started();
     feedbackPipeline.start();
+    startWALReplay(60_000); // Retry failed training writes every 60s
   });
 }
 

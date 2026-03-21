@@ -4,8 +4,10 @@
   "description": "AI agent chat interface",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#0a1628",
   "theme_color": "#0a1628",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/assets/icon-192.png",
@@ -19,5 +21,7 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
 }
