@@ -47,23 +47,26 @@ export function registerTaskRoutes({ log }) {
         if (!cleanTitle) return json(res, { error: "title cannot be empty after sanitization" }, 400);
         const cleanDesc = description ? String(description).replace(/<[^>]*>/g, "").slice(0, 2000).trim() : undefined;
 
-        const taskPayload = {
+        const svcToken = process.env.SHRE_TASKS_TOKEN || "";
+
+        // Route through universal intake endpoint for approval classification
+        const intakePayload = {
           title: cleanTitle,
           description: cleanDesc,
           priority: priority || "medium",
-          source: source || "shre-chat",
-          created_by: "shre-chat",
-          status: "created",
+          source: "chat",
+          requestor: "shre-chat",
+          category: "general",
+          skip_decompose: true, // simple chat tasks don't need decomposition
         };
 
-        const svcToken = process.env.SHRE_TASKS_TOKEN || "";
-        const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks`, {
+        const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/intake`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(svcToken ? { Authorization: `Bearer ${svcToken}` } : {}),
           },
-          body: JSON.stringify(taskPayload),
+          body: JSON.stringify(intakePayload),
           signal: AbortSignal.timeout(5000),
         });
 
@@ -74,8 +77,9 @@ export function registerTaskRoutes({ log }) {
         }
 
         const result = await taskRes.json();
-        log.info("Task created from chat", { taskId: result.id, title: cleanTitle.slice(0, 50) });
-        return json(res, { ok: true, task: result });
+        log.info("Task created from chat via intake", { taskId: result.objective_id, title: cleanTitle.slice(0, 50), approval: result.approval_needed });
+        // Return in the shape the client expects
+        return json(res, { ok: true, task: { id: result.objective_id, title: cleanTitle, status: result.status, approval_needed: result.approval_needed } });
       } catch (e) {
         log.error("Task creation error", {}, e);
         return json(res, { error: e.message }, 400);

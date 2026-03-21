@@ -221,15 +221,15 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
                 const title = learned.params.title;
                 const priority = learned.params?.priority || "medium";
                 try {
-                  const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks`, {
+                  const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/intake`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", ...fwdAuth },
-                    body: JSON.stringify({ title, priority, source: "voice-assistant", created_by: "shre-chat", status: "created" }),
+                    body: JSON.stringify({ title, priority, source: "chat", requestor: "voice-assistant", category: "general", skip_decompose: true }),
                     signal: AbortSignal.timeout(5000),
                   });
                   if (taskRes.ok) {
                     const task = await taskRes.json();
-                    return json(res, { action: "task_created", spoken: `Got it! I've created a task: "${title}".`, transcript: `Task created: ${title} [${priority}]`, task: { id: task.id, title }, mib007Link: "/SHR/tasks" });
+                    return json(res, { action: "task_created", spoken: `Got it! I've created a task: "${title}".`, transcript: `Task created: ${title} [${priority}]`, task: { id: task.objective_id, title }, mib007Link: "/SHR/tasks" });
                   }
                 } catch (err) {
                   log.warn("Learned intent task_create failed", {}, err);
@@ -324,22 +324,23 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
             }
 
             try {
-              const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks`, {
+              const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/intake`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...fwdAuth },
                 body: JSON.stringify({
                   title,
                   description: `Created via voice command: "${text}"`,
                   priority,
-                  source: "voice-assistant",
-                  created_by: "shre-chat",
-                  status: "created",
-                  ...(due_at ? { due_at } : {}),
+                  source: "chat",
+                  requestor: "voice-assistant",
+                  category: "general",
+                  skip_decompose: true,
                 }),
                 signal: AbortSignal.timeout(5000),
               });
               if (taskRes.ok) {
                 const task = await taskRes.json();
+                task.id = task.objective_id; // normalize for downstream
                 log.info("Task created from voice", { taskId: task.id, title: title.slice(0, 50) });
                 // Learn the pattern for future instant matching
                 if (dbReady) { try { learnIntent(text, "task_create", "shre-tasks", { title, priority }, chatDb); } catch {} }
@@ -606,15 +607,16 @@ Examples:
                 const title = classified.title.replace(/[.!?]+$/, "").trim().slice(0, 500);
                 if (title) {
                   const priority = classified.priority || "medium";
-                  const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks`, {
+                  const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/intake`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", ...fwdAuth },
-                    body: JSON.stringify({ title, priority, source: "voice-assistant", created_by: "shre-chat", status: "created" }),
+                    body: JSON.stringify({ title, priority, source: "chat", requestor: "voice-assistant", category: "general", skip_decompose: true }),
                     signal: AbortSignal.timeout(5000),
                   });
                   if (taskRes.ok) {
                     const task = await taskRes.json();
-                    log.info("AI-classified task created", { taskId: task.id, title: title.slice(0, 50) });
+                    task.id = task.objective_id; // normalize
+                    log.info("AI-classified task created via intake", { taskId: task.id, title: title.slice(0, 50) });
                     // Learn from this classification for next time
                     if (dbReady) { try { learnIntent(text, "task_create", getTargetForIntent("task_create"), { title, priority }, chatDb); } catch {} }
                     return json(res, {
