@@ -658,9 +658,13 @@ function verifyAuthToken(token) {
     if (parts.length !== 3) return null;
     const [header, payload, sig] = parts;
     const expected = createHmac("sha256", authSigningKey).update(`${header}.${payload}`).digest("base64url");
-    if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    const sigBuf = Buffer.from(sig, "utf-8");
+    const expBuf = Buffer.from(expected, "utf-8");
+    if (sigBuf.length !== expBuf.length) return null;
+    if (!timingSafeEqual(sigBuf, expBuf)) return null;
     const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (claims.exp && claims.exp < Math.floor(Date.now() / 1000)) return null;
+    if (claims.tokenType && claims.tokenType !== "platform_user") return null;
     return claims;
   } catch { return null; }
 }
@@ -775,7 +779,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/health", "/api/verify-identity", "/api/branding/public"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -1106,17 +1110,20 @@ async function requestHandler(req, res) {
   // ── Route module delegation ────────────────────────────────────
   const _routeUtils = { json, collectBody, rateLimit, authCookie };
   // Auth routes (public — before auth middleware)
-  if (handleAuth(req, res, url, _routeUtils)) return;
+  if (await handleAuth(req, res, url, _routeUtils)) return;
 
   // ── Auth middleware — protect /api/* routes (except public paths) ──
+  // Parse JWT claims for auth + tenant context injection on router proxy.
+  // checkAuth() verifies the HMAC signature and returns decoded claims.
+  // Works for both local JWTs (sub=username) and platform JWTs (sub=UUID, activeWorkspaceId).
   const isPublic = PUBLIC_PATHS.has(url.pathname)
     || url.pathname.startsWith("/api/i18n/translations/")
     || url.pathname === "/api/i18n/available"
-    || url.pathname.startsWith("/api/router/")
     || url.pathname === "/api/push/vapid-key";
-  if (url.pathname.startsWith("/api/") && !isPublic) {
-    const claims = checkAuth(req);
-    if (!claims) {
+  const authClaims = checkAuth(req);
+  const isRouterProxy = url.pathname.startsWith("/api/router/");
+  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy) {
+    if (!authClaims) {
       return json(res, { error: "Unauthorized", code: "AUTH_REQUIRED" }, 401);
     }
   }
@@ -2465,10 +2472,11 @@ async function requestHandler(req, res) {
         // Auto-summarize session (lightweight — first user message + topic extraction)
         if (sessionId !== "unknown") {
           try {
-            const existing = chatDb.prepare("SELECT summary FROM chat_sessions WHERE id = ?").get(sessionId);
+            const summaryUserId = authClaims?.sub || 'system';
+            const existing = chatDb.prepare("SELECT summary FROM chat_sessions WHERE id = ? AND user_id = ?").get(sessionId, summaryUserId);
             if (!existing?.summary) {
               const summary = `${agentId || "shre"}: ${userMessage.slice(0, 100)}${userMessage.length > 100 ? "..." : ""}`;
-              chatDb.prepare("UPDATE chat_sessions SET summary = ? WHERE id = ?").run(summary, sessionId);
+              chatDb.prepare("UPDATE chat_sessions SET summary = ? WHERE id = ? AND user_id = ?").run(summary, sessionId, summaryUserId);
             }
           } catch {}
         }
@@ -2504,6 +2512,13 @@ async function requestHandler(req, res) {
     try {
       const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
       delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
+      // Strip client-supplied trust headers to prevent spoofing, then set from validated JWT
+      delete routerHeaders["x-tenant-id"];
+      delete routerHeaders["x-user-id"];
+      if (authClaims?.activeWorkspaceId) {
+        routerHeaders["x-tenant-id"] = authClaims.activeWorkspaceId;
+        routerHeaders["x-user-id"] = authClaims.sub;
+      }
       const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
         routerUrl,
         { method: req.method, headers: routerHeaders },
@@ -2582,6 +2597,13 @@ async function requestHandler(req, res) {
     try {
       const routerHeaders = { ...req.headers, host: new URL(routerBase).host };
       delete routerHeaders["accept-encoding"];
+      // Strip client-supplied trust headers, inject from validated JWT
+      delete routerHeaders["x-tenant-id"];
+      delete routerHeaders["x-user-id"];
+      if (authClaims?.activeWorkspaceId) {
+        routerHeaders["x-tenant-id"] = authClaims.activeWorkspaceId;
+        routerHeaders["x-user-id"] = authClaims.sub;
+      }
       const routerReq = (routerBase.startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
         routerUrl,
         { method: req.method, headers: routerHeaders },

@@ -324,8 +324,9 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
 
       const ctrl = new AbortController();
       ttsAbortRef.current = ctrl;
-      const safetyTimer = setTimeout(() => { ctrl.abort(); resolve(); }, 25_000);
-      const done = () => { clearTimeout(safetyTimer); resolve(); };
+      let resolved = false;
+      const safetyTimer = setTimeout(() => { ctrl.abort(); if (!resolved) { resolved = true; resolve(); } }, 25_000);
+      const done = () => { if (resolved) return; resolved = true; clearTimeout(safetyTimer); resolve(); };
 
       // Try streaming TTS first, fall back to buffered
       console.log("[voice-tts] speak:", plain.slice(0, 60));
@@ -412,7 +413,9 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
             vad.stop(); // stop barge-in monitor
             done();
           };
+          let audioPlaying = false;
           const fallbackToSpeechSynthesis = () => {
+            if (audioPlaying) return; // Audio already playing — don't double-speak
             URL.revokeObjectURL(url);
             ttsAudioRef.current = null;
             vad.stop();
@@ -429,8 +432,8 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
             }
           };
           audio.onended = audioCleanup;
-          audio.onerror = (e) => { console.error("[voice-tts] audio error:", e); fallbackToSpeechSynthesis(); };
-          audio.play().then(() => console.log("[voice-tts] playing audio")).catch((e) => { console.error("[voice-tts] play blocked:", e); fallbackToSpeechSynthesis(); });
+          audio.onerror = (e) => { if (audioPlaying) { audioCleanup(); return; } console.error("[voice-tts] audio error:", e); fallbackToSpeechSynthesis(); };
+          audio.play().then(() => { audioPlaying = true; console.log("[voice-tts] playing audio"); }).catch((e) => { console.error("[voice-tts] play blocked:", e); fallbackToSpeechSynthesis(); });
         })
         .catch((err) => {
           if (err.name === "AbortError") { done(); return; }
@@ -928,71 +931,11 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       if (data?.shortcuts?.length) setShortcuts(data.shortcuts);
     }).catch(() => {});
 
-    // Check if we should play a morning briefing
-    const today = new Date().toISOString().slice(0, 10);
-    const briefingDate = sessionStorage.getItem("shre-voice-briefing-date");
-    const shouldBrief = briefingDate !== today;
-
-    // Combine greeting + briefing into a single natural message
-    const buildGreeting = async (): Promise<string> => {
-      const base = "Hey!";
-      if (!shouldBrief) return `${base} How can I help you?`;
-      try {
-        const briefRes = await fetch("/api/voice-briefing", { signal: AbortSignal.timeout(5000) });
-        if (briefRes.ok) {
-          const data = await briefRes.json();
-          if (data?.briefing) {
-            sessionStorage.setItem("shre-voice-briefing-date", today);
-            return `${base} Quick update — ${data.briefing} What would you like to do?`;
-          }
-        }
-      } catch { /* briefing failed, use simple greeting */ }
-      return `${base} How can I help you?`;
-    };
-
-    buildGreeting().then(async (combinedGreeting) => {
-      try {
-        if (!activeRef.current) return;
-
-        const greetTurn: Turn = { role: "assistant", text: combinedGreeting };
-        setTurns([greetTurn]);
-        turnHistoryRef.current = [greetTurn];
-
-        // Speak using browser speechSynthesis (avoids autoplay blocking)
-        dispatch({ type: "START_SPEAKING" });
-        await new Promise<void>((resolve) => {
-          try {
-            if (window.speechSynthesis) {
-              const u = new SpeechSynthesisUtterance(combinedGreeting);
-              u.rate = 1.0;
-              const timer = setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} resolve(); }, 20000);
-              u.onend = () => { clearTimeout(timer); resolve(); };
-              u.onerror = () => { clearTimeout(timer); resolve(); };
-              window.speechSynthesis.speak(u);
-            } else {
-              setTimeout(resolve, 1500);
-            }
-          } catch {
-            resolve();
-          }
-        });
-
-        if (activeRef.current) {
-          dispatch({ type: "GREETING_DONE" });
-          startListening();
-        }
-      } catch (err) {
-        console.error("[voice] greeting init error:", err);
-        if (activeRef.current) {
-          dispatch({ type: "ERROR", message: "Voice initialization failed. Tap to retry." });
-        }
-      }
-    }).catch((err) => {
-      console.error("[voice] greeting build error:", err);
-      if (activeRef.current) {
-        dispatch({ type: "ERROR", message: "Voice initialization failed. Tap to retry." });
-      }
-    });
+    // Skip greeting — go straight to listening (like other voice AI assistants)
+    if (activeRef.current) {
+      dispatch({ type: "GREETING_DONE" });
+      startListening();
+    }
 
     return cleanup;
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps

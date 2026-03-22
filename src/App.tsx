@@ -44,6 +44,7 @@ import type { ActivityStatus, ChatMessage } from "./openclaw";
 import { compactSession, listSessions } from "./openclaw";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
+import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { ChatView } from "./ChatView";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ViewErrorBoundary } from "./ViewErrorBoundary";
@@ -55,8 +56,17 @@ import { useAnomalyStream } from "./hooks/useAnomalyStream";
 // ── Auth state ──────────────────────────────────────────────────
 const AUTH_TOKEN_KEY = "shre-auth-token";
 const AUTH_USER_KEY = "shre-auth-user";
+const AUTH_WORKSPACE_KEY = "shre-auth-workspace";
+const AUTH_WORKSPACES_KEY = "shre-auth-workspaces";
 
-function getStoredAuth(): { token: string; user: { username: string; name: string; role: string } } | null {
+interface AuthWorkspace {
+  id: string;
+  name: string;
+  role: string;
+  isDefault?: boolean;
+}
+
+function getStoredAuth(): { token: string; user: { username: string; name: string; role: string; id?: string; isSuperAdmin?: boolean }; workspace?: AuthWorkspace; workspaces?: AuthWorkspace[] } | null {
   try {
     // Token in both sessionStorage (fast) and localStorage (survives tab close)
     const token = sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
@@ -65,7 +75,9 @@ function getStoredAuth(): { token: string; user: { username: string; name: strin
       // Ensure token is in both stores
       sessionStorage.setItem(AUTH_TOKEN_KEY, token);
       localStorage.setItem(AUTH_TOKEN_KEY, token);
-      return { token, user };
+      const workspace = JSON.parse(localStorage.getItem(AUTH_WORKSPACE_KEY) || "null");
+      const workspaces = JSON.parse(localStorage.getItem(AUTH_WORKSPACES_KEY) || "null");
+      return { token, user, workspace, workspaces };
     }
   } catch { /* */ }
   return null;
@@ -106,10 +118,16 @@ export function App() {
 
   // ── Auth gate ──────────────────────────────────────────────────
   const devUser = { token: "dev-token", user: { username: "dev", name: "Developer", role: "admin" } };
-  const [authState, setAuthState] = useState<{ token: string; user: { username: string; name: string; role: string } } | null>(
+  const [authState, setAuthState] = useState<{ token: string; user: { username: string; name: string; role: string; id?: string; isSuperAdmin?: boolean }; workspace?: AuthWorkspace; workspaces?: AuthWorkspace[] } | null>(
     () => DEV_BYPASS_AUTH ? devUser : getStoredAuth()
   );
   const [authChecking, setAuthChecking] = useState(!DEV_BYPASS_AUTH);
+  // Workspace selection state (shown when login returns requiresWorkspaceSelection)
+  const [pendingWorkspaceSelection, setPendingWorkspaceSelection] = useState<{
+    workspaces: AuthWorkspace[];
+    tempToken: string;
+    user: any;
+  } | null>(null);
 
   // Verify stored token on mount
   useEffect(() => {
@@ -118,24 +136,50 @@ export function App() {
     if (!stored) { setAuthChecking(false); return; }
     fetch("/api/auth/check", {
       headers: { Authorization: `Bearer ${stored.token}` },
-    }).then((r) => {
+    }).then(async (r) => {
       if (!r.ok) {
         sessionStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_USER_KEY);
+        localStorage.removeItem(AUTH_WORKSPACE_KEY);
+        localStorage.removeItem(AUTH_WORKSPACES_KEY);
         setAuthState(null);
+      } else {
+        // Update workspace info from auth check response
+        try {
+          const data = await r.json();
+          if (data.workspace) {
+            localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(data.workspace));
+          }
+        } catch { /* ignore */ }
       }
     }).catch(() => {
       // Can't reach server — keep token, will revalidate later
     }).finally(() => setAuthChecking(false));
   }, []);
 
-  const handleLogin = useCallback((token: string, user: { username: string; name: string; role: string }) => {
+  const handleLogin = useCallback((token: string, user: { username: string; name: string; role: string }, loginData?: any) => {
+    // Check if workspace selection is needed
+    if (loginData?.requiresWorkspaceSelection) {
+      setPendingWorkspaceSelection({
+        workspaces: loginData.workspaces,
+        tempToken: loginData.tempToken,
+        user: loginData.user || user,
+      });
+      return;
+    }
+
     sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     localStorage.setItem(AUTH_TOKEN_KEY, token);
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    if (loginData?.workspace) {
+      localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(loginData.workspace));
+    }
+    if (loginData?.workspaces) {
+      localStorage.setItem(AUTH_WORKSPACES_KEY, JSON.stringify(loginData.workspaces));
+    }
     installAuthFetch(); // Re-install fetch interceptor with the new token
-    setAuthState({ token, user });
+    setAuthState({ token, user, workspace: loginData?.workspace, workspaces: loginData?.workspaces });
     // Check for cross-service redirect (e.g., from pos.nirtek.net or openclaw.nirtek.net)
     const params = new URLSearchParams(window.location.search);
     const redirect = params.get("redirect");
@@ -151,24 +195,100 @@ export function App() {
     }
   }, []);
 
+  const handleWorkspaceSelected = useCallback(async (workspaceId: string) => {
+    if (!pendingWorkspaceSelection) return;
+    try {
+      const res = await fetch("/api/auth/select-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tempToken: pendingWorkspaceSelection.tempToken, workspaceId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.token) {
+        return; // Stay on selection screen
+      }
+      setPendingWorkspaceSelection(null);
+      handleLogin(data.token, data.user, data);
+    } catch { /* ignore */ }
+  }, [pendingWorkspaceSelection, handleLogin]);
+
+  const handleWorkspaceSwitch = useCallback(async (workspaceId: string) => {
+    try {
+      const res = await fetch("/api/auth/switch-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.token) return;
+      // Update auth state with new token and workspace
+      sessionStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
+      if (data.workspace) localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(data.workspace));
+      installAuthFetch();
+      setAuthState({ token: data.token, user: data.user, workspace: data.workspace, workspaces: authState?.workspaces });
+      // Clear identity verification — new workspace requires re-verification
+      sessionStorage.removeItem("shre-identity-verified");
+      // Force full reload to reset chat state
+      window.location.reload();
+    } catch { /* ignore */ }
+  }, [authState]);
+
   const handleLogout = useCallback(() => {
     if (DEV_BYPASS_AUTH) return;
     fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(AUTH_WORKSPACE_KEY);
+    localStorage.removeItem(AUTH_WORKSPACES_KEY);
     setAuthState(null);
+    setPendingWorkspaceSelection(null);
   }, []);
 
   if (authChecking) {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #000)", color: "var(--c-text-4)" }}>Loading...</div>;
   }
 
+  // Workspace selection modal
+  if (pendingWorkspaceSelection) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #000)" }}>
+        <div style={{ background: "var(--c-bg-2, #111)", border: "1px solid var(--c-border, #333)", borderRadius: 12, padding: 32, maxWidth: 400, width: "90%" }}>
+          <h2 style={{ color: "var(--c-text-1, #fff)", fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Select Workspace</h2>
+          <p style={{ color: "var(--c-text-3, #888)", fontSize: 13, marginBottom: 20 }}>
+            Welcome, {pendingWorkspaceSelection.user?.name}. Choose a workspace to continue.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingWorkspaceSelection.workspaces.map((ws) => (
+              <button
+                key={ws.id}
+                onClick={() => handleWorkspaceSelected(ws.id)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "12px 16px", borderRadius: 8, border: "1px solid var(--c-border, #333)",
+                  background: "var(--c-bg-3, #1a1a1a)", color: "var(--c-text-1, #fff)",
+                  cursor: "pointer", fontSize: 14, transition: "background 0.15s",
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.background = "var(--c-bg-4, #222)")}
+                onMouseOut={(e) => (e.currentTarget.style.background = "var(--c-bg-3, #1a1a1a)")}
+              >
+                <span>{ws.name}</span>
+                <span style={{ fontSize: 11, color: "var(--c-text-3, #888)", textTransform: "uppercase" }}>{ws.role}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!authState) {
     return <LoginView onLogin={handleLogin} />;
   }
 
-  return <AuthenticatedApp authUser={authState.user} onLogout={handleLogout} />;
+  return <AuthenticatedApp authUser={authState.user} onLogout={handleLogout} activeWorkspace={authState.workspace} workspaces={authState.workspaces} onWorkspaceSwitch={handleWorkspaceSwitch} />;
 }
 
 // Inject auth token into all fetch calls to /api/* (same-origin only)
@@ -192,7 +312,13 @@ function installAuthFetch() {
 }
 installAuthFetch();
 
-function AuthenticatedApp({ authUser, onLogout }: { authUser: { username: string; name: string; role: string }; onLogout: () => void }) {
+function AuthenticatedApp({ authUser, onLogout, activeWorkspace, workspaces, onWorkspaceSwitch }: {
+  authUser: { username: string; name: string; role: string; id?: string; isSuperAdmin?: boolean };
+  onLogout: () => void;
+  activeWorkspace?: AuthWorkspace | null;
+  workspaces?: AuthWorkspace[];
+  onWorkspaceSwitch: (workspaceId: string) => void;
+}) {
   // ── User Profile / Onboarding gate ──────────────────────────────
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
 
@@ -204,12 +330,15 @@ function AuthenticatedApp({ authUser, onLogout }: { authUser: { username: string
     return null; // re-render with completed profile
   }
 
-  return <MainApp authUser={authUser} onLogout={onLogout} userProfile={userProfile} setUserProfile={setUserProfile} />;
+  return <MainApp authUser={authUser} onLogout={onLogout} userProfile={userProfile} setUserProfile={setUserProfile} activeWorkspace={activeWorkspace} workspaces={workspaces} onWorkspaceSwitch={onWorkspaceSwitch} />;
 }
 
-function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
-  authUser: { username: string; name: string; role: string };
+function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorkspace, workspaces, onWorkspaceSwitch }: {
+  authUser: { username: string; name: string; role: string; id?: string; isSuperAdmin?: boolean };
   onLogout: () => void;
+  activeWorkspace?: AuthWorkspace | null;
+  workspaces?: AuthWorkspace[];
+  onWorkspaceSwitch: (workspaceId: string) => void;
   userProfile: UserProfile;
   setUserProfile: (p: UserProfile) => void;
 }) {
@@ -1024,6 +1153,13 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
             </div>
           )}
           <StatusBar />
+          {workspaces && workspaces.length > 1 && (
+            <WorkspaceSwitcher
+              activeWorkspace={activeWorkspace ?? undefined}
+              workspaces={workspaces}
+              onSwitch={onWorkspaceSwitch}
+            />
+          )}
           {/* RapidRMS live anomaly banner — shown when active alerts exist */}
           {rmsAnomalies.length > 0 && (
             <div
