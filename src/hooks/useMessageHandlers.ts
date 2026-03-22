@@ -543,6 +543,52 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       messageText = `[Replying to ${replyRole}]: "${replySnippet}"\n\n${text}`;
     }
 
+    // ── Context anchoring for short/vague follow-ups ──
+    // When the user sends a terse message without a reply reference, inject
+    // context from recent messages so the model knows what "this" refers to.
+    if (replyToIndex === null && filteredMessages.length > 0) {
+      const lower = text.toLowerCase().trim();
+
+      // Status keywords: user asking about progress on something discussed
+      const isStatusQuery = /^(status|any\s*(status|update|progress)|update[s?]|is\s+(this|that|it)\s+(done|complete|finished|ready|resolved|fixed)|done\s*\??|complete\s*\??|finished\s*\??|what('?s| is)\s+the\s+(status|progress|update)|where\s+(are|did)\s+we\s+(leave|left)\s+(off|this|that)|how('?s| is)\s+(this|that|it)\s+(going|coming|progressing))$/i.test(lower);
+
+      // Continue keywords: user wants the assistant to resume where it stopped
+      const isContinue = /^(continue|keep\s+going|go\s+on|finish\s+(this|that|it)|carry\s+on|resume|pick\s+up\s+where|and\s*\??|then\s*\??|next\s*\??)$/i.test(lower);
+
+      // Repeat/recall keywords: user wants to see something again
+      const isRecall = /^(show\s+(me\s+)?(that|it)\s+again|repeat\s+that|the\s+(table|chart|list|query|data|result)\s+(you\s+)?(showed?|gave|returned|generated)|what\s+did\s+you\s+(say|show|find|get)|what\s+was\s+(that|the\s+(result|answer|output)))$/i.test(lower);
+
+      if (isStatusQuery || isContinue || isRecall) {
+        // Find the last 2 assistant messages and the user messages that prompted them
+        const recentPairs: string[] = [];
+        let found = 0;
+        for (let i = filteredMessages.length - 1; i >= 0 && found < 2; i--) {
+          const m = filteredMessages[i];
+          if (m.role === "assistant") {
+            const snippet = m.content.replace(/\n/g, " ").slice(0, 400);
+            recentPairs.unshift(`[assistant]: ${snippet}${m.content.length > 400 ? "..." : ""}`);
+            // Also grab the preceding user message
+            if (i > 0 && filteredMessages[i - 1].role === "user") {
+              const uSnip = filteredMessages[i - 1].content.replace(/\n/g, " ").slice(0, 200);
+              recentPairs.unshift(`[user]: ${uSnip}${filteredMessages[i - 1].content.length > 200 ? "..." : ""}`);
+            }
+            found++;
+          }
+        }
+
+        if (recentPairs.length > 0) {
+          const contextBlock = recentPairs.join("\n");
+          if (isStatusQuery) {
+            messageText = `[Context — the user is asking for a status update on what was recently discussed. Review the conversation and determine if the task/topic was completed or left unfinished. Give a clear status.]\n\nRecent discussion:\n${contextBlock}\n\nUser's question: ${text}`;
+          } else if (isContinue) {
+            messageText = `[Context — the user wants you to continue or finish what you were doing. Pick up exactly where you left off.]\n\nYour last response:\n${contextBlock}\n\nUser: ${text}`;
+          } else if (isRecall) {
+            messageText = `[Context — the user is asking you to recall or repeat something from earlier in this conversation. Find the relevant content in the conversation history and present it again.]\n\nRecent discussion:\n${contextBlock}\n\nUser: ${text}`;
+          }
+        }
+      }
+    }
+
     const attachments = attachedFiles.filter(f => f.dataUrl).map(f => ({
       name: f.name,
       type: f.type,

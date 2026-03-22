@@ -1,9 +1,16 @@
-import { useReducer, useEffect, useRef, useCallback, useState } from "react";
+import { useReducer, useEffect, useRef, useCallback, useState, lazy, Suspense, memo } from "react";
 import { voiceReducer, initialVoiceState } from "./voiceStateMachine";
 import type { VoiceAction } from "./voiceStateMachine";
 import { useVAD } from "./useVAD";
 import { useProactiveNotifications } from "./hooks/useProactiveNotifications";
 import { sendMessage as sendChatMessage, type ChatMessage, type StreamCallbacks } from "./openclaw";
+
+// Lazy-load rich rendering — keeps initial voice chunk small
+const Markdown = lazy(() => import("react-markdown"));
+const DataCard = lazy(() => import("./components/DataCard"));
+const remarkGfmPromise = import("remark-gfm").then(m => m.default);
+let remarkGfmPlugin: any = null;
+remarkGfmPromise.then(p => { remarkGfmPlugin = p; });
 
 /**
  * VoiceAssistant v4 — full-screen conversational voice overlay.
@@ -66,6 +73,90 @@ function detectAgentSwitch(text: string, agents?: AgentOption[]): string | null 
   const target = m[1].toLowerCase();
   return agents.find((a) => a.name.toLowerCase() === target || a.id.toLowerCase() === target)?.id || null;
 }
+
+// ── Rich content renderer for assistant voice turns ──
+const VoiceTurnContent = memo(({ text, role }: { text: string; role: string }) => {
+  if (role === "user") return <>{text}</>;
+
+  // Assistant turns get markdown + data cards
+  return (
+    <Suspense fallback={<span>{text}</span>}>
+      <DataCard content={text} />
+      <Markdown
+        remarkPlugins={remarkGfmPlugin ? [remarkGfmPlugin] : []}
+        components={{
+          // Tables: styled for dark voice theme
+          table({ children }) {
+            return (
+              <div style={{ overflowX: "auto", margin: "8px 0", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>{children}</table>
+              </div>
+            );
+          },
+          thead({ children }) {
+            return <thead style={{ background: "rgba(255,255,255,0.06)" }}>{children}</thead>;
+          },
+          th({ children }) {
+            return (
+              <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.6)", borderBottom: "1px solid rgba(255,255,255,0.1)", whiteSpace: "nowrap" }}>
+                {children}
+              </th>
+            );
+          },
+          td({ children }) {
+            return (
+              <td style={{ padding: "5px 10px", borderBottom: "1px solid rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.85)", fontFamily: "'SF Mono', monospace", fontSize: 12 }}>
+                {children}
+              </td>
+            );
+          },
+          // Strong: accent color
+          strong({ children }) {
+            return <strong style={{ color: "rgba(255,255,255,0.95)", fontWeight: 600 }}>{children}</strong>;
+          },
+          // Links
+          a({ href, children }) {
+            return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(96,165,250,0.9)", textDecoration: "underline" }}>{children}</a>;
+          },
+          // Lists: tighter spacing for voice context
+          ul({ children }) {
+            return <ul style={{ paddingLeft: 16, margin: "4px 0", listStyleType: "disc" }}>{children}</ul>;
+          },
+          ol({ children }) {
+            return <ol style={{ paddingLeft: 16, margin: "4px 0", listStyleType: "decimal" }}>{children}</ol>;
+          },
+          li({ children }) {
+            return <li style={{ marginBottom: 2, lineHeight: 1.5 }}>{children}</li>;
+          },
+          // Code: inline only in voice (no big code blocks expected)
+          code({ className, children }) {
+            const isBlock = Boolean(className) || String(children).includes("\n");
+            if (isBlock) {
+              return (
+                <pre style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: "8px 10px", margin: "6px 0", overflowX: "auto", fontSize: 11, lineHeight: 1.4 }}>
+                  <code style={{ fontFamily: "'SF Mono', monospace", color: "rgba(255,255,255,0.8)" }}>{children}</code>
+                </pre>
+              );
+            }
+            return <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 3, fontSize: "0.9em", fontFamily: "'SF Mono', monospace" }}>{children}</code>;
+          },
+          // Paragraphs: compact
+          p({ children }) {
+            return <p style={{ margin: "4px 0", lineHeight: 1.6 }}>{children}</p>;
+          },
+          // Headers: scaled down for voice bubbles
+          h1({ children }) { return <div style={{ fontSize: 16, fontWeight: 700, margin: "8px 0 4px", color: "rgba(255,255,255,0.95)" }}>{children}</div>; },
+          h2({ children }) { return <div style={{ fontSize: 15, fontWeight: 600, margin: "6px 0 3px", color: "rgba(255,255,255,0.9)" }}>{children}</div>; },
+          h3({ children }) { return <div style={{ fontSize: 14, fontWeight: 600, margin: "4px 0 2px", color: "rgba(255,255,255,0.85)" }}>{children}</div>; },
+          // Horizontal rule
+          hr() { return <hr style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", margin: "8px 0" }} />; },
+        }}
+      >
+        {text}
+      </Markdown>
+    </Suspense>
+  );
+});
 
 export default function VoiceAssistant({ open, onClose, messages, agentName, agentEmoji, agentId, ttsVoice, agents, onSwitchAgent, onVoiceTurn, openclawMode }: Props) {
   const [state, dispatch] = useReducer(voiceReducer, initialVoiceState);
@@ -291,7 +382,8 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
 
           // Create blob from all chunks
           const blob = new Blob(chunks, { type: "audio/mpeg" });
-          if (!blob.size) { done(); return; }
+          console.log("[voice-tts] blob created:", blob.size, "bytes, chunks:", chunks.length);
+          if (!blob.size) { console.warn("[voice-tts] empty blob, skipping"); done(); return; }
 
           const url = URL.createObjectURL(blob);
           const audio = new Audio(url);
@@ -320,9 +412,25 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
             vad.stop(); // stop barge-in monitor
             done();
           };
+          const fallbackToSpeechSynthesis = () => {
+            URL.revokeObjectURL(url);
+            ttsAudioRef.current = null;
+            vad.stop();
+            console.log("[voice-tts] falling back to browser speechSynthesis");
+            if (window.speechSynthesis) {
+              const u = new SpeechSynthesisUtterance(plain.slice(0, 1000));
+              u.rate = 1.0;
+              const ft = setTimeout(() => { window.speechSynthesis.cancel(); done(); }, 15_000);
+              u.onend = () => { clearTimeout(ft); done(); };
+              u.onerror = () => { clearTimeout(ft); done(); };
+              window.speechSynthesis.speak(u);
+            } else {
+              done();
+            }
+          };
           audio.onended = audioCleanup;
-          audio.onerror = (e) => { console.error("[voice-tts] audio error:", e); audioCleanup(); };
-          audio.play().then(() => console.log("[voice-tts] playing audio")).catch((e) => { console.error("[voice-tts] play blocked:", e); audioCleanup(); });
+          audio.onerror = (e) => { console.error("[voice-tts] audio error:", e); fallbackToSpeechSynthesis(); };
+          audio.play().then(() => console.log("[voice-tts] playing audio")).catch((e) => { console.error("[voice-tts] play blocked:", e); fallbackToSpeechSynthesis(); });
         })
         .catch((err) => {
           if (err.name === "AbortError") { done(); return; }
@@ -523,7 +631,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     if (processingRef.current) return;
     if (phaseRef.current === "thinking" || phaseRef.current === "speaking") return;
     processingRef.current = true;
-    try {
+    try { // outer try-catch for the entire pipeline
 
     const userTurn: Turn = { role: "user", text };
     setTurns((prev) => [...prev, userTurn]);
@@ -613,6 +721,11 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       }, 300);
     }
 
+    } catch (err) {
+      console.error("[voice] processUserInput crashed:", err);
+      if (activeRef.current) {
+        dispatch({ type: "ERROR", message: `Voice error: ${(err as Error)?.message || "Unknown error"}. Tap to retry.` });
+      }
     } finally {
       processingRef.current = false;
     }
@@ -696,13 +809,14 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
   const finishListening = useCallback(async () => {
     if (phaseRef.current !== "listening") return;
 
+    try {
     dispatch({ type: "FINISH_LISTENING" });
 
     // Stop SR preview
     if (recRef.current) { try { recRef.current.abort(); } catch {} recRef.current = null; }
 
     // Stop VAD
-    vad.stop();
+    try { vad.stop(); } catch {}
 
     // Get the recorded audio
     const audioBlob = await stopRecording();
@@ -729,6 +843,12 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     }
 
     processUserInput(whisperText);
+    } catch (err) {
+      console.error("[voice] finishListening crashed:", err);
+      if (activeRef.current) {
+        dispatch({ type: "ERROR", message: "Voice processing error. Tap to retry." });
+      }
+    }
   }, [vad, stopRecording, transcribeWithWhisper, processUserInput, startListening]);
 
   // ── Save voice session on close ──
@@ -1019,7 +1139,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
                 border: `1px solid ${t.role === "user" ? "rgba(59, 130, 246, 0.1)" : "rgba(255,255,255,0.04)"}`,
               }}
             >
-              {t.text}
+              <VoiceTurnContent text={t.text} role={t.role} />
               {t.mib007Link && (
                 <button
                   onClick={() => window.open(`${window.location.hostname !== "localhost" ? "https://app.nirtek.net" : "https://localhost:5520"}${t.mib007Link}`, "_blank")}
