@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { SButton, SInput, SBadge, PoweredByNirlab } from "@shre/ui-kit";
 
 interface LoginProps {
-  onLogin: (token: string, user: { username: string; name: string; role: string }) => void;
+  onLogin: (token: string, user: { username: string; name: string; role: string }, loginData?: any) => void;
 }
 
 const REMEMBER_KEY = "shre_remember_user";
@@ -71,7 +71,7 @@ export function LoginView({ onLogin }: LoginProps) {
       }
       if (rememberMe) localStorage.setItem(REMEMBER_KEY, username.trim());
       else localStorage.removeItem(REMEMBER_KEY);
-      onLogin(data.token, data.user);
+      onLogin(data.token, data.user, data);
     } catch {
       setError("Connection failed");
       setLoading(false);
@@ -98,7 +98,7 @@ export function LoginView({ onLogin }: LoginProps) {
       }
       if (rememberMe) localStorage.setItem(REMEMBER_KEY, otpUsername);
       else localStorage.removeItem(REMEMBER_KEY);
-      onLogin(data.token, data.user);
+      onLogin(data.token, data.user, data);
     } catch {
       setError("Connection failed");
       setLoading(false);

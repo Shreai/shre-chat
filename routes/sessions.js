@@ -58,7 +58,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
 
     // GET /api/chat-sessions — list all (metadata only, no messages)
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions') {
-      const rows = stmtGetAll.all();
+      const claims = checkAuth(req);
+      const userId = claims?.sub || 'system';
+      const rows = stmtGetAll.all(userId);
       const sessions = rows.map(r => ({
         id: r.id,
         title: r.title,
@@ -74,6 +76,8 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // GET /api/chat-sessions/recent-context — cross-session context for AI memory
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/recent-context') {
       try {
+        const claims = checkAuth(req);
+        const userId = claims?.sub || 'system';
         const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
         // Last 5 sessions (metadata + message count, not full messages)
@@ -81,9 +85,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           `SELECT id, title, agent_id, updated_at,
                   json_array_length(messages) as messageCount
            FROM chat_sessions
-           WHERE updated_at > ? AND title != 'New chat'
+           WHERE user_id = ? AND updated_at > ? AND title != 'New chat'
            ORDER BY updated_at DESC LIMIT 5`
-        ).all(sevenDaysAgo);
+        ).all(userId, sevenDaysAgo);
 
         // Recent voice session summaries
         let voiceSummaries = [];
@@ -133,6 +137,8 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // GET /api/chat-sessions/search — search past conversations (text + voice + audit)
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/search') {
       try {
+        const claims = checkAuth(req);
+        const userId = claims?.sub || 'system';
         const query = url.searchParams.get("q") || "";
         const since = url.searchParams.get("since") || "0";
         const limit = Math.min(parseInt(url.searchParams.get("limit") || "20"), 50);
@@ -146,9 +152,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           `SELECT id, title, agent_id, updated_at,
                   json_array_length(messages) as messageCount
            FROM chat_sessions
-           WHERE (title LIKE ? OR messages LIKE ?) AND updated_at > ?
+           WHERE user_id = ? AND (title LIKE ? OR messages LIKE ?) AND updated_at > ?
            ORDER BY updated_at DESC LIMIT ?`
-        ).all(`%${query}%`, `%${query}%`, sinceMs || 0, limit);
+        ).all(userId, `%${query}%`, `%${query}%`, sinceMs || 0, limit);
         for (const s of sessionHits) {
           results.push({ type: "session", id: s.id, title: s.title, agent_id: s.agent_id, updated_at: s.updated_at, messageCount: s.messageCount });
         }
@@ -219,7 +225,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
 
     // GET /api/chat-sessions/trash — list recently deleted sessions (must be before :id match)
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/trash') {
-      const rows = stmtListDeleted.all();
+      const claims = checkAuth(req);
+      const userId = claims?.sub || 'system';
+      const rows = stmtListDeleted.all(userId);
       json(res, { sessions: rows });
       return true;
     }
@@ -228,11 +236,13 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     if (req.method === 'POST' && url.pathname.match(/^\/api\/chat-sessions\/[^/]+\/restore$/)) {
       const parts = url.pathname.split('/');
       const id = parts[parts.length - 2];
-      const restored = stmtRestoreDeleted.run(id);
+      const claims = checkAuth(req);
+      const userId = claims?.sub || 'system';
+      const restored = stmtRestoreDeleted.run(id, userId);
       if (restored.changes === 0) {
         return json(res, { error: 'Not found in trash' }, 404);
       }
-      stmtRemoveFromTrash.run(id);
+      stmtRemoveFromTrash.run(id, userId);
       json(res, { ok: true, restored: true, id });
       return true;
     }
@@ -240,7 +250,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // GET /api/chat-sessions/:id — get single session with messages
     if (req.method === 'GET' && url.pathname.match(/^\/api\/chat-sessions\/[^/]+$/)) {
       const id = url.pathname.split('/').pop();
-      const row = stmtGetOne.get(id);
+      const claims = checkAuth(req);
+      const userId = claims?.sub || 'system';
+      const row = stmtGetOne.get(id, userId);
       if (!row) return json(res, { error: 'not found' }, 404);
       json(res, dbSessionToClient(row));
       return true;
@@ -265,9 +277,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     if (req.method === 'DELETE' && url.pathname.match(/^\/api\/chat-sessions\/[^/]+$/)) {
       const id = url.pathname.split('/').pop();
       const claims = checkAuth(req);
-      const deletedBy = claims?.sub || 'unknown';
-      stmtSoftDelete.run(deletedBy, id);
-      stmtDelete.run(id);
+      const userId = claims?.sub || 'unknown';
+      stmtSoftDelete.run(userId, id, userId);
+      stmtDelete.run(id, userId);
       stmtPurgeTrash.run(Date.now() - 30 * 24 * 60 * 60 * 1000);
       json(res, { ok: true, recoverable: true });
       return true;
@@ -278,8 +290,10 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       let body;
       try { body = await collectBody(req, 5 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
       try {
+        const claims = checkAuth(req);
+        const userId = claims?.sub || 'system';
         const { sessions: clientSessions = [] } = JSON.parse(body);
-        const serverRows = chatDb.prepare('SELECT * FROM chat_sessions ORDER BY updated_at DESC').all();
+        const serverRows = chatDb.prepare('SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
         const serverMap = new Map(serverRows.map(r => [r.id, r]));
 
         const bulkUpsert = chatDb.transaction((sessions) => {
@@ -294,7 +308,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
         });
         bulkUpsert(clientSessions);
 
-        const mergedRows = chatDb.prepare('SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT 100').all();
+        const mergedRows = chatDb.prepare('SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100').all(userId);
         const merged = mergedRows.map(dbSessionToClient);
         json(res, { sessions: merged });
         return true;

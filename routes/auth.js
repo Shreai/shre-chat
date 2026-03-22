@@ -344,9 +344,13 @@ export function verifyAuthToken(token) {
     if (parts.length !== 3) return null;
     const [header, payload, sig] = parts;
     const expected = createHmac("sha256", authSigningKey).update(`${header}.${payload}`).digest("base64url");
-    if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    const sigBuf = Buffer.from(sig, "utf-8");
+    const expBuf = Buffer.from(expected, "utf-8");
+    if (sigBuf.length !== expBuf.length) return null;
+    if (!timingSafeEqual(sigBuf, expBuf)) return null;
     const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (claims.exp && claims.exp < Math.floor(Date.now() / 1000)) return null;
+    if (claims.tokenType && claims.tokenType !== "platform_user") return null;
     return claims;
   } catch { return null; }
 }
@@ -386,9 +390,9 @@ if (!existsSync(USERS_PATH)) {
  */
 export function registerAuthRoutes({ log }) {
 
-  return function handleAuthRoute(req, res, url, { json, rateLimit, authCookie }) {
+  return async function handleAuthRoute(req, res, url, { json, rateLimit, authCookie }) {
 
-    // ── Login ──
+    // ── Login (delegates to shre-auth centralized auth) ──
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
       // @ts-ignore — x-forwarded-for is always a string in practice
       const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
@@ -399,7 +403,7 @@ export function registerAuthRoutes({ log }) {
       }
       let body = "";
       req.on("data", (chunk) => { body += chunk; });
-      req.on("end", () => {
+      req.on("end", async () => {
         try {
           const { username, password } = JSON.parse(body);
           if (!username || !password) return json(res, { error: "Username and password required" }, 400);
@@ -408,38 +412,96 @@ export function registerAuthRoutes({ log }) {
             auditLog("login_rate_limited", { ip: clientIp, username });
             return json(res, { error: "Too many login attempts for this account. Try again later.", retryAfter: ulr.retryAfter }, 429);
           }
-          const users = loadUsers();
-          const user = users[username];
-          if (!user || !verifyPassword(password, user.hash)) {
-            auditLog("login_failed", { ip: clientIp, username });
-            return json(res, { error: "Invalid credentials" }, 401);
-          }
-          upgradePasswordIfNeeded(username, password, users);
-          if (user.twoFactor && user.email) {
-            const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
-            const trustCookie = cookies.find(c => c.startsWith("shre_trust="));
-            const trustToken = trustCookie?.split("=")[1];
-            if (trustToken && isDeviceTrusted(username, trustToken)) {
-              const token = issueAuthToken(username, user.role || "admin");
-              if (!token) return json(res, { error: "Auth system unavailable" }, 500);
-              res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
-              auditLog("login_success_trusted", { ip: clientIp, username });
-              logLogin(username, req, "login_trusted_device");
-              return json(res, { token, user: { username, name: user.name || username, role: user.role || "admin" } });
+
+          // Delegate to shre-auth centralized auth
+          try {
+            const { serviceUrl } = await import("shre-sdk/discovery");
+            const authUrl = serviceUrl("shre-auth");
+            const authRes = await fetch(`${authUrl}/v1/auth/login`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-forwarded-for": clientIp,
+                "user-agent": req.headers["user-agent"] || "",
+              },
+              body: JSON.stringify({ username, password }),
+              signal: AbortSignal.timeout(10000),
+            });
+            const data = await authRes.json();
+
+            if (!authRes.ok) {
+              auditLog("login_failed", { ip: clientIp, username, code: data.code });
+              return json(res, { error: data.error || "Login failed" }, authRes.status);
             }
-            const code = generateOTP();
-            otpStore.set(username, { code, expires: Date.now() + OTP_TTL, attempts: 0 });
-            sendOTPEmail(user.email, code, username);
-            const masked = user.email.replace(/^(.{1,2})(.*)(@.*)$/, (_, a, b, c) => a + "*".repeat(Math.min(b.length, 6)) + c);
-            auditLog("2fa_sent", { ip: clientIp, username });
-            return json(res, { requires2FA: true, maskedEmail: masked });
+
+            // Check 2FA (local shre-chat feature — applies on top of shre-auth)
+            if (!data.requiresWorkspaceSelection) {
+              const users = loadUsers();
+              const localUser = users[username];
+              if (localUser?.twoFactor && localUser.email) {
+                const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+                const trustCookie = cookies.find(c => c.startsWith("shre_trust="));
+                const trustToken = trustCookie?.split("=")[1];
+                if (trustToken && isDeviceTrusted(username, trustToken)) {
+                  // Trusted device — skip 2FA
+                  res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
+                  auditLog("login_success_trusted", { ip: clientIp, username });
+                  logLogin(username, req, "login_trusted_device");
+                  return json(res, data);
+                }
+                // Need 2FA — stash the platform token for after verification
+                const code = generateOTP();
+                otpStore.set(username, { code, expires: Date.now() + OTP_TTL, attempts: 0, platformData: data });
+                sendOTPEmail(localUser.email, code, username);
+                const masked = localUser.email.replace(/^(.{1,2})(.*)(@.*)$/, (_, a, b, c) => a + "*".repeat(Math.min(b.length, 6)) + c);
+                auditLog("2fa_sent", { ip: clientIp, username });
+                return json(res, { requires2FA: true, maskedEmail: masked });
+              }
+            }
+
+            // Success or workspace selection needed
+            if (data.token) {
+              res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
+              auditLog("login_success", { ip: clientIp, username });
+              logLogin(username, req, "login");
+            }
+            return json(res, data);
+          } catch (authErr) {
+            // shre-auth unavailable — fall back to local auth
+            log.warn("[auth] shre-auth unavailable, falling back to local auth", { error: authErr?.message });
+            const users = loadUsers();
+            const user = users[username];
+            if (!user || !verifyPassword(password, user.hash)) {
+              auditLog("login_failed", { ip: clientIp, username });
+              return json(res, { error: "Invalid credentials" }, 401);
+            }
+            upgradePasswordIfNeeded(username, password, users);
+            if (user.twoFactor && user.email) {
+              const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+              const trustCookie = cookies.find(c => c.startsWith("shre_trust="));
+              const trustToken = trustCookie?.split("=")[1];
+              if (trustToken && isDeviceTrusted(username, trustToken)) {
+                const token = issueAuthToken(username, user.role || "admin");
+                if (!token) return json(res, { error: "Auth system unavailable" }, 500);
+                res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
+                auditLog("login_success_trusted", { ip: clientIp, username });
+                logLogin(username, req, "login_trusted_device");
+                return json(res, { token, user: { username, name: user.name || username, role: user.role || "admin" } });
+              }
+              const code = generateOTP();
+              otpStore.set(username, { code, expires: Date.now() + OTP_TTL, attempts: 0 });
+              sendOTPEmail(user.email, code, username);
+              const masked = user.email.replace(/^(.{1,2})(.*)(@.*)$/, (_, a, b, c) => a + "*".repeat(Math.min(b.length, 6)) + c);
+              auditLog("2fa_sent", { ip: clientIp, username });
+              return json(res, { requires2FA: true, maskedEmail: masked });
+            }
+            const token = issueAuthToken(username, user.role || "admin");
+            if (!token) return json(res, { error: "Auth system unavailable" }, 500);
+            res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
+            auditLog("login_success", { ip: clientIp, username });
+            logLogin(username, req, "login");
+            return json(res, { token, user: { username, name: user.name || username, role: user.role || "admin" } });
           }
-          const token = issueAuthToken(username, user.role || "admin");
-          if (!token) return json(res, { error: "Auth system unavailable" }, 500);
-          res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
-          auditLog("login_success", { ip: clientIp, username });
-          logLogin(username, req, "login");
-          return json(res, { token, user: { username, name: user.name || username, role: user.role || "admin" } });
         } catch { return json(res, { error: "Invalid request" }, 400); }
       });
       return true;
@@ -474,7 +536,23 @@ export function registerAuthRoutes({ log }) {
             auditLog("2fa_failed", { ip: clientIp, username, attempt: otp.attempts });
             return json(res, { error: `Invalid code. ${5 - otp.attempts} attempts remaining.` }, 401);
           }
+          // Check if platform auth data was stashed from shre-auth login
+          const platformData = otp.platformData;
           otpStore.delete(username);
+          if (platformData) {
+            // Return the platform JWT from shre-auth
+            const cookieHeaders = [authCookie("shre_token", platformData.token, AUTH_TOKEN_TTL, req)];
+            if (shouldTrust) {
+              const deviceToken = trustDevice(username);
+              cookieHeaders.push(authCookie("shre_trust", deviceToken, TRUST_TTL, req));
+              auditLog("device_trusted", { ip: clientIp, username });
+            }
+            res.setHeader("Set-Cookie", cookieHeaders);
+            auditLog("login_success_2fa", { ip: clientIp, username });
+            logLogin(username, req, "login_2fa");
+            return json(res, platformData);
+          }
+          // Fallback: local auth (shre-auth was unavailable during login)
           const users = loadUsers();
           const user = users[username];
           const token = issueAuthToken(username, user?.role || "admin");
@@ -494,8 +572,46 @@ export function registerAuthRoutes({ log }) {
       return true;
     }
 
-    // ── Auth check ──
+    // ── Auth check (try shre-auth first, fallback to local) ──
     if (url.pathname === "/api/auth/check" && req.method === "GET") {
+      const authHeader = req.headers["authorization"];
+      const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (!token) return json(res, { authenticated: false }, 401);
+
+      // Try platform JWT validation via shre-auth
+      try {
+        const { serviceUrl } = await import("shre-sdk/discovery");
+        const authUrl = serviceUrl("shre-auth");
+        const valRes = await fetch(`${authUrl}/v1/auth/validate-user`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          signal: AbortSignal.timeout(5000),
+        });
+        const valData = await valRes.json();
+        if (valData.valid && valData.claims) {
+          return json(res, {
+            authenticated: true,
+            user: {
+              id: valData.claims.sub,
+              username: valData.claims.email,
+              name: valData.claims.name,
+              role: valData.claims.role,
+              isSuperAdmin: valData.claims.isSuperAdmin,
+            },
+            workspace: {
+              id: valData.claims.activeWorkspaceId,
+              name: valData.claims.activeWorkspaceName,
+              role: valData.claims.role,
+            },
+            workspaces: valData.claims.workspaceIds,
+          });
+        }
+      } catch {
+        // shre-auth unavailable — fall back to local check
+      }
+
+      // Local JWT fallback
       const claims = checkAuth(req);
       if (!claims) return json(res, { authenticated: false }, 401);
       const users = loadUsers();
@@ -504,8 +620,77 @@ export function registerAuthRoutes({ log }) {
       return true;
     }
 
-    // ── Logout ──
+    // ── Workspace switch (proxy to shre-auth) ──
+    if (url.pathname === "/api/auth/switch-workspace" && req.method === "POST") {
+      const authHeader = req.headers["authorization"];
+      if (!authHeader?.startsWith("Bearer ")) return json(res, { error: "Unauthorized" }, 401);
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", async () => {
+        try {
+          const { serviceUrl } = await import("shre-sdk/discovery");
+          const authUrl = serviceUrl("shre-auth");
+          const switchRes = await fetch(`${authUrl}/v1/auth/switch-workspace`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": authHeader,
+            },
+            body,
+            signal: AbortSignal.timeout(10000),
+          });
+          const data = await switchRes.json();
+          if (data.token) {
+            res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
+          }
+          json(res, data, switchRes.status);
+        } catch {
+          json(res, { error: "Auth service unavailable" }, 503);
+        }
+      });
+      return true;
+    }
+
+    // ── Select workspace (proxy to shre-auth) ──
+    if (url.pathname === "/api/auth/select-workspace" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", async () => {
+        try {
+          const { serviceUrl } = await import("shre-sdk/discovery");
+          const authUrl = serviceUrl("shre-auth");
+          const selRes = await fetch(`${authUrl}/v1/auth/select-workspace`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            signal: AbortSignal.timeout(10000),
+          });
+          const data = await selRes.json();
+          if (data.token) {
+            res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
+          }
+          json(res, data, selRes.status);
+        } catch {
+          json(res, { error: "Auth service unavailable" }, 503);
+        }
+      });
+      return true;
+    }
+
+    // ── Logout (also revoke at shre-auth) ──
     if (url.pathname === "/api/auth/logout" && req.method === "POST") {
+      const authHeader = req.headers["authorization"];
+      if (authHeader?.startsWith("Bearer ")) {
+        try {
+          const { serviceUrl } = await import("shre-sdk/discovery");
+          const authUrl = serviceUrl("shre-auth");
+          fetch(`${authUrl}/v1/auth/logout`, {
+            method: "POST",
+            headers: { "Authorization": authHeader },
+            signal: AbortSignal.timeout(5000),
+          }).catch(() => {});
+        } catch { /* ignore */ }
+      }
       res.setHeader("Set-Cookie", authCookie("shre_token", "", 0, req));
       json(res, { ok: true });
       return true;

@@ -5,6 +5,7 @@ import hljs from "highlight.js/lib/common";
 const ContentCard = lazy(() => import("./ContentCard"));
 const MibWidgetBlock = lazy(() => import("./MibWidgetBlock"));
 const DataCard = lazy(() => import("./DataCard"));
+const MessageExportMenu = lazy(() => import("./MessageExportMenu").then(m => ({ default: m.MessageExportMenu })));
 import type { ChatMessage } from "../openclaw";
 import type { ProcessRun } from "./process-bar/types";
 import {
@@ -59,23 +60,28 @@ function CodeCopyButton({ code }: { code: string }) {
   );
 }
 
-// ── HtmlCodeBlock — code block with always-visible actions + inline preview ──
+// ── HtmlCodeBlock — code block with always-visible Preview button ──
 function HtmlCodeBlock({ lang, className, highlightedHtml, codeText, isShell, onRunCommand, props, children }: {
   lang: string; className?: string; highlightedHtml: string; codeText: string;
   isShell: boolean; onRunCommand?: (cmd: string) => void; props: any; children: React.ReactNode;
 }) {
-  const [inlinePreview, setInlinePreview] = useState(false);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (inlinePreview && lang === "html") {
-      const blob = new Blob([codeText], { type: "text/html" });
-      const u = URL.createObjectURL(blob);
-      setBlobUrl(u);
-      return () => URL.revokeObjectURL(u);
-    }
-    setBlobUrl(null);
-  }, [inlinePreview, codeText, lang]);
+  const openPreview = () => {
+    // Store HTML in sessionStorage, then switch to preview tab
+    sessionStorage.setItem("shre-preview-html", JSON.stringify({
+      id: `prev_${Date.now()}`,
+      title: (codeText.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()) || "Preview",
+      html: codeText,
+      savedAt: Date.now(),
+    }));
+    // Also save to library in localStorage
+    try {
+      const lib = JSON.parse(localStorage.getItem("shre-preview-library") || "[]");
+      const deduped = lib.filter((e: any) => e.html !== codeText);
+      deduped.unshift({ id: `prev_${Date.now()}`, title: (codeText.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()) || "Preview", html: codeText, savedAt: Date.now() });
+      localStorage.setItem("shre-preview-library", JSON.stringify(deduped.slice(0, 20)));
+    } catch {}
+    window.dispatchEvent(new CustomEvent("shre:switch-view", { detail: "preview" }));
+  };
 
   return (
     <div className="relative group">
@@ -87,35 +93,17 @@ function HtmlCodeBlock({ lang, className, highlightedHtml, codeText, isShell, on
           <code className={className} {...props}>{children}</code>
         )}
       </pre>
-      {/* Action buttons — always visible for html/shell, hover for others */}
       <div className={`absolute top-1 right-1 flex gap-0.5 transition-opacity ${lang === "html" || isShell ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         <CodeCopyButton code={codeText} />
         {lang === "html" && (
-          <>
-            <button
-              onClick={() => setInlinePreview((v) => !v)}
-              className="text-[10px] px-2 py-0.5 rounded"
-              style={{
-                background: inlinePreview ? "rgba(52,211,153,0.35)" : "rgba(52,211,153,0.2)",
-                color: "var(--c-emerald, #34d399)",
-                border: `1px solid ${inlinePreview ? "rgba(52,211,153,0.5)" : "rgba(52,211,153,0.3)"}`,
-              }}
-              title={inlinePreview ? "Hide preview" : "Show inline preview"}
-            >
-              👁 {inlinePreview ? "Hide" : "Preview"}
-            </button>
-            <button
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("shre:open-preview", { detail: { html: codeText } }));
-                window.dispatchEvent(new CustomEvent("shre:switch-view", { detail: "preview" }));
-              }}
-              className="text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ background: "var(--c-bg-hover)", color: "var(--c-text-3)", border: "1px solid var(--c-border-2)" }}
-              title="Open in full Preview tab"
-            >
-              ↗ Full
-            </button>
-          </>
+          <button
+            onClick={openPreview}
+            className="text-[10px] px-2 py-0.5 rounded"
+            style={{ background: "rgba(52,211,153,0.2)", color: "var(--c-emerald, #34d399)", border: "1px solid rgba(52,211,153,0.3)" }}
+            title="Open in Preview tab"
+          >
+            Preview
+          </button>
         )}
         {isShell && onRunCommand && (
           <button
@@ -128,17 +116,38 @@ function HtmlCodeBlock({ lang, className, highlightedHtml, codeText, isShell, on
           </button>
         )}
       </div>
-      {/* Inline preview iframe */}
-      {inlinePreview && blobUrl && (
-        <div style={{ marginTop: 4, borderRadius: 8, overflow: "hidden", border: "1px solid var(--c-border-2, rgba(255,255,255,0.08))" }}>
-          <iframe
-            src={blobUrl}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            style={{ width: "100%", height: 360, border: 0, background: "white", borderRadius: 8 }}
-            title="Inline HTML preview"
-          />
-        </div>
-      )}
+    </div>
+  );
+}
+
+// ── TableWithExport — wraps markdown tables with export buttons ──────
+function TableWithExport({ children, ...props }: React.HTMLAttributes<HTMLTableElement>) {
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const handleExport = async (format: "excel" | "csv" | "pdf") => {
+    const table = tableRef.current;
+    if (!table) return;
+    const utils = await import("../lib/export-utils");
+    const { headers, rows } = utils.parseHtmlTable(table);
+    if (headers.length === 0) return;
+    if (format === "excel") await utils.exportToExcel(headers, rows);
+    else if (format === "csv") utils.exportToCSV(headers, rows);
+    else if (format === "pdf") await utils.exportTableToPDF(headers, rows);
+  };
+
+  return (
+    <div className="relative group/table">
+      <div style={{ overflowX: "auto" }}>
+        <table ref={tableRef} {...props}>{children}</table>
+      </div>
+      <div
+        className="absolute top-0 right-0 flex gap-0.5 opacity-0 group-hover/table:opacity-100 transition-opacity"
+        style={{ transform: "translateY(-100%)", padding: "2px 0" }}
+      >
+        <button onClick={() => handleExport("excel")} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(52,211,153,0.2)", color: "var(--c-emerald)", border: "1px solid rgba(52,211,153,0.3)" }} title="Export to Excel">Excel</button>
+        <button onClick={() => handleExport("csv")} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--c-bg-hover)", color: "var(--c-text-3)", border: "1px solid var(--c-border-2)" }} title="Export to CSV">CSV</button>
+        <button onClick={() => handleExport("pdf")} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(96,165,250,0.2)", color: "var(--c-info-soft)", border: "1px solid rgba(96,165,250,0.3)" }} title="Export to PDF">PDF</button>
+      </div>
     </div>
   );
 }
@@ -379,6 +388,11 @@ function MessageActions({ content, feedback, onFeedback, onRegenerate, onBranch,
           <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v3c0 2 2 3 6 3h3"/><line x1="6" y1="9" x2="6" y2="9"/></svg>
           <span className="text-[10px]">Branch</span>
         </button>
+      )}
+      {content.length > 80 && (
+        <Suspense fallback={null}>
+          <MessageExportMenu content={content} />
+        </Suspense>
       )}
     </div>
   );
@@ -736,6 +750,9 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                         {/* LinkPreview disabled — unfurl cards cause layout shifts during scroll */}
                       </>
                     );
+                  },
+                  table({ children, node, ...props }) {
+                    return <TableWithExport {...props}>{children}</TableWithExport>;
                   },
                   pre({ children }) {
                     return <>{children}</>;
