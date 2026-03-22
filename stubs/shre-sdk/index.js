@@ -53,8 +53,8 @@ export function createLifecycleEmitter(eventBus, name, opts) {
 
 export function serviceUrl(name) {
   const ports = {
-    'mib007': 'http://127.0.0.1:5500',
-    'shre-router': 'http://127.0.0.1:5497',
+    'mib007': 'https://127.0.0.1:5520',
+    'shre-router': 'https://127.0.0.1:5497',
     'shre-tasks': 'http://127.0.0.1:5460',
     'shre-fleet': 'http://127.0.0.1:5498',
   };

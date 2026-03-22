@@ -37,9 +37,10 @@ export class ViewErrorBoundary extends Component<Props, State> {
 
     const msg = this.state.error?.message || "Unknown error";
     const truncated = msg.length > 120 ? msg.slice(0, 120) + "..." : msg;
+    const isOverlay = this.props.viewName === "Voice Assistant";
 
     return (
-      <div style={styles.container}>
+      <div style={isOverlay ? styles.overlayContainer : styles.container}>
         <div style={styles.icon}>!</div>
         <div style={styles.title}>{this.props.viewName}</div>
         <div style={styles.subtitle}>Something went wrong</div>
@@ -62,6 +63,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "2rem",
     color: "var(--c-text-2, #a1a1aa)",
     gap: "0.5rem",
+  },
+  overlayContainer: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 200,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "2rem",
+    color: "var(--c-text-2, #a1a1aa)",
+    gap: "0.5rem",
+    background: "linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)",
   },
   icon: {
     width: 36,

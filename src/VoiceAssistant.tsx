@@ -624,66 +624,71 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
 
     dispatch({ type: "START_LISTENING" });
 
-    const stream = await acquireMic();
-    if (!stream) {
-      dispatch({ type: "ERROR", message: "Microphone access denied. Allow mic access in browser settings." });
-      return;
-    }
-
-    // Start audio recording for Whisper (primary STT)
-    await startRecording();
-
-    // Start VAD for silence detection
-    vad.start(stream);
-
-    // Start browser SpeechRecognition for live interim preview only
-    const SR = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SR) {
-      if (recRef.current) { try { recRef.current.abort(); } catch {} }
-      const rec = new SR();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "en-US";
-      rec.maxAlternatives = 3;
-
-      rec.onresult = (e: SpeechRecognitionEvent) => {
-        let interim = "";
-        let final = "";
-        for (let i = 0; i < e.results.length; i++) {
-          const result = e.results[i];
-          if (result.isFinal) {
-            let best = result[0];
-            for (let j = 1; j < result.length; j++) {
-              if (result[j].confidence > best.confidence) best = result[j];
-            }
-            final += best.transcript + " ";
-          } else {
-            interim += result[0].transcript;
-          }
-        }
-        dispatch({ type: "TRANSCRIPT_UPDATE", final: final.trim(), interim: interim.trim() });
-      };
-
-      rec.onend = () => {
-        // Only restart if still in listening phase — SR preview is secondary
-        if (activeRef.current && phaseRef.current === "listening") {
-          try { rec.start(); } catch { /* */ }
-        }
-      };
-
-      rec.onerror = (e: any) => {
-        if (e.error === "no-speech" || e.error === "aborted") return;
-        if (e.error === "not-allowed") {
-          dispatch({ type: "ERROR", message: "Microphone access denied. Allow mic access in browser settings." });
-        }
-      };
-
-      try {
-        rec.start();
-        recRef.current = rec;
-      } catch {
-        // SR not available — Whisper still works
+    try {
+      const stream = await acquireMic();
+      if (!stream) {
+        dispatch({ type: "ERROR", message: "Microphone access denied. Allow mic access in browser settings." });
+        return;
       }
+
+      // Start audio recording for Whisper (primary STT)
+      await startRecording();
+
+      // Start VAD for silence detection
+      try { vad.start(stream); } catch (e) { console.warn("[voice] VAD start failed:", e); }
+
+      // Start browser SpeechRecognition for live interim preview only
+      const SR = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SR) {
+        if (recRef.current) { try { recRef.current.abort(); } catch {} }
+        const rec = new SR();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = "en-US";
+        rec.maxAlternatives = 3;
+
+        rec.onresult = (e: SpeechRecognitionEvent) => {
+          let interim = "";
+          let final = "";
+          for (let i = 0; i < e.results.length; i++) {
+            const result = e.results[i];
+            if (result.isFinal) {
+              let best = result[0];
+              for (let j = 1; j < result.length; j++) {
+                if (result[j].confidence > best.confidence) best = result[j];
+              }
+              final += best.transcript + " ";
+            } else {
+              interim += result[0].transcript;
+            }
+          }
+          dispatch({ type: "TRANSCRIPT_UPDATE", final: final.trim(), interim: interim.trim() });
+        };
+
+        rec.onend = () => {
+          // Only restart if still in listening phase — SR preview is secondary
+          if (activeRef.current && phaseRef.current === "listening") {
+            try { rec.start(); } catch { /* */ }
+          }
+        };
+
+        rec.onerror = (e: any) => {
+          if (e.error === "no-speech" || e.error === "aborted") return;
+          if (e.error === "not-allowed") {
+            dispatch({ type: "ERROR", message: "Microphone access denied. Allow mic access in browser settings." });
+          }
+        };
+
+        try {
+          rec.start();
+          recRef.current = rec;
+        } catch {
+          // SR not available — Whisper still works
+        }
+      }
+    } catch (err) {
+      console.error("[voice] startListening failed:", err);
+      dispatch({ type: "ERROR", message: "Failed to start voice input. Tap to retry." });
     }
   }, [acquireMic, startRecording, vad]);
 
@@ -799,8 +804,8 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     dispatch({ type: "OPEN" });
 
     // Fetch shortcuts on mount
-    fetch("/api/voice-shortcuts").then(r => r.json()).then(data => {
-      if (data.shortcuts?.length) setShortcuts(data.shortcuts);
+    fetch("/api/voice-shortcuts").then(r => r.ok ? r.json() : { shortcuts: [] }).then(data => {
+      if (data?.shortcuts?.length) setShortcuts(data.shortcuts);
     }).catch(() => {});
 
     // Check if we should play a morning briefing
@@ -815,10 +820,10 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       try {
         const briefRes = await fetch("/api/voice-briefing", { signal: AbortSignal.timeout(5000) });
         if (briefRes.ok) {
-          const { briefing } = await briefRes.json();
-          if (briefing) {
+          const data = await briefRes.json();
+          if (data?.briefing) {
             sessionStorage.setItem("shre-voice-briefing-date", today);
-            return `${base} Quick update — ${briefing} What would you like to do?`;
+            return `${base} Quick update — ${data.briefing} What would you like to do?`;
           }
         }
       } catch { /* briefing failed, use simple greeting */ }
@@ -826,30 +831,46 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     };
 
     buildGreeting().then(async (combinedGreeting) => {
-      if (!activeRef.current) return;
+      try {
+        if (!activeRef.current) return;
 
-      const greetTurn: Turn = { role: "assistant", text: combinedGreeting };
-      setTurns([greetTurn]);
-      turnHistoryRef.current = [greetTurn];
+        const greetTurn: Turn = { role: "assistant", text: combinedGreeting };
+        setTurns([greetTurn]);
+        turnHistoryRef.current = [greetTurn];
 
-      // Speak using browser speechSynthesis (avoids autoplay blocking)
-      dispatch({ type: "START_SPEAKING" });
-      await new Promise<void>((resolve) => {
-        if (window.speechSynthesis) {
-          const u = new SpeechSynthesisUtterance(combinedGreeting);
-          u.rate = 1.0;
-          const timer = setTimeout(() => { window.speechSynthesis.cancel(); resolve(); }, 20000);
-          u.onend = () => { clearTimeout(timer); resolve(); };
-          u.onerror = () => { clearTimeout(timer); resolve(); };
-          window.speechSynthesis.speak(u);
-        } else {
-          setTimeout(resolve, 1500);
+        // Speak using browser speechSynthesis (avoids autoplay blocking)
+        dispatch({ type: "START_SPEAKING" });
+        await new Promise<void>((resolve) => {
+          try {
+            if (window.speechSynthesis) {
+              const u = new SpeechSynthesisUtterance(combinedGreeting);
+              u.rate = 1.0;
+              const timer = setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} resolve(); }, 20000);
+              u.onend = () => { clearTimeout(timer); resolve(); };
+              u.onerror = () => { clearTimeout(timer); resolve(); };
+              window.speechSynthesis.speak(u);
+            } else {
+              setTimeout(resolve, 1500);
+            }
+          } catch {
+            resolve();
+          }
+        });
+
+        if (activeRef.current) {
+          dispatch({ type: "GREETING_DONE" });
+          startListening();
         }
-      });
-
+      } catch (err) {
+        console.error("[voice] greeting init error:", err);
+        if (activeRef.current) {
+          dispatch({ type: "ERROR", message: "Voice initialization failed. Tap to retry." });
+        }
+      }
+    }).catch((err) => {
+      console.error("[voice] greeting build error:", err);
       if (activeRef.current) {
-        dispatch({ type: "GREETING_DONE" });
-        startListening();
+        dispatch({ type: "ERROR", message: "Voice initialization failed. Tap to retry." });
       }
     });
 

@@ -5,27 +5,29 @@ import type { ProcessRun, ProcessStep, ProcessStepKind } from "./types";
 // ---------------------------------------------------------------------------
 
 const ICONS: Record<ProcessStepKind, string> = {
-  thinking:   "🧠",
-  planning:   "📋",
-  tool_use:   "⚡",
-  generating: "✎",
-  compacting: "⟳",
-  done:       "✅",
-  attention:  "⚠️",
-  approval:   "🔐",
-  error:      "❌",
+  thinking:    "🧠",
+  planning:    "📋",
+  tool_use:    "⚡",
+  tool_result: "📦",
+  generating:  "✎",
+  compacting:  "⟳",
+  done:        "✅",
+  attention:   "⚠️",
+  approval:    "🔐",
+  error:       "❌",
 };
 
 const COLORS: Record<ProcessStepKind, { active: string; muted: string }> = {
-  thinking:   { active: "var(--c-amber, #fbbf24)",  muted: "rgba(251,191,36,0.4)" },
-  planning:   { active: "var(--c-violet, #a78bfa)", muted: "rgba(167,139,250,0.4)" },
-  tool_use:   { active: "var(--c-blue, #60a5fa)",   muted: "rgba(96,165,250,0.4)" },
-  generating: { active: "var(--c-green, #4ade80)",   muted: "rgba(74,222,128,0.4)" },
-  compacting: { active: "var(--c-orange, #fb923c)",  muted: "rgba(251,146,60,0.4)" },
-  done:       { active: "var(--c-emerald, #34d399)", muted: "rgba(52,211,153,0.4)" },
-  attention:  { active: "var(--c-yellow, #facc15)",  muted: "rgba(250,204,21,0.4)" },
-  approval:   { active: "var(--c-amber, #f59e0b)",   muted: "rgba(245,158,11,0.4)" },
-  error:      { active: "var(--c-red, #f87171)",     muted: "rgba(248,113,113,0.4)" },
+  thinking:    { active: "var(--c-amber, #fbbf24)",  muted: "rgba(251,191,36,0.4)" },
+  planning:    { active: "var(--c-violet, #a78bfa)", muted: "rgba(167,139,250,0.4)" },
+  tool_use:    { active: "var(--c-blue, #60a5fa)",   muted: "rgba(96,165,250,0.4)" },
+  tool_result: { active: "var(--c-cyan, #22d3ee)",   muted: "rgba(34,211,238,0.4)" },
+  generating:  { active: "var(--c-green, #4ade80)",   muted: "rgba(74,222,128,0.4)" },
+  compacting:  { active: "var(--c-orange, #fb923c)",  muted: "rgba(251,146,60,0.4)" },
+  done:        { active: "var(--c-emerald, #34d399)", muted: "rgba(52,211,153,0.4)" },
+  attention:   { active: "var(--c-yellow, #facc15)",  muted: "rgba(250,204,21,0.4)" },
+  approval:    { active: "var(--c-amber, #f59e0b)",   muted: "rgba(245,158,11,0.4)" },
+  error:       { active: "var(--c-red, #f87171)",     muted: "rgba(248,113,113,0.4)" },
 };
 
 function StepPill({
@@ -38,7 +40,8 @@ function StepPill({
   onClick?: () => void;
 }) {
   const isActive = step.status === "active";
-  const color = isActive ? COLORS[step.kind].active : COLORS[step.kind].muted;
+  const colorEntry = COLORS[step.kind] ?? { active: "var(--c-text-3)", muted: "var(--c-text-5)" };
+  const color = isActive ? colorEntry.active : colorEntry.muted;
 
   return (
     <button
