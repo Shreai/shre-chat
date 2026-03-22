@@ -118,6 +118,18 @@ export function ChatView() {
   } = useVoiceRecording();
   // ── Wake word listener (extracted hook) ──
   useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen);
+
+  // ── Dedicated voice session (isolated from chat) ──
+  const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (voiceAssistantOpen && !voiceSessionId) {
+      const id = actions.getOrCreateVoiceSession(activeAgentId);
+      setVoiceSessionId(id);
+    }
+  }, [voiceAssistantOpen, voiceSessionId, actions, activeAgentId]);
+  const voiceSession = sessions.find((s) => s.id === voiceSessionId);
+  const voiceMessages = voiceSession?.messages || [];
+
   const [showModelPicker, setShowModelPicker] = useState(false);
   const notifSound = usePreferences((s) => s.notifSound);
   const setNotifSound = usePreferences((s) => s.setNotifSound);
@@ -1687,14 +1699,23 @@ export function ChatView() {
           <VoiceAssistant
             open={voiceAssistantOpen}
             onClose={() => { setVoiceAssistantOpen(false); window.dispatchEvent(new CustomEvent("shre-voice-stop")); }}
-            messages={messages}
+            messages={voiceMessages}
             agentName={currentAgent.name}
             agentEmoji={currentAgent.emoji}
             agentId={activeAgentId}
             ttsVoice={ttsVoice}
             agents={AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji }))}
             onSwitchAgent={(id) => actions.setActiveAgent(id)}
-            onVoiceTurn={(turn) => { if (activeSessionId) actions.addMessage(activeSessionId, { role: turn.role, content: turn.content }); }}
+            onVoiceTurn={(turn) => {
+              if (voiceSessionId) {
+                actions.addMessage(voiceSessionId, { role: turn.role, content: turn.content });
+                // Auto-title on first user message
+                if (turn.role === "user" && voiceSession && voiceSession.messages.length === 0) {
+                  const title = "Voice: " + (turn.content.length > 35 ? turn.content.slice(0, 35) + "…" : turn.content);
+                  actions.updateSessionTitle(voiceSessionId, title);
+                }
+              }
+            }}
             openclawMode={openclawMode}
           />
         </Suspense>

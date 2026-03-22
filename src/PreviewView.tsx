@@ -125,8 +125,19 @@ export function PreviewView() {
     }
   };
 
-  const srcDoc = htmlContent || undefined;
-  const src = !htmlContent && url.trim() ? url.trim() : undefined;
+  // Use blob URL for HTML content to avoid MIME type issues with srcDoc + allow-scripts
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (htmlContent) {
+      const blob = new Blob([htmlContent], { type: "text/html" });
+      const u = URL.createObjectURL(blob);
+      setBlobUrl(u);
+      return () => URL.revokeObjectURL(u);
+    }
+    setBlobUrl(null);
+  }, [htmlContent]);
+
+  const src = blobUrl || (!htmlContent && url.trim() ? url.trim() : undefined);
   const canLoadFromChat = !!extractHtml();
 
   return (
@@ -295,10 +306,9 @@ export function PreviewView() {
 
         {/* Preview Area */}
         <div className="flex-1 relative min-w-0">
-          {(srcDoc || src) ? (
+          {src ? (
             <iframe
               ref={iframeRef}
-              srcDoc={srcDoc}
               src={src}
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               className="w-full h-full border-0"

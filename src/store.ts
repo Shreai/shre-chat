@@ -196,6 +196,7 @@ export interface Session {
   tags?: string[];
   systemPrompt?: string;
   parentId?: string;
+  type?: "chat" | "voice";
 }
 
 export interface ActivityEvent {
@@ -643,6 +644,19 @@ export function createSession(title?: string, agentId?: string): Session {
   };
 }
 
+export function createVoiceSession(agentId?: string): Session {
+  return {
+    id: uid(),
+    title: "Voice session",
+    agentId: agentId || "main",
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    type: "voice",
+    tags: ["voice"],
+  };
+}
+
 export function generateTitle(message: string): string {
   const cleaned = message.replace(/\n/g, " ").trim();
   return cleaned.length > 40 ? cleaned.slice(0, 40) + "…" : cleaned;
@@ -751,6 +765,7 @@ export interface AppActions {
   setDraft: (sessionId: string, text: string) => void;
   getDraft: (sessionId: string) => string;
   setReplyTo: (index: number | null) => void;
+  getOrCreateVoiceSession: (agentId: string) => string;
   logout?: () => void;
 }
 

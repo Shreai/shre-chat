@@ -12,6 +12,7 @@ import {
   type FeedEntry,
   uid,
   createSession,
+  createVoiceSession,
   fetchAgentModels,
   loadSessions,
   saveSessions,
@@ -501,6 +502,18 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
       return s.id;
     },
 
+    getOrCreateVoiceSession: (agentId: string) => {
+      const RESUME_WINDOW = 30 * 60 * 1000; // 30 min
+      const now = Date.now();
+      const existing = sessionsRef.current.find(
+        (s) => s.type === "voice" && s.agentId === agentId && (now - s.updatedAt) < RESUME_WINDOW
+      );
+      if (existing) return existing.id;
+      const s = createVoiceSession(agentId);
+      updateSessions((prev) => [...prev, s]);
+      return s.id;
+    },
+
     switchSession: (id: string) => {
       setActiveSessionId(id);
       saveActiveSession(id);
@@ -799,6 +812,22 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
       const source = sessionsRef.current.find((s) => s.id === sessionId);
       if (!source) return null;
       const branchedMessages = source.messages.slice(0, messageIndex + 1);
+
+      // Build a context summary from the last few messages so the model
+      // understands what "this" refers to in follow-up questions
+      const recentMsgs = branchedMessages.slice(-4);
+      const contextLines = recentMsgs.map((m) => {
+        const snippet = m.content.replace(/\n/g, " ").slice(0, 200);
+        return `- [${m.role}]: ${snippet}${m.content.length > 200 ? "..." : ""}`;
+      });
+      const branchContext = `[This conversation was branched from "${source.title}" at message ${messageIndex + 1} of ${source.messages.length}. ` +
+        `The user wants to continue or follow up on what was being discussed. ` +
+        `Recent context:\n${contextLines.join("\n")}\n` +
+        `IMPORTANT: When the user says "this", "status on this", or asks if something is done/complete, ` +
+        `they are referring to the task or topic in the conversation above. ` +
+        `Review the full conversation history to determine: what was being worked on, ` +
+        `and whether it was completed or left unfinished. Give a clear status update.]`;
+
       const newId = uid();
       const branched: Session = {
         id: newId,
@@ -807,7 +836,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile }: {
         messages: branchedMessages.map((m) => ({ ...m })),
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        systemPrompt: source.systemPrompt,
+        systemPrompt: (source.systemPrompt ? source.systemPrompt + "\n\n" : "") + branchContext,
         parentId: source.id,
       };
       updateSessions((prev) => [...prev, branched]);

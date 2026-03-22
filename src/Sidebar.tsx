@@ -134,7 +134,7 @@ export function Sidebar() {
         }}
       >
         <div className="flex items-center gap-2">
-          <span className="text-base shrink-0">{agent.emoji}</span>
+          <span className="text-base shrink-0">{s.type === "voice" ? "🎙️" : agent.emoji}</span>
           <div className="flex-1 min-w-0">
             {editingId === s.id ? (
               <InlineEdit

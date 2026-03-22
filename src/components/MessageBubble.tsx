@@ -59,6 +59,90 @@ function CodeCopyButton({ code }: { code: string }) {
   );
 }
 
+// ── HtmlCodeBlock — code block with always-visible actions + inline preview ──
+function HtmlCodeBlock({ lang, className, highlightedHtml, codeText, isShell, onRunCommand, props, children }: {
+  lang: string; className?: string; highlightedHtml: string; codeText: string;
+  isShell: boolean; onRunCommand?: (cmd: string) => void; props: any; children: React.ReactNode;
+}) {
+  const [inlinePreview, setInlinePreview] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inlinePreview && lang === "html") {
+      const blob = new Blob([codeText], { type: "text/html" });
+      const u = URL.createObjectURL(blob);
+      setBlobUrl(u);
+      return () => URL.revokeObjectURL(u);
+    }
+    setBlobUrl(null);
+  }, [inlinePreview, codeText, lang]);
+
+  return (
+    <div className="relative group">
+      {lang && <div className="hljs-lang-badge">{lang}</div>}
+      <pre>
+        {highlightedHtml ? (
+          <code className={`hljs ${className || ""}`} dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+        ) : (
+          <code className={className} {...props}>{children}</code>
+        )}
+      </pre>
+      {/* Action buttons — always visible for html/shell, hover for others */}
+      <div className={`absolute top-1 right-1 flex gap-0.5 transition-opacity ${lang === "html" || isShell ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+        <CodeCopyButton code={codeText} />
+        {lang === "html" && (
+          <>
+            <button
+              onClick={() => setInlinePreview((v) => !v)}
+              className="text-[10px] px-2 py-0.5 rounded"
+              style={{
+                background: inlinePreview ? "rgba(52,211,153,0.35)" : "rgba(52,211,153,0.2)",
+                color: "var(--c-emerald, #34d399)",
+                border: `1px solid ${inlinePreview ? "rgba(52,211,153,0.5)" : "rgba(52,211,153,0.3)"}`,
+              }}
+              title={inlinePreview ? "Hide preview" : "Show inline preview"}
+            >
+              👁 {inlinePreview ? "Hide" : "Preview"}
+            </button>
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("shre:open-preview", { detail: { html: codeText } }));
+                window.dispatchEvent(new CustomEvent("shre:switch-view", { detail: "preview" }));
+              }}
+              className="text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: "var(--c-bg-hover)", color: "var(--c-text-3)", border: "1px solid var(--c-border-2)" }}
+              title="Open in full Preview tab"
+            >
+              ↗ Full
+            </button>
+          </>
+        )}
+        {isShell && onRunCommand && (
+          <button
+            onClick={() => onRunCommand(codeText)}
+            className="text-[10px] px-2 py-0.5 rounded"
+            style={{ background: "rgba(107,180,238,0.2)", color: "var(--c-terminal-accent)", border: "1px solid rgba(107,180,238,0.3)" }}
+            title="Run in terminal"
+          >
+            &#9654; Run
+          </button>
+        )}
+      </div>
+      {/* Inline preview iframe */}
+      {inlinePreview && blobUrl && (
+        <div style={{ marginTop: 4, borderRadius: 8, overflow: "hidden", border: "1px solid var(--c-border-2, rgba(255,255,255,0.08))" }}>
+          <iframe
+            src={blobUrl}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            style={{ width: "100%", height: 360, border: 0, background: "white", borderRadius: 8 }}
+            title="Inline HTML preview"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── CopyButton ──────────────────────────────────────────────────────
 function CopyButton({ content, inline }: { content: string; inline?: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -710,45 +794,17 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                     }
 
                     return (
-                      <div className="relative group">
-                        {lang && <div className="hljs-lang-badge">{lang}</div>}
-                        <pre>
-                          {highlightedHtml ? (
-                            <code className={`hljs ${className || ""}`} dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
-                          ) : (
-                            <code className={className} {...props}>{children}</code>
-                          )}
-                        </pre>
-                        <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <CodeCopyButton code={codeText} />
-                          {lang === "html" && (
-                            <button
-                              onClick={() => {
-                                window.dispatchEvent(
-                                  new CustomEvent("shre:open-preview", { detail: { html: codeText } })
-                                );
-                                // Navigate to Preview tab
-                                window.dispatchEvent(new CustomEvent("shre:switch-view", { detail: "preview" }));
-                              }}
-                              className="text-[10px] px-2 py-0.5 rounded"
-                              style={{ background: "rgba(52,211,153,0.2)", color: "var(--c-emerald, #34d399)", border: "1px solid rgba(52,211,153,0.3)" }}
-                              title="Open in Preview"
-                            >
-                              👁 Preview
-                            </button>
-                          )}
-                          {isShell && onRunCommand && (
-                            <button
-                              onClick={() => onRunCommand(codeText)}
-                              className="text-[10px] px-2 py-0.5 rounded"
-                              style={{ background: "rgba(107,180,238,0.2)", color: "var(--c-terminal-accent)", border: "1px solid rgba(107,180,238,0.3)" }}
-                              title="Run in terminal"
-                            >
-                              &#9654; Run
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      <HtmlCodeBlock
+                        lang={lang}
+                        className={className}
+                        highlightedHtml={highlightedHtml}
+                        codeText={codeText}
+                        isShell={isShell}
+                        onRunCommand={onRunCommand}
+                        props={props}
+                      >
+                        {children}
+                      </HtmlCodeBlock>
                     );
                   },
                 }}

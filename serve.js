@@ -862,6 +862,7 @@ const MIME = {
 };
 
 function json(res, data, status = 200) {
+  if (res.headersSent) return;
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate, private", "Pragma": "no-cache" });
   res.end(JSON.stringify(data));
 }
@@ -3306,7 +3307,17 @@ Examples:
   let filePath = resolve(DIST, url.pathname === "/" ? "index.html" : "." + url.pathname);
   // Path traversal guard — ensure resolved path is within DIST
   if (!filePath.startsWith(DIST)) filePath = join(DIST, "index.html");
-  if (!existsSync(filePath)) filePath = join(DIST, "index.html");
+  if (!existsSync(filePath)) {
+    // Asset requests (.js, .css, etc.) should 404 — not fall back to index.html
+    // SPA fallback to index.html only for navigation requests (no file extension)
+    const reqExt = extname(filePath);
+    if (reqExt && reqExt !== ".html") {
+      res.writeHead(404);
+      res.end("Not found");
+      return;
+    }
+    filePath = join(DIST, "index.html");
+  }
 
   try {
     const content = readFileSync(filePath);
