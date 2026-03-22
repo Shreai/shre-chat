@@ -6,6 +6,7 @@ export type ProcessStepKind =
   | "thinking"
   | "planning"
   | "tool_use"
+  | "tool_result"
   | "generating"
   | "compacting"
   | "done"

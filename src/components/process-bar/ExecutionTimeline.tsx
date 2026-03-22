@@ -12,15 +12,16 @@ interface StageConfig {
 }
 
 const STAGES: Record<ProcessStepKind, StageConfig> = {
-  thinking:   { icon: "🧠", label: "Thinking",    color: "var(--c-warning-soft, #fbbf24)", glow: "rgba(251,191,36,0.3)" },
-  planning:   { icon: "📋", label: "Planning",    color: "var(--c-purple, #a78bfa)", glow: "rgba(167,139,250,0.3)" },
-  tool_use:   { icon: "⚡", label: "Tool",        color: "var(--c-info-soft, #60a5fa)", glow: "rgba(96,165,250,0.3)" },
-  generating: { icon: "✍️", label: "Writing",     color: "var(--c-success-soft, #4ade80)", glow: "rgba(74,222,128,0.3)" },
-  compacting: { icon: "📦", label: "Compacting",  color: "var(--c-orange, #fb923c)", glow: "rgba(251,146,60,0.3)" },
-  done:       { icon: "✅", label: "Done",        color: "var(--c-emerald, #34d399)", glow: "rgba(52,211,153,0.3)" },
-  attention:  { icon: "⚠️", label: "Attention",   color: "var(--c-yellow, #facc15)", glow: "rgba(250,204,21,0.3)" },
-  approval:   { icon: "🔐", label: "Approval",    color: "var(--c-amber, #f59e0b)", glow: "rgba(245,158,11,0.3)" },
-  error:      { icon: "❌", label: "Error",       color: "var(--c-danger-soft, #f87171)", glow: "rgba(248,113,113,0.3)" },
+  thinking:    { icon: "🧠", label: "Thinking",    color: "var(--c-warning-soft, #fbbf24)", glow: "rgba(251,191,36,0.3)" },
+  planning:    { icon: "📋", label: "Planning",    color: "var(--c-purple, #a78bfa)", glow: "rgba(167,139,250,0.3)" },
+  tool_use:    { icon: "⚡", label: "Tool",        color: "var(--c-info-soft, #60a5fa)", glow: "rgba(96,165,250,0.3)" },
+  tool_result: { icon: "📦", label: "Result",      color: "var(--c-cyan, #22d3ee)", glow: "rgba(34,211,238,0.3)" },
+  generating:  { icon: "✍️", label: "Writing",     color: "var(--c-success-soft, #4ade80)", glow: "rgba(74,222,128,0.3)" },
+  compacting:  { icon: "📦", label: "Compacting",  color: "var(--c-orange, #fb923c)", glow: "rgba(251,146,60,0.3)" },
+  done:        { icon: "✅", label: "Done",        color: "var(--c-emerald, #34d399)", glow: "rgba(52,211,153,0.3)" },
+  attention:   { icon: "⚠️", label: "Attention",   color: "var(--c-yellow, #facc15)", glow: "rgba(250,204,21,0.3)" },
+  approval:    { icon: "🔐", label: "Approval",    color: "var(--c-amber, #f59e0b)", glow: "rgba(245,158,11,0.3)" },
+  error:       { icon: "❌", label: "Error",       color: "var(--c-danger-soft, #f87171)", glow: "rgba(248,113,113,0.3)" },
 };
 
 // ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ function Connector({ completed }: { completed: boolean }) {
 // ---------------------------------------------------------------------------
 
 function StageNode({ step, isLast }: { step: ProcessStep; isLast: boolean }) {
-  const config = STAGES[step.kind];
+  const config = STAGES[step.kind] ?? { icon: "?", label: step.kind, color: "var(--c-text-4)", glow: "rgba(255,255,255,0.1)" };
   const isActive = step.status === "active";
   const isCompleted = step.status === "completed";
 
