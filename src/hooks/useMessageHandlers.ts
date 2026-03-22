@@ -532,6 +532,17 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     processStepRef.current = thinkStepId;
 
     let messageText = text;
+
+    // Prepend quoted reply context so the model knows which message the user is responding to
+    if (replyToIndex !== null && filteredMessages[replyToIndex]) {
+      const replyMsg = filteredMessages[replyToIndex];
+      const replySnippet = replyMsg.content.length > 500
+        ? replyMsg.content.slice(0, 500) + "..."
+        : replyMsg.content;
+      const replyRole = replyMsg.role === "user" ? "my earlier message" : "your earlier response";
+      messageText = `[Replying to ${replyRole}]: "${replySnippet}"\n\n${text}`;
+    }
+
     const attachments = attachedFiles.filter(f => f.dataUrl).map(f => ({
       name: f.name,
       type: f.type,
@@ -539,7 +550,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     }));
     if (attachedFiles.length > 0) {
       const fileNames = attachedFiles.map((f) => f.name).join(", ");
-      messageText = `[Attached files: ${fileNames}]\n\n${text}`;
+      messageText = `[Attached files: ${fileNames}]\n\n${messageText}`;
       actions.addFeed(sessionId, "sent", `Attached: ${fileNames}`, { files: String(attachedFiles.length) });
     }
 
