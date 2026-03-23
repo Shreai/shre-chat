@@ -238,7 +238,7 @@ export interface FeedEntry {
   timestamp: number;
 }
 
-export type View = "chat" | "activity" | "files" | "cron" | "feed" | "agent-feed" | "preview" | "spend" | "briefing" | "reminders" | "cost-dashboard" | "marketplace" | "admin" | "feed-analytics" | "task-timeline" | "finetune" | "reports";
+export type View = "chat" | "activity" | "files" | "cron" | "feed" | "agent-feed" | "preview" | "spend" | "briefing" | "reminders" | "cost-dashboard" | "marketplace" | "admin" | "feed-analytics" | "task-timeline" | "finetune" | "reports" | "employee-activity";
 
 // ── Bookmarks ─────────────────────────────────────────────────────
 

@@ -100,6 +100,7 @@ const FeedAnalyticsView = lazy(() => import("./FeedAnalyticsView").then(m => ({ 
 const TaskTimelineView = lazy(() => import("./TaskTimelineView").then(m => ({ default: m.TaskTimelineView })));
 const FinetuneView = lazy(() => import("./FinetuneView").then(m => ({ default: m.FinetuneView })));
 const ReportsView = lazy(() => import("./ReportsView").then(m => ({ default: m.ReportsView })));
+const EmployeeActivityView = lazy(() => import("./EmployeeActivityView").then(m => ({ default: m.EmployeeActivityView })));
 
 const LazyFallback = () => (
   <div className="flex-1 flex items-center justify-center" style={{ color: "var(--c-text-3)" }}>
@@ -1220,6 +1221,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
               {view === "task-timeline" && <ViewErrorBoundary viewName="Task Timeline"><TaskTimelineView /></ViewErrorBoundary>}
               {view === "finetune" && <ViewErrorBoundary viewName="Fine-Tuning"><FinetuneView /></ViewErrorBoundary>}
               {view === "reports" && <ViewErrorBoundary viewName="Reports"><ReportsView /></ViewErrorBoundary>}
+              {view === "employee-activity" && <ViewErrorBoundary viewName="Employee Activity"><EmployeeActivityView /></ViewErrorBoundary>}
             </Suspense>
           </div>
         </div>
