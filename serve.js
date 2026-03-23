@@ -2651,9 +2651,14 @@ async function requestHandler(req, res) {
           const chunks = [];
           let totalLen = 0;
           const MAX_CAPTURE = 50 * 1024;
+          let ended = false;
+
+          // Guard: if client disconnects early, stop forwarding
+          res.on("close", () => { ended = true; });
 
           routerRes.on("data", (chunk) => {
-            try { res.write(chunk); } catch { /* client disconnected */ }
+            if (ended) return; // client gone or stream ended — discard
+            try { res.write(chunk); } catch { ended = true; /* client disconnected */ }
             if (totalLen < MAX_CAPTURE) {
               chunks.push(chunk);
               totalLen += chunk.length;
@@ -2661,6 +2666,7 @@ async function requestHandler(req, res) {
           });
           routerRes.on("end", () => {
             // Debug: log.info("[router-proxy] stream ended", { totalLen });
+            ended = true;
             try { res.end(); } catch { /* client disconnected */ }
             // Fire-and-forget: extract agent response from SSE and run learning pipeline
             try {
@@ -3939,6 +3945,11 @@ process.on("uncaughtException", (err) => {
   if (err.code === "EADDRINUSE") {
     log.error(`[shre-chat] Port ${PORT} already in use`);
     process.exit(1);
+  }
+  // Stream race conditions are non-fatal — log and continue
+  if (err.code === "ERR_STREAM_WRITE_AFTER_END" || err.code === "ERR_STREAM_DESTROYED") {
+    log.warn("[shre-chat] Non-fatal stream error (suppressed)", { code: err.code });
+    return; // do NOT shutdown — these are benign SSE proxy races
   }
   log.error("[shre-chat] Uncaught exception", {}, err);
   // Graceful shutdown — flush sessions before exiting
