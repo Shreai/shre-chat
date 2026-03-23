@@ -494,25 +494,29 @@ export function ChatView() {
         const hist = sentHistoryRef.current;
         if (hist[hist.length - 1] !== input.trim()) {
           hist.push(input.trim());
-          if (hist.length > HISTORY_MAX) hist.splice(0, hist.length - HISTORY_MAX);
           localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
         }
         sentHistoryIdxRef.current = hist.length;
       }
       handleSend();
-    } else if (e.key === "ArrowUp" && !input) {
-      e.preventDefault();
+    } else if (e.key === "ArrowUp") {
       const hist = sentHistoryRef.current;
       if (hist.length === 0) return;
-      const idx = sentHistoryIdxRef.current - 1;
+      e.preventDefault();
+      // Clamp index to valid range before decrementing
+      const cur = Math.min(sentHistoryIdxRef.current, hist.length);
+      const idx = cur - 1;
       if (idx >= 0) {
         sentHistoryIdxRef.current = idx;
         setInput(hist[idx]);
       }
-    } else if (e.key === "ArrowDown" && sentHistoryIdxRef.current >= 0 && sentHistoryIdxRef.current < sentHistoryRef.current.length) {
-      e.preventDefault();
+    } else if (e.key === "ArrowDown") {
       const hist = sentHistoryRef.current;
-      const idx = sentHistoryIdxRef.current + 1;
+      if (hist.length === 0) return;
+      const cur = sentHistoryIdxRef.current;
+      if (cur < 0 || cur >= hist.length) return;
+      e.preventDefault();
+      const idx = cur + 1;
       if (idx < hist.length) {
         sentHistoryIdxRef.current = idx;
         setInput(hist[idx]);

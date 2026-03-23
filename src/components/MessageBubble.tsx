@@ -893,6 +893,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
         {!streaming && message.content && !editing && (
           isUser ? (
             <div className="flex items-center justify-end gap-0.5 mt-1 px-1">
+              <CopyButton content={message.content} />
               {onAnnotate && (
                 <button
                   onClick={() => { setAnnotationEditing(true); setAnnotationDraft(message.annotation || ""); }}

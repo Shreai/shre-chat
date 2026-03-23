@@ -5,7 +5,7 @@ import { createServer as createNetServer } from "node:net";
 // net.createConnection removed — using http upgrade proxy instead
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, appendFileSync, mkdirSync, openSync, readSync, closeSync, renameSync } from "node:fs";
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
-import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
+import { randomUUID, createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { join, extname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { URL } from "node:url";
@@ -119,6 +119,23 @@ chatDb.exec(`
     deleted_by   TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_deleted_at ON deleted_sessions(deleted_at);
+`);
+
+// ── Chat Messages (individual message persistence) ──────────────
+chatDb.exec(`
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    model       TEXT,
+    agent_id    TEXT,
+    user_id     TEXT NOT NULL DEFAULT 'system',
+    metadata    TEXT DEFAULT '{}',
+    created_at  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_messages_agent ON chat_messages(agent_id, created_at);
 `);
 
 // ── Migration: add tenant isolation columns ────────────────────────
@@ -276,6 +293,7 @@ chatDb.exec(`
     event_type TEXT NOT NULL,
     agent_id TEXT,
     model TEXT,
+    user_id TEXT,
     user_message TEXT,
     assistant_response TEXT,
     tokens_in INTEGER,
@@ -289,6 +307,9 @@ chatDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_chat_audit_agent ON chat_audit_log(agent_id);
   CREATE INDEX IF NOT EXISTS idx_chat_audit_trace ON chat_audit_log(trace_id);
 `);
+// Migration: add user_id column to existing chat_audit_log tables (must run BEFORE index creation)
+try { chatDb.exec(`ALTER TABLE chat_audit_log ADD COLUMN user_id TEXT`); } catch {}
+chatDb.exec(`CREATE INDEX IF NOT EXISTS idx_chat_audit_user ON chat_audit_log(user_id)`);
 
 // ── Chat Actions — tracks what the agent DID in text conversations ──
 chatDb.exec(`
@@ -344,6 +365,19 @@ const stmtRemoveFromTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE i
 const stmtListDeleted = chatDb.prepare(`SELECT id, title, agent_id, deleted_at, deleted_by FROM deleted_sessions WHERE user_id = ? ORDER BY deleted_at DESC LIMIT 50`);
 // Auto-purge trash older than 30 days
 const stmtPurgeTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE deleted_at < ?`);
+
+// ── Chat message prepared statements ────────────────────────────
+const stmtInsertMessage = chatDb.prepare(`
+  INSERT OR IGNORE INTO chat_messages (id, session_id, role, content, model, agent_id, user_id, metadata, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtGetMessages = chatDb.prepare(`
+  SELECT id, session_id, role, content, model, agent_id, user_id, metadata, created_at
+  FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?
+`);
+const stmtCountMessages = chatDb.prepare(`
+  SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?
+`);
 
 function upsertSession(s, userId = 'system', tenantId = 'default') {
   stmtUpsert.run(
@@ -483,6 +517,69 @@ async function extractAndLogSkills(agentId, conversationText) {
 
   } catch (err) {
     log.error("[skill-learn] Error:", err.message);
+  }
+}
+
+/**
+ * Build agent memory block from CortexDB for injection into system prompt.
+ * Queries long-term memories + shared knowledge from other agents.
+ * Returns formatted markdown or null on failure.
+ */
+async function buildAgentMemory(agentId) {
+  if (!agentId || agentId === "main") return null;
+  try {
+    const [memoriesRes, sharedRes] = await Promise.all([
+      // Long-term agent memories
+      fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data_type: "agent_memory",
+          filters: { agentId, importance: { $gte: 0.3 } },
+          limit: 20,
+          sort: { created_at: -1 },
+        }),
+        signal: AbortSignal.timeout(2000),
+      }).then(r => r.json()).catch(() => ({ results: [] })),
+      // Shared knowledge from other agents
+      fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data_type: "agent_shared_knowledge",
+          filters: { confidence: { $gte: 0.85 } },
+          limit: 5,
+          sort: { created_at: -1 },
+        }),
+        signal: AbortSignal.timeout(2000),
+      }).then(r => r.json()).catch(() => ({ results: [] })),
+    ]);
+
+    const memories = memoriesRes?.results || memoriesRes?.data || [];
+    const shared = sharedRes?.results || sharedRes?.data || [];
+
+    if (memories.length === 0 && shared.length === 0) return null;
+
+    const lines = ["## Your Memory (from past sessions)\n"];
+    for (const m of memories) {
+      const payload = m.payload || m;
+      const summary = payload.summary || payload.content || payload.text;
+      if (summary) lines.push(`- ${summary.slice(0, 300)}`);
+    }
+    if (shared.length > 0) {
+      lines.push("\n### Shared Knowledge (from other agents)\n");
+      for (const s of shared) {
+        const payload = s.payload || s;
+        const summary = payload.summary || payload.content || payload.text;
+        if (summary) lines.push(`- ${summary.slice(0, 200)}`);
+      }
+    }
+    const block = lines.join("\n");
+    log.info(`[agent-memory] Injected memory for ${agentId}: ${block.length} chars, ${memories.length} memories, ${shared.length} shared`);
+    return block;
+  } catch (err) {
+    log.warn(`[agent-memory] Failed to build memory for ${agentId}:`, err.message);
+    return null;
   }
 }
 
@@ -779,7 +876,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -1081,6 +1178,9 @@ async function requestHandler(req, res) {
   // and add CSP only on HTML responses (not API/JSON).
   const origWriteHead = res.writeHead.bind(res);
   res.writeHead = function (statusCode, reasonOrHeaders, maybeHeaders) {
+    // Guard: don't attempt to set headers after they've already been sent
+    if (res.headersSent) return res;
+
     // Normalize arguments — writeHead accepts (code, headers) or (code, reason, headers)
     let headers = maybeHeaders || (typeof reasonOrHeaders === "object" ? reasonOrHeaders : undefined);
     let reason = typeof reasonOrHeaders === "string" ? reasonOrHeaders : undefined;
@@ -1138,6 +1238,22 @@ async function requestHandler(req, res) {
   if (handleSuggestions(req, res, url, _routeUtils)) return;
   // Session persistence routes (SQLite)
   if (await handleSessions(req, res, url, _routeUtils)) return;
+
+  // ── GET /api/chat-sessions/:id/messages — retrieve persisted messages ──
+  const msgMatch = url.pathname.match(/^\/api\/chat-sessions\/([^/]+)\/messages$/);
+  if (msgMatch && req.method === "GET") {
+    const sessionId = decodeURIComponent(msgMatch[1]);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+    const offset = parseInt(url.searchParams.get("offset") || "0", 10);
+    try {
+      const messages = stmtGetMessages.all(sessionId, limit, offset);
+      const total = stmtCountMessages.get(sessionId)?.count || 0;
+      return json(res, { messages, total, limit, offset });
+    } catch (err) {
+      return json(res, { error: err.message }, 500);
+    }
+  }
+
   // Scheduled report routes
   if (await handleReports(req, res, url, _routeUtils)) return;
   // Agent handoff routes
@@ -2463,11 +2579,12 @@ async function requestHandler(req, res) {
       const traceId = randomUUID();
       try {
         const sessionId = req.headers["x-session-id"] || "unknown";
+        const auditUserId = authClaims?.sub || 'system';
         chatDb.prepare(
-          `INSERT INTO chat_audit_log (id, session_id, trace_id, event_type, agent_id, model, user_message, assistant_response, created_at)
-           VALUES (?, ?, ?, 'chat_exchange', ?, ?, ?, ?, ?)`
+          `INSERT INTO chat_audit_log (id, session_id, trace_id, event_type, agent_id, model, user_id, user_message, assistant_response, created_at)
+           VALUES (?, ?, ?, 'chat_exchange', ?, ?, ?, ?, ?, ?)`
         ).run(randomUUID(), sessionId, traceId, agentId || "shre", model || "unknown",
-          userMessage.slice(0, 5000), assistantResponse.slice(0, 10000), Date.now());
+          auditUserId, userMessage.slice(0, 5000), assistantResponse.slice(0, 10000), Date.now());
 
         // Auto-summarize session (lightweight — first user message + topic extraction)
         if (sessionId !== "unknown") {
@@ -2512,6 +2629,7 @@ async function requestHandler(req, res) {
     try {
       const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
       delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
+      delete routerHeaders["content-length"]; // body may be modified (memory injection) — let Node use chunked encoding
       // Strip client-supplied trust headers to prevent spoofing, then set from validated JWT
       delete routerHeaders["x-tenant-id"];
       delete routerHeaders["x-user-id"];
@@ -2521,8 +2639,9 @@ async function requestHandler(req, res) {
       }
       const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
         routerUrl,
-        { method: req.method, headers: routerHeaders },
+        { method: req.method, headers: routerHeaders, rejectUnauthorized: false },
         (routerRes) => {
+          // Debug: log.info("[router-proxy] response", { status: routerRes.statusCode, ct: routerRes.headers["content-type"]?.slice(0, 40) });
           const rHeaders = { ...routerRes.headers };
           rHeaders["cache-control"] = "no-cache";
           rHeaders["x-accel-buffering"] = "no";
@@ -2534,14 +2653,15 @@ async function requestHandler(req, res) {
           const MAX_CAPTURE = 50 * 1024;
 
           routerRes.on("data", (chunk) => {
-            res.write(chunk);
+            try { res.write(chunk); } catch { /* client disconnected */ }
             if (totalLen < MAX_CAPTURE) {
               chunks.push(chunk);
               totalLen += chunk.length;
             }
           });
           routerRes.on("end", () => {
-            res.end();
+            // Debug: log.info("[router-proxy] stream ended", { totalLen });
+            try { res.end(); } catch { /* client disconnected */ }
             // Fire-and-forget: extract agent response from SSE and run learning pipeline
             try {
               const sseText = Buffer.concat(chunks).toString("utf8");
@@ -2550,16 +2670,39 @@ async function requestHandler(req, res) {
               const userMessage = Array.isArray(parsed.messages)
                 ? (parsed.messages.filter(m => m.role === "user").pop()?.content || "").slice(0, 5000)
                 : "";
-              // Extract assistant text from SSE delta events
+              // Extract assistant text from SSE delta events OR plain JSON response
               let assistantResponse = "";
-              for (const line of sseText.split("\n")) {
-                if (!line.startsWith("data: ")) continue;
+              if (sseText.includes("data: ")) {
+                // SSE streaming response
+                for (const line of sseText.split("\n")) {
+                  if (!line.startsWith("data: ")) continue;
+                  try {
+                    const evt = JSON.parse(line.slice(6));
+                    if (evt.type === "delta" && evt.content) assistantResponse += evt.content;
+                    else if (evt.type === "content_block_delta" && evt.delta?.text) assistantResponse += evt.delta.text;
+                  } catch { /* not JSON or not a delta */ }
+                }
+              } else {
+                // Non-streaming JSON response (stream: false)
                 try {
-                  const evt = JSON.parse(line.slice(6));
-                  if (evt.type === "delta" && evt.content) assistantResponse += evt.content;
-                  else if (evt.type === "content_block_delta" && evt.delta?.text) assistantResponse += evt.delta.text;
-                } catch { /* not JSON or not a delta */ }
+                  const jsonRes = JSON.parse(sseText);
+                  if (typeof jsonRes.content === "string") assistantResponse = jsonRes.content;
+                  else if (Array.isArray(jsonRes.content)) assistantResponse = jsonRes.content.filter(b => b.type === "text").map(b => b.text).join("");
+                } catch { /* not valid JSON */ }
               }
+
+              // ── Persist user message to chat_messages ──
+              const sessionId = parsed.sessionId || parsed.session_id || req.headers["x-session-id"];
+              if (sessionId && userMessage) {
+                try {
+                  stmtInsertMessage.run(
+                    `msg-${Date.now()}-u-${Math.random().toString(36).slice(2, 8)}`,
+                    sessionId, "user", userMessage.slice(0, 50000),
+                    parsed.model || null, agentId, parsed.userId || "system", "{}", Date.now()
+                  );
+                } catch { /* best-effort */ }
+              }
+
               if (userMessage && assistantResponse.length >= 80) {
                 const model = parsed.model || "unknown";
                 logConversationToCortex(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
@@ -2570,6 +2713,45 @@ async function requestHandler(req, res) {
                 if (agentId !== "shre" && agentId !== "main") {
                   postAgentSummaryToComms(agentId, assistantResponse.slice(0, 500)).catch(() => {});
                 }
+                // ── Persist assistant message to chat_messages ──
+                if (sessionId) {
+                  try {
+                    stmtInsertMessage.run(
+                      `msg-${Date.now()}-a-${Math.random().toString(36).slice(2, 8)}`,
+                      sessionId, "assistant", assistantResponse.slice(0, 50000),
+                      parsed.model || null, agentId, "system", "{}", Date.now()
+                    );
+                  } catch { /* best-effort */ }
+                }
+                // ── Auto-summarize every 10 messages → agent memory in CortexDB ──
+                if (sessionId) {
+                  try {
+                    const msgCount = stmtCountMessages.get(sessionId)?.count || 0;
+                    if (msgCount > 0 && msgCount % 10 === 0) {
+                      const recentMsgs = stmtGetMessages.all(sessionId, 10, Math.max(0, msgCount - 10));
+                      const convoText = recentMsgs.map(m => `${m.role}: ${m.content.slice(0, 500)}`).join("\n");
+                      const memorySummary = {
+                        data_type: "agent_memory",
+                        payload: {
+                          agentId,
+                          category: "relationship",
+                          summary: `Session ${sessionId} (msgs ${msgCount - 9}-${msgCount}): ${convoText.slice(0, 1000)}`,
+                          importance: 0.5,
+                          sessionId,
+                          messageCount: msgCount,
+                          timestamp: new Date().toISOString(),
+                        },
+                        actor: "shre-chat",
+                      };
+                      fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/write`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(memorySummary),
+                        signal: AbortSignal.timeout(5000),
+                      }).catch(() => {});
+                    }
+                  } catch { /* auto-summarize is best-effort */ }
+                }
               }
             } catch { /* learning pipeline is best-effort */ }
           });
@@ -2579,8 +2761,30 @@ async function requestHandler(req, res) {
         log.error("[router-proxy] shre-router error:", err.message);
         if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: "shre-router unreachable" })); }
       });
-      req.on("data", (chunk) => { routerReq.write(chunk); reqBody += chunk; });
-      req.on("end", () => routerReq.end());
+      // Buffer request body for memory injection
+      const reqChunks = [];
+      req.on("data", (chunk) => { reqChunks.push(chunk); reqBody += chunk; });
+      req.on("end", async () => {
+        try {
+          const parsed = JSON.parse(reqBody || "{}");
+          const agentId = parsed.agentId || "shre";
+
+          // ── Agent memory injection ──
+          const memoryBlock = await buildAgentMemory(agentId).catch(() => null);
+          if (memoryBlock && parsed.systemPrompt !== undefined) {
+            parsed.systemPrompt = memoryBlock + "\n\n" + (parsed.systemPrompt || "");
+          } else if (memoryBlock) {
+            // Inject as first system message or add systemPrompt field
+            parsed.systemPrompt = memoryBlock;
+          }
+
+          routerReq.end(JSON.stringify(parsed));
+        } catch {
+          // If JSON parse fails, forward raw body
+          for (const chunk of reqChunks) routerReq.write(chunk);
+          routerReq.end();
+        }
+      });
     } catch (err) {
       log.error("[router-proxy] proxy failed:", err.message);
       if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: "Proxy error" })); }
@@ -2606,14 +2810,14 @@ async function requestHandler(req, res) {
       }
       const routerReq = (routerBase.startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
         routerUrl,
-        { method: req.method, headers: routerHeaders },
+        { method: req.method, headers: routerHeaders, rejectUnauthorized: false },
         (routerRes) => {
           const rHeaders = { ...routerRes.headers };
           rHeaders["cache-control"] = "no-cache";
           rHeaders["x-accel-buffering"] = "no";
           res.writeHead(routerRes.statusCode ?? 502, rHeaders);
-          routerRes.on("data", (chunk) => res.write(chunk));
-          routerRes.on("end", () => res.end());
+          routerRes.on("data", (chunk) => { try { res.write(chunk); } catch {} });
+          routerRes.on("end", () => { try { res.end(); } catch {} });
         },
       );
       routerReq.on("error", (err) => {
@@ -3324,9 +3528,33 @@ Examples:
     return json(res, { active: !!activePty });
   }
 
+  // ── GET /api/version — build fingerprint for cache-busting ──
+  if (url.pathname === "/api/version" && req.method === "GET") {
+    try {
+      const hash = createHash("md5");
+      const assetsDir = resolve(DIST, "assets");
+      if (existsSync(assetsDir)) {
+        for (const f of readdirSync(assetsDir).sort()) {
+          hash.update(f);
+        }
+      }
+      const indexPath = resolve(DIST, "index.html");
+      if (existsSync(indexPath)) {
+        hash.update(String(statSync(indexPath).mtimeMs));
+      }
+      const buildHash = hash.digest("hex").slice(0, 12);
+      return json(res, { version: buildHash, service: "shre-chat", builtAt: statSync(indexPath).mtime.toISOString() });
+    } catch (err) {
+      return json(res, { error: "Version check failed" }, 500);
+    }
+  }
+
   // ── Serve static files ───────────────────────────────────────────
 
   let filePath = resolve(DIST, url.pathname === "/" ? "index.html" : "." + url.pathname);
+  // Guard: if a prior handler already closed the response, bail out
+  if (res.writableEnded) return;
+
   // Path traversal guard — ensure resolved path is within DIST
   if (!filePath.startsWith(DIST)) filePath = join(DIST, "index.html");
   if (!existsSync(filePath)) {
@@ -3334,14 +3562,14 @@ Examples:
     // SPA fallback to index.html only for navigation requests (no file extension)
     const reqExt = extname(filePath);
     if (reqExt && reqExt !== ".html") {
-      res.writeHead(404);
-      res.end("Not found");
+      if (!res.writableEnded) { res.writeHead(404); res.end("Not found"); }
       return;
     }
     filePath = join(DIST, "index.html");
   }
 
   try {
+    if (res.writableEnded) return;
     const content = readFileSync(filePath);
     const ext = extname(filePath);
     // Vite hashed assets can be cached forever; HTML should never be cached
@@ -3349,8 +3577,7 @@ Examples:
     res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": cacheControl });
     res.end(content);
   } catch {
-    res.writeHead(404);
-    res.end("Not found");
+    if (!res.headersSent && !res.writableEnded) { res.writeHead(404); res.end("Not found"); }
   }
 }
 
