@@ -9,7 +9,7 @@ import { randomUUID, createHmac, createHash, timingSafeEqual } from "node:crypto
 import { join, extname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { URL } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline } from "shre-sdk";
@@ -378,6 +378,29 @@ const stmtGetMessages = chatDb.prepare(`
 const stmtCountMessages = chatDb.prepare(`
   SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?
 `);
+
+// ── Helper: date range for employee activity queries ──
+function getDateRange(period) {
+  const tz = "America/New_York";
+  const now = new Date();
+  const todayStr = now.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+  switch (period) {
+    case "yesterday": {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      const yStr = y.toLocaleDateString("en-CA", { timeZone: tz });
+      return { from: yStr, to: yStr };
+    }
+    case "week": {
+      const w = new Date(now); w.setDate(w.getDate() - 7);
+      return { from: w.toLocaleDateString("en-CA", { timeZone: tz }), to: todayStr };
+    }
+    case "month": {
+      const m = new Date(now); m.setDate(m.getDate() - 30);
+      return { from: m.toLocaleDateString("en-CA", { timeZone: tz }), to: todayStr };
+    }
+    default: return { from: todayStr, to: todayStr };
+  }
+}
 
 function upsertSession(s, userId = 'system', tenantId = 'default') {
   stmtUpsert.run(
@@ -876,7 +899,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -2798,6 +2821,90 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Employee Activity API (CortexDB party_liquor) ──
+  if (url.pathname === "/api/employee-activity" && req.method === "GET") {
+    try {
+      const period = url.searchParams?.get("period") || "today";
+      const { from, to } = getDateRange(period);
+      const sql = `SELECT cashier_name as name, COUNT(*) as transactions, ROUND(SUM(bill_amount)::numeric, 2) as sales, ROUND(AVG(bill_amount)::numeric, 2) as avg_ticket, SUM(CASE WHEN is_void THEN 1 ELSE 0 END) as voids, SUM(CASE WHEN bill_amount = 0 AND NOT is_void THEN 1 ELSE 0 END) as no_sales, SUM(CASE WHEN bill_amount < 0 THEN 1 ELSE 0 END) as refunds, ROUND(SUM(CASE WHEN is_void THEN bill_amount ELSE 0 END)::numeric, 2) as void_amount FROM party_liquor.invoices WHERE invoice_date >= '${from}' AND invoice_date <= '${to}T23:59:59' GROUP BY cashier_name ORDER BY sales DESC`;
+      const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
+      const employees = [];
+      let totalSales = 0, totalTransactions = 0, totalVoids = 0, totalNoSales = 0, totalRefunds = 0, totalVoidAmount = 0;
+      if (result) {
+        for (const line of result.split("\n")) {
+          if (!line.trim()) continue;
+          const [name, transactions, sales, avg_ticket, voids, no_sales, refunds, void_amount] = line.split("|");
+          const emp = {
+            name: name || "Unknown",
+            transactions: parseInt(transactions) || 0,
+            sales: parseFloat(sales) || 0,
+            avgTicket: parseFloat(avg_ticket) || 0,
+            voids: parseInt(voids) || 0,
+            noSales: parseInt(no_sales) || 0,
+            refunds: parseInt(refunds) || 0,
+            voidAmount: parseFloat(void_amount) || 0,
+          };
+          employees.push(emp);
+          totalSales += emp.sales;
+          totalTransactions += emp.transactions;
+          totalVoids += emp.voids;
+          totalNoSales += emp.noSales;
+          totalRefunds += emp.refunds;
+          totalVoidAmount += emp.voidAmount;
+        }
+      }
+      json(res, {
+        period,
+        summary: {
+          totalSales: Math.round(totalSales * 100) / 100,
+          totalTransactions,
+          totalVoids,
+          totalNoSales,
+          totalRefunds,
+          totalVoidAmount: Math.round(totalVoidAmount * 100) / 100,
+        },
+        employees,
+      });
+    } catch (err) {
+      log.warn("[employee-activity] Query failed", { error: err.message });
+      json(res, { error: "Employee activity query failed", detail: err.message }, 500);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/employee-activity/alerts" && req.method === "GET") {
+    try {
+      const since = url.searchParams?.get("since");
+      const limit = parseInt(url.searchParams?.get("limit")) || 50;
+      const sinceDate = since ? new Date(parseInt(since)).toISOString() : new Date(Date.now() - 86400000).toISOString();
+      const sql = `SELECT invoice_no, invoice_date, cashier_name, bill_amount, is_void, discount_amount FROM party_liquor.invoices WHERE (is_void = true OR bill_amount = 0 OR bill_amount < 0) AND invoice_date >= '${sinceDate}' ORDER BY invoice_date DESC LIMIT ${limit}`;
+      const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
+      const alerts = [];
+      if (result) {
+        for (const line of result.split("\n")) {
+          if (!line.trim()) continue;
+          const [invoiceNo, invoiceDate, cashier, amount, isVoid, discount] = line.split("|");
+          let type = "no_sale";
+          if (isVoid === "t") type = "void";
+          else if (parseFloat(amount) < 0) type = "refund";
+          alerts.push({
+            id: `alert-${invoiceNo}-${invoiceDate}`,
+            timestamp: invoiceDate,
+            type,
+            employee: cashier || "Unknown",
+            invoiceNo,
+            amount: parseFloat(amount) || 0,
+          });
+        }
+      }
+      json(res, alerts);
+    } catch (err) {
+      log.warn("[employee-activity] Alerts query failed", { error: err.message });
+      json(res, { error: "Employee activity alerts query failed", detail: err.message }, 500);
+    }
+    return;
+  }
+
   // ── Proxy /v1/* through shre-router (enforces trust gate, budgets, cost tracking) ──
   // All /v1/ requests route through shre-router — no direct OpenClaw bypass.
 
@@ -3921,6 +4028,63 @@ eventBus.subscribe("briefing.daily", async (event) => {
 }).catch((err) => {
   log.warn("[briefing] Failed to subscribe to briefing.daily events", {}, err);
 });
+
+// ── StorePulse 30-min performance reporter ──────────────────────────────────
+setInterval(async () => {
+  try {
+    const sql = `SELECT COUNT(*) as txns, ROUND(SUM(bill_amount)::numeric, 2) as sales, ROUND(AVG(bill_amount)::numeric, 2) as avg_ticket, SUM(CASE WHEN is_void THEN 1 ELSE 0 END) as voids, SUM(CASE WHEN bill_amount = 0 AND NOT is_void THEN 1 ELSE 0 END) as no_sales FROM party_liquor.invoices WHERE invoice_date >= CURRENT_DATE`;
+    const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
+    const [txns, sales, avgTicket, voids, noSales] = result.split("|");
+
+    const title = `Party Liquor Performance Update`;
+    const body = `Sales: $${sales || "0"} | Txns: ${txns || "0"} | Avg: $${avgTicket || "0"} | Voids: ${voids || "0"} | No-Sales: ${noSales || "0"}`;
+
+    // Insert notification
+    const notifId = `perf-${Date.now()}`;
+    chatDb.prepare("INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(notifId, "storepulse.performance", title, body, "storepulse", Date.now());
+
+    // Broadcast to WS clients
+    broadcastNotification("storepulse.performance", { id: notifId, title, body, source: "storepulse" });
+
+    log.info("[storepulse] Performance report sent", { txns, sales, voids, noSales });
+  } catch (err) {
+    log.warn("[storepulse] Performance report failed", { error: err.message });
+  }
+}, 1800000); // 30 minutes
+
+// ── StorePulse instant alert watcher ────────────────────────────────────────
+let lastAlertCheck = Date.now();
+setInterval(async () => {
+  try {
+    const sinceDate = new Date(lastAlertCheck - 120000).toISOString(); // 2min overlap for safety
+    const sql = `SELECT invoice_no, invoice_date, cashier_name, bill_amount, is_void FROM party_liquor.invoices WHERE (is_void = true OR bill_amount = 0 OR bill_amount < 0) AND invoice_date >= '${sinceDate}' AND invoice_date >= CURRENT_DATE ORDER BY invoice_date DESC LIMIT 10`;
+    const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
+
+    if (!result) { lastAlertCheck = Date.now(); return; }
+
+    for (const line of result.split("\n")) {
+      const [invoiceNo, invoiceDate, cashier, amount, isVoid] = line.split("|");
+      const alertId = `alert-${invoiceNo}-${invoiceDate}`;
+
+      // Dedup: only insert if not already notified
+      const existing = chatDb.prepare("SELECT id FROM notifications WHERE id = ?").get(alertId);
+      if (existing) continue;
+
+      const type = isVoid === "t" ? "VOID" : parseFloat(amount) === 0 ? "NO-SALE" : "REFUND";
+      const severity = type === "VOID" ? "warning" : "info";
+      const title = `${type}: ${cashier || "Unknown"} — Invoice #${invoiceNo}`;
+      const body = `Amount: $${Math.abs(parseFloat(amount) || 0).toFixed(2)} at ${new Date(invoiceDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`;
+
+      chatDb.prepare("INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(alertId, `storepulse.alert.${type.toLowerCase()}`, title, body, "storepulse", Date.now());
+
+      broadcastNotification(`storepulse.alert.${type.toLowerCase()}`, { id: alertId, title, body, source: "storepulse", severity });
+    }
+
+    lastAlertCheck = Date.now();
+  } catch (err) {
+    log.warn("[storepulse] Alert watcher failed", { error: err.message });
+  }
+}, 60000); // check every 60 seconds
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal) {
