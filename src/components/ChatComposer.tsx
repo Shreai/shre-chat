@@ -268,7 +268,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {(editingMsgIndex !== null || editingQueueId !== null) && (
             <div className="flex items-center gap-2 px-2 py-1 text-[11px] rounded-lg mb-1" style={{ background: "var(--c-bg-active)", color: "var(--c-accent)" }}>
               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              <span>{editingQueueId ? "Editing queue item — press Enter to save, Escape to cancel" : "Editing message — press Enter to resend, Escape to cancel"}</span>
+              <span>{editingQueueId ? "Editing queue item — press Ctrl+Enter to save, Escape to cancel" : "Editing message — press Ctrl+Enter to resend, Escape to cancel"}</span>
               <button
                 onClick={onCancelEdit}
                 className="ml-auto p-0.5 rounded hover:opacity-80"
@@ -543,7 +543,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       : { color: "var(--c-text-4)" }
                   }
                   disabled={!input.trim() || syncing || !writeEnabled}
-                  title={!writeEnabled ? "Read-only mode — enable Write in settings" : streaming ? `Add to queue${queueCount ? ` (${queueCount} queued)` : ""}` : "Send"}
+                  title={!writeEnabled ? "Read-only mode — enable Write in settings" : streaming ? `Add to queue${queueCount ? ` (${queueCount} queued)` : ""}` : "Send (Ctrl+Enter)"}
                   aria-label={streaming ? "Add to queue" : "Send message"}
                 >
                   {streaming ? (
