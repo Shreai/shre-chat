@@ -146,11 +146,14 @@ export function Sidebar() {
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-medium truncate">{s.title !== "New chat" ? s.title : agent.name}</span>
+                  <span className="text-[13px] font-medium truncate">{agent.name}</span>
                   <span className="text-[10px] shrink-0 ml-1" style={{ color: "var(--c-text-5)" }}>{timeStr}</span>
                 </div>
+                {s.title !== "New chat" && s.title !== agent.name && (
+                  <div className="text-[11px] truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>{s.title}</div>
+                )}
                 {preview && (
-                  <div className="text-[11px] truncate mt-0.5" style={{ color: "var(--c-text-4)" }}>{preview}</div>
+                  <div className="text-[10px] truncate mt-0.5" style={{ color: "var(--c-text-4)" }}>{preview}</div>
                 )}
                 {s.tags && s.tags.length > 0 && (
                   <div className="flex flex-wrap gap-0.5 mt-1">

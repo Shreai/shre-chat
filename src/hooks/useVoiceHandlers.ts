@@ -102,7 +102,8 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     const wakeAlreadyDetected = skipWakeRef.current;
     skipWakeRef.current = false;
 
-    if (wakeAlreadyDetected || !SpeechRec) {
+    // Always skip wake word on manual mic press — wake word is only for hands-free mode
+    if (wakeAlreadyDetected || !SpeechRec || !isHandsFreeRef.current) {
       setVoicePhase("recording");
       setInterimTranscript("Recording...");
       beginCapture();

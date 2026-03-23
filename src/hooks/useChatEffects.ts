@@ -112,7 +112,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   const lastSyncRef = useRef(0);
   const syncedAgentRef = useRef<string | null>(null);
   const recentWSSendRef = useRef(false);
-  const HISTORY_MAX = 20;
+  const HISTORY_MAX = Infinity;
   const HISTORY_KEY = "shre-sent-history";
   const [initHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
@@ -582,7 +582,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     if (sentHistoryRef.current.length > 0) return;
     const userMsgs = messages.filter((m) => m.role === "user").map((m) => m.content.trim());
     if (userMsgs.length > 0) {
-      const unique = [...new Set(userMsgs)].slice(-HISTORY_MAX);
+      const unique = [...new Set(userMsgs)];
       sentHistoryRef.current = unique;
       sentHistoryIdxRef.current = unique.length;
       localStorage.setItem(HISTORY_KEY, JSON.stringify(unique));

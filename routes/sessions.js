@@ -168,17 +168,17 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
               `SELECT cal.id, cal.session_id, cal.agent_id, cal.model, cal.user_message, cal.assistant_response, cal.created_at
                FROM chat_audit_fts fts
                JOIN chat_audit_log cal ON cal.rowid = fts.rowid
-               WHERE chat_audit_fts MATCH ? AND cal.created_at > ?
+               WHERE chat_audit_fts MATCH ? AND cal.created_at > ? AND (cal.user_id = ? OR cal.user_id IS NULL)
                ORDER BY cal.created_at DESC LIMIT ?`
-            ).all(query, sinceMs || 0, limit);
+            ).all(query, sinceMs || 0, userId, limit);
           } catch {
             // Fallback to LIKE if FTS5 not available
             auditHits = chatDb.prepare(
               `SELECT id, session_id, agent_id, model, user_message, assistant_response, created_at
                FROM chat_audit_log
-               WHERE (user_message LIKE ? OR assistant_response LIKE ?) AND created_at > ?
+               WHERE (user_message LIKE ? OR assistant_response LIKE ?) AND created_at > ? AND (user_id = ? OR user_id IS NULL)
                ORDER BY created_at DESC LIMIT ?`
-            ).all(`%${query}%`, `%${query}%`, sinceMs || 0, limit);
+            ).all(`%${query}%`, `%${query}%`, sinceMs || 0, userId, limit);
           }
           for (const a of auditHits) {
             results.push({
@@ -263,9 +263,12 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       let body;
       try { body = await collectBody(req, 2 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
       try {
+        const claims = checkAuth(req);
+        const userId = claims?.sub || 'system';
+        const tenantId = claims?.activeWorkspaceId || 'default';
         const session = JSON.parse(body);
         session.id = url.pathname.split('/').pop();
-        upsertSession(session);
+        upsertSession(session, userId, tenantId);
         json(res, { ok: true });
         return true;
       } catch (e) {
@@ -302,7 +305,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
             const clientUpdated = cs.updatedAt || cs.updated_at || 0;
             const serverUpdated = existing ? existing.updated_at : 0;
             if (clientUpdated >= serverUpdated) {
-              upsertSession(cs);
+              upsertSession(cs, userId, claims?.activeWorkspaceId || 'default');
             }
           }
         });

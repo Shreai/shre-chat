@@ -15,7 +15,7 @@ const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.or
 // Gateway auth — token fetched from server at runtime (never bundled in JS)
 
 // Active agent ID — defaults to shre, switchable
-let currentAgentId = "main";
+let currentAgentId = "shre";
 let currentAgentModel = "claude-sonnet-4-6";
 
 /** Get user's preferred language from localStorage (set via profile or chat settings) */
@@ -401,6 +401,12 @@ export interface StreamCallbacks {
  * Send a chat message through OpenClaw gateway (streaming).
  * Falls back to shre-router → direct API if gateway is down.
  */
+export interface ThreadContext {
+  parentSessionId?: string;
+  branchPoint?: number;
+  replyToMessageIndex?: number;
+}
+
 export async function sendMessage(
   message: string,
   history: ChatMessage[],
@@ -411,6 +417,7 @@ export async function sendMessage(
   modelOverride?: string,
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
   openclawMode?: boolean,
+  threadContext?: ThreadContext,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? "main";
@@ -427,7 +434,7 @@ export async function sendMessage(
   // - Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
   // - OpenClaw: shre-router → OpenClaw gateway → agent workspace (SOUL.md, tools, session memory)
   try {
-    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode);
+    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode, threadContext);
   } catch (err) {
     if (done) return;
     if (signal?.aborted) {
@@ -497,6 +504,7 @@ async function streamViaFallback(
   modelOverride?: string,
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
   openclawMode?: boolean,
+  threadContext?: ThreadContext,
 ): Promise<void> {
   callbacks.onStatus?.("connecting");
 
@@ -514,9 +522,12 @@ async function streamViaFallback(
       model: modelOverride || "auto",
       stream: true,
       agentId: currentAgentId,
+      sessionId: activeSessionKey,
+      tenantId: "platform",
       ...(attachments?.length ? { attachments } : {}),
       ...(openclawMode ? { openclawMode: true } : {}),
       ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
+      ...(threadContext ? { threadContext } : {}),
     }),
     signal,
   });

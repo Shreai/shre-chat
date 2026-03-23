@@ -42,6 +42,29 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 
+// ── Version polling — detect new builds and auto-reload ──
+let _knownVersion: string | null = null;
+async function checkVersion() {
+  try {
+    const res = await fetch("/api/version", { signal: AbortSignal.timeout(3000), cache: "no-store" });
+    if (!res.ok) return;
+    const { version } = await res.json();
+    if (!_knownVersion) { _knownVersion = version; return; }
+    if (version !== _knownVersion) {
+      _knownVersion = version;
+      // Show non-intrusive update banner
+      const banner = document.createElement("div");
+      banner.id = "update-banner";
+      banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#2563eb;color:#fff;text-align:center;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;";
+      banner.textContent = "A new version is available. Click to reload.";
+      banner.onclick = () => window.location.reload();
+      document.body.prepend(banner);
+    }
+  } catch { /* non-blocking */ }
+}
+checkVersion();
+setInterval(checkVersion, 60_000);
+
 // Register service worker for offline app-shell caching + auto-update
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").then((reg) => {

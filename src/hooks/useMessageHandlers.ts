@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { sendMessage, generateAITitle, type ChatMessage, type ToolResult } from "../openclaw";
+import { sendMessage, generateAITitle, type ChatMessage, type ToolResult, type ThreadContext } from "../openclaw";
 import { sendChatWS, isWSConnected, queueMessage } from "../gateway-ws";
 import { uid, generateTitle, getAgent, type UploadedFile, type Session } from "../store";
 import { playNotifSound, mib007Link } from "../chat-utils";
@@ -994,7 +994,12 @@ Conversation Memory: You have access to the full conversation in this session. W
         });
         actions.addActivity(sessionId, "executing", `${statusIcon} ${toolLabel}${durationStr}`);
       },
-    }, controller.signal, sessionId, selectedModel || undefined, attachments.length > 0 ? attachments : undefined, openclawMode);
+    }, controller.signal, sessionId, selectedModel || undefined, attachments.length > 0 ? attachments : undefined, openclawMode,
+    // Phase 4: thread context propagation for branch/reply continuity
+    (session?.parentId || replyToIndex !== null) ? {
+      ...(session?.parentId ? { parentSessionId: session.parentId, branchPoint: session.messages.length } : {}),
+      ...(replyToIndex !== null ? { replyToMessageIndex: replyToIndex } : {}),
+    } as ThreadContext : undefined);
   }, [input, streaming, syncing, ensureSession, sessions, activeSessionId, actions, pendingFiles, wsConnected, wsReconnecting, activeAgentId, currentAgent.name, cliMode, openclawMode, sendViaCLI, selectedModel, compareMode, compareModels, startRun, addStep, updateStep, completeRun, executeSlashCommand, generateSuggestions, identityVerified, pendingMessage, verifyIdentity]);
 
   // Keep handleSend accessible via ref for voice auto-send
