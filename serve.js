@@ -929,7 +929,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/voice-quality", "/api/sitemap"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -3567,6 +3567,62 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("[notifications] Failed to create notification", { error: err.message });
       json(res, { error: "Failed to create notification", detail: err.message }, 500);
+    }
+    return;
+  }
+
+  // ── POST /api/messages/append — internal loopback: post a message into an existing chat session ──
+  // Used by ellie-escalation to post resolution messages back into the originating chat session.
+  if (url.pathname === "/api/messages/append" && req.method === "POST") {
+    try {
+      let rawBody;
+      try { rawBody = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
+      const parsed = JSON.parse(rawBody);
+      const { sessionId, role = "assistant", content, source, metadata } = parsed;
+
+      if (!sessionId || !content) {
+        return json(res, { error: "sessionId and content are required" }, 400);
+      }
+
+      // Verify session exists
+      const session = chatDb.prepare("SELECT id, user_id FROM chat_sessions WHERE id = ?").get(sessionId);
+      if (!session) {
+        return json(res, { error: "Session not found" }, 404);
+      }
+
+      // Insert message into chat_messages table
+      const msgId = `msg-${Date.now()}-${source || "svc"}-${Math.random().toString(36).slice(2, 8)}`;
+      const now = Date.now();
+      stmtInsertMessage.run(
+        msgId,
+        sessionId,
+        role,
+        content.slice(0, 50000),
+        null,               // model
+        source || "system",  // agent_id
+        session.user_id || "system",
+        JSON.stringify(metadata || {}),
+        now
+      );
+
+      // Update session's updated_at so it surfaces in recents
+      chatDb.prepare("UPDATE chat_sessions SET updated_at = ? WHERE id = ?").run(now, sessionId);
+
+      // Broadcast via WebSocket so the user sees the message in real-time
+      broadcastNotification("chat.message", {
+        id: msgId,
+        sessionId,
+        role,
+        content,
+        source: source || "system",
+        metadata: metadata || {},
+      });
+
+      log.info("[messages/append] Message appended to session", { msgId, sessionId, role, source });
+      json(res, { ok: true, id: msgId });
+    } catch (err) {
+      log.warn("[messages/append] Failed to append message", { error: err.message });
+      json(res, { error: "Failed to append message", detail: err.message }, 500);
     }
     return;
   }
