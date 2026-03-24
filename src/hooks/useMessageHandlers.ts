@@ -105,6 +105,50 @@ export interface UseMessageHandlersReturn {
   pendingSuggestionSendRef: React.MutableRefObject<boolean>;
 }
 
+/** Version stamp for the default system prompt — bump when prompt logic changes. */
+export const SYSTEM_PROMPT_VERSION = "1.0.0";
+
+/**
+ * Validate custom system prompt — reject injection patterns and excessive length.
+ * Returns the prompt if safe, or null if it should be discarded.
+ */
+function validateCustomPrompt(prompt: string): string | null {
+  if (!prompt || typeof prompt !== "string") return null;
+
+  // Length cap: ~4000 tokens ≈ 14000 chars
+  const MAX_CHARS = 14_000;
+  if (prompt.length > MAX_CHARS) {
+    console.warn("[shre] Custom system prompt exceeds length limit, using default", {
+      length: prompt.length, max: MAX_CHARS
+    });
+    return null;
+  }
+
+  // Injection pattern detection — refuse prompts that try to override identity or instructions
+  const INJECTION_PATTERNS = [
+    /ignore\s+(all\s+)?previous\s+(instructions?|prompts?|context)/i,
+    /disregard\s+(all\s+)?previous/i,
+    /forget\s+(everything|all|your)\s*(previous|prior|above)/i,
+    /you\s+are\s+now\s+(?!an?\s+AI\s+agent)/i,  // "you are now X" but allow "you are now an AI agent"
+    /new\s+identity|new\s+persona|pretend\s+to\s+be/i,
+    /override\s+(system|default|base)\s+(prompt|instructions?)/i,
+    /do\s+not\s+follow\s+(the\s+)?(system|default|previous)/i,
+    /\bsystem\s*:\s*\{/i,  // JSON injection attempt
+    /<\/?system>/i,  // XML tag injection
+  ];
+
+  for (const pattern of INJECTION_PATTERNS) {
+    if (pattern.test(prompt)) {
+      console.warn("[shre] Custom system prompt contains injection pattern, using default", {
+        pattern: pattern.source,
+      });
+      return null;
+    }
+  }
+
+  return prompt;
+}
+
 export function useMessageHandlers(params: UseMessageHandlersParams): UseMessageHandlersReturn {
   const {
     input, setInput, streaming, syncing, writeEnabled,
@@ -552,8 +596,12 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     let messageText = sendText;
 
     // Prepend quoted reply context so the model knows which message the user is responding to
-    if (replyToIndex !== null && filteredMessages[replyToIndex]) {
-      const replyMsg = filteredMessages[replyToIndex];
+    // Try filteredMessages first; fall back to full session messages when the reply target
+    // has been scrolled out of the virtualized/filtered list (dangling reference).
+    const replyMsg = replyToIndex !== null
+      ? (filteredMessages[replyToIndex] ?? (session?.messages ?? [])[replyToIndex] ?? null)
+      : null;
+    if (replyMsg) {
       const replySnippet = replyMsg.content.length > 500
         ? replyMsg.content.slice(0, 500) + "..."
         : replyMsg.content;
@@ -802,7 +850,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const currentMessages = replyToIndex !== null
       ? allMessages.slice(0, replyToIndex + 1)
       : allMessages;
-    const defaultSystemPrompt = `You are ${currentAgent.name}, an AI agent (${currentAgent.id}) in the Nirlab ecosystem. You serve Nir, the founder of Nirlab Inc. Be intelligent, concise, and proactive. Keep responses focused and actionable. Use markdown when helpful.
+    const defaultSystemPrompt = `[prompt-version: ${SYSTEM_PROMPT_VERSION}] You are ${currentAgent.name}, an AI agent (${currentAgent.id}) in the Nirlab ecosystem. You serve Nir, the founder of Nirlab Inc. Be intelligent, concise, and proactive. Keep responses focused and actionable. Use markdown when helpful.
 
 UI Capabilities: This chat app has a Preview tab that renders HTML. When the user asks you to create or show HTML content (pages, charts, dashboards, visualizations), output it in a \`\`\`html code block. The user can click "Preview" in the sidebar and "Load from Chat" to render it live \u2014 do NOT tell them to save as a file. You can generate full HTML pages with inline CSS and JavaScript.
 
@@ -871,8 +919,54 @@ Conversation Memory: You have access to the full conversation in this session. W
       }
     } catch { /* non-fatal */ }
 
-    const systemPrompt = session?.systemPrompt
-      ? `${session.systemPrompt}\n\n${defaultSystemPrompt}${taskContext}${sessionContext}`
+    // Build contextHealth — signal which client-side sources succeeded/failed
+    const contextHealth: Record<string, "ok" | "missing" | "error"> = {
+      tasks: "missing",
+      crossSession: "missing",
+    };
+    try {
+      if (taskResult.status === "fulfilled" && taskResult.value.ok) {
+        contextHealth.tasks = "ok";
+      } else if (taskResult.status === "rejected") {
+        contextHealth.tasks = "error";
+      } else if (taskResult.status === "fulfilled" && !taskResult.value.ok) {
+        contextHealth.tasks = "error";
+      }
+    } catch { contextHealth.tasks = "error"; }
+
+    try {
+      if (sessionResult.status === "fulfilled" && sessionResult.value.ok) {
+        contextHealth.crossSession = "ok";
+      } else if (sessionResult.status === "rejected") {
+        contextHealth.crossSession = "error";
+      } else if (sessionResult.status === "fulfilled" && !sessionResult.value.ok) {
+        contextHealth.crossSession = "error";
+      }
+    } catch { contextHealth.crossSession = "error"; }
+
+    // Auto-create support task on context fetch failure (non-blocking)
+    if (contextHealth.tasks === "error" || contextHealth.crossSession === "error") {
+      const failedSources = Object.entries(contextHealth)
+        .filter(([, v]) => v === "error")
+        .map(([k]) => k);
+      fetch("/api/tasks/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `Context fetch failed: ${failedSources.join(", ")}`,
+          description: `Client-side context sources failed during chat assembly.\nFailed: ${failedSources.join(", ")}\nSession: ${sessionId}\nTimestamp: ${new Date().toISOString()}`,
+          priority: "low",
+          tags: ["context.fetch.failed", "auto-created"],
+        }),
+      }).catch(() => {}); // Fire and forget
+    }
+
+    const validatedCustomPrompt = session?.systemPrompt
+      ? validateCustomPrompt(session.systemPrompt)
+      : null;
+
+    const systemPrompt = validatedCustomPrompt
+      ? `${validatedCustomPrompt}\n\n${defaultSystemPrompt}${taskContext}${sessionContext}`
       : `${defaultSystemPrompt}${taskContext}${sessionContext}`;
 
     await sendMessage(messageText, currentMessages, systemPrompt, {
@@ -1026,7 +1120,8 @@ Conversation Memory: You have access to the full conversation in this session. W
     (session?.parentId || replyToIndex !== null) ? {
       ...(session?.parentId ? { parentSessionId: session.parentId, branchPoint: session.messages.length } : {}),
       ...(replyToIndex !== null ? { replyToMessageIndex: replyToIndex } : {}),
-    } as ThreadContext : undefined);
+    } as ThreadContext : undefined,
+    contextHealth);
   }, [input, streaming, syncing, ensureSession, sessions, activeSessionId, actions, pendingFiles, wsConnected, wsReconnecting, activeAgentId, currentAgent.name, cliMode, openclawMode, sendViaCLI, selectedModel, compareMode, compareModels, startRun, addStep, updateStep, completeRun, executeSlashCommand, generateSuggestions, identityVerified, pendingMessage, verifyIdentity]);
 
   // Keep handleSend accessible via ref for voice auto-send

@@ -136,8 +136,8 @@ export function MessageList(props: MessageListProps) {
     onBranch: () => onBranch(i),
     onReaction: (emoji: string) => onReaction(i, emoji),
     onReply: () => onReply(i),
-    replyPreview: msg.replyTo != null && filteredMessages[msg.replyTo]
-      ? filteredMessages[msg.replyTo].content.replace(/\n/g, " ").slice(0, 80)
+    replyPreview: msg.replyTo != null
+      ? (filteredMessages[msg.replyTo] ?? messages[msg.replyTo])?.content.replace(/\n/g, " ").slice(0, 80) ?? null
       : null,
     processRun: getRunForMessage(msg, i),
     onRetry: (!streaming && msg.role === "assistant" && msg.content.startsWith("Error:"))

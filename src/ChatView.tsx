@@ -1734,7 +1734,7 @@ export function ChatView() {
         onMentionSelect={onMentionSelect}
         mentionAgent={mentionAgent}
         replyToIndex={state.replyToIndex}
-        replyToContent={state.replyToIndex !== null && filteredMessages[state.replyToIndex] ? filteredMessages[state.replyToIndex].content : null}
+        replyToContent={state.replyToIndex !== null ? (filteredMessages[state.replyToIndex]?.content ?? messages[state.replyToIndex]?.content ?? null) : null}
         onCancelReply={() => actions.setReplyTo(null)}
         editingMsgIndex={editingMsgIndex}
         editingQueueId={editingQueueId}

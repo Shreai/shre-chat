@@ -1298,6 +1298,18 @@ async function requestHandler(req, res) {
   const isRouterProxy = url.pathname.startsWith("/api/router/");
   if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy) {
     if (!authClaims) {
+      // Emit structured auth failure event for security dashboard
+      try {
+        const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+        const reason = req.headers.authorization ? "invalid_signature" : "no_token";
+        eventBus.publish("proxy.auth.failure", "warning", {
+          tenantId: "unknown",
+          reason,
+          ip: clientIp,
+          path: url.pathname,
+          timestamp: Date.now(),
+        }).catch(() => {});
+      } catch { /* non-blocking */ }
       return json(res, { error: "Unauthorized", code: "AUTH_REQUIRED" }, 401);
     }
   }

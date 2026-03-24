@@ -8,6 +8,8 @@
  * to get optimal model, then calls that model's API.
  */
 
+import { SYSTEM_PROMPT_VERSION } from "./hooks/useMessageHandlers";
+
 const OPENCLAW_URL = "/v1/responses";
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
 const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
@@ -418,6 +420,7 @@ export async function sendMessage(
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
   openclawMode?: boolean,
   threadContext?: ThreadContext,
+  contextHealth?: Record<string, "ok" | "missing" | "error">,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? "main";
@@ -434,7 +437,7 @@ export async function sendMessage(
   // - Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
   // - OpenClaw: shre-router → OpenClaw gateway → agent workspace (SOUL.md, tools, session memory)
   try {
-    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode, threadContext);
+    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode, threadContext, contextHealth);
   } catch (err) {
     if (done) return;
     if (signal?.aborted) {
@@ -505,6 +508,7 @@ async function streamViaFallback(
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
   openclawMode?: boolean,
   threadContext?: ThreadContext,
+  contextHealth?: Record<string, "ok" | "missing" | "error">,
 ): Promise<void> {
   callbacks.onStatus?.("connecting");
 
@@ -524,10 +528,12 @@ async function streamViaFallback(
       agentId: currentAgentId,
       sessionId: activeSessionKey,
       tenantId: "platform",
+      promptVersion: SYSTEM_PROMPT_VERSION,
       ...(attachments?.length ? { attachments } : {}),
       ...(openclawMode ? { openclawMode: true } : {}),
       ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
       ...(threadContext ? { threadContext } : {}),
+      ...(contextHealth ? { contextHealth } : {}),
     }),
     signal,
   });
