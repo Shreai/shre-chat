@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { sendMessage, generateAITitle, type ChatMessage, type ToolResult, type ThreadContext } from "../openclaw";
-import { sendChatWS, isWSConnected, queueMessage } from "../gateway-ws";
+import { sendChatWS, isWSConnected, queueMessage, onStateChange } from "../gateway-ws";
 import { uid, generateTitle, getAgent, type UploadedFile, type Session } from "../store";
 import { playNotifSound, mib007Link } from "../chat-utils";
 import { detectTaskIntent, createTaskFromChat, detectIssueIntent, createIssueFromChat } from "../taskDetector";
@@ -179,6 +179,31 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
   const pendingSuggestionSendRef = useRef(false);
 
   const currentAgent = getAgent(activeAgentId);
+
+  // Surface WS connection state changes as system messages
+  useEffect(() => {
+    const unsubscribe = onStateChange((_state, info) => {
+      const activeSession = sessions[0]?.id;
+      if (!activeSession) return;
+
+      if (info.state === "disconnected" || info.state === "failed") {
+        actions.addMessage(activeSession, {
+          role: "assistant",
+          content: `[system] ${info.errorMessage || "Gateway disconnected"}`,
+          timestamp: Date.now(),
+          meta: { system: "true", type: "system", event: "disconnect" },
+        });
+      } else if (info.state === "connected") {
+        actions.addMessage(activeSession, {
+          role: "assistant",
+          content: "[system] Gateway reconnected",
+          timestamp: Date.now(),
+          meta: { system: "true", type: "system", event: "reconnect" },
+        });
+      }
+    });
+    return unsubscribe;
+  }, [sessions, actions]);
 
   // Follow-up suggestion generation
   const generateSuggestions = useCallback(async (assistantResponse: string) => {
@@ -692,6 +717,12 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const useOpenClawWS = isWSConnected();
     if (useOpenClawWS) {
       actions.addFeed(sessionId, "gateway", "OpenClaw Gateway (full agent)", { transport: "ws" });
+      actions.addMessage(sessionId, {
+        role: "assistant",
+        content: "[system] Routing via OpenClaw Gateway (WebSocket)",
+        timestamp: Date.now(),
+        meta: { system: "true", type: "system", event: "route-change" },
+      });
 
       let fullResponse = "";
       streamBufferRef.current = "";
@@ -773,6 +804,12 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             setCompacting(false);
             actions.addActivity(sessionId, "error", `WS error: ${error}`);
             actions.addFeed(sessionId, "error", `WS: ${error}`);
+            actions.addMessage(sessionId, {
+              role: "assistant",
+              content: `[system] Connection error: ${error || "Unknown error"}`,
+              timestamp: Date.now(),
+              meta: { system: "true", type: "system", event: "error" },
+            });
             addStep(runId, { kind: "error", label: error || "Error" });
             completeRun(runId);
             resolveAndClear({ ok: false, error });
@@ -831,12 +868,26 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       if (wsResult.ok) return;
 
       actions.addFeed(sessionId, "fallback", `WS failed (${wsResult.error}), trying shre-router...`);
+      actions.addMessage(sessionId, {
+        role: "assistant",
+        content: `[system] WebSocket failed — falling back to shre-router HTTP`,
+        timestamp: Date.now(),
+        meta: { system: "true", type: "system", event: "route-fallback" },
+      });
       actions.setStatusLine("Falling back to shre-router...");
     }
 
     // shre-router smart gateway
     const routeLabel = selectedModel ? `shre-router \u2192 ${selectedModel.split("/")[1] || selectedModel}` : "shre-router (auto)";
     actions.addFeed(sessionId, "gateway", routeLabel, { transport: "http" });
+    if (!useOpenClawWS) {
+      actions.addMessage(sessionId, {
+        role: "assistant",
+        content: `[system] Routing via shre-router${selectedModel ? ` → ${selectedModel.split("/").pop() || selectedModel}` : " (auto)"}`,
+        timestamp: Date.now(),
+        meta: { system: "true", type: "system", event: "route-change" },
+      });
+    }
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1033,7 +1084,15 @@ Conversation Memory: You have access to the full conversation in this session. W
           let friendlyError = error;
           if (error.includes("502") || error.includes("unreachable")) friendlyError = "OpenClaw gateway is down. Check that it's running.";
           else if (error.includes("rate") || error.includes("429")) friendlyError = "Rate limited \u2014 too many requests. Wait a moment and try again.";
-          else if (error.includes("401") || error.includes("403") || error.includes("auth")) friendlyError = "Authentication failed. Check your API keys.";
+          else if (error.includes("401") || error.includes("403") || error.includes("auth")) {
+            friendlyError = "Authentication failed. Check your API keys.";
+            actions.addMessage(sessionId, {
+              role: "assistant",
+              content: "[system] Session expired — please sign in again",
+              timestamp: Date.now(),
+              meta: { system: "true", type: "system", event: "session-expired" },
+            });
+          }
           else if (error.includes("model") && error.includes("not found")) friendlyError = `Model not available. Try switching to a different model.`;
           else if (error.includes("timeout")) friendlyError = "Request timed out. The model may be overloaded.";
           else if (error.includes("fetch") || error.includes("network")) friendlyError = "Network error. Check your connection.";
