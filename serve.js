@@ -1185,8 +1185,12 @@ function loadCliHistory(agentId, maxMessages = 20) {
 // ── Route module initialization ──────────────────────────────────────
 const handleAuth = registerAuthRoutes({ log });
 const intentRouter = registerIntentRouter({ log, chatDb });
-const handleVoice = registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb });
 const conversationEvaluator = createConversationEvaluator({ log, chatDb });
+const handleVoice = registerVoiceRoutes({
+  log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb,
+  logConversationToCortex, emitConversationComplete, extractAndLogSkills,
+  conversationLearner, conversationEvaluator, feedbackPipeline,
+});
 const handleTasks = registerTaskRoutes({ log });
 const handleSessions = registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stmtDelete, stmtSoftDelete, stmtRestoreDeleted, stmtRemoveFromTrash, stmtListDeleted, stmtPurgeTrash, upsertSession, dbSessionToClient, checkAuth });
 const handleSuggestions = registerSuggestionsRoutes({ log, loadReminders, getBriefingCache: () => _briefingCache });
