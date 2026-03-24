@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from "react";
 import type { ChatMessage } from "../openclaw";
+import type { AppActions } from "../store";
 import { abortChatWS } from "../gateway-ws";
 
 export interface UseKeyboardShortcutsParams {
@@ -13,26 +14,22 @@ export interface UseKeyboardShortcutsParams {
   setSelectedMsgIndex: React.Dispatch<React.SetStateAction<number | null>>;
   chatSearchOpen: boolean;
   setChatSearchOpen: (v: boolean) => void;
-  chatSearchRef: React.RefObject<HTMLInputElement>;
+  chatSearchRef: React.RefObject<HTMLInputElement | null>;
   closeChatSearch: () => void;
   globalSearchOpen: boolean;
   setGlobalSearchOpen: (v: boolean) => void;
-  globalSearchRef: React.RefObject<HTMLInputElement>;
+  globalSearchRef: React.RefObject<HTMLInputElement | null>;
   shortcutsOpen: boolean;
   setShortcutsOpen: (v: boolean) => void;
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean | ((prev: boolean) => boolean)) => void;
   abortRef: React.MutableRefObject<AbortController | null>;
-  inputRef: React.RefObject<HTMLTextAreaElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   pendingEditSendRef: React.MutableRefObject<boolean>;
   setInput: (v: string) => void;
   setEditingMsgIndex: (v: number | null) => void;
   setEditingMsgText: (v: string) => void;
-  actions: {
-    newSession: () => string;
-    switchSession: (id: string) => void;
-    replaceSessionMessages: (id: string, msgs: ChatMessage[]) => void;
-  };
+  actions: Pick<AppActions, "newSession" | "switchSession" | "replaceSessionMessages">;
   virtualizer: { scrollToIndex: (idx: number, opts?: any) => void };
 }
 

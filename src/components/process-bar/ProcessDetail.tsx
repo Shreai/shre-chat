@@ -1,12 +1,12 @@
 import type { ProcessRun, ProcessStep, ProcessStepKind } from "./types";
 
 const ICONS: Record<ProcessStepKind, string> = {
-  thinking: "🧠", planning: "📋", tool_use: "⚡", generating: "✎",
+  thinking: "🧠", planning: "📋", tool_use: "⚡", tool_result: "📦", generating: "✎",
   compacting: "⟳", done: "✅", attention: "⚠️", approval: "🔐", error: "❌",
 };
 
 const COLORS: Record<ProcessStepKind, string> = {
-  thinking: "#fbbf24", planning: "#a78bfa", tool_use: "#60a5fa", generating: "#4ade80",
+  thinking: "#fbbf24", planning: "#a78bfa", tool_use: "#60a5fa", tool_result: "#22d3ee", generating: "#4ade80",
   compacting: "#fb923c", done: "#34d399", attention: "#facc15", approval: "#f59e0b", error: "#f87171",
 };
 

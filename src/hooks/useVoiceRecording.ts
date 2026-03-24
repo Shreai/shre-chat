@@ -22,9 +22,9 @@ export interface UseVoiceRecordingReturn {
   isHandsFree: boolean;
   setIsHandsFree: React.Dispatch<React.SetStateAction<boolean>>;
   voiceMode: boolean;
-  setVoiceMode: React.Dispatch<React.SetStateAction<boolean>>;
+  setVoiceMode: (v: boolean) => void;
   ttsVoice: string;
-  setTtsVoice: React.Dispatch<React.SetStateAction<string>>;
+  setTtsVoice: (v: string) => void;
   speechSupported: boolean;
   // Refs
   analyserRef: React.MutableRefObject<AnalyserNode | null>;

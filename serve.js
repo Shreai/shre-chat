@@ -1319,7 +1319,7 @@ async function requestHandler(req, res) {
 
   // ── GET /api/sitemap — view registry for agent deep-linking ──
   if (url.pathname === "/api/sitemap" && req.method === "GET") {
-    const mib007Base = "https://localhost:5520";
+    const mib007Base = serviceUrl("mib007");
     const prefix = "SHR";
     const sitemap = [
       { id: "chat", label: "Chat", description: "AI chat with Shre and agents", category: "work", type: "view", keywords: ["chat", "ask", "message", "talk", "conversation"] },
@@ -1994,7 +1994,7 @@ async function requestHandler(req, res) {
   if (url.pathname === "/api/branding/public" && req.method === "GET") {
     const domain = url.searchParams.get("domain") || "localhost";
     try {
-      const brandRes = await fetch(`http://localhost:5416/v1/branding/public/${encodeURIComponent(domain)}`, {
+      const brandRes = await fetch(`${serviceUrl("shre-brand")}/v1/branding/public/${encodeURIComponent(domain)}`, {
         signal: AbortSignal.timeout(2000),
       });
       if (brandRes.ok) {

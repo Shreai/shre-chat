@@ -11,6 +11,7 @@ const TYPE_CONFIG: Record<FeedEntry["type"], { icon: string; color: string; labe
   fallback: { icon: "↺", color: "text-orange-400", label: "Fallback" },
   error: { icon: "✗", color: "text-red-400", label: "Error" },
   system: { icon: "⚙", color: "text-gray-400", label: "System" },
+  tool_result: { icon: "⚡", color: "text-cyan-300", label: "Tool Result" },
 };
 
 export function FeedView() {

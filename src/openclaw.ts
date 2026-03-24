@@ -90,6 +90,7 @@ function reportUsage(model: string, usage: { input_tokens?: number; output_token
 let activeSessionKey = "main";
 
 export interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   timestamp?: number;
@@ -379,6 +380,7 @@ export type ActivityStatus =
   | "tool_call"
   | "done"
   | "attention"
+  | "warning"
   | "error";
 
 export interface ToolResult {
@@ -397,6 +399,12 @@ export interface StreamCallbacks {
   onApprovalRequired?: (approval: { approvalId: string; tool: string; input: any; reason: string }) => void;
   onToolResult?: (result: ToolResult) => void;
   onBillingWarning?: (message: string, balanceCents: number) => void;
+  /** Fired when a model's response failed quality checks and will be retried */
+  onModelFailed?: (model: string, reason: string) => void;
+  /** Fired to clear accumulated stream text before a retry with a better model */
+  onClearResponse?: () => void;
+  /** Fired when switching to a fallback model after failure */
+  onModelSwitch?: (from: string, to: string, reason: string) => void;
 }
 
 /**
@@ -636,6 +644,16 @@ async function streamViaFallback(
               input: evt.input,
               reason: evt.reason,
             });
+          } else if (evt.type === "model_failed") {
+            callbacks.onModelFailed?.(evt.model || routedModel, evt.reason || "Quality check failed");
+          } else if (evt.type === "clear_response") {
+            // Server says: discard streamed text, retry coming with better model
+            fullText = "";
+            callbacks.onClearResponse?.();
+          } else if (evt.type === "model_switch") {
+            routedModel = evt.to || "";
+            callbacks.onModelSwitch?.(evt.from || "", evt.to || "", evt.reason || "");
+            callbacks.onStatus?.("thinking", `Retrying → ${routedModel}`);
           } else if (evt.type === "billing_warning") {
             callbacks.onStatus?.("warning", evt.message || "Low balance");
             callbacks.onBillingWarning?.(evt.message, evt.balanceCents);

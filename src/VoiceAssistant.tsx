@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useRef, useCallback, useState, lazy, Suspense, memo } from "react";
 import { voiceReducer, initialVoiceState } from "./voiceStateMachine";
-import type { VoiceAction } from "./voiceStateMachine";
+import type { VoiceAction, VoicePhase } from "./voiceStateMachine";
 import { useVAD } from "./useVAD";
 import { useProactiveNotifications } from "./hooks/useProactiveNotifications";
 import { sendMessage as sendChatMessage, type ChatMessage, type StreamCallbacks } from "./openclaw";
@@ -362,7 +362,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
           // Collect chunks and play — MediaSource API has limited browser support for audio/mpeg
           // so we accumulate the stream into a blob but start faster since server streams from provider
           const reader = r.body.getReader();
-          const chunks: Uint8Array[] = [];
+          const chunks: BlobPart[] = [];
           let streamDone = false;
 
           while (!streamDone) {
@@ -740,7 +740,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
 
     // Push-to-talk: go to "ready" after speaking — user taps to start next turn
     if (activeRef.current) {
-      if (phaseRef.current === "speaking") {
+      if ((phaseRef.current as VoicePhase) === "speaking") {
         dispatch({ type: "SPEAK_DONE" });
       }
     }
@@ -858,8 +858,8 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     const whisperText = await transcribeWithWhisper(audioBlob);
 
     // Guard: if user interrupted during transcription, abort — don't process stale text
-    if (!whisperText || !activeRef.current || phaseRef.current !== "transcribing") {
-      if (activeRef.current && phaseRef.current === "transcribing") {
+    if (!whisperText || !activeRef.current || (phaseRef.current as VoicePhase) !== "transcribing") {
+      if (activeRef.current && (phaseRef.current as VoicePhase) === "transcribing") {
         dispatch({ type: "INTERRUPT" }); // back to ready
       }
       return;

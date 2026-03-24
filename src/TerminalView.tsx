@@ -233,7 +233,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
           ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
           // Update tab ref so sendCommand works
           setTabs((prev) =>
-            prev.map((t) => (t.id === activeTab.id ? { ...t, ws } : t)),
+            prev.map((t) => (t.id === activeTab?.id ? { ...t, ws } : t)),
           );
         };
 

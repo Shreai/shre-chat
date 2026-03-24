@@ -11,6 +11,7 @@ const STATUS_ICONS: Record<ActivityStatus, string> = {
   tool_call: "⚡",
   done: "✅",
   attention: "⚠️",
+  warning: "⚠️",
   error: "❌",
 };
 
@@ -24,6 +25,7 @@ const STATUS_COLORS: Record<ActivityStatus, string> = {
   tool_call: "text-amber-400",
   done: "text-emerald-400",
   attention: "text-yellow-400",
+  warning: "text-orange-400",
   error: "text-red-400",
 };
 

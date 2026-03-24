@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { setAgent, fetchAllAgentMessages, fetchAvailableModels, type ChatMessage, type RouterModel } from "../openclaw";
 import { isWSConnected, startHealthPoll, stopHealthPoll, onHealthChange, abortChatWS, abortAllStreams, retryConnection } from "../gateway-ws";
-import { loadScrollPositions, saveScrollPositions, type Session } from "../store";
+import { loadScrollPositions, saveScrollPositions, type Session, type AppActions } from "../store";
 import { showDesktopNotification, getModelOverride, setModelOverride } from "../chat-utils";
 
 export interface UseChatEffectsParams {
@@ -13,23 +13,9 @@ export interface UseChatEffectsParams {
   sessions: Session[];
   messages: ChatMessage[];
   filteredMessages: ChatMessage[];
-  actions: {
-    setSyncing: (v: boolean) => void;
-    switchSession: (id: string) => void;
-    replaceSessionMessages: (id: string, msgs: ChatMessage[]) => void;
-    addMessage: (id: string, msg: ChatMessage) => void;
-    addFeed: (id: string, type: string, text: string, meta?: Record<string, string>) => void;
-    newSession: () => string;
-    updateSessionTitle: (id: string, title: string) => void;
-    setStreaming: (v: boolean) => void;
-    setStreamText: (v: string) => void;
-    setGatewayUp: (v: boolean | null) => void;
-    setDraft: (id: string, v: string) => void;
-    getDraft: (id: string) => string;
-    setStatusLine: (s: string | null) => void;
-  };
-  scrollRef: React.RefObject<HTMLDivElement>;
-  inputRef: React.RefObject<HTMLTextAreaElement>;
+  actions: Pick<AppActions, "setSyncing" | "switchSession" | "replaceSessionMessages" | "addMessage" | "addFeed" | "newSession" | "updateSessionTitle" | "setStreaming" | "setStreamText" | "setGatewayUp" | "setDraft" | "getDraft" | "setStatusLine">;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   streamFlushRaf: React.MutableRefObject<number | null>;
   streamBufferRef: React.MutableRefObject<string>;
   sendingRef: React.MutableRefObject<boolean>;
@@ -41,13 +27,13 @@ export interface UseChatEffectsParams {
   setCompareModels: (v: string[] | ((prev: string[]) => string[])) => void;
   showEmoji: boolean;
   setShowEmoji: (v: boolean) => void;
-  emojiRef: React.RefObject<HTMLDivElement>;
+  emojiRef: React.RefObject<HTMLDivElement | null>;
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
-  modelPickerRef: React.RefObject<HTMLDivElement>;
+  modelPickerRef: React.RefObject<HTMLDivElement | null>;
   comparePickerOpen: boolean;
   setComparePickerOpen: (v: boolean) => void;
-  comparePickerRef: React.RefObject<HTMLDivElement>;
+  comparePickerRef: React.RefObject<HTMLDivElement | null>;
   setShareUrl: (v: string | null) => void;
   setSharedSnapshot: (v: any) => void;
   setSharedLoading: (v: boolean) => void;
