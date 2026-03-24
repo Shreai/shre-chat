@@ -49,6 +49,8 @@ export interface UseMessageHandlersParams {
   setVerifying: (v: boolean) => void;
   ensureSession: () => string;
   executeSlashCommand: (cmd: string) => void;
+  extractMention?: (text: string) => { cleanText: string; agentId: string | null };
+  clearMention?: () => void;
   // Stream state
   setStreamPhase: (v: string) => void;
   setActiveToolName: (v: string | null) => void;
@@ -111,7 +113,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     selectedModel, compareMode, compareModels, setCompareStreams, setCompareWinner,
     cliMode, openclawMode, identityVerified, setIdentityVerified,
     pendingMessage, setPendingMessage, verifying, setVerifying,
-    ensureSession, executeSlashCommand,
+    ensureSession, executeSlashCommand, extractMention, clearMention,
     setStreamPhase, setActiveToolName, setCompacting, setPendingApproval,
     streamStartRef, sendTimeRef, firstTokenTimeRef,
     startRun, addStep, updateStep, completeRun,
@@ -212,6 +214,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     } catch {
       // Network error — silent fail
     }
+
+    // Routing feedback is forwarded server-side by /api/feedback endpoint
   }, [messages, activeSessionId, activeAgentId, actions]);
 
   // CLI mode sender
@@ -372,8 +376,22 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       return;
     }
 
+    // Extract @@mention to override target agent
+    let mentionCleanText = text;
+    let effectiveAgentId = activeAgentId;
+    if (extractMention) {
+      const { cleanText, agentId } = extractMention(text);
+      if (agentId) {
+        effectiveAgentId = agentId;
+        mentionCleanText = cleanText || text;
+      }
+    }
+    if (clearMention) clearMention();
+    // Use cleaned text going forward (@@mention stripped)
+    const sendText = mentionCleanText;
+
     if (streaming) {
-      setQueue((prev) => [...prev, { id: uid(), text }]);
+      setQueue((prev) => [...prev, { id: uid(), text: sendText }]);
       setInput("");
       return;
     }
@@ -439,7 +457,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const attachedFiles = [...pendingFiles];
     setPendingFiles([]);
     for (const f of attachedFiles) {
-      actions.addFile({ ...f, sessionId, sessionTitle: session?.title || "Chat", agentId: activeAgentId });
+      actions.addFile({ ...f, sessionId, sessionTitle: session?.title || "Chat", agentId: effectiveAgentId });
     }
 
     const userMsg: ChatMessage = { role: "user", content: text, timestamp: Date.now(), ...(replyToIndex !== null ? { replyTo: replyToIndex } : {}) };
@@ -531,7 +549,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const thinkStepId = addStep(runId, { kind: "thinking", label: "Thinking..." });
     processStepRef.current = thinkStepId;
 
-    let messageText = text;
+    let messageText = sendText;
 
     // Prepend quoted reply context so the model knows which message the user is responding to
     if (replyToIndex !== null && filteredMessages[replyToIndex]) {
@@ -540,7 +558,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         ? replyMsg.content.slice(0, 500) + "..."
         : replyMsg.content;
       const replyRole = replyMsg.role === "user" ? "my earlier message" : "your earlier response";
-      messageText = `[Replying to ${replyRole}]: "${replySnippet}"\n\n${text}`;
+      messageText = `[Replying to ${replyRole}]: "${replySnippet}"\n\n${sendText}`;
     }
 
     // ── Context anchoring for short/vague follow-ups ──
@@ -550,13 +568,16 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       const lower = text.toLowerCase().trim();
 
       // Status keywords: user asking about progress on something discussed
-      const isStatusQuery = /^(status|any\s*(status|update|progress)|update[s?]|is\s+(this|that|it)\s+(done|complete|finished|ready|resolved|fixed)|done\s*\??|complete\s*\??|finished\s*\??|what('?s| is)\s+the\s+(status|progress|update)|where\s+(are|did)\s+we\s+(leave|left)\s+(off|this|that)|how('?s| is)\s+(this|that|it)\s+(going|coming|progressing))$/i.test(lower);
+      // Voice-friendly: allow leading filler (hey/ok/so/shre/please), trailing punctuation, and natural phrasing
+      const stripped = lower.replace(/^(hey|ok|okay|so|shre|shrey|please|can you|could you|uh|um)\s+/g, "").replace(/[.!?,]+$/g, "").trim();
+
+      const isStatusQuery = /^(status|any\s*(status|update|progress)|update\s*(me|us)?|update[s]?|give\s+me\s+(an?\s+)?(status|update|progress)|is\s+(this|that|it)\s+(done|complete|finished|ready|resolved|fixed)|done\s*\??|complete\s*\??|finished\s*\??|what('?s| is)\s+the\s+(status|progress|update)|where\s+(are|did)\s+we\s+(leave|left)\s+(off|this|that)|how('?s| is)\s+(this|that|it)\s+(going|coming|progressing)|catch\s+me\s+up|bring\s+me\s+up\s+to\s+(speed|date)|what('?s| is)\s+(new|happening|going\s+on)|fill\s+me\s+in)$/i.test(stripped);
 
       // Continue keywords: user wants the assistant to resume where it stopped
-      const isContinue = /^(continue|keep\s+going|go\s+on|finish\s+(this|that|it)|carry\s+on|resume|pick\s+up\s+where|and\s*\??|then\s*\??|next\s*\??)$/i.test(lower);
+      const isContinue = /^(continue|keep\s+going|go\s+on|go\s+ahead|finish\s+(this|that|it)|carry\s+on|resume|pick\s+up\s+where|and\s*\??|then\s*\??|next\s*\??|keep\s+going\s+with\s+(this|that)|finish\s+what\s+you\s+(were|started)|where\s+were\s+we)$/i.test(stripped);
 
       // Repeat/recall keywords: user wants to see something again
-      const isRecall = /^(show\s+(me\s+)?(that|it)\s+again|repeat\s+that|the\s+(table|chart|list|query|data|result)\s+(you\s+)?(showed?|gave|returned|generated)|what\s+did\s+you\s+(say|show|find|get)|what\s+was\s+(that|the\s+(result|answer|output)))$/i.test(lower);
+      const isRecall = /^(show\s+(me\s+)?(that|it)\s+again|repeat\s+that|recall\s+(this|that)\s*(conversation|chat|session)?|the\s+(table|chart|list|query|data|result)\s+(you\s+)?(showed?|gave|returned|generated)|what\s+did\s+(you|we)\s+(say|show|find|get|discuss|talk\s+about)|what\s+was\s+(that|the\s+(result|answer|output))|what\s+were\s+we\s+(talking|discussing)\s+about|remind\s+me\s+(what|where)\s+we\s+(left\s+off|were|discussed)|go\s+back\s+to\s+(that|what\s+we)|summarize\s+(this|our)\s*(conversation|chat|discussion)?)$/i.test(stripped);
 
       if (isStatusQuery || isContinue || isRecall) {
         // Find the last 2 assistant messages and the user messages that prompted them
@@ -635,7 +656,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           clearTimeout(safetyTimeout);
           resolve(result);
         };
-        sendChatWS(activeAgentId, "main", messageText, {
+        sendChatWS(effectiveAgentId, "main", messageText, {
           onToken: (token) => {
             if (!token) return;
             if (firstTokenTimeRef.current === 0) firstTokenTimeRef.current = Date.now();
@@ -693,7 +714,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ agentId: activeAgentId, userMessage: messageText, assistantResponse: full, model: selectedModel || "ws" }),
+              body: JSON.stringify({ agentId: effectiveAgentId, userMessage: messageText, assistantResponse: full, model: selectedModel || "ws" }),
             }).catch(() => {});
             resolveAndClear({ ok: true });
           },
@@ -774,7 +795,13 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
 
     let fullResponse = "";
     let streamStarted = false;
-    const currentMessages = session?.messages ?? [];
+    // When replying to a previous message, only send history up to that point
+    // so the AI continues from the correct context instead of seeing the full
+    // conversation and getting confused about what the user is referencing.
+    const allMessages = session?.messages ?? [];
+    const currentMessages = replyToIndex !== null
+      ? allMessages.slice(0, replyToIndex + 1)
+      : allMessages;
     const defaultSystemPrompt = `You are ${currentAgent.name}, an AI agent (${currentAgent.id}) in the Nirlab ecosystem. You serve Nir, the founder of Nirlab Inc. Be intelligent, concise, and proactive. Keep responses focused and actionable. Use markdown when helpful.
 
 UI Capabilities: This chat app has a Preview tab that renders HTML. When the user asks you to create or show HTML content (pages, charts, dashboards, visualizations), output it in a \`\`\`html code block. The user can click "Preview" in the sidebar and "Load from Chat" to render it live \u2014 do NOT tell them to save as a file. You can generate full HTML pages with inline CSS and JavaScript.
@@ -902,7 +929,7 @@ Conversation Memory: You have access to the full conversation in this session. W
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
           credentials: "include",
-          body: JSON.stringify({ agentId: activeAgentId, userMessage: messageText, assistantResponse: full, model: selectedModel || "auto" }),
+          body: JSON.stringify({ agentId: effectiveAgentId, userMessage: messageText, assistantResponse: full, model: selectedModel || "auto" }),
         }).catch(() => {});
       },
       onError: (error) => {

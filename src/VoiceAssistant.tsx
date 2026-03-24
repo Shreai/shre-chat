@@ -44,6 +44,7 @@ interface Props {
 interface Turn { role: "user" | "assistant"; text: string; mib007Link?: string; }
 interface VoiceShortcut { id: string; pattern: string; intent: string; hit_count: number; lastUsed: number; }
 
+/** Strip markdown for TTS — converts tables to spoken form, removes formatting */
 function stripMd(t: string): string {
   let s = t.replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/<think>[\s\S]*$/gi, "")
@@ -52,6 +53,23 @@ function stripMd(t: string): string {
     .replace(/<\/?think(?:ing)?>/gi, "")
     .replace(/<thinking_mode>[\s\S]*?<\/thinking_mode>/gi, "")
     .replace(/<reasoning_effort>[\s\S]*?<\/reasoning_effort>/gi, "");
+  // Convert markdown tables to spoken-friendly form before stripping
+  // "| Item | Qty | Revenue |" rows → "Item: Qty, Revenue" or similar
+  s = s.replace(/(?:^\|.+\|\s*\n\|[-:\s|]+\|\s*\n)((?:^\|.+\|\s*\n?)+)/gm, (block) => {
+    const rows = block.trim().split("\n").filter(r => r.includes("|") && !/^[\s|:-]+$/.test(r));
+    if (rows.length === 0) return block;
+    // Parse header row for column names
+    const headerCells = rows[0].split("|").map(c => c.trim()).filter(Boolean);
+    const dataRows = rows.slice(1);
+    if (dataRows.length === 0) return block;
+    // Speak first few rows: "Column1 Value1, Column2 Value2"
+    const spoken = dataRows.slice(0, 5).map(row => {
+      const cells = row.split("|").map(c => c.trim()).filter(Boolean);
+      return cells.map((c, i) => headerCells[i] ? `${headerCells[i]}: ${c}` : c).join(", ");
+    }).join(". ");
+    const extra = dataRows.length > 5 ? `. And ${dataRows.length - 5} more rows.` : "";
+    return spoken + extra + " ";
+  });
   return s.replace(/```[\s\S]*?```/g, " code block omitted ").replace(/`[^`]+`/g, (m) => m.slice(1, -1))
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/#{1,6}\s+/g, "").replace(/[*_~]{1,3}/g, "").replace(/\n{2,}/g, ". ").replace(/\n/g, " ").trim().slice(0, 4096);
@@ -243,6 +261,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const aiAbortRef = useRef<AbortController | null>(null);
+  const whisperAbortRef = useRef<AbortController | null>(null);
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
 
@@ -255,15 +274,13 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [turns, state.transcript]);
 
-  // ── VAD setup ──
+  // ── VAD setup (speech detection for visual feedback only — no auto-submit) ──
   const vad = useVAD({
     speechThreshold: 0.015,
     silenceDuration: 4000,
     onSilence: useCallback(() => {
-      if (phaseRef.current === "listening") {
-        finishListening();
-      }
-    }, []), // eslint-disable-line react-hooks/exhaustive-deps
+      // Push-to-talk: silence does NOT auto-submit — user taps to finish
+    }, []),
     onSpeechStart: useCallback(() => {
       dispatchRef.current({ type: "SPEECH_DETECTED" });
     }, []),
@@ -300,6 +317,8 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     ttsAbortRef.current = null;
     aiAbortRef.current?.abort();
     aiAbortRef.current = null;
+    whisperAbortRef.current?.abort();
+    whisperAbortRef.current = null;
     if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ""; ttsAudioRef.current = null; }
     if (mediaRecorderRef.current) {
       if (mediaRecorderRef.current.state !== "inactive") { try { mediaRecorderRef.current.stop(); } catch {} }
@@ -402,7 +421,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
                 ttsAbortRef.current?.abort();
                 done();
                 dispatch({ type: "BARGE_IN" });
-                startListening();
+                // Push-to-talk: go to ready, user taps to record next
               }
             });
           }
@@ -494,9 +513,9 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
           onToken: (token) => { fullText += token; },
           onDone: (text) => {
             clearTimeout(timeoutId);
-            const clean = stripMd(text || fullText);
-            console.log("[voice-chat] response:", clean.slice(0, 80));
-            resolve(clean || "I didn't catch that. Could you try again?");
+            const raw = text || fullText;
+            console.log("[voice-chat] response:", raw.slice(0, 80));
+            resolve(raw || "I didn't catch that. Could you try again?");
           },
           onError: (err) => {
             clearTimeout(timeoutId);
@@ -512,7 +531,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
         sendChatMessage(
           prompt,
           history,
-          `You are ${agentName}, a voice assistant. Keep responses concise and conversational — they will be read aloud. Avoid markdown, code blocks, or long lists. Be natural and helpful.`,
+          `You are ${agentName}, a voice assistant. Keep responses concise. When the user asks for data (sales, invoices, inventory, top items, etc.), use markdown tables and formatting — the UI renders them visually. For conversational responses, be natural and brief. Always prefer structured data presentation (tables, bullet points) for data-heavy answers.`,
           callbacks,
           signal,
           voiceSessionIdRef.current || undefined,
@@ -539,18 +558,24 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
   // ── Whisper transcription (primary STT) ──
   const transcribeWithWhisper = useCallback(async (audioBlob: Blob): Promise<string> => {
     try {
+      const ctrl = new AbortController();
+      whisperAbortRef.current = ctrl;
+      const timeout = setTimeout(() => ctrl.abort(), 15_000);
       const formData = new FormData();
       formData.append("file", audioBlob, "voice.webm");
       formData.append("model", "whisper-1");
       const res = await fetch("/api/transcribe", {
         method: "POST",
         body: formData,
-        signal: AbortSignal.timeout(15_000),
+        signal: ctrl.signal,
       });
+      clearTimeout(timeout);
+      whisperAbortRef.current = null;
       if (!res.ok) return "";
       const data = await res.json();
       return (data.text || "").trim();
     } catch {
+      whisperAbortRef.current = null;
       return "";
     }
   }, []);
@@ -651,7 +676,8 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       onVoiceTurn?.({ role: "assistant", content: response });
       await speak(response);
       onSwitchAgent(switchTarget);
-      if (activeRef.current) setTimeout(() => startListening(), 500);
+      // Push-to-talk: go to ready after agent switch
+      if (activeRef.current) dispatch({ type: "SPEAK_DONE" });
       return;
     }
 
@@ -710,18 +736,13 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     onVoiceTurn?.({ role: "assistant", content: response });
 
     dispatch({ type: "AI_RESPONSE" });
-    await speak(response);
+    await speak(stripMd(response));
 
-    if (activeRef.current && phaseRef.current !== "listening") {
-      // SPEAK_DONE only transitions from "speaking", but if phase got stuck, force to listening
+    // Push-to-talk: go to "ready" after speaking — user taps to start next turn
+    if (activeRef.current) {
       if (phaseRef.current === "speaking") {
         dispatch({ type: "SPEAK_DONE" });
-      } else {
-        dispatch({ type: "START_LISTENING" });
       }
-      setTimeout(() => {
-        if (activeRef.current) startListening();
-      }, 300);
     }
 
     } catch (err) {
@@ -825,10 +846,9 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     const audioBlob = await stopRecording();
 
     if (!audioBlob || audioBlob.size < 3000) {
-      // No meaningful audio — go back to listening
+      // No meaningful audio — go back to ready
       if (activeRef.current) {
-        dispatch({ type: "START_LISTENING" });
-        setTimeout(() => startListening(), 300);
+        dispatch({ type: "INTERRUPT" });
       }
       return;
     }
@@ -837,10 +857,10 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     dispatch({ type: "SET_STATUS", text: "Transcribing..." });
     const whisperText = await transcribeWithWhisper(audioBlob);
 
-    if (!whisperText || !activeRef.current) {
-      if (activeRef.current) {
-        dispatch({ type: "START_LISTENING" });
-        setTimeout(() => startListening(), 300);
+    // Guard: if user interrupted during transcription, abort — don't process stale text
+    if (!whisperText || !activeRef.current || phaseRef.current !== "transcribing") {
+      if (activeRef.current && phaseRef.current === "transcribing") {
+        dispatch({ type: "INTERRUPT" }); // back to ready
       }
       return;
     }
@@ -852,7 +872,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
         dispatch({ type: "ERROR", message: "Voice processing error. Tap to retry." });
       }
     }
-  }, [vad, stopRecording, transcribeWithWhisper, processUserInput, startListening]);
+  }, [vad, stopRecording, transcribeWithWhisper, processUserInput]);
 
   // ── Save voice session on close ──
   useEffect(() => {
@@ -874,7 +894,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
   // ── Proactive notifications: auto-speak when idle ──
   useEffect(() => {
     if (!proactiveMode || !open || pendingNotifs.length === 0) return;
-    if (phaseRef.current !== "listening") return;
+    if (phaseRef.current !== "ready") return;
 
     const notif = speakNext();
     if (!notif) return;
@@ -886,12 +906,12 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     onVoiceTurn?.({ role: "assistant", content: text });
 
     speak(text).then(() => {
-      if (activeRef.current && phaseRef.current !== "listening") {
+      if (activeRef.current && phaseRef.current === "speaking") {
         dispatch({ type: "SPEAK_DONE" });
-        setTimeout(() => { if (activeRef.current) startListening(); }, 300);
+        // Push-to-talk: go to ready, not auto-listen
       }
     });
-  }, [proactiveMode, open, pendingNotifs, speakNext, speak, onVoiceTurn, startListening]);
+  }, [proactiveMode, open, pendingNotifs, speakNext, speak, onVoiceTurn]);
 
   // ── Initialize on open ──
   useEffect(() => {
@@ -931,10 +951,11 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       if (data?.shortcuts?.length) setShortcuts(data.shortcuts);
     }).catch(() => {});
 
-    // Skip greeting — go straight to listening (like other voice AI assistants)
+    // Push-to-talk: go to "ready" state — user taps orb to start recording
     if (activeRef.current) {
       dispatch({ type: "GREETING_DONE" });
-      startListening();
+      // Pre-acquire mic permission so first tap is instant
+      acquireMic().catch(() => {});
     }
 
     return cleanup;
@@ -950,27 +971,32 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
     }
   }, [briefingPlaying]);
 
-  // ── Orb tap ──
+  // ── Orb tap (push-to-talk) ──
   const handleOrbTap = useCallback(() => {
     const { phase } = { phase: phaseRef.current };
-    if (phase === "listening") {
+    if (phase === "ready") {
+      // Tap to start recording — instant activation
+      startListening();
+    } else if (phase === "listening") {
+      // Tap to stop recording → transcribe → submit
       finishListening();
     } else if (phase === "speaking") {
-      // Interrupt TTS
+      // Interrupt TTS → back to ready
       ttsAbortRef.current?.abort();
       if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ""; ttsAudioRef.current = null; }
       window.speechSynthesis?.cancel();
       vad.stop();
       dispatch({ type: "INTERRUPT" });
-      setTimeout(() => { if (activeRef.current) startListening(); }, 200);
+    } else if (phase === "transcribing") {
+      // Cancel Whisper transcription → back to ready
+      whisperAbortRef.current?.abort();
+      dispatch({ type: "INTERRUPT" });
     } else if (phase === "thinking") {
-      // Cancel AI request
+      // Cancel AI request → back to ready
       aiAbortRef.current?.abort();
       dispatch({ type: "INTERRUPT" });
-      setTimeout(() => { if (activeRef.current) startListening(); }, 200);
     } else if (phase === "error") {
       dispatch({ type: "RETRY" });
-      startListening();
     }
   }, [finishListening, startListening, vad]);
 
@@ -980,22 +1006,25 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
 
   const phaseLabel = statusText
     || (phase === "greeting" ? "Starting up..."
-    : phase === "listening" ? (transcript ? "" : "Listening...")
+    : phase === "ready" ? ""
+    : phase === "listening" ? (transcript ? "" : "Recording...")
     : phase === "transcribing" ? "Transcribing..."
     : phase === "thinking" ? "Processing..."
     : phase === "speaking" ? "Speaking..."
     : "");
 
-  const orbScale = speechActive ? 1.08 : 1;
-  const orbGlow = phase === "listening"
-    ? speechActive
-      ? "0 0 50px 15px rgba(239, 68, 68, 0.5)"
-      : "0 0 25px 8px rgba(239, 68, 68, 0.25)"
-    : phase === "speaking"
-      ? "0 0 30px 10px rgba(34, 197, 94, 0.25)"
-      : phase === "thinking" || phase === "transcribing"
-        ? "0 0 25px 8px rgba(59, 130, 246, 0.2)"
-        : "0 0 15px 5px rgba(107, 114, 128, 0.15)";
+  const orbScale = phase === "listening" && speechActive ? 1.08 : 1;
+  const orbGlow = phase === "ready"
+    ? "0 0 20px 8px rgba(255, 255, 255, 0.1)"
+    : phase === "listening"
+      ? speechActive
+        ? "0 0 50px 15px rgba(239, 68, 68, 0.5)"
+        : "0 0 25px 8px rgba(239, 68, 68, 0.25)"
+      : phase === "speaking"
+        ? "0 0 30px 10px rgba(34, 197, 94, 0.25)"
+        : phase === "thinking" || phase === "transcribing"
+          ? "0 0 25px 8px rgba(59, 130, 246, 0.2)"
+          : "0 0 15px 5px rgba(107, 114, 128, 0.15)";
 
   return (
     <div className="fixed inset-0 z-[200] flex flex-col" style={{ background: "linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)" }}>
@@ -1123,7 +1152,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       )}
 
       {/* Voice shortcuts */}
-      {shortcuts.length > 0 && state.phase === "listening" && (
+      {shortcuts.length > 0 && state.phase === "ready" && (
         <div className="px-5 py-1.5 flex flex-wrap gap-2 justify-center">
           {shortcuts.map(s => (
             <button
@@ -1159,25 +1188,33 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
           onClick={handleOrbTap}
           className="relative h-24 w-24 rounded-full flex items-center justify-center active:scale-90"
           style={{
-            background: phase === "listening"
-              ? "radial-gradient(circle, rgba(239,68,68,0.85) 0%, rgba(220,38,38,0.95) 100%)"
-              : phase === "speaking"
-                ? "radial-gradient(circle, rgba(34,197,94,0.8) 0%, rgba(22,163,74,0.9) 100%)"
-                : phase === "thinking" || phase === "transcribing"
-                  ? "radial-gradient(circle, rgba(59,130,246,0.8) 0%, rgba(37,99,235,0.9) 100%)"
-                  : phase === "error"
-                    ? "radial-gradient(circle, rgba(239,68,68,0.6) 0%, rgba(185,28,28,0.8) 100%)"
-                    : "radial-gradient(circle, rgba(107,114,128,0.6) 0%, rgba(75,85,99,0.8) 100%)",
+            background: phase === "ready"
+              ? "radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.08) 100%)"
+              : phase === "listening"
+                ? "radial-gradient(circle, rgba(239,68,68,0.85) 0%, rgba(220,38,38,0.95) 100%)"
+                : phase === "speaking"
+                  ? "radial-gradient(circle, rgba(34,197,94,0.8) 0%, rgba(22,163,74,0.9) 100%)"
+                  : phase === "thinking" || phase === "transcribing"
+                    ? "radial-gradient(circle, rgba(59,130,246,0.8) 0%, rgba(37,99,235,0.9) 100%)"
+                    : phase === "error"
+                      ? "radial-gradient(circle, rgba(239,68,68,0.6) 0%, rgba(185,28,28,0.8) 100%)"
+                      : "radial-gradient(circle, rgba(107,114,128,0.6) 0%, rgba(75,85,99,0.8) 100%)",
             boxShadow: orbGlow,
             transform: `scale(${orbScale})`,
             transition: "transform 150ms ease-out, box-shadow 150ms ease-out",
           }}
-          aria-label={phase === "listening" ? "Tap to send" : phase === "speaking" ? "Tap to interrupt" : phase === "thinking" ? "Tap to cancel" : phase === "error" ? "Tap to retry" : ""}
+          aria-label={phase === "ready" ? "Tap to talk" : phase === "listening" ? "Tap to send" : phase === "transcribing" ? "Tap to cancel" : phase === "speaking" ? "Tap to interrupt" : phase === "thinking" ? "Tap to cancel" : phase === "error" ? "Tap to retry" : ""}
         >
-          {phase === "listening" ? (
-            <svg className="h-9 w-9 text-white drop-shadow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          {phase === "ready" ? (
+            /* Mic icon — tap to start */
+            <svg className="h-10 w-10 text-white/80 drop-shadow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          ) : phase === "listening" ? (
+            /* Stop/send icon — recording active */
+            <svg className="h-9 w-9 text-white drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
           ) : phase === "speaking" ? (
             <svg className="h-9 w-9 text-white drop-shadow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -1204,10 +1241,18 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
           )}
         </button>
         <span className="text-[11px] mt-3 font-medium tracking-wide" style={{ color: "rgba(255,255,255,0.4)" }}>{phaseLabel}</span>
-        {phase === "listening" && !transcript && (
-          <p className="text-[10px] mt-1.5 text-center max-w-[220px] leading-relaxed" style={{ color: "rgba(255,255,255,0.25)" }}>
-            Speak now &bull; Tap orb when done
+        {phase === "ready" && (
+          <p className="text-[10px] mt-1.5 text-center max-w-[220px] leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
+            Tap to talk
           </p>
+        )}
+        {phase === "listening" && (
+          <p className="text-[10px] mt-1.5 text-center max-w-[220px] leading-relaxed" style={{ color: "rgba(255,255,255,0.25)" }}>
+            Tap to send
+          </p>
+        )}
+        {phase === "transcribing" && (
+          <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>Tap to cancel</p>
         )}
         {phase === "speaking" && (
           <p className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>Tap to interrupt</p>

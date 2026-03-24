@@ -716,28 +716,8 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
       signal: AbortSignal.timeout(5000),
     }).catch(() => { /* CortexDB write is best-effort */ });
 
-    // Also ingest to Qdrant vectors for semantic search (conversation recall)
-    if (assistantResponse.length >= 80) {
-      const vectorContent = `[${new Date().toISOString().slice(0, 10)}] User: ${userMessage.slice(0, 200)} | Assistant: ${assistantResponse.slice(0, 300)}`;
-      fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/superadmin/rag/ingest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `Conversation with ${agentId || "shre"}`,
-          content: vectorContent,
-          workspace_id: "platform",
-          metadata: {
-            type: "conversation",
-            agentId: agentId || "shre",
-            source,
-            model,
-            importance: "low",
-            expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(), // 30 day retention
-          },
-        }),
-        signal: AbortSignal.timeout(5000),
-      }).catch(() => {});
-    }
+    // Vector ingestion handled by conversationLearner.learn() via shre-sdk/rag
+    // (calls CortexDB:5400 /v1/superadmin/rag/ingest with proper auth)
 
     // Durable training write — shre-sdk/training (local backup + CortexDB + WAL retry)
     // NEVER truncates — full conversation preserved for fine-tuning pipeline

@@ -78,7 +78,7 @@ const AGENT_META: Omit<Agent, "model">[] = [
   { id: "council-raven", name: "Raven", emoji: "🐦‍⬛", group: "council" },
 ];
 
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = "ollama/qwen3:8b";
 
 const ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? "https://127.0.0.1:5497";
 
@@ -238,7 +238,7 @@ export interface FeedEntry {
   timestamp: number;
 }
 
-export type View = "chat" | "activity" | "files" | "cron" | "feed" | "agent-feed" | "preview" | "spend" | "briefing" | "reminders" | "cost-dashboard" | "marketplace" | "admin" | "feed-analytics" | "task-timeline" | "finetune" | "reports" | "employee-activity";
+export type View = "chat" | "activity" | "files" | "cron" | "feed" | "agent-feed" | "preview" | "spend" | "briefing" | "reminders" | "cost-dashboard" | "marketplace" | "admin" | "feed-analytics" | "task-timeline" | "finetune" | "reports" | "employee-activity" | "tasks" | "projects" | "email";
 
 // ── Bookmarks ─────────────────────────────────────────────────────
 
@@ -428,13 +428,31 @@ export async function syncWithServer(localSessions: Session[]): Promise<Session[
       body: JSON.stringify({ sessions: localSessions }),
     });
     if (!res.ok) return localSessions; // server down — use local
-    const { sessions: merged } = await res.json();
-    if (Array.isArray(merged) && merged.length > 0) {
-      // Persist merged result to localStorage
-      try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(merged)); } catch { /* quota */ }
-      return merged;
+    const { sessions: serverMerged } = await res.json();
+    if (!Array.isArray(serverMerged) || serverMerged.length === 0) return localSessions;
+
+    // Merge: for each session, pick whichever version has MORE messages.
+    // This prevents data loss when localStorage quota caused a stale write.
+    const localMap = new Map(localSessions.map((s) => [s.id, s]));
+    const merged = serverMerged.map((serverSession: Session) => {
+      const local = localMap.get(serverSession.id);
+      if (!local) return serverSession; // new from server
+      const localCount = local.messages?.length ?? 0;
+      const serverCount = serverSession.messages?.length ?? 0;
+      // Prefer the version with more messages (data wins over timestamps)
+      if (localCount > serverCount) return local;
+      return serverSession;
+    });
+    // Also include local-only sessions not on server yet
+    for (const local of localSessions) {
+      if (!serverMerged.some((s: Session) => s.id === local.id)) {
+        merged.push(local);
+      }
     }
-    return localSessions;
+
+    // Persist merged result to localStorage (may trim if large)
+    try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(merged)); } catch { /* quota — server has the data */ }
+    return merged;
   } catch {
     return localSessions; // offline — use local
   }
@@ -500,17 +518,23 @@ export function flushServerSync(): void {
 }
 
 /** Save a session to BOTH localStorage and server immediately (no debounce).
- *  Call after every user/assistant message to guarantee crash-proof persistence. */
+ *  Call after every user/assistant message to guarantee crash-proof persistence.
+ *  Server sync is the primary durable store; localStorage is a fast cache. */
 export function saveSessionImmediate(session: Session): void {
-  // 1. localStorage (sync, instant)
+  // 1. localStorage (sync, instant) — may fail on quota (~5MB)
   const sessions = loadSessions();
   const idx = sessions.findIndex((s) => s.id === session.id);
   if (idx >= 0) sessions[idx] = session;
   else sessions.push(session);
-  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions)); } catch { /* quota */ }
+  try {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  } catch {
+    // Quota exceeded — trim older sessions from localStorage to free space
+    _trimLocalStorage(sessions, session.id);
+  }
   if (isIdbReady()) idbSaveSessions(sessions).catch(() => {});
 
-  // 2. Server (async, fire-and-retry)
+  // 2. Server (async, fire-and-retry) — primary durable store
   _dirtySessionIds.delete(session.id); // no need for debounced sync
   syncSessionToServer(session).then((ok) => {
     if (!ok) {
@@ -518,6 +542,18 @@ export function saveSessionImmediate(session: Session): void {
       setTimeout(() => syncSessionToServer(session), 2000);
     }
   });
+}
+
+/** Trim older sessions' messages from localStorage to free quota.
+ *  Keeps the active session intact, strips messages from oldest sessions first. */
+function _trimLocalStorage(sessions: Session[], keepId: string): void {
+  const sorted = [...sessions].sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+  for (const s of sorted) {
+    if (s.id === keepId) continue;
+    // Strip messages from oldest sessions first (server has the full copy)
+    s.messages = s.messages.slice(-2); // keep last 2 as preview
+  }
+  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(sorted)); } catch { /* still too big — give up, server is the backup */ }
 }
 
 /** Debounced saveSessions — delays write by 500ms, coalescing rapid calls.

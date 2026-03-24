@@ -46,6 +46,7 @@ import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { ChatView } from "./ChatView";
+import { mib007Link } from "./chat-utils";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import { LoginView } from "./LoginView";
@@ -101,6 +102,9 @@ const TaskTimelineView = lazy(() => import("./TaskTimelineView").then(m => ({ de
 const FinetuneView = lazy(() => import("./FinetuneView").then(m => ({ default: m.FinetuneView })));
 const ReportsView = lazy(() => import("./ReportsView").then(m => ({ default: m.ReportsView })));
 const EmployeeActivityView = lazy(() => import("./EmployeeActivityView").then(m => ({ default: m.EmployeeActivityView })));
+const TasksView = lazy(() => import("./TasksView").then(m => ({ default: m.TasksView })));
+const ProjectsView = lazy(() => import("./ProjectsView").then(m => ({ default: m.ProjectsView })));
+const EmailView = lazy(() => import("./EmailView").then(m => ({ default: m.EmailView })));
 
 const LazyFallback = () => (
   <div className="flex-1 flex items-center justify-center" style={{ color: "var(--c-text-3)" }}>
@@ -112,6 +116,111 @@ const AGENT_KEY = "shre-active-agent";
 const THEME_KEY = "shre-theme";
 const COMPACT_KEY = "shre-compact";
 const WRITE_ENABLED_KEY = "shre-write-enabled";
+
+// ── View labels for the nav header ──
+const VIEW_LABELS: Record<string, string> = {
+  tasks: "Tasks", projects: "Projects", reminders: "Reminders",
+  "task-timeline": "Task Timeline", feed: "Feed", "feed-analytics": "Feed Analytics",
+  "cost-dashboard": "Cost Dashboard", reports: "Reports", marketplace: "Marketplace",
+  admin: "Admin", finetune: "Fine-Tuning", activity: "Activity", files: "Files",
+  cron: "Cron Jobs", "agent-feed": "Agent Feed", preview: "Preview", spend: "Spend",
+  briefing: "Briefing", "employee-activity": "Employee Activity", email: "Email",
+};
+
+const NAV_VIEWS: { key: View; label: string; section: string }[] = [
+  { key: "tasks", label: "Tasks", section: "Work" },
+  { key: "projects", label: "Projects", section: "Work" },
+  { key: "reminders", label: "Reminders", section: "Work" },
+  { key: "task-timeline", label: "Task Timeline", section: "Work" },
+  { key: "feed", label: "Feed", section: "Views" },
+  { key: "feed-analytics", label: "Feed Analytics", section: "Views" },
+  { key: "cost-dashboard", label: "Cost Dashboard", section: "Views" },
+  { key: "reports", label: "Reports", section: "Views" },
+  { key: "email", label: "Email", section: "Work" },
+  { key: "marketplace", label: "Marketplace", section: "Apps" },
+  { key: "admin", label: "Admin", section: "Tools" },
+  { key: "finetune", label: "Fine-Tuning", section: "Tools" },
+];
+
+function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: View) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  let lastSection = "";
+
+  return (
+    <header
+      className="flex items-center gap-2 px-3 py-1.5 shrink-0"
+      style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-2)", zIndex: 30, position: "relative" }}
+    >
+      <button
+        onClick={() => onSwitch("chat")}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[13px] transition-colors hover:bg-white/5"
+        style={{ color: "var(--c-text-3)" }}
+        title="Back to Chat"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Chat
+      </button>
+
+      <div style={{ width: 1, height: 16, background: "var(--c-border-2)" }} />
+
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[13px] font-medium transition-colors hover:bg-white/5"
+          style={{ color: "var(--c-text-1)" }}
+        >
+          {VIEW_LABELS[view] || view}
+          <svg className="h-3 w-3" style={{ color: "var(--c-text-4)", transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+
+        {open && (
+          <div
+            className="absolute left-0 top-9 z-50 w-52 rounded-xl shadow-xl py-1"
+            style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)", maxHeight: "min(420px, calc(100dvh - 80px))", overflowY: "auto" }}
+          >
+            {NAV_VIEWS.map((item) => {
+              const showSection = item.section !== lastSection;
+              lastSection = item.section;
+              return (
+                <div key={item.key}>
+                  {showSection && (
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>
+                      {item.section}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => onSwitch(item.key)}
+                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                    style={{ color: view === item.key ? "var(--c-accent)" : "var(--c-text-1)" }}
+                  >
+                    {view === item.key && <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "var(--c-accent)" }} />}
+                    {item.label}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1" />
+
+      <span className="text-[11px]" style={{ color: "var(--c-text-4)" }}>
+        {VIEW_LABELS[view] || view}
+      </span>
+    </header>
+  );
+}
 
 export function App() {
   // ── Dev mode: set to true to skip auth for UI-only work ──
@@ -515,12 +624,53 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
     setupPush();
   }, []);
 
-  // Flush pending debounced session saves on page unload
+  // Flush pending saves + persist partial streaming response on page unload/hide
   useEffect(() => {
-    const handleUnload = () => flushPendingSave();
+    const persistStreamIfActive = () => {
+      if (streamingRef.current && streamTextRef.current.trim() && activeSessionId) {
+        // Save the partial AI response so it survives tab close/switch
+        const sessions = loadSessions();
+        const idx = sessions.findIndex((s) => s.id === activeSessionId);
+        if (idx >= 0) {
+          const session = sessions[idx];
+          // Only add if last message isn't already this partial
+          const lastMsg = session.messages[session.messages.length - 1];
+          if (lastMsg?.role !== "assistant" || !lastMsg.meta?.partial) {
+            session.messages.push({
+              role: "assistant",
+              content: streamTextRef.current,
+              timestamp: Date.now(),
+              meta: { partial: "true" },
+            });
+          } else {
+            // Update existing partial
+            lastMsg.content = streamTextRef.current;
+            lastMsg.timestamp = Date.now();
+          }
+          session.updatedAt = Date.now();
+          sessions[idx] = session;
+          try { localStorage.setItem("shre-sessions", JSON.stringify(sessions)); } catch { /* quota */ }
+        }
+      }
+    };
+
+    const handleUnload = () => {
+      persistStreamIfActive();
+      flushPendingSave();
+    };
+    const handleVisChange = () => {
+      if (document.visibilityState === "hidden") {
+        persistStreamIfActive();
+        flushPendingSave();
+      }
+    };
     window.addEventListener("beforeunload", handleUnload);
-    return () => window.removeEventListener("beforeunload", handleUnload);
-  }, []);
+    document.addEventListener("visibilitychange", handleVisChange);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      document.removeEventListener("visibilitychange", handleVisChange);
+    };
+  }, [activeSessionId]);
 
   // Periodic background sync — push active session to server every 30s as safety net
   useEffect(() => {
@@ -623,6 +773,10 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
   sessionsRef.current = sessions;
   const agentRef = useRef(activeAgentId);
   agentRef.current = activeAgentId;
+  const streamTextRef = useRef(streamText);
+  streamTextRef.current = streamText;
+  const streamingRef = useRef(streaming);
+  streamingRef.current = streaming;
 
   const actions: AppActions = {
     newSession: () => {
@@ -692,11 +846,19 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
 
     addMessage: (sessionId, msg) => {
       updateSessions((prev) => {
-        const next = prev.map((s) =>
-          s.id === sessionId
-            ? { ...s, messages: [...s.messages, msg], updatedAt: Date.now() }
-            : s
-        );
+        const next = prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          let messages = [...s.messages];
+          // If adding a full assistant message, replace any trailing partial
+          // (but never replace a partial with a system notice)
+          if (msg.role === "assistant" && !msg.meta?.partial && !msg.meta?.system) {
+            const last = messages[messages.length - 1];
+            if (last?.role === "assistant" && last.meta?.partial) {
+              messages = messages.slice(0, -1);
+            }
+          }
+          return { ...s, messages: [...messages, msg], updatedAt: Date.now() };
+        });
         // Crash-proof: immediately persist to localStorage + server after every message
         const updated = next.find((s) => s.id === sessionId);
         if (updated) saveSessionImmediate(updated);
@@ -1204,25 +1366,33 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
             <div className={`swipe-indicator ${swipeActive ? "swipe-active" : ""}`} />
             <Sidebar />
             <div style={{ display: view === "chat" ? "contents" : "none" }}><ChatView /></div>
-            <Suspense fallback={<LazyFallback />}>
-              {view === "activity" && <ViewErrorBoundary viewName="Activity"><ActivityView /></ViewErrorBoundary>}
-              {view === "files" && <ViewErrorBoundary viewName="Files"><FilesView /></ViewErrorBoundary>}
-              {view === "cron" && <ViewErrorBoundary viewName="Cron"><CronView /></ViewErrorBoundary>}
-              {view === "feed" && <ViewErrorBoundary viewName="Feed"><FeedView /></ViewErrorBoundary>}
-              {view === "agent-feed" && <ViewErrorBoundary viewName="Agent Feed"><AgentFeedView /></ViewErrorBoundary>}
-              {view === "preview" && <ViewErrorBoundary viewName="Preview"><PreviewView /></ViewErrorBoundary>}
-              {view === "spend" && <ViewErrorBoundary viewName="Spend"><SpendView /></ViewErrorBoundary>}
-              {view === "briefing" && <ViewErrorBoundary viewName="Briefing"><BriefingView /></ViewErrorBoundary>}
-              {view === "reminders" && <ViewErrorBoundary viewName="Reminders"><RemindersView /></ViewErrorBoundary>}
-              {view === "cost-dashboard" && <ViewErrorBoundary viewName="Cost Dashboard"><CostDashboardView /></ViewErrorBoundary>}
-              {view === "marketplace" && <ViewErrorBoundary viewName="Marketplace"><MarketplaceView /></ViewErrorBoundary>}
-              {view === "admin" && <ViewErrorBoundary viewName="Admin"><AdminView /></ViewErrorBoundary>}
-              {view === "feed-analytics" && <ViewErrorBoundary viewName="Feed Analytics"><FeedAnalyticsView /></ViewErrorBoundary>}
-              {view === "task-timeline" && <ViewErrorBoundary viewName="Task Timeline"><TaskTimelineView /></ViewErrorBoundary>}
-              {view === "finetune" && <ViewErrorBoundary viewName="Fine-Tuning"><FinetuneView /></ViewErrorBoundary>}
-              {view === "reports" && <ViewErrorBoundary viewName="Reports"><ReportsView /></ViewErrorBoundary>}
-              {view === "employee-activity" && <ViewErrorBoundary viewName="Employee Activity"><EmployeeActivityView /></ViewErrorBoundary>}
-            </Suspense>
+            {view !== "chat" && (
+              <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                <ViewNavHeader view={view} onSwitch={actions.setView} />
+                <Suspense fallback={<LazyFallback />}>
+                  {view === "activity" && <ViewErrorBoundary viewName="Activity"><ActivityView /></ViewErrorBoundary>}
+                  {view === "files" && <ViewErrorBoundary viewName="Files"><FilesView /></ViewErrorBoundary>}
+                  {view === "cron" && <ViewErrorBoundary viewName="Cron"><CronView /></ViewErrorBoundary>}
+                  {view === "feed" && <ViewErrorBoundary viewName="Feed"><FeedView /></ViewErrorBoundary>}
+                  {view === "agent-feed" && <ViewErrorBoundary viewName="Agent Feed"><AgentFeedView /></ViewErrorBoundary>}
+                  {view === "preview" && <ViewErrorBoundary viewName="Preview"><PreviewView /></ViewErrorBoundary>}
+                  {view === "spend" && <ViewErrorBoundary viewName="Spend"><SpendView /></ViewErrorBoundary>}
+                  {view === "briefing" && <ViewErrorBoundary viewName="Briefing"><BriefingView /></ViewErrorBoundary>}
+                  {view === "reminders" && <ViewErrorBoundary viewName="Reminders"><RemindersView /></ViewErrorBoundary>}
+                  {view === "cost-dashboard" && <ViewErrorBoundary viewName="Cost Dashboard"><CostDashboardView /></ViewErrorBoundary>}
+                  {view === "marketplace" && <ViewErrorBoundary viewName="Marketplace"><MarketplaceView /></ViewErrorBoundary>}
+                  {view === "admin" && <ViewErrorBoundary viewName="Admin"><AdminView /></ViewErrorBoundary>}
+                  {view === "feed-analytics" && <ViewErrorBoundary viewName="Feed Analytics"><FeedAnalyticsView /></ViewErrorBoundary>}
+                  {view === "task-timeline" && <ViewErrorBoundary viewName="Task Timeline"><TaskTimelineView /></ViewErrorBoundary>}
+                  {view === "finetune" && <ViewErrorBoundary viewName="Fine-Tuning"><FinetuneView /></ViewErrorBoundary>}
+                  {view === "reports" && <ViewErrorBoundary viewName="Reports"><ReportsView /></ViewErrorBoundary>}
+                  {view === "employee-activity" && <ViewErrorBoundary viewName="Employee Activity"><EmployeeActivityView /></ViewErrorBoundary>}
+                  {view === "tasks" && <ViewErrorBoundary viewName="Tasks"><TasksView /></ViewErrorBoundary>}
+                  {view === "projects" && <ViewErrorBoundary viewName="Projects"><ProjectsView /></ViewErrorBoundary>}
+                  {view === "email" && <ViewErrorBoundary viewName="Email"><EmailView /></ViewErrorBoundary>}
+                </Suspense>
+              </div>
+            )}
           </div>
         </div>
       </AppContext.Provider>

@@ -1,11 +1,12 @@
 /**
  * Voice Assistant State Machine — useReducer-based with typed actions and guards.
  *
- * States: idle → greeting → listening → transcribing → thinking → speaking → error
+ * States: idle → greeting → ready → listening → transcribing → thinking → speaking → error
+ * Push-to-talk: "ready" waits for user tap, "listening" actively records until next tap.
  * Replaces scattered setPhase() calls + processingRef/stoppedRef/activeRef booleans.
  */
 
-export type VoicePhase = "idle" | "greeting" | "listening" | "transcribing" | "thinking" | "speaking" | "error";
+export type VoicePhase = "idle" | "greeting" | "ready" | "listening" | "transcribing" | "thinking" | "speaking" | "error";
 
 export interface VoiceState {
   phase: VoicePhase;
@@ -53,9 +54,10 @@ export function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState
 
     case "GREETING_DONE":
       if (state.phase !== "greeting") return state;
-      return { ...state, phase: "listening", statusText: "" };
+      return { ...state, phase: "ready", statusText: "" };
 
     case "START_LISTENING":
+      if (state.phase !== "ready" && state.phase !== "listening" && state.phase !== "greeting") return state;
       return {
         ...state,
         phase: "listening",
@@ -93,19 +95,20 @@ export function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState
       return { ...state, phase: "speaking", statusText: "" };
 
     case "START_SPEAKING":
+      if (state.phase !== "thinking" && state.phase !== "ready") return state;
       return { ...state, phase: "speaking", statusText: "" };
 
     case "SPEAK_DONE":
       if (state.phase !== "speaking") return state;
-      return { ...state, phase: "listening", transcript: "", finalTranscript: "", statusText: "" };
+      return { ...state, phase: "ready", transcript: "", finalTranscript: "", statusText: "" };
 
     case "INTERRUPT":
-      if (state.phase !== "speaking" && state.phase !== "thinking") return state;
-      return { ...state, phase: "listening", transcript: "", finalTranscript: "", statusText: "" };
+      if (state.phase !== "speaking" && state.phase !== "thinking" && state.phase !== "transcribing" && state.phase !== "listening") return state;
+      return { ...state, phase: "ready", transcript: "", finalTranscript: "", statusText: "" };
 
     case "BARGE_IN":
       if (state.phase !== "speaking") return state;
-      return { ...state, phase: "listening", transcript: "", finalTranscript: "", statusText: "", speechActive: true };
+      return { ...state, phase: "ready", transcript: "", finalTranscript: "", statusText: "", speechActive: false };
 
     case "CLOSE":
       return { ...initialVoiceState };
@@ -115,7 +118,7 @@ export function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState
 
     case "RETRY":
       if (state.phase !== "error") return state;
-      return { ...state, phase: "listening", errorMsg: "", transcript: "", finalTranscript: "", statusText: "" };
+      return { ...state, phase: "ready", errorMsg: "", transcript: "", finalTranscript: "", statusText: "" };
 
     case "SET_STATUS":
       return { ...state, statusText: action.text };

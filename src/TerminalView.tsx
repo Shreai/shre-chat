@@ -140,6 +140,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
       setTabs((prev) => {
         const tab = prev.find((t) => t.id === tabId);
         if (tab) {
+          (tab as any)._cleanup?.(); // stop auto-reconnect before closing
           tab.observer?.disconnect();
           tab.ws?.close();
           tab.term?.dispose();
@@ -213,46 +214,91 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
       term.open(el);
       fit.fit();
 
-      // Connect WebSocket
+      // ── Auto-reconnecting WebSocket for terminal ──────────────
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${proto}//${location.host}/ws/terminal`);
+      const wsUrl = `${proto}//${location.host}/ws/terminal`;
+      let currentWs: WebSocket | null = null;
+      let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+      let reconnectAttempt = 0;
+      let intentionallyClosed = false;
+      const MAX_RECONNECT_DELAY = 8_000;
 
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-      };
+      function connectWs() {
+        if (intentionallyClosed) return;
+        const ws = new WebSocket(wsUrl);
+        currentWs = ws;
 
-      ws.onmessage = (e) => {
-        term.write(e.data);
-      };
+        ws.onopen = () => {
+          reconnectAttempt = 0;
+          ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+          // Update tab ref so sendCommand works
+          setTabs((prev) =>
+            prev.map((t) => (t.id === activeTab.id ? { ...t, ws } : t)),
+          );
+        };
 
-      ws.onclose = () => {
-        term.write("\r\n\x1b[90m[Disconnected]\x1b[0m\r\n");
-      };
+        ws.onmessage = (e) => {
+          term.write(e.data);
+        };
 
-      ws.onerror = () => {
-        term.write("\r\n\x1b[31m[Connection error]\x1b[0m\r\n");
-      };
+        ws.onclose = () => {
+          if (intentionallyClosed) {
+            term.write("\r\n\x1b[90m[Disconnected]\x1b[0m\r\n");
+            return;
+          }
+          // Auto-reconnect with backoff
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
+          reconnectAttempt++;
+          term.write(`\r\n\x1b[33m[Connection lost — reconnecting in ${(delay / 1000).toFixed(0)}s...]\x1b[0m\r\n`);
+          reconnectTimer = setTimeout(connectWs, delay);
+        };
+
+        ws.onerror = () => {
+          // onclose will fire after this — reconnect handled there
+        };
+      }
+
+      connectWs();
 
       term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
+        if (currentWs?.readyState === WebSocket.OPEN) {
+          currentWs.send(data);
         }
       });
 
+      // Reconnect on visibility restore (tab switch / screen wake)
+      const handleVisibility = () => {
+        if (document.visibilityState === "visible" && currentWs?.readyState !== WebSocket.OPEN && !intentionallyClosed) {
+          // Clear any pending reconnect and connect immediately
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectAttempt = 0;
+          term.write("\r\n\x1b[36m[Reconnecting...]\x1b[0m\r\n");
+          connectWs();
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+
       const onResize = () => {
         fit.fit();
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+        if (currentWs?.readyState === WebSocket.OPEN) {
+          currentWs.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
         }
       };
 
       const observer = new ResizeObserver(onResize);
       observer.observe(el);
 
+      // Store cleanup function on tab for closeTab to use
+      const cleanup = () => {
+        intentionallyClosed = true;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+
       // Update tab state
       setTabs((prev) =>
         prev.map((t) =>
-          t.id === activeTab.id ? { ...t, term, ws, fit, observer } : t,
+          t.id === activeTab.id ? { ...t, term, ws: currentWs, fit, observer, _cleanup: cleanup } as any : t,
         ),
       );
     }, [visible, activeTab?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -326,6 +372,47 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
 
         {/* Terminal container */}
         <div ref={containerRef} className="flex-1 min-h-0" style={{ padding: "4px 8px" }} />
+
+        {/* Shortcut keys bar */}
+        <div className="flex items-center gap-1 px-2 py-1 shrink-0 overflow-x-auto scrollbar-none"
+          style={{ background: "rgba(255,255,255,0.03)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          {[
+            { label: "Esc", seq: "\x1b" },
+            { label: "Tab", seq: "\t" },
+            { label: "⇧Tab", seq: "\x1b[Z" },
+            { label: "Ctrl+C", seq: "\x03" },
+            { label: "Ctrl+D", seq: "\x04" },
+            { label: "Ctrl+Z", seq: "\x1a" },
+            { label: "Ctrl+L", seq: "\x0c" },
+            { label: "Ctrl+A", seq: "\x01" },
+            { label: "Ctrl+E", seq: "\x05" },
+            { label: "↑", seq: "\x1b[A" },
+            { label: "↓", seq: "\x1b[B" },
+          ].map(({ label, seq }) => (
+            <button
+              key={label}
+              onClick={() => {
+                const tab = tabsRef.current.find((t) => t.id === activeTabId);
+                if (tab?.ws && tab.ws.readyState === WebSocket.OPEN) {
+                  tab.ws.send(seq);
+                }
+                tab?.term?.focus();
+              }}
+              className="px-2 py-0.5 rounded text-[10px] font-medium shrink-0 transition-colors"
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                color: "rgba(255,255,255,0.5)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                fontFamily: "'SF Mono', Menlo, monospace",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.8)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {/* Voice/text input bar — type or speak commands */}
         <TerminalVoiceInput onSubmit={(cmd) => {

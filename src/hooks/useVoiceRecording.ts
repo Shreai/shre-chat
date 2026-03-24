@@ -100,8 +100,8 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
   useEffect(() => {
     const announcements: Record<string, string> = {
       idle: "",
-      waiting: "Listening for wake word. Say shre shre to start.",
-      recording: "Recording. Tap to stop, or pause for 3 seconds.",
+      waiting: "Ready. Tap to talk.",
+      recording: "Recording. Tap to send.",
       transcribing: "Processing your voice.",
     };
     setVoiceAnnouncement(announcements[voicePhase] || "");
