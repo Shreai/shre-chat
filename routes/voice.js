@@ -4,6 +4,7 @@ import { serviceUrl } from "shre-sdk";
 import { randomUUID } from "node:crypto";
 import { classifyIntent, learnIntent, getTargetForIntent, getTopShortcuts } from "./intent-router.js";
 import { chunkIntoSentences, scoreRelevance, assembleContext, detectStoreReferences } from "./voice-context.js";
+import { recordVoiceFailure } from "./voice-quality-monitor.js";
 
 /** @typedef {import('node:http').IncomingMessage} IncomingMessage */
 /** @typedef {import('node:http').ServerResponse} ServerResponse */
@@ -356,6 +357,7 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
               } else {
                 const errBody = await taskRes.text().catch(() => "");
                 log.warn("Voice task creation failed", { status: taskRes.status, body: errBody.slice(0, 300) });
+                recordVoiceFailure("voice_cmd_error", { detail: `Task creation HTTP ${taskRes.status}: ${errBody.slice(0, 200)}` });
                 return json(res, {
                   action: "task_error",
                   spoken: "I tried to create that task but something went wrong. You can try again or type it in the chat.",
@@ -363,6 +365,7 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
               }
             } catch (err) {
               log.error("Voice task creation error", {}, err);
+              recordVoiceFailure("voice_cmd_error", { detail: `Task creation error: ${err.message}` });
               return json(res, {
                 action: "task_error",
                 spoken: "Sorry, I couldn't reach the task service right now. Try again in a moment.",
@@ -396,9 +399,12 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
                 tasks,
                 mib007Link: "/SHR/tasks",
               });
+            } else {
+              recordVoiceFailure("voice_cmd_error", { detail: `Task list non-ok: ${taskRes.status}` });
             }
           } catch (err) {
             log.error("Voice task list error", {}, err);
+            recordVoiceFailure("voice_cmd_error", { detail: `Task list error: ${err.message}` });
           }
           return json(res, { action: "task_error", spoken: "I couldn't fetch your tasks right now. The task service might be busy." });
         }
@@ -425,9 +431,12 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
                 transcript,
                 digest,
               });
+            } else {
+              recordVoiceFailure("voice_cmd_error", { detail: `Digest non-ok: ${digestRes.status}` });
             }
           } catch (err) {
             log.error("Voice digest error", {}, err);
+            recordVoiceFailure("voice_cmd_error", { detail: `Digest error: ${err.message}` });
           }
           return json(res, { action: "digest_error", spoken: "I couldn't pull up your status right now." });
         }
@@ -465,9 +474,14 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
                 spoken: `Done! I'll send you ${reportName} ${scheduleLabel}. You can manage schedules in settings.`,
                 transcript: `Report scheduled: ${reportName} [${schedule}]`,
               });
+            } else if (reportRes) {
+              recordVoiceFailure("voice_cmd_error", { detail: `Report schedule non-ok: ${reportRes.status}` });
+            } else {
+              recordVoiceFailure("voice_cmd_error", { detail: "Report schedule fetch failed (null response)" });
             }
           } catch (err) {
             log.warn("Voice schedule report failed", {}, err);
+            recordVoiceFailure("voice_cmd_error", { detail: `Report schedule error: ${err.message}` });
           }
           // If internal fetch failed, still acknowledge — the report table might not exist yet
           const scheduleLabel = schedule === "daily_8am" ? "every morning" : schedule === "weekly_monday" ? "every Monday" : "on the 1st of each month";
@@ -518,6 +532,7 @@ export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY
             });
           } catch (err) {
             log.warn("Voice handoff creation failed", {}, err);
+            recordVoiceFailure("voice_cmd_error", { detail: `Handoff error: ${err.message}`, targetAgent });
           }
           return json(res, {
             action: "agent_switch",
@@ -628,6 +643,7 @@ Examples:
                     });
                   } else {
                     log.warn("AI-classified task creation failed", { status: taskRes.status });
+                    recordVoiceFailure("voice_cmd_error", { detail: `AI-classified task creation HTTP ${taskRes.status}` });
                     return json(res, { action: "task_error", spoken: "I understood you want a task, but couldn't create it right now. Try again." });
                   }
                 }
@@ -643,6 +659,7 @@ Examples:
                   const transcript = taskLines.join("\n");
                   return json(res, { action: "task_list", spoken: `You have ${tasks.length} pending task${tasks.length === 1 ? "" : "s"}. ${taskLines.join(". ")}.`, transcript, tasks, mib007Link: "/SHR/tasks" });
                 } else {
+                  recordVoiceFailure("voice_cmd_error", { detail: `AI-classified task list HTTP ${taskRes.status}` });
                   return json(res, { action: "task_error", spoken: "I couldn't fetch your tasks right now." });
                 }
               } else if (classified?.intent === "digest") {
@@ -654,6 +671,7 @@ Examples:
                   const transcript = `Pending: ${digest.pendingTasks || 0}, Completed today: ${digest.completedToday || 0}`;
                   return json(res, { action: "digest", spoken: `You have ${digest.pendingTasks || 0} pending tasks and ${digest.completedToday || 0} completed today.`, transcript, digest });
                 } else {
+                  recordVoiceFailure("voice_cmd_error", { detail: `AI-classified digest HTTP ${digestRes.status}` });
                   return json(res, { action: "digest_error", spoken: "I couldn't pull up your status right now." });
                 }
               } else if (classified?.intent === "data_query") {
@@ -764,6 +782,12 @@ How to speak:
 - It's okay to be brief. "Yep, that's right" or "Nah, I wouldn't do that" are perfectly fine answers.
 - Keep it to 1-3 sentences for simple things, up to 5 for complex topics. Don't ramble.
 
+Data access:
+- You have access to sales data, inventory, invoices, tasks, and contacts through your tools. If the user asks about data, USE YOUR TOOLS to fetch it.
+- Never say "I don't have access to that data" or "I can't retrieve that" — if a tool exists for it, call it.
+- If one tool fails, try alternative tools or data sources. CortexDB has cached data, RapidRMS has live data.
+- The user's name is Nir. He owns the business. Treat every data request as actionable.
+
 What NOT to do:
 - Never output markdown, bullet points, numbered lists, code blocks, URLs, or any formatting.
 - Never read data tables, JSON, or code verbatim. Summarize: "You've got about 12 tasks, mostly around the router" not the raw data.
@@ -774,6 +798,23 @@ What NOT to do:
 You have context from recent chat messages below — this includes data the user already pulled (sales reports, task lists, analytics, etc.).
 IMPORTANT: If the user asks about data that's already in the chat context, summarize it conversationally. Do NOT say "I can't access that" or "I don't have that data" — the data is RIGHT HERE in the context below. Read it, understand it, and give a spoken summary.
 For example, if the chat shows sales data, and the user asks "what were my sales today?" — just summarize the numbers from the context.`;
+
+          // ── Timezone injection — business local time, never UTC ──
+          let timezoneContext = "";
+          try {
+            const tzRes = await fetch(`${serviceUrl("shre-context")}/v1/context/timezone`, {
+              signal: AbortSignal.timeout(2000),
+            }).catch(() => null);
+            if (tzRes?.ok) {
+              const tzData = await tzRes.json();
+              timezoneContext = `\nCurrent local time: ${tzData.localTime || new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" })}. Timezone: ${tzData.timezone || "America/New_York"}. Always use this local time, never UTC.`;
+            }
+          } catch {}
+          if (!timezoneContext) {
+            // Fallback: use server-side ET
+            const localNow = new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" });
+            timezoneContext = `\nCurrent local time: ${localNow}. Timezone: America/New_York. Always use this local time, never UTC.`;
+          }
 
           // ── Data query metadata — when voice-command detected a multi-store/metric query ──
           let dataQueryHint = "";
@@ -790,7 +831,7 @@ For example, if the chat shows sales data, and the user asks "what were my sales
             : "No relevant data in recent chat. Answer based on your knowledge or ask the user to pull the data in chat first." + dataQueryHint;
 
           const allMessages = [
-            { role: "system", content: systemPrompt },
+            { role: "system", content: systemPrompt + timezoneContext },
             { role: "system", content: contextSystemMsg },
             ...(prevSessionsMsg ? [{ role: "system", content: prevSessionsMsg }] : []),
             ...(actionMemoryMsg ? [{ role: "system", content: actionMemoryMsg }] : []),
@@ -811,6 +852,7 @@ For example, if the chat shows sales data, and the user asks "what were my sales
 
           if (!apiRes.ok) {
             const errBody = await apiRes.text();
+            recordVoiceFailure("ai_error", { detail: `HTTP ${apiRes.status}: ${errBody.slice(0, 200)}`, sessionId });
             return json(res, { error: `AI failed: ${errBody}`, response: "Sorry, I couldn't process that." }, 502);
           }
 
@@ -841,9 +883,39 @@ For example, if the chat shows sales data, and the user asks "what were my sales
           auditLog(sessionId, 'voice_assist_response', 'out', { response: response.slice(0, 2000), sseLines: sseText.split("\n").length }, { latencyMs: Date.now() - auditStart, agentId, model: 'auto' });
           // Save assistant turn to DB for context persistence
           saveTurn(sessionId, "assistant", response || "I didn't catch that.", "speaking", null, null);
+          // ── Voice conversation learning — feed into RAG + training pipeline ──
+          // (Previously missing — voice conversations were invisible to the learning loop)
+          if (response && response.length >= 20) {
+            try {
+              const { logConversationToCortex, writeConversation } = await import("../serve-learning.js").catch(() => ({}));
+              if (typeof logConversationToCortex === "function") {
+                logConversationToCortex(agentId, prompt, response, "voice", "auto");
+              }
+            } catch {}
+            // Durable training write — same as text chat path
+            try {
+              const { writeConversation } = await import("shre-sdk/training");
+              writeConversation({
+                source: "shre-chat-voice",
+                agentId: agentId || "shre",
+                messages: [
+                  { role: "user", content: prompt },
+                  { role: "assistant", content: response },
+                ],
+                model: "auto",
+                tenantId: "platform",
+                conversationType: "voice",
+              }).catch(() => {});
+            } catch {}
+          }
           log.info("Voice assist response", { chars: response.length, preview: response.slice(0, 80), sseLines: sseText.split("\n").length });
+          if (!response) {
+            recordVoiceFailure("ai_empty", { detail: `Empty response after ${Date.now() - auditStart}ms`, sessionId });
+          }
           return json(res, { response: response || "I didn't catch that. Could you try again?" });
         } catch (err) {
+          const isTimeout = err.name === "AbortError" || err.name === "TimeoutError";
+          recordVoiceFailure(isTimeout ? "ai_timeout" : "ai_error", { detail: err.message, sessionId });
           return json(res, { error: err.message, response: "Sorry, something went wrong." }, 502);
         }
       });
@@ -866,6 +938,7 @@ For example, if the chat shows sales data, and the user asks "what were my sales
           if (digestRes.ok) digest = await digestRes.json();
         } catch (err) {
           log.warn("Voice briefing: tasks digest failed (non-fatal)", {}, err);
+          recordVoiceFailure("voice_cmd_error", { detail: `Briefing digest fetch: ${err.message}` });
         }
 
         // 2. Fetch fleet status — validate response shape
@@ -934,6 +1007,7 @@ For example, if the chat shows sales data, and the user asks "what were my sales
         });
       } catch (err) {
         log.error("Voice briefing error", {}, err);
+        recordVoiceFailure("voice_cmd_error", { detail: `Briefing error: ${err.message}` });
         return json(res, { briefing: "Hey! Ready when you are.", data: {} });
       }
     }

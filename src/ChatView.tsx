@@ -29,6 +29,7 @@ import { useGatewayConnection } from "./hooks/useGatewayConnection";
 
 // Extracted custom hooks
 import { useSlashCommands } from "./hooks/useSlashCommands";
+import { useMentions } from "./hooks/useMentions";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useVoiceHandlers } from "./hooks/useVoiceHandlers";
 import { useChatEffects } from "./hooks/useChatEffects";
@@ -353,6 +354,17 @@ export function ChatView() {
     ensureSession, AVAILABLE_MODELS, setSelectedModel, setModelOverride,
   });
 
+  // ── @@ Mentions (extracted hook) ──
+  const {
+    mentionOpen, setMentionOpen, mentionIndex, setMentionIndex,
+    mentionRef, mentionFiltered, mentionAgent, clearMention,
+    onMentionSelect, extractMention,
+  } = useMentions({
+    input, setInput,
+    agents: AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, group: a.group })),
+    inputRef,
+  });
+
   // ── Message handlers (extracted hook) ──
   const {
     handleSend, handleSendRef, sendFeedbackToRapidRMS,
@@ -366,7 +378,7 @@ export function ChatView() {
     selectedModel, compareMode, compareModels, setCompareStreams, setCompareWinner,
     cliMode, openclawMode, identityVerified, setIdentityVerified,
     pendingMessage, setPendingMessage, verifying, setVerifying,
-    ensureSession, executeSlashCommand,
+    ensureSession, executeSlashCommand, extractMention, clearMention,
     setStreamPhase, setActiveToolName, setCompacting, setPendingApproval,
     streamStartRef, sendTimeRef, firstTokenTimeRef,
     startRun, addStep, updateStep, completeRun,
@@ -449,6 +461,31 @@ export function ChatView() {
       if (e.key === "Escape") {
         e.preventDefault();
         setSlashOpen(false);
+        return;
+      }
+    }
+
+    // @@ Mention dropdown navigation
+    if (mentionOpen && mentionFiltered.length > 0) {
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev - 1 + mentionFiltered.length) % mentionFiltered.length);
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev + 1) % mentionFiltered.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const selected = mentionFiltered[mentionIndex];
+        if (selected) onMentionSelect(selected);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMentionOpen(false);
         return;
       }
     }
@@ -815,7 +852,19 @@ export function ChatView() {
             onToggle={() => setShowModelPicker(!showModelPicker)}
             onClose={() => setShowModelPicker(false)}
             selectedModel={selectedModel}
-            onSelectModel={(modelId) => { setSelectedModel(modelId); setModelOverride(activeAgentId, modelId); }}
+            onSelectModel={(modelId) => {
+              const prevName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name ?? selectedModel;
+              setSelectedModel(modelId);
+              setModelOverride(activeAgentId, modelId);
+              const sid = ensureSession();
+              const newName = AVAILABLE_MODELS.find(m => m.id === modelId)?.name ?? modelId;
+              actions.addMessage(sid, {
+                role: "assistant",
+                content: `[system] Model switched from ${prevName} to ${newName}. Connected.`,
+                timestamp: Date.now(),
+                meta: { system: "true" },
+              });
+            }}
             models={AVAILABLE_MODELS}
             agentName={currentAgent.name}
             pickerRef={modelPickerRef}
@@ -1677,6 +1726,13 @@ export function ChatView() {
             executeSlashCommand(cmd.startsWith("model ") ? cmd : input.slice(1));
           }
         }}
+        mentionOpen={mentionOpen}
+        mentionFiltered={mentionFiltered}
+        mentionIndex={mentionIndex}
+        mentionRef={mentionRef}
+        setMentionIndex={setMentionIndex}
+        onMentionSelect={onMentionSelect}
+        mentionAgent={mentionAgent}
         replyToIndex={state.replyToIndex}
         replyToContent={state.replyToIndex !== null && filteredMessages[state.replyToIndex] ? filteredMessages[state.replyToIndex].content : null}
         onCancelReply={() => actions.setReplyTo(null)}

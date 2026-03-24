@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shre Chat — Demo</title>
+<style>
+  :root {
+    --bg-1: #0d0d0f;
+    --bg-2: #161618;
+    --bg-3: #1e1e22;
+    --bg-main: #111113;
+    --msg-user: rgba(99,141,255,0.10);
+    --msg-ai: rgba(255,255,255,0.045);
+    --accent: #638dff;
+    --accent-soft: rgba(99,141,255,0.14);
+    --border: rgba(255,255,255,0.065);
+    --text-1: #ececf1;
+    --text-2: #a1a1aa;
+    --text-3: #6b6b76;
+    --success: #34d399;
+    --warning: #fbbf24;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "SF Pro Text", BlinkMacSystemFont, "Helvetica Neue", "Inter", system-ui, sans-serif;
+    background: var(--bg-1);
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .demo-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 800px;
+    margin: 0 auto;
+    background: var(--bg-main);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  /* Header */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+  .chat-header .avatar {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .chat-header .info h2 {
+    font-size: 15px; font-weight: 600; letter-spacing: -0.02em;
+  }
+  .chat-header .info .status {
+    font-size: 11px; color: var(--success); display: flex; align-items: center; gap: 5px;
+  }
+  .chat-header .info .status::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--success);
+  }
+
+  /* Messages */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+  .msg-row {
+    display: flex;
+    opacity: 0;
+    transform: translateY(12px);
+    animation: msgIn 0.4s ease forwards;
+  }
+  .msg-row.user { justify-content: flex-end; }
+  .msg-row.ai { justify-content: flex-start; }
+
+  .msg-bubble {
+    max-width: 85%;
+    padding: 10px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+  }
+  .user .msg-bubble {
+    background: var(--msg-user);
+    border: 1px solid var(--accent-soft);
+    color: var(--text-1);
+  }
+  .ai .msg-bubble {
+    background: var(--msg-ai);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+  }
+
+  .agent-label {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-bottom: 4px;
+    padding-left: 4px;
+  }
+
+  /* Typing indicator */
+  .typing {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 16px;
+  }
+  .typing .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-3);
+    animation: typingDot 1.4s ease-in-out infinite;
+  }
+  .typing .dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing .dot:nth-child(3) { animation-delay: 0.4s; }
+
+  /* Data table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 6px;
+    font-size: 13px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 6px 10px;
+    color: var(--text-3);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: var(--text-2);
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table .num { text-align: right; color: var(--text-1); font-weight: 500; }
+  .data-table tr:hover td { background: rgba(99,141,255,0.04); }
+
+  /* KPI cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 10px 0;
+  }
+  .kpi-card {
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .kpi-card .value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-1);
+    letter-spacing: -0.02em;
+  }
+  .kpi-card .label {
+    font-size: 10px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+  .kpi-card .delta {
+    font-size: 11px;
+    margin-top: 3px;
+    font-weight: 600;
+  }
+  .kpi-card .delta.up { color: var(--success); }
+  .kpi-card .delta.down { color: #f87171; }
+
+  /* Dept breakdown */
+  .dept-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 3px 0;
+    font-size: 12px;
+  }
+  .dept-bar .name { width: 80px; color: var(--text-2); text-align: right; flex-shrink: 0; }
+  .dept-bar .bar-wrap { flex: 1; height: 18px; background: var(--bg-3); border-radius: 4px; overflow: hidden; }
+  .dept-bar .bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+  .dept-bar .amt { width: 70px; color: var(--text-2); font-family: "SF Mono", monospace; font-size: 11px; }
+
+  /* Input bar */
+  .input-bar {
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+  .input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px 8px 4px 16px;
+    transition: border-color 0.2s;
+  }
+  .input-wrap.active { border-color: var(--accent); }
+  .input-wrap input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-1);
+    font-size: 14px;
+    padding: 8px 0;
+    font-family: inherit;
+  }
+  .input-wrap input::placeholder { color: var(--text-3); }
+  .send-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: #7fa3ff; }
+  .send-btn svg { width: 16px; height: 16px; }
+
+  /* Replay badge */
+  .replay-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .replay-btn {
+    padding: 6px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--accent-soft);
+    background: rgba(99,141,255,0.08);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .replay-btn:hover { background: rgba(99,141,255,0.15); }
+
+  /* Tool call badge */
+  .tool-call {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: rgba(99,141,255,0.06);
+    border: 1px solid var(--accent-soft);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--accent);
+    font-family: "SF Mono", monospace;
+    margin: 6px 0;
+  }
+  .tool-call .spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .tool-call.done { color: var(--success); border-color: rgba(52,211,153,0.2); background: rgba(52,211,153,0.06); }
+  .tool-call.done .spinner { display: none; }
+  .tool-call.done::before { content: '✓'; margin-right: 2px; }
+
+  @keyframes msgIn { to { opacity: 1; transform: translateY(0); } }
+  @keyframes typingDot { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; } 40% { transform: scale(1); opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .fade-in { animation: fadeIn 0.5s ease forwards; }
+</style>
+</head>
+<body>
+<div class="demo-shell">
+  <div class="chat-header">
+    <div class="avatar">🤖</div>
+    <div class="info">
+      <h2>Shre</h2>
+      <div class="status">Online — Party Liquor</div>
+    </div>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="input-bar">
+    <div class="input-wrap" id="inputWrap">
+      <input type="text" id="chatInput" placeholder="Ask Shre anything..." disabled>
+      <button class="send-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="replay-bar" id="replayBar" style="display:none">
+    <span>Demo complete</span>
+    <button class="replay-btn" onclick="location.reload()">↻ Replay</button>
+  </div>
+</div>
+
+<script>
+const msgs = document.getElementById('messages');
+const chatInput = document.getElementById('chatInput');
+const inputWrap = document.getElementById('inputWrap');
+const replayBar = document.getElementById('replayBar');
+
+const DEPT_COLORS = {
+  'Liquor':'#6366f1','Beer':'#f59e0b','Wine':'#ec4899','Tobacco':'#64748b',
+  'Beverages':'#06b6d4','Mixes':'#a78bfa','ICE BAG':'#94a3b8','Cigarette':'#fb923c','Miscellaneous':'#6b7280'
+};
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function scrollBottom() { msgs.scrollTop = msgs.scrollHeight; }
+
+function addUser(text) {
+  const row = document.createElement('div');
+  row.className = 'msg-row user';
+  row.innerHTML = '<div class="msg-bubble">' + text + '</div>';
+  msgs.appendChild(row);
+  scrollBottom();
+}
+
+function addAiLabel() {
+  const label = document.createElement('div');
+  label.className = 'agent-label';
+  label.textContent = '🤖 Shre';
+  label.style.opacity = '0';
+  label.style.animation = 'fadeIn 0.3s ease forwards';
+  msgs.appendChild(label);
+  scrollBottom();
+  return label;
+}
+
+function addTyping() {
+  const row = document.createElement('div');
+  row.className = 'msg-row ai';
+  row.innerHTML = '<div class="msg-bubble"><div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>';
+  msgs.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+function addAiBubble(html) {
+  const row = document.createElement('div');
+  row.className = 'msg-row ai';
+  row.innerHTML = '<div class="msg-bubble">' + html + '</div>';
+  msgs.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+function typeInInput(text, speed) {
+  return new Promise(resolve => {
+    inputWrap.classList.add('active');
+    chatInput.value = '';
+    let i = 0;
+    const iv = setInterval(() => {
+      chatInput.value += text[i];
+      i++;
+      if (i >= text.length) { clearInterval(iv); inputWrap.classList.remove('active'); resolve(); }
+    }, speed || 45);
+  });
+}
+
+// ── DEMO SCRIPT ──
+async function runDemo() {
+  await delay(800);
+
+  // Greeting
+  addAiLabel();
+  const g = addTyping();
+  await delay(1200);
+  g.remove();
+  addAiBubble("Hi Nir! 👋 I'm connected to <strong>Party Liquor</strong>'s live POS data. What would you like to know?");
+  await delay(1800);
+
+  // ── Q1: Top 5 invoices ──
+  await typeInInput('Fetch me top 5 invoices', 50);
+  await delay(400);
+  addUser('Fetch me top 5 invoices');
+  chatInput.value = '';
+  await delay(600);
+
+  addAiLabel();
+  const t1 = addTyping();
+  await delay(800);
+  t1.remove();
+
+  // Tool call
+  const tool1 = addAiBubble('<div class="tool-call"><div class="spinner"></div>Querying RapidRMS InvoiceReport API…</div>');
+  await delay(2000);
+  tool1.querySelector('.tool-call').className = 'tool-call done';
+  tool1.querySelector('.tool-call').innerHTML = 'Fetched 102 invoices for today';
+  await delay(600);
+
+  addAiLabel();
+  const t1b = addTyping();
+  await delay(1000);
+  t1b.remove();
+
+  addAiBubble(
+    "Here are today's <strong>top 5 invoices</strong> by amount:" +
+    '<table class="data-table">' +
+    '<tr><th>#</th><th>Invoice</th><th>Time</th><th>Cashier</th><th class="num">Amount</th></tr>' +
+    '<tr><td>1</td><td>INV-4821</td><td>2:47 PM</td><td>Maria G.</td><td class="num">$287.50</td></tr>' +
+    '<tr><td>2</td><td>INV-4809</td><td>1:12 PM</td><td>James R.</td><td class="num">$214.80</td></tr>' +
+    '<tr><td>3</td><td>INV-4835</td><td>3:31 PM</td><td>Maria G.</td><td class="num">$189.25</td></tr>' +
+    '<tr><td>4</td><td>INV-4798</td><td>11:45 AM</td><td>James R.</td><td class="num">$156.40</td></tr>' +
+    '<tr><td>5</td><td>INV-4844</td><td>4:08 PM</td><td>David L.</td><td class="num">$142.90</td></tr>' +
+    '</table>' +
+    '<div style="font-size:12px;color:var(--text-3);margin-top:4px">Showing highest-value transactions from 102 invoices today.</div>'
+  );
+  await delay(2500);
+
+  // ── Q2: Sales today ──
+  await typeInInput('What is my sales today?', 50);
+  await delay(400);
+  addUser('What is my sales today?');
+  chatInput.value = '';
+  await delay(600);
+
+  addAiLabel();
+  const t2 = addTyping();
+  await delay(800);
+  t2.remove();
+
+  const tool2 = addAiBubble('<div class="tool-call"><div class="spinner"></div>Fetching live dashboard data…</div>');
+  await delay(1500);
+  tool2.querySelector('.tool-call').className = 'tool-call done';
+  tool2.querySelector('.tool-call').innerHTML = 'Live data retrieved';
+  await delay(600);
+
+  addAiLabel();
+  const t2b = addTyping();
+  await delay(1200);
+  t2b.remove();
+
+  addAiBubble(
+    "Here's your <strong>live sales summary</strong> for today:" +
+    '<div class="kpi-grid">' +
+      '<div class="kpi-card"><div class="value">$3,147</div><div class="label">Gross Sales</div><div class="delta up">▲ +12.3%</div></div>' +
+      '<div class="kpi-card"><div class="value">102</div><div class="label">Transactions</div><div class="delta up">▲ +8.5%</div></div>' +
+      '<div class="kpi-card"><div class="value">$30.85</div><div class="label">Avg Ticket</div><div class="delta up">▲ +3.4%</div></div>' +
+      '<div class="kpi-card"><div class="value">$772</div><div class="label">Profit</div><div class="delta up">▲ +9.1%</div></div>' +
+      '<div class="kpi-card"><div class="value">24.6%</div><div class="label">Margin</div><div class="delta down">▼ -0.8%</div></div>' +
+      '<div class="kpi-card"><div class="value">$233</div><div class="label">Tax</div></div>' +
+    '</div>' +
+    '<div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">Sales by Department</div>' +
+    buildDeptBars({
+      'Liquor': 1917, 'Beer': 581, 'Wine': 297, 'Tobacco': 48,
+      'Beverages': 27, 'Mixes': 23, 'Miscellaneous': 12, 'ICE BAG': 5
+    }) +
+    '<div style="font-size:12px;color:var(--text-3);margin-top:10px">📊 Data as of ' + new Date().toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + ' — auto-refreshes every 5 min.</div>'
+  );
+
+  await delay(1500);
+  replayBar.style.display = 'flex';
+  replayBar.style.animation = 'fadeIn 0.5s ease';
+}
+
+function buildDeptBars(dept) {
+  const max = Math.max(...Object.values(dept));
+  let html = '';
+  for (const [name, amt] of Object.entries(dept)) {
+    const pct = (amt / max * 100).toFixed(0);
+    const color = DEPT_COLORS[name] || '#6366f1';
+    html += '<div class="dept-bar">' +
+      '<span class="name">' + name + '</span>' +
+      '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+      '<span class="amt">$' + amt.toLocaleString() + '</span>' +
+    '</div>';
+  }
+  return html;
+}
+
+runDemo();
+</script>
+</body>
+</html>

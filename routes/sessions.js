@@ -304,7 +304,10 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
             const existing = serverMap.get(cs.id);
             const clientUpdated = cs.updatedAt || cs.updated_at || 0;
             const serverUpdated = existing ? existing.updated_at : 0;
-            if (clientUpdated >= serverUpdated) {
+            // Pick version with more messages to prevent localStorage-quota data loss
+            const clientMsgCount = Array.isArray(cs.messages) ? cs.messages.length : 0;
+            const serverMsgCount = existing ? JSON.parse(existing.messages || '[]').length : 0;
+            if (clientMsgCount >= serverMsgCount || clientUpdated >= serverUpdated) {
               upsertSession(cs, userId, claims?.activeWorkspaceId || 'default');
             }
           }

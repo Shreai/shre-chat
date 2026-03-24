@@ -68,11 +68,20 @@ interface ChatComposerProps {
 
   // Slash commands
   slashOpen: boolean;
-  slashFiltered: { name: string; description: string; usage: string }[];
+  slashFiltered: { name: string; description: string; usage: string; category?: string }[];
   slashIndex: number;
   slashRef: React.RefObject<HTMLDivElement | null>;
   setSlashIndex: (val: number) => void;
   onSlashSelect: (cmd: string) => void;
+
+  // Mentions (@@)
+  mentionOpen: boolean;
+  mentionFiltered: { id: string; name: string; emoji: string; group: string }[];
+  mentionIndex: number;
+  mentionRef: React.RefObject<HTMLDivElement | null>;
+  setMentionIndex: (val: number) => void;
+  onMentionSelect: (agent: { id: string; name: string; emoji: string; group: string }) => void;
+  mentionAgent: { id: string; name: string; emoji: string } | null;
 
   // Reply
   replyToIndex: number | null;
@@ -115,6 +124,7 @@ export function ChatComposer(props: ChatComposerProps) {
     setIsHandsFree, setVoiceMode, setTtsVoice, onStopTTS,
     showTerminal, termViewMode, onToggleTerminal, onToggleTermViewMode,
     slashOpen, slashFiltered, slashIndex, slashRef, setSlashIndex, onSlashSelect,
+    mentionOpen, mentionFiltered, mentionIndex, mentionRef, setMentionIndex, onMentionSelect, mentionAgent,
     replyToIndex, replyToContent, onCancelReply,
     editingMsgIndex, editingQueueId, onCancelEdit,
     suggestions, onSelectSuggestion,
@@ -199,36 +209,98 @@ export function ChatComposer(props: ChatComposerProps) {
             style={{
               background: "var(--c-bg-2)",
               border: "1px solid var(--c-border-2)",
-              maxHeight: "240px",
+              maxHeight: "280px",
               overflowY: "auto",
             }}
           >
             <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--c-text-4)", borderBottom: "1px solid var(--c-border-1)" }}>
               Commands
             </div>
-            {slashFiltered.map((cmd, i) => (
+            {(() => {
+              let lastCategory = "";
+              return slashFiltered.map((cmd, i) => {
+                const cat = cmd.category || "session";
+                const showHeader = cat !== lastCategory;
+                lastCategory = cat;
+                const catLabel = cat === "app" ? "Apps" : cat === "platform" ? "Platform" : "";
+                return (
+                  <React.Fragment key={cmd.name}>
+                    {showHeader && catLabel && (
+                      <div className="px-3 py-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-5)", background: "var(--c-bg-3)" }}>
+                        {catLabel}
+                      </div>
+                    )}
+                    <button
+                      data-slash-active={i === slashIndex ? "true" : "false"}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                      style={{
+                        background: i === slashIndex ? "var(--c-bg-hover)" : "transparent",
+                        color: "var(--c-text-1)",
+                      }}
+                      onMouseEnter={() => setSlashIndex(i)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onSlashSelect(cmd.name.startsWith("model ") ? cmd.name : input.slice(1));
+                      }}
+                    >
+                      <span className="flex items-center justify-center w-6 h-6 rounded text-xs font-mono font-bold" style={{ background: "var(--c-bg-3)", color: cat === "app" ? "var(--c-success, #22c55e)" : cat === "platform" ? "var(--c-warning, #f59e0b)" : "var(--c-accent)" }}>
+                        /
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{cmd.name.startsWith("model ") ? cmd.name : cmd.usage}</div>
+                        <div className="text-xs truncate" style={{ color: "var(--c-text-4)" }}>{cmd.description}</div>
+                      </div>
+                      {i === slashIndex && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "var(--c-bg-3)", color: "var(--c-text-4)" }}>
+                          Enter
+                        </span>
+                      )}
+                    </button>
+                  </React.Fragment>
+                );
+              });
+            })()}
+          </div>
+        )}
+
+        {/* @@ Mention dropdown */}
+        {mentionOpen && mentionFiltered.length > 0 && (
+          <div
+            ref={mentionRef}
+            className="max-w-3xl mx-auto mb-1 rounded-lg overflow-hidden shadow-lg"
+            style={{
+              background: "var(--c-bg-2)",
+              border: "1px solid var(--c-border-2)",
+              maxHeight: "240px",
+              overflowY: "auto",
+            }}
+          >
+            <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--c-text-4)", borderBottom: "1px solid var(--c-border-1)" }}>
+              Mention Agent
+            </div>
+            {mentionFiltered.map((agent, i) => (
               <button
-                key={cmd.name}
-                data-slash-active={i === slashIndex ? "true" : "false"}
+                key={agent.id}
+                data-mention-active={i === mentionIndex ? "true" : "false"}
                 className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
                 style={{
-                  background: i === slashIndex ? "var(--c-bg-hover)" : "transparent",
+                  background: i === mentionIndex ? "var(--c-bg-hover)" : "transparent",
                   color: "var(--c-text-1)",
                 }}
-                onMouseEnter={() => setSlashIndex(i)}
+                onMouseEnter={() => setMentionIndex(i)}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onSlashSelect(cmd.name.startsWith("model ") ? cmd.name : input.slice(1));
+                  onMentionSelect(agent);
                 }}
               >
-                <span className="flex items-center justify-center w-6 h-6 rounded text-xs font-mono font-bold" style={{ background: "var(--c-bg-3)", color: "var(--c-accent)" }}>
-                  /
+                <span className="flex items-center justify-center w-6 h-6 rounded text-sm">
+                  {agent.emoji}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{cmd.name.startsWith("model ") ? cmd.name : cmd.usage}</div>
-                  <div className="text-xs truncate" style={{ color: "var(--c-text-4)" }}>{cmd.description}</div>
+                  <div className="text-sm font-medium truncate">{agent.name}</div>
+                  <div className="text-xs truncate" style={{ color: "var(--c-text-4)" }}>{agent.group}</div>
                 </div>
-                {i === slashIndex && (
+                {i === mentionIndex && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "var(--c-bg-3)", color: "var(--c-text-4)" }}>
                     Enter
                   </span>
@@ -279,6 +351,14 @@ export function ChatComposer(props: ChatComposerProps) {
             </div>
           )}
 
+          {/* Mention agent badge */}
+          {mentionAgent && (
+            <div className="flex items-center gap-1.5 px-3 py-1 text-[11px]" style={{ color: "var(--c-accent)" }}>
+              <span>{mentionAgent.emoji}</span>
+              <span>Directing to <strong>{mentionAgent.name}</strong></span>
+            </div>
+          )}
+
           {/* Textarea */}
           <textarea
             id="shre-chat-textarea"
@@ -306,6 +386,7 @@ export function ChatComposer(props: ChatComposerProps) {
             <div className="flex items-center gap-0.5">
               {/* Attach */}
               <button
+                tabIndex={-1}
                 onClick={() => fileRef.current?.click()}
                 className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
                 style={{ color: "var(--c-text-2)" }}
@@ -318,6 +399,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* Emoji */}
               <div className="relative" ref={emojiRef}>
                 <button
+                  tabIndex={-1}
                   onClick={() => setShowEmoji(!showEmoji)}
                   className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
                   style={{ color: showEmoji ? "var(--c-accent)" : "var(--c-text-2)" }}
@@ -350,6 +432,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* Mic button — tap = push-to-talk, long-press = hands-free mode */}
               {speechSupported && (
                 <button
+                  tabIndex={-1}
                   onClick={() => {
                     if (isRecording) onStopRecording();
                     else if (!isHandsFree) onStartRecording();
@@ -406,6 +489,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* Voice mode */}
               {speechSupported && (
                 <button
+                  tabIndex={-1}
                   onClick={() => {
                     const next = !voiceMode;
                     setVoiceMode(next);
@@ -423,6 +507,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* TTS voice selector */}
               {voiceMode && (
                 <select
+                  tabIndex={-1}
                   value={ttsVoice}
                   onChange={(e) => setTtsVoice(e.target.value)}
                   className="h-7 sm:h-6 rounded text-[10px] px-1 border-none outline-none cursor-pointer hidden sm:block"
@@ -441,6 +526,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
               {/* Terminal toggle */}
               <button
+                tabIndex={-1}
                 onClick={onToggleTerminal}
                 className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${showTerminal ? "bg-violet-500/20 text-violet-400" : ""}`}
                 style={showTerminal ? {} : { color: "var(--c-text-2)" }}
@@ -453,6 +539,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* View mode toggle */}
               {showTerminal && (
                 <button
+                  tabIndex={-1}
                   onClick={onToggleTermViewMode}
                   className="h-7 rounded-lg flex items-center px-1.5 text-[10px] transition-all hover:brightness-125"
                   style={{ color: termViewMode === "tabs" ? "var(--c-terminal-accent)" : "var(--c-text-2)" }}
@@ -523,6 +610,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* Stop button */}
               {streaming && (
                 <button
+                  tabIndex={-1}
                   onClick={onAbort}
                   className="h-7 w-7 rounded-lg flex items-center justify-center transition-all bg-red-500/20 text-red-400 hover:bg-red-500/30 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
                   title="Stop"

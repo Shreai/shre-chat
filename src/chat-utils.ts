@@ -113,6 +113,8 @@ export function providerLabel(provider: string): string {
 
 // Fallback models (used until live fetch completes)
 export const FALLBACK_MODELS: Array<{ id: string; name: string; provider: string; icon: string; connected?: boolean }> = [
+  { id: "ollama/qwen3:8b", name: "Qwen3 8B", provider: "Ollama", icon: "🦙", connected: true },
+  { id: "ollama/qwen3:14b", name: "Qwen3 14B", provider: "Ollama", icon: "🦙", connected: true },
   { id: "anthropic/claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "Anthropic", icon: "🟣", connected: true },
   { id: "anthropic/claude-opus-4-6", name: "Claude Opus 4.6", provider: "Anthropic", icon: "🟣", connected: true },
   { id: "anthropic/claude-haiku", name: "Claude Haiku", provider: "Anthropic", icon: "🟣", connected: true },
@@ -191,8 +193,8 @@ export function setModelOverride(agentId: string, modelId: string | null) {
 }
 
 /** MIB007 base URL — use tunnel URL when available, fallback to localhost */
-export const MIB007_BASE = typeof window !== "undefined" && window.location.hostname !== "localhost"
-  ? "https://app.nirtek.net"
+export const MIB007_BASE = typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname)
+  ? "https://mib007.nirtek.net"
   : `https://localhost:${ports.services?.["mib007"]?.port ?? 5520}`;
 
 /** Default company prefix for MIB007 deep links */
@@ -346,6 +348,7 @@ export function splitStableAndPending(text: string): { stable: string; pending: 
 export function classifySystemEvent(content: string): { icon: string; label: string; color: string } {
   const t = content.toLowerCase();
   if (t.includes("compaction") || t.includes("compacted")) return { icon: "⟳", label: "Context compacted", color: "var(--c-orange)" };
+  if (t.includes("model switched")) return { icon: "⚡", label: "Model changed", color: "var(--c-info-soft)" };
   if (t.includes("session startup") || t.includes("startup sequence")) return { icon: "🔄", label: "Session refresh", color: "var(--c-info-soft)" };
   if (t.includes("agents.md") || t.includes("identity verification")) return { icon: "📋", label: "Agent startup", color: "var(--c-purple)" };
   if (t.includes("sender (untrusted")) return { icon: "🏷", label: "Sender metadata", color: "var(--c-slate)" };

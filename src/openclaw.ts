@@ -509,7 +509,7 @@ async function streamViaFallback(
   callbacks.onStatus?.("connecting");
 
   const messages = [
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    ...history.filter((m) => !m.meta?.system).map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: message },
   ];
 

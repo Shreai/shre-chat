@@ -497,7 +497,7 @@ export const StableMarkdownBlock = memo(function StableMarkdownBlock({ text }: {
 // Compact inline display for system/context messages
 export function SystemEventChip({ message, timestamp }: { message: ChatMessage; timestamp?: string }) {
   const [expanded, setExpanded] = useState(false);
-  const content = message.content.trim();
+  const content = message.content.trim().replace(/^\[system\]\s*/i, "");
 
   // Group multiple system markers into chips
   const chips: { icon: string; label: string; color: string }[] = [];
@@ -829,6 +829,16 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                 {displayContent}
               </Markdown>
               <ActionTagChips tags={actionTags} />
+            </div>
+          )}
+          {/* Partial response indicator — shown when response was saved mid-stream */}
+          {!isUser && meta?.partial && (
+            <div
+              className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded text-[10px] font-medium"
+              style={{ background: "rgba(245,158,11,0.12)", color: "rgb(217,119,6)", border: "1px solid rgba(245,158,11,0.2)" }}
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 4a.75.75 0 011.5 0v3a.75.75 0 01-1.5 0V5zm.75 6.5a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
+              Response was interrupted — this is a partial reply
             </div>
           )}
         </div>

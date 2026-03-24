@@ -230,7 +230,7 @@ export function MessageList(props: MessageListProps) {
                     paddingBottom: compact ? "4px" : "12px",
                   }}
                 >
-                  {(msg as ChatMessage & { _system?: boolean })._system ? (
+                  {(msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
                     <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : (
                     <MessageBubble
@@ -253,7 +253,7 @@ export function MessageList(props: MessageListProps) {
                 className={newMsgStartIndex.current !== null && i >= newMsgStartIndex.current ? "msg-enter" : undefined}
                 style={{ paddingBottom: compact ? "4px" : "12px" }}
               >
-                {(msg as ChatMessage & { _system?: boolean })._system ? (
+                {(msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
                   <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
                 ) : (
                   <MessageBubble
