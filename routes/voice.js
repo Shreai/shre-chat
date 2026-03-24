@@ -16,6 +16,12 @@ import { recordVoiceFailure } from "./voice-quality-monitor.js";
  * @property {number|string} OPENCLAW_PORT
  * @property {string} GATEWAY_TOKEN
  * @property {import('better-sqlite3').Database} chatDb
+ * @property {Function} logConversationToCortex
+ * @property {Function} emitConversationComplete
+ * @property {Function} extractAndLogSkills
+ * @property {object} conversationLearner
+ * @property {object} conversationEvaluator
+ * @property {object} feedbackPipeline
  */
 
 /**
@@ -124,7 +130,7 @@ function validatePrompt(prompt) {
  * @param {VoiceDeps} deps
  * @returns {(req: IncomingMessage, res: ServerResponse, url: URL, helpers: { json: Function, collectBody: Function }) => Promise<boolean>}
  */
-export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb }) {
+export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb, logConversationToCortex, emitConversationComplete, extractAndLogSkills, conversationLearner, conversationEvaluator, feedbackPipeline }) {
 
   // ── DB schema validation at init ──
   let dbReady = false;
@@ -717,27 +723,35 @@ Examples:
           const promptErr = validatePrompt(prompt);
           if (promptErr) return json(res, { error: promptErr }, 400);
 
-          // ── Smart context pipeline: chunk → score → assemble focused context ──
-          const sentenceChunks = chunkIntoSentences((chatHistory || []).slice(-20));
-          const scored = scoreRelevance(sentenceChunks, prompt);
-          const assembled = assembleContext(scored, 3000);
+          // ── Unified context from shre-context:5462 ──
+          let unifiedContext = "";
+          try {
+            const ctxRes = await fetch(`${serviceUrl("shre-context")}/v1/context`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                agentId: agentId || "shre",
+                tenantId: "platform",
+                prompt,
+                format: "prompt",
+              }),
+              signal: AbortSignal.timeout(3000),
+            });
+            if (ctxRes.ok) {
+              const ctxData = await ctxRes.json();
+              unifiedContext = ctxData.injection || "";
+              log.info("Voice unified context", { chars: unifiedContext.length, layers: ctxData.layers?.length || 0, latencyMs: ctxData.totalLatencyMs });
+            }
+          } catch (ctxErr) {
+            log.warn("Voice unified context fetch failed, continuing without", { error: ctxErr.message });
+          }
 
-          // Log pipeline stats for tuning
-          const top3 = scored.slice(0, 3).map((c) => ({ score: c.score, text: c.text.slice(0, 60), role: c.role }));
-          log.info("Voice context pipeline", {
-            totalSentences: sentenceChunks.length,
-            top3,
-            relevant: assembled.relevant,
-            contextChars: assembled.totalChars || 0,
-            contextChunks: assembled.chunkCount || 0,
-          });
-
+          // ── Voice-local context (session memory, actions) ──
           const voiceTurns = (voiceHistory || []).map((t) => ({
             role: t.role,
             content: t.content || t.text || "",
           }));
 
-          // Fetch last 3 voice session summaries for context
           let prevSessionsMsg = "";
           let actionMemoryMsg = "";
           if (dbReady) {
@@ -749,7 +763,6 @@ Examples:
                 prevSessionsMsg = "Previous voice sessions: " + prevSessions.map((s, i) => `${i + 1}. ${s.summary}`).join(" ");
               }
             } catch {}
-            // Fetch recent actions from this session for action memory
             try {
               const recentActions = chatDb.prepare(
                 `SELECT action_type, target, result, status, created_at FROM voice_actions ORDER BY created_at DESC LIMIT 10`
@@ -766,7 +779,8 @@ Examples:
           const sessionId = body.sessionId || null;
           saveTurn(sessionId, "user", prompt, "thinking", null, null);
 
-          const systemPrompt = `You are ${agentId || "Shre"}, a real person having a spoken conversation. This is voice — not text chat. Everything you say will be read aloud by a text-to-speech engine.
+          // ── Voice personality wrapper (around unified context) ──
+          const voicePersonality = `You are ${agentId || "Shre"}, a real person having a spoken conversation. This is voice — not text chat. Everything you say will be read aloud by a text-to-speech engine.
 
 Personality:
 - You're a sharp, warm colleague who genuinely cares. Think senior engineer at a coffee shop, not customer support.
@@ -782,39 +796,17 @@ How to speak:
 - It's okay to be brief. "Yep, that's right" or "Nah, I wouldn't do that" are perfectly fine answers.
 - Keep it to 1-3 sentences for simple things, up to 5 for complex topics. Don't ramble.
 
-Data access:
-- You have access to sales data, inventory, invoices, tasks, and contacts through your tools. If the user asks about data, USE YOUR TOOLS to fetch it.
-- Never say "I don't have access to that data" or "I can't retrieve that" — if a tool exists for it, call it.
-- If one tool fails, try alternative tools or data sources. CortexDB has cached data, RapidRMS has live data.
-- The user's name is Nir. He owns the business. Treat every data request as actionable.
-
 What NOT to do:
 - Never output markdown, bullet points, numbered lists, code blocks, URLs, or any formatting.
 - Never read data tables, JSON, or code verbatim. Summarize: "You've got about 12 tasks, mostly around the router" not the raw data.
 - Never say "As an AI" or "I don't have feelings" — stay in character.
 - Never start with "Sure!" or "Of course!" or "Absolutely!" — those are robotic fillers. Be more natural.
-- Never use the word "certainly" — real people don't say it.
+- Never use the word "certainly" — real people don't say it.`;
 
-You have context from recent chat messages below — this includes data the user already pulled (sales reports, task lists, analytics, etc.).
-IMPORTANT: If the user asks about data that's already in the chat context, summarize it conversationally. Do NOT say "I can't access that" or "I don't have that data" — the data is RIGHT HERE in the context below. Read it, understand it, and give a spoken summary.
-For example, if the chat shows sales data, and the user asks "what were my sales today?" — just summarize the numbers from the context.`;
-
-          // ── Timezone injection — business local time, never UTC ──
-          let timezoneContext = "";
-          try {
-            const tzRes = await fetch(`${serviceUrl("shre-context")}/v1/context/timezone`, {
-              signal: AbortSignal.timeout(2000),
-            }).catch(() => null);
-            if (tzRes?.ok) {
-              const tzData = await tzRes.json();
-              timezoneContext = `\nCurrent local time: ${tzData.localTime || new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" })}. Timezone: ${tzData.timezone || "America/New_York"}. Always use this local time, never UTC.`;
-            }
-          } catch {}
-          if (!timezoneContext) {
-            // Fallback: use server-side ET
-            const localNow = new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" });
-            timezoneContext = `\nCurrent local time: ${localNow}. Timezone: America/New_York. Always use this local time, never UTC.`;
-          }
+          // ── Chat context from recent messages (local scoring for voice relevance) ──
+          const sentenceChunks = chunkIntoSentences((chatHistory || []).slice(-20));
+          const scored = scoreRelevance(sentenceChunks, prompt);
+          const assembled = assembleContext(scored, 3000);
 
           // ── Data query metadata — when voice-command detected a multi-store/metric query ──
           let dataQueryHint = "";
@@ -826,13 +818,18 @@ For example, if the chat shows sales data, and the user asks "what were my sales
             dataQueryHint = `\nThe user is asking about ${metricLabel} for ${storesLabel} during ${periodLabel}. If you have this data in the chat context, summarize it. If comparing stores, present the comparison clearly.`;
           }
 
-          const contextSystemMsg = assembled.relevant
+          const chatContextMsg = assembled.relevant
             ? "Data from the user's recent chat (summarize this if asked):\n" + assembled.context + dataQueryHint
-            : "No relevant data in recent chat. Answer based on your knowledge or ask the user to pull the data in chat first." + dataQueryHint;
+            : (dataQueryHint || "");
+
+          // ── Assemble final system prompt: unified context + voice wrapper ──
+          const systemPrompt = unifiedContext
+            ? `${unifiedContext}\n\n--- VOICE MODE ---\n${voicePersonality}`
+            : voicePersonality;
 
           const allMessages = [
-            { role: "system", content: systemPrompt + timezoneContext },
-            { role: "system", content: contextSystemMsg },
+            { role: "system", content: systemPrompt },
+            ...(chatContextMsg ? [{ role: "system", content: chatContextMsg }] : []),
             ...(prevSessionsMsg ? [{ role: "system", content: prevSessionsMsg }] : []),
             ...(actionMemoryMsg ? [{ role: "system", content: actionMemoryMsg }] : []),
             ...voiceTurns,
@@ -844,8 +841,12 @@ For example, if the chat shows sales data, and the user asks "what were my sales
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               model: "auto",
-              max_tokens: 400,
+              max_tokens: 800,
               messages: allMessages,
+              tenantId: "platform",
+              agentId: agentId || "shre",
+              sessionId: sessionId || undefined,
+              modality: "voice",
             }),
             signal: AbortSignal.timeout(20000),
           });
@@ -883,21 +884,23 @@ For example, if the chat shows sales data, and the user asks "what were my sales
           auditLog(sessionId, 'voice_assist_response', 'out', { response: response.slice(0, 2000), sseLines: sseText.split("\n").length }, { latencyMs: Date.now() - auditStart, agentId, model: 'auto' });
           // Save assistant turn to DB for context persistence
           saveTurn(sessionId, "assistant", response || "I didn't catch that.", "speaking", null, null);
-          // ── Voice conversation learning — feed into RAG + training pipeline ──
-          // (Previously missing — voice conversations were invisible to the learning loop)
+          // ── Full learning pipeline (same as text chat path) ──
           if (response && response.length >= 20) {
-            try {
-              const { logConversationToCortex, writeConversation } = await import("../serve-learning.js").catch(() => ({}));
-              if (typeof logConversationToCortex === "function") {
-                logConversationToCortex(agentId, prompt, response, "voice", "auto");
-              }
-            } catch {}
-            // Durable training write — same as text chat path
+            const effectiveAgent = agentId || "shre";
+            // 1. CortexDB RAG vectors
+            if (typeof logConversationToCortex === "function") {
+              logConversationToCortex(effectiveAgent, prompt, response, "voice", "auto").catch(() => {});
+            }
+            // 2. Conversation learner (shre-sdk/rag)
+            if (conversationLearner?.learn) {
+              conversationLearner.learn(prompt, response, "platform", effectiveAgent).catch(() => {});
+            }
+            // 3. Durable training write
             try {
               const { writeConversation } = await import("shre-sdk/training");
               writeConversation({
                 source: "shre-chat-voice",
-                agentId: agentId || "shre",
+                agentId: effectiveAgent,
                 messages: [
                   { role: "user", content: prompt },
                   { role: "assistant", content: response },
@@ -907,6 +910,22 @@ For example, if the chat shows sales data, and the user asks "what were my sales
                 conversationType: "voice",
               }).catch(() => {});
             } catch {}
+            // 4. Emit conversation complete event
+            if (typeof emitConversationComplete === "function") {
+              emitConversationComplete(effectiveAgent, prompt, response, "voice", "auto").catch(() => {});
+            }
+            // 5. Extract skills from conversation
+            if (typeof extractAndLogSkills === "function") {
+              extractAndLogSkills(effectiveAgent, `User: ${prompt}\nAssistant: ${response}`).catch(() => {});
+            }
+            // 6. Feedback pipeline
+            if (feedbackPipeline?.reportKnowledgeLearned) {
+              feedbackPipeline.reportKnowledgeLearned("conversation", response.slice(0, 200), `voice:${effectiveAgent}`).catch(() => {});
+            }
+            // 7. Conversation evaluator (quality scoring + negative training)
+            if (conversationEvaluator?.evaluate) {
+              conversationEvaluator.evaluate(sessionId, prompt, response, effectiveAgent, "auto").catch(() => {});
+            }
           }
           log.info("Voice assist response", { chars: response.length, preview: response.slice(0, 80), sseLines: sseText.split("\n").length });
           if (!response) {

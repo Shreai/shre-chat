@@ -40,8 +40,8 @@ export const QUALITY_PATTERNS = {
   garbledOutput: {
     severity: "critical",
     patterns: [
-      /[\u4e00-\u9fff]{5,}/,           // CJK runs (5+ chars)
-      /[\u0400-\u04ff]{10,}/,          // Cyrillic runs (10+ chars)
+      /[\u4e00-\u9fff]{3,}/,           // CJK runs (3+ chars — aligned with shre-router threshold)
+      /[\u0400-\u04ff]{5,}/,           // Cyrillic runs (5+ chars — aligned with shre-router threshold)
       /[\u2800-\u28ff]{3,}/,           // Braille patterns
       /[\ufffd]{3,}/,                  // Unicode replacement chars
       /[^\x00-\x7f\u00a0-\u024f]{20,}/, // long non-Latin runs
@@ -88,6 +88,25 @@ export const QUALITY_PATTERNS = {
 
 const CORTEX_BRIDGE_PORT = 5450;
 
+// ── Rate limiter for remediation task creation (council condition: Panther) ──
+// Max 5 tasks per hour per agent to prevent task flood from flaky models.
+const _taskRateMap = new Map(); // agentId → { count, windowStart }
+const TASK_RATE_LIMIT = 5;
+const TASK_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+function canCreateRemediationTask(agentId) {
+  const now = Date.now();
+  const key = agentId || "unknown";
+  const entry = _taskRateMap.get(key);
+  if (!entry || now - entry.windowStart > TASK_RATE_WINDOW_MS) {
+    _taskRateMap.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= TASK_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 // ── Evaluator factory ────────────────────────────────────────────────────────
 
 export function createConversationEvaluator(deps) {
@@ -108,6 +127,19 @@ export function createConversationEvaluator(deps) {
         created_at INTEGER
       )
     `);
+    // Indexes for query performance (council condition: Whale)
+    chatDb.exec(`CREATE INDEX IF NOT EXISTS idx_eval_created ON chat_evaluations(created_at)`);
+    chatDb.exec(`CREATE INDEX IF NOT EXISTS idx_eval_score ON chat_evaluations(score)`);
+    // 30-day retention cleanup (council condition: Whale + Viper)
+    try {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const deleted = chatDb.prepare(`DELETE FROM chat_evaluations WHERE created_at < ?`).run(thirtyDaysAgo);
+      if (deleted.changes > 0) {
+        log.info("Cleaned up old chat evaluations", { deleted: deleted.changes, cutoff: new Date(thirtyDaysAgo).toISOString() });
+      }
+    } catch (cleanupErr) {
+      log.warn("Failed to clean up old evaluations", {}, cleanupErr);
+    }
   } catch (err) {
     log.warn("Failed to create chat_evaluations table", {}, err);
   }
@@ -160,8 +192,8 @@ export function createConversationEvaluator(deps) {
         }
       }
 
-      // ── Create remediation task for severe failures ──
-      if (score < 0.3 && issues.length > 0) {
+      // ── Create remediation task for severe failures (rate-limited) ──
+      if (score < 0.3 && issues.length > 0 && canCreateRemediationTask(agentId)) {
         try {
           const tasksUrl = serviceUrl("shre-tasks");
           await fetch(`${tasksUrl}/v1/intake`, {
