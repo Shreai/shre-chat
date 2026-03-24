@@ -623,14 +623,15 @@ export function ChatComposer(props: ChatComposerProps) {
               <div className="relative">
                 <button
                   data-send-btn
-                  onClick={onSend}
+                  onClick={() => { if (input.trim() && !syncing && writeEnabled) onSend(); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (input.trim() && !syncing && writeEnabled) onSend(); } }}
                   className="h-7 w-7 rounded-lg flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
                   style={
                     input.trim() && !syncing
                       ? { background: streaming ? "var(--c-accent-soft)" : "var(--c-accent)", color: streaming ? "var(--c-accent)" : "var(--c-on-accent)" }
-                      : { color: "var(--c-text-4)" }
+                      : { color: "var(--c-text-4)", opacity: 0.5 }
                   }
-                  disabled={!input.trim() || syncing || !writeEnabled}
+                  aria-disabled={!input.trim() || syncing || !writeEnabled}
                   title={!writeEnabled ? "Read-only mode — enable Write in settings" : streaming ? `Add to queue${queueCount ? ` (${queueCount} queued)` : ""}` : "Send (Enter)"}
                   aria-label={streaming ? "Add to queue" : "Send message"}
                 >
