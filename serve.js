@@ -26,6 +26,8 @@ import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
 import { registerHandoffRoutes } from "./routes/handoff.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerPushRoutes } from "./routes/push.js";
+import { initVoiceQualityMonitor, recordVoiceFailure, getVoiceQualityStats } from "./routes/voice-quality-monitor.js";
+import { createConversationEvaluator } from "./routes/conversation-evaluator.js";
 
 // ── Trust mkcert CA so Node verifies local TLS certs properly ──
 const _mkcertCA = join(homedir(), "Library", "Application Support", "mkcert", "rootCA.pem");
@@ -53,6 +55,22 @@ try {
   // Token lives at gateway.auth.token in openclaw.json
   GATEWAY_TOKEN = ocConfig?.gateway?.auth?.token || ocConfig?.auth?.token || "";
 } catch { /* will fail gracefully — gateway calls won't auth */ }
+
+// ── MIB007 service token — for loopback API calls to MIB007 ──
+let MIB007_SERVICE_TOKEN = "";
+try {
+  const svcTokens = JSON.parse(readFileSync(join(homedir(), ".shre", "service-tokens.json"), "utf8"));
+  MIB007_SERVICE_TOKEN = svcTokens.mib007 || "";
+} catch { /* no service token — MIB007 proxy will fail auth */ }
+
+// ── Service tokens for inter-service auth ──
+let CONTACTS_TOKEN = "";
+try {
+  const vaultOut = execSync("bash scripts/vault-read.sh tokens.env", { cwd: join(import.meta.dirname, ".."), timeout: 5000 }).toString("utf-8");
+  const match = vaultOut.match(/SHRE_CONTACTS_TOKEN=([^\s\n]+)/);
+  if (match) CONTACTS_TOKEN = match[1].trim();
+  if (CONTACTS_TOKEN) log.info("Contacts token loaded");
+} catch (err) { log.warn("Failed to load contacts token:", err.message); }
 
 // ── Anthropic API key — for direct calls that bypass OpenClaw session tracking ──
 let ANTHROPIC_API_KEY = "";
@@ -544,6 +562,43 @@ async function extractAndLogSkills(agentId, conversationText) {
 }
 
 /**
+ * Fetch unified context from shre-context:5462 for injection into system prompt.
+ * Includes soul, platform state, RAG vectors, live data, and contacts — all in parallel.
+ * Returns the combined injection string or null on failure.
+ */
+async function fetchContextInjection(agentId, prompt, tenantId) {
+  try {
+    const contextUrl = serviceUrl("shre-context");
+    const res = await fetch(`${contextUrl}/v1/context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agentId: agentId || "shre",
+        prompt: prompt || "",
+        tenantId: tenantId || "platform",
+        // Skip soul — shre-router injects it during routing. Include live data layers only.
+        layers: ["platform", "rag", "data", "contacts"],
+        format: "markdown",
+      }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) {
+      log.warn(`[context] shre-context returned ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    const injection = data.injection || "";
+    if (injection.length > 0) {
+      log.info(`[context] Injected ${injection.length} chars for ${agentId} (${(data.layers || []).map(l => l.name).join(",")})`);
+    }
+    return injection || null;
+  } catch (err) {
+    log.warn(`[context] shre-context unavailable:`, err.message);
+    return null;
+  }
+}
+
+/**
  * Build agent memory block from CortexDB for injection into system prompt.
  * Queries long-term memories + shared knowledge from other agents.
  * Returns formatted markdown or null on failure.
@@ -708,16 +763,11 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
 async function postAgentSummaryToComms(agentId, summary) {
   try {
     // Discover first company
-    const companiesRes = await fetch(`http://127.0.0.1:${MIB007_PORT}/api/companies`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!companiesRes.ok) return;
-    const companies = await companiesRes.json();
-    const companyId = companies?.[0]?.id;
+    const companyId = await mib007CompanyId();
     if (!companyId) return;
 
     // Discover first comms channel
-    const channelsRes = await fetch(`http://127.0.0.1:${MIB007_PORT}/api/companies/${companyId}/comms/channels`, {
+    const channelsRes = await mib007Fetch(`/api/companies/${companyId}/comms/channels`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!channelsRes.ok) return;
@@ -726,7 +776,7 @@ async function postAgentSummaryToComms(agentId, summary) {
     if (!channelId) return;
 
     const chatBaseUrl = process.env.SHRE_CHAT_URL || `https://localhost:${PORT}`;
-    await fetch(`http://127.0.0.1:${MIB007_PORT}/api/companies/${companyId}/comms/agent-summary`, {
+    await mib007Fetch(`/api/companies/${companyId}/comms/agent-summary`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -899,7 +949,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/voice-quality", "/api/sitemap"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -973,6 +1023,22 @@ function collectBody(req, maxBytes = 1024 * 1024) {
     req.on("end", () => resolve(Buffer.concat(chunks).toString()));
     req.on("error", reject);
   });
+}
+
+// ── MIB007 authenticated fetch helper ──
+const mib007Headers = () => MIB007_SERVICE_TOKEN
+  ? { Authorization: `Bearer ${MIB007_SERVICE_TOKEN}` }
+  : {};
+
+async function mib007Fetch(path, opts = {}) {
+  const headers = { ...mib007Headers(), ...opts.headers };
+  return fetch(`http://127.0.0.1:${MIB007_PORT}${path}`, { ...opts, headers });
+}
+
+async function mib007CompanyId() {
+  const r = await mib007Fetch("/api/companies", { signal: AbortSignal.timeout(5000) });
+  const companies = r.ok ? await r.json() : [];
+  return companies?.[0]?.id || null;
 }
 
 const MIME = {
@@ -1140,6 +1206,7 @@ function loadCliHistory(agentId, maxMessages = 20) {
 const handleAuth = registerAuthRoutes({ log });
 const intentRouter = registerIntentRouter({ log, chatDb });
 const handleVoice = registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb });
+const conversationEvaluator = createConversationEvaluator({ log, chatDb });
 const handleTasks = registerTaskRoutes({ log });
 const handleSessions = registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stmtDelete, stmtSoftDelete, stmtRestoreDeleted, stmtRemoveFromTrash, stmtListDeleted, stmtPurgeTrash, upsertSession, dbSessionToClient, checkAuth });
 const handleSuggestions = registerSuggestionsRoutes({ log, loadReminders, getBriefingCache: () => _briefingCache });
@@ -1253,6 +1320,35 @@ async function requestHandler(req, res) {
 
   // Health routes (after auth for readyz, but health is in PUBLIC_PATHS)
   if (await handleHealth(req, res, url, _routeUtils)) return;
+
+  // ── GET /api/sitemap — view registry for agent deep-linking ──
+  if (url.pathname === "/api/sitemap" && req.method === "GET") {
+    const mib007Base = "https://localhost:5520";
+    const prefix = "SHR";
+    const sitemap = [
+      { id: "chat", label: "Chat", description: "AI chat with Shre and agents", category: "work", type: "view", keywords: ["chat", "ask", "message", "talk", "conversation"] },
+      { id: "tasks", label: "Tasks", description: "View and manage all tasks — filter by status, priority, agent", category: "work", type: "view", keywords: ["tasks", "todo", "action items", "assignments", "pending"] },
+      { id: "projects", label: "Projects", description: "Browse projects with associated tasks", category: "work", type: "view", keywords: ["projects", "initiatives", "workstreams"] },
+      { id: "reminders", label: "Reminders", description: "Personal reminders with NL input, recurring schedules, snooze", category: "work", type: "view", keywords: ["reminders", "remind me", "alerts", "schedule", "due"] },
+      { id: "task-timeline", label: "Task Timeline", description: "Gantt chart visualization of tasks over time", category: "work", type: "view", keywords: ["timeline", "gantt", "schedule"] },
+      { id: "briefing", label: "Briefing", description: "Morning briefing — pending tasks, active agents, summary", category: "work", type: "view", keywords: ["briefing", "morning", "summary", "digest"] },
+      { id: "activity", label: "Activity", description: "Activity log — recent actions and events", category: "work", type: "view", keywords: ["activity", "log", "history"] },
+      { id: "feed", label: "Feed", description: "Real-time activity feed — gateway events", category: "analytics", type: "view", keywords: ["feed", "live", "stream", "events"] },
+      { id: "feed-analytics", label: "Feed Analytics", description: "Charts for feed events by agent, category, severity", category: "analytics", type: "view", keywords: ["analytics", "charts", "metrics"] },
+      { id: "cost-dashboard", label: "Cost Dashboard", description: "AI cost tracking — by model, agent, budget", category: "analytics", type: "view", keywords: ["costs", "spend", "budget", "billing", "usage"] },
+      { id: "reports", label: "Reports", description: "Schedule and manage automated reports", category: "analytics", type: "view", keywords: ["reports", "scheduled", "automated"] },
+      { id: "marketplace", label: "Marketplace", description: "Agent marketplace — catalog, quality, costs", category: "apps", type: "view", keywords: ["marketplace", "agents", "catalog", "apps"] },
+      { id: "admin", label: "Admin", description: "System administration — agent roster, stats", category: "tools", type: "view", keywords: ["admin", "system", "settings"] },
+      { id: "finetune", label: "Fine-Tuning", description: "LoRA fine-tuning pipeline monitor", category: "tools", type: "view", keywords: ["finetune", "training", "lora"] },
+      { id: "mib-tasks", label: "Tasks (MIB007)", description: "Full task management in MIB007", category: "external", type: "external", url: `${mib007Base}/${prefix}/tasks`, keywords: ["mib tasks", "kanban"] },
+      { id: "mib-projects", label: "Projects (MIB007)", description: "Full project management in MIB007", category: "external", type: "external", url: `${mib007Base}/${prefix}/projects`, keywords: ["mib projects"] },
+      { id: "mib-agents", label: "Agents (MIB007)", description: "Agent management in MIB007", category: "external", type: "external", url: `${mib007Base}/${prefix}/agents/all`, keywords: ["mib agents"] },
+      { id: "mib-issues", label: "Issues (MIB007)", description: "Issue tracker in MIB007", category: "external", type: "external", url: `${mib007Base}/${prefix}/issues`, keywords: ["mib issues", "bugs"] },
+      { id: "mib-home", label: "MIB007 Home", description: "MIB007 main dashboard", category: "external", type: "external", url: `${mib007Base}/${prefix}/home`, keywords: ["mib", "mib007", "home"] },
+    ];
+    return json(res, { sitemap, navigation_event: "shre:switch-view", note: "Dispatch CustomEvent with view id as detail to navigate" });
+  }
+
   // Voice routes
   if (await handleVoice(req, res, url, _routeUtils)) return;
   // Task creation routes
@@ -1363,6 +1459,107 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Tasks CRUD proxy (shre-tasks) ──
+  if (url.pathname === "/api/tasks" && (req.method === "GET" || req.method === "POST")) {
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      if (req.method === "GET") {
+        const upstream = await fetch(`${tasksUrl}/v1/tasks${url.search || "?limit=100"}`, { signal: AbortSignal.timeout(8000) });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      } else {
+        const body = await collectBody(req);
+        const upstream = await fetch(`${tasksUrl}/v1/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      }
+    } catch (err) {
+      log.warn("Tasks proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Single task update proxy ──
+  const taskIdMatch = url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9_-]+)$/);
+  if (taskIdMatch && (req.method === "PATCH" || req.method === "GET")) {
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      const taskId = taskIdMatch[1];
+      if (req.method === "GET") {
+        const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, { signal: AbortSignal.timeout(5000) });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      } else {
+        const body = await collectBody(req);
+        const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(8000),
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      }
+    } catch (err) {
+      log.warn("Task update proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Projects proxy (shre-tasks) ──
+  if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      if (req.method === "GET") {
+        const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      } else {
+        const body = await collectBody(req);
+        const upstream = await fetch(`${tasksUrl}/v1/projects`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      }
+    } catch (err) {
+      log.warn("Projects proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Briefing proxy (shre-tasks) ──
+  if (url.pathname === "/api/briefing" && req.method === "GET") {
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      const upstream = await fetch(`${tasksUrl}/v1/briefing`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Briefing proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Finetune status proxy ──
   if (url.pathname.startsWith("/api/finetune/") && req.method === "GET") {
     try {
@@ -1379,17 +1576,386 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Contacts list proxy (shre-contacts) ──
+  if (url.pathname === "/api/contacts" && req.method === "GET") {
+    try {
+      const contactsUrl = serviceUrl("shre-contacts");
+      const headers = CONTACTS_TOKEN ? { Authorization: `Bearer ${CONTACTS_TOKEN}` } : {};
+      const upstream = await fetch(`${contactsUrl}/v1/contacts${url.search || ""}`, { headers, signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Contacts list proxy failed:", err.message);
+      json(res, { error: "shre-contacts unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Contacts search proxy (shre-contacts) ──
   if (url.pathname === "/api/contacts/search" && req.method === "GET") {
     try {
       const contactsUrl = serviceUrl("shre-contacts");
-      const upstream = await fetch(`${contactsUrl}/v1/contacts/search${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const headers = CONTACTS_TOKEN ? { Authorization: `Bearer ${CONTACTS_TOKEN}` } : {};
+      const upstream = await fetch(`${contactsUrl}/v1/contacts/search${url.search || ""}`, { headers, signal: AbortSignal.timeout(8000) });
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Contacts proxy failed:", err.message);
       json(res, { error: "shre-contacts unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Contacts create proxy (shre-contacts) ──
+  if (url.pathname === "/api/contacts" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      const contactsUrl = serviceUrl("shre-contacts");
+      const authHeaders = CONTACTS_TOKEN ? { Authorization: `Bearer ${CONTACTS_TOKEN}` } : {};
+      const upstream = await fetch(`${contactsUrl}/v1/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Contacts create proxy failed:", err.message);
+      json(res, { error: "shre-contacts unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Projects proxy (shre-tasks) ──
+  if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      if (req.method === "GET") {
+        const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      } else {
+        const body = await collectBody(req);
+        const upstream = await fetch(`${tasksUrl}/v1/projects`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      }
+    } catch (err) {
+      log.warn("Projects proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Issues proxy (MIB007) ──
+  if (url.pathname === "/api/issues" && (req.method === "GET" || req.method === "POST")) {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company found" }, 404);
+
+      if (req.method === "GET") {
+        const upstream = await mib007Fetch(`/api/companies/${companyId}/issues${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      } else {
+        const body = await collectBody(req);
+        const upstream = await mib007Fetch(`/api/companies/${companyId}/issues`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      }
+    } catch (err) {
+      log.warn("Issues proxy failed:", err.message);
+      json(res, { error: "MIB007 unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Goals proxy (MIB007) ──
+  if (url.pathname === "/api/goals" && (req.method === "GET" || req.method === "POST")) {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company found" }, 404);
+
+      if (req.method === "GET") {
+        const upstream = await mib007Fetch(`/api/companies/${companyId}/goals${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      } else {
+        const body = await collectBody(req);
+        const upstream = await mib007Fetch(`/api/companies/${companyId}/goals`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+      }
+    } catch (err) {
+      log.warn("Goals proxy failed:", err.message);
+      json(res, { error: "MIB007 unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Email threads (Gmail thread API) ──
+  if (url.pathname === "/api/email/threads" && req.method === "GET") {
+    try {
+      const max = url.searchParams.get("max") || "30";
+      const query = url.searchParams.get("q") || "";
+      const label = url.searchParams.get("label") || "INBOX";
+      const args = [join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), "threads", `--max=${max}`, `--label=${label}`];
+      if (query) args.push(`--query=${query}`);
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+      const { stdout } = await execFileAsync("node", args, { timeout: 20000, env: { ...process.env, HOME: homedir() } });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(stdout);
+    } catch (err) {
+      log.warn("Email threads failed:", err.message);
+      json(res, { error: err.stderr || err.message || "Failed to fetch threads" }, 502);
+    }
+    return;
+  }
+
+  // ── Email single thread ──
+  const threadMatch = url.pathname.match(/^\/api\/email\/thread\/([a-zA-Z0-9]+)$/);
+  if (threadMatch && req.method === "GET") {
+    try {
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+      const { stdout } = await execFileAsync("node", [
+        join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), "thread", threadMatch[1]
+      ], { timeout: 15000, env: { ...process.env, HOME: homedir() } });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(stdout);
+    } catch (err) {
+      log.warn("Email thread fetch failed:", err.message);
+      json(res, { error: err.stderr || err.message }, 502);
+    }
+    return;
+  }
+
+  // ── Email reply / reply-all ──
+  if (url.pathname === "/api/email/reply" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      if (!body.threadId || !body.body) return json(res, { error: "threadId and body required" }, 400);
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+      const cmd = body.replyAll !== false ? "reply-all" : "reply";
+      const args = [join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), cmd, body.threadId];
+      if (cmd === "reply") {
+        args.push(body.to || "", body.subject || "", body.body);
+      } else {
+        args.push(body.body);
+      }
+      if (body.cc) args.push(`--cc=${body.cc}`);
+      if (body.add) args.push(`--add=${body.add}`);
+      const { stdout } = await execFileAsync("node", args, { timeout: 15000, env: { ...process.env, HOME: homedir() } });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(stdout);
+    } catch (err) {
+      log.warn("Email reply failed:", err.message);
+      json(res, { error: err.stderr || err.message }, 500);
+    }
+    return;
+  }
+
+  // ── Email attachment download ──
+  const attachMatch = url.pathname.match(/^\/api\/email\/attachment\/([a-zA-Z0-9]+)\/(.+)$/);
+  if (attachMatch && req.method === "GET") {
+    try {
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+      const { stdout } = await execFileAsync("node", [
+        join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), "attachment", attachMatch[1], attachMatch[2]
+      ], { timeout: 15000, env: { ...process.env, HOME: homedir() } });
+      const data = JSON.parse(stdout);
+      const buf = Buffer.from(data.data, "base64url");
+      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": buf.length });
+      res.end(buf);
+    } catch (err) {
+      log.warn("Attachment download failed:", err.message);
+      json(res, { error: err.message }, 502);
+    }
+    return;
+  }
+
+  // ── Email draft (AI-composed body via shre-router) ──
+  if (url.pathname === "/api/email/draft" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      if (!body.to || !body.subject) return json(res, { error: "to and subject required" }, 400);
+
+      const context = body.context || "";
+      const systemPrompt = `You are a professional email composer. Write a concise, well-structured email body based on the subject and context provided. Do NOT include the subject line, greeting salutation, or signature — just the email body content. Keep it professional but natural. If context from a chat conversation is provided, use it to inform the email content.`;
+
+      const userPrompt = [
+        `To: ${body.to}`,
+        `Subject: ${body.subject}`,
+        context ? `\nConversation context:\n${context}` : "",
+        `\nWrite the email body:`,
+      ].filter(Boolean).join("\n");
+
+      const apiRes = await fetch(`${serviceUrl("shre-router")}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic/claude-haiku-4-5",
+          max_tokens: 1000,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!apiRes.ok) return json(res, { error: "AI drafting failed" }, 502);
+      const apiData = await apiRes.json();
+      const draft = (apiData.choices?.[0]?.message?.content || "").trim();
+      return json(res, { to: body.to, subject: body.subject, body: draft });
+    } catch (err) {
+      log.warn("Email draft failed:", err.message);
+      json(res, { error: err.message || "Draft failed" }, 500);
+    }
+    return;
+  }
+
+  // ── Email send proxy (shre-gmail) ──
+  if (url.pathname === "/api/email/send" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      if (!body.to) return json(res, { error: "Missing 'to' field" }, 400);
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+      const scriptPath = join(homedir(), "Documents/Projects/shreai/shre-gmail/send-email.mjs");
+      await execFileAsync("node", [scriptPath, "--to", body.to, "--subject", body.subject || "(no subject)", "--body", body.body || ""], { timeout: 15000 });
+      json(res, { ok: true });
+    } catch (err) {
+      log.warn("Email send failed:", err.message);
+      json(res, { error: err.message || "Email send failed" }, 500);
+    }
+    return;
+  }
+
+  // ── Nodes proxy (MIB007) ──
+  if (url.pathname === "/api/nodes" && req.method === "GET") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, []);
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/nodes${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.json().catch(() => []);
+      json(res, data);
+    } catch (err) {
+      log.warn("Nodes proxy failed:", err.message);
+      json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Tools/Skills proxy (MIB007 marketplace) ──
+  if (url.pathname === "/api/tools" && req.method === "GET") {
+    try {
+      const upstream = await mib007Fetch(`/api/marketplace/skills${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.json().catch(() => []);
+      json(res, data);
+    } catch (err) {
+      log.warn("Tools proxy failed:", err.message);
+      json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Permissions proxy (MIB007 vault) ──
+  if (url.pathname === "/api/permissions" && req.method === "GET") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, []);
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/vault/tool-permissions${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.json().catch(() => []);
+      json(res, data);
+    } catch (err) {
+      log.warn("Permissions proxy failed:", err.message);
+      json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Agents list proxy ──
+  if (url.pathname === "/api/agents" && req.method === "GET") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const upstream = await fetch(`${routerUrl}/v1/config/agents`, { signal: AbortSignal.timeout(5000) });
+      if (upstream.ok) {
+        const agentModels = await upstream.json();
+        // Merge with known agent metadata
+        const agents = Object.entries(agentModels).filter(([k]) => k !== "_default").map(([id, model]) => ({
+          id, name: id, model, status: "idle", emoji: "●",
+        }));
+        return json(res, agents);
+      }
+      json(res, []);
+    } catch (err) {
+      log.warn("Agents proxy failed:", err.message);
+      json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Platform status (aggregated health) ──
+  if (url.pathname === "/api/platform-status" && req.method === "GET") {
+    try {
+      const healthUrl = serviceUrl("shre-health");
+      const upstream = await fetch(`${healthUrl}/v1/status`, { signal: AbortSignal.timeout(8000) });
+      if (upstream.ok) {
+        const data = await upstream.json();
+        return json(res, data);
+      }
+      // Fallback: basic health checks
+      const services = ["shre-router", "shre-tasks", "shre-contacts", "shre-chat", "shre-health"];
+      const results = await Promise.allSettled(
+        services.map(async (svc) => {
+          try {
+            const svcUrl = serviceUrl(svc);
+            const r = await fetch(`${svcUrl}/health`, { signal: AbortSignal.timeout(3000) });
+            return { name: svc, healthy: r.ok, status: r.ok ? "up" : `HTTP ${r.status}` };
+          } catch {
+            return { name: svc, healthy: false, status: "unreachable" };
+          }
+        })
+      );
+      const svcList = results.map((r) => r.status === "fulfilled" ? r.value : { name: "unknown", healthy: false, status: "error" });
+      json(res, { services: svcList, summary: `${svcList.filter(s => s.healthy).length}/${svcList.length} services healthy` });
+    } catch (err) {
+      log.warn("Platform status failed:", err.message);
+      json(res, { services: [], summary: "Health check failed" }, 502);
     }
     return;
   }
@@ -1453,6 +2019,7 @@ async function requestHandler(req, res) {
       const body = Buffer.concat(chunks);
       const boundary = (req.headers["content-type"] || "").match(/boundary=([^\s;]+)/)?.[1];
       if (!boundary) return json(res, { error: "Missing multipart boundary" }, 400);
+      const sttStart = Date.now();
       try {
         const routerRes = await fetch(`${serviceUrl("shre-router")}/v1/audio/transcriptions`, {
           method: "POST",
@@ -1462,12 +2029,24 @@ async function requestHandler(req, res) {
         const oaBody = await routerRes.text();
         try {
           const result = JSON.parse(oaBody);
-          if (routerRes.status >= 400) return json(res, { error: result.error?.message || "Whisper error" }, routerRes.status);
+          if (routerRes.status >= 400) {
+            recordVoiceFailure("stt_error", { detail: `HTTP ${routerRes.status}: ${(result.error?.message || "Whisper error").slice(0, 200)}` });
+            return json(res, { error: result.error?.message || "Whisper error" }, routerRes.status);
+          }
+          if (!result.text || result.text.trim().length === 0) {
+            const latency = Date.now() - sttStart;
+            if (latency > 12000) {
+              recordVoiceFailure("stt_timeout", { detail: `Whisper returned empty after ${latency}ms` });
+            }
+          }
           return json(res, { text: result.text || "" });
         } catch {
+          recordVoiceFailure("stt_error", { detail: "Invalid Whisper response (JSON parse failed)" });
           return json(res, { error: "Invalid Whisper response" }, 502);
         }
       } catch (err) {
+        const isTimeout = err.name === "AbortError" || err.name === "TimeoutError";
+        recordVoiceFailure(isTimeout ? "stt_timeout" : "stt_error", { detail: err.message });
         return json(res, { error: "Whisper request failed: " + err.message }, 502);
       }
     });
@@ -1497,6 +2076,7 @@ async function requestHandler(req, res) {
 
         if (!routerRes.ok) {
           const errBody = await routerRes.text();
+          recordVoiceFailure("tts_error", { detail: `HTTP ${routerRes.status}: ${errBody.slice(0, 200)}` });
           return json(res, { error: `TTS failed: ${errBody}` }, routerRes.status);
         }
 
@@ -1507,6 +2087,7 @@ async function requestHandler(req, res) {
         });
         res.end(Buffer.from(audioBuffer));
       } catch (err) {
+        recordVoiceFailure("tts_error", { detail: err.message, critical: err.name === "AbortError" });
         return json(res, { error: "TTS request failed: " + err.message }, 502);
       }
     });
@@ -1535,6 +2116,7 @@ async function requestHandler(req, res) {
 
       if (!routerRes.ok) {
         const errBody = await routerRes.text();
+        recordVoiceFailure("tts_stream_error", { detail: `HTTP ${routerRes.status}: ${errBody.slice(0, 200)}` });
         return json(res, { error: `TTS stream failed: ${errBody}` }, routerRes.status);
       }
 
@@ -1548,8 +2130,12 @@ async function requestHandler(req, res) {
       // Pipe the streaming response body to the client
       const nodeStream = Readable.fromWeb(routerRes.body);
       nodeStream.pipe(res);
-      nodeStream.on("error", () => { try { res.end(); } catch {} });
+      nodeStream.on("error", (err) => {
+        recordVoiceFailure("tts_stream_error", { detail: `Stream interrupted: ${err.message}` });
+        try { res.end(); } catch {}
+      });
     } catch (err) {
+      recordVoiceFailure("tts_stream_error", { detail: err.message });
       if (!res.headersSent) return json(res, { error: "TTS stream failed: " + err.message }, 502);
       try { res.end(); } catch {}
     }
@@ -2590,6 +3176,65 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── POST /api/feedback — user thumbs up/down on assistant messages ──
+  if (url.pathname === "/api/feedback" && req.method === "POST") {
+    let body;
+    try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
+    try {
+      const { messageId, workspaceId, rating, agentId, userInput, assistantText } = JSON.parse(body);
+      if (!messageId || !rating) return json(res, { error: "messageId and rating required" }, 400);
+
+      // 1. Audit log — persist feedback for analytics
+      try {
+        const userId = authClaims?.sub || 'system';
+        chatDb.prepare(
+          `INSERT INTO chat_audit_log (id, session_id, trace_id, event_type, agent_id, model, user_id, user_message, assistant_response, created_at)
+           VALUES (?, ?, ?, 'user_feedback', ?, ?, ?, ?, ?, ?)`
+        ).run(randomUUID(), workspaceId || "unknown", messageId, agentId || "shre", rating,
+          userId, (userInput || "").slice(0, 2000), (assistantText || "").slice(0, 2000), Date.now());
+      } catch (auditErr) { log.warn("Feedback audit log failed", {}, auditErr); }
+
+      // 2. Forward to shre-router routing feedback (improves agent/model selection)
+      try {
+        const routerUrl = serviceUrl("shre-router");
+        fetch(`${routerUrl}/v1/routing/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: workspaceId || "unknown",
+            satisfaction: rating === "positive" ? 5 : 1,
+          }),
+          signal: AbortSignal.timeout(3000),
+        }).catch(() => {});
+      } catch {}
+
+      // 3. Feedback pipeline — report to upstream agents
+      feedbackPipeline.reportKnowledgeLearned(
+        "user-feedback",
+        `User ${rating} feedback on ${agentId || "shre"}: ${(userInput || "").slice(0, 100)}`,
+        `feedback:${workspaceId || "unknown"}`,
+      ).catch(() => {});
+
+      // 4. Training data — record feedback for fine-tuning (uses top-level import)
+      if (userInput && assistantText) {
+        try {
+          writeConversation({
+            agentId: agentId || "shre",
+            userMessage: userInput,
+            assistantResponse: assistantText,
+            quality: rating === "positive" ? 5 : 1,
+            source: "user-feedback",
+            model: "unknown",
+          }).catch(() => {});
+        } catch {}
+      }
+
+      return json(res, { ok: true });
+    } catch (e) {
+      return json(res, { error: e.message }, 400);
+    }
+  }
+
   // ── POST /api/conversation-log — client reports completed WS conversations for learning ──
   if (url.pathname === "/api/conversation-log" && req.method === "POST") {
     let body;
@@ -2635,6 +3280,9 @@ async function requestHandler(req, res) {
 
       // Feedback pipeline — report conversation to MIB + Shre + Ellie
       feedbackPipeline.reportKnowledgeLearned("conversation", assistantResponse.slice(0, 200), `ws:${agentId || "shre"}`).catch(() => {});
+
+      // Post-conversation quality evaluation — scores response, flags issues, writes training data
+      conversationEvaluator.evaluate(sessionId, userMessage, assistantResponse, agentId || "shre", model || "unknown").catch(() => {});
 
       return json(res, { ok: true });
     } catch (e) {
@@ -2738,6 +3386,8 @@ async function requestHandler(req, res) {
                 emitConversationComplete(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
                 conversationLearner.learn(userMessage, assistantResponse, "platform", agentId).catch(() => {});
                 extractAndLogSkills(agentId, `User: ${userMessage}\n\nAssistant: ${assistantResponse}`).catch(() => {});
+                // Post-conversation quality evaluation — auto-scores, flags issues, writes training data
+                conversationEvaluator.evaluate(sessionId, userMessage, assistantResponse, agentId, model).catch(() => {});
                 // Push agent-summary to MIB007 comms for store-facing agents
                 if (agentId !== "shre" && agentId !== "main") {
                   postAgentSummaryToComms(agentId, assistantResponse.slice(0, 500)).catch(() => {});
@@ -2797,14 +3447,20 @@ async function requestHandler(req, res) {
         try {
           const parsed = JSON.parse(reqBody || "{}");
           const agentId = parsed.agentId || "shre";
+          const lastUserMsg = [...(parsed.messages || [])].reverse().find(m => m.role === "user")?.content || "";
+          const tenantId = parsed.tenantId || "platform";
 
-          // ── Agent memory injection ──
-          const memoryBlock = await buildAgentMemory(agentId).catch(() => null);
-          if (memoryBlock && parsed.systemPrompt !== undefined) {
-            parsed.systemPrompt = memoryBlock + "\n\n" + (parsed.systemPrompt || "");
-          } else if (memoryBlock) {
-            // Inject as first system message or add systemPrompt field
-            parsed.systemPrompt = memoryBlock;
+          // ── Context + Memory injection (parallel) ──
+          const [contextBlock, memoryBlock] = await Promise.all([
+            fetchContextInjection(agentId, lastUserMsg, tenantId).catch(() => null),
+            buildAgentMemory(agentId).catch(() => null),
+          ]);
+
+          // Assemble: context first (soul/platform/RAG/data), then agent memories
+          const injections = [contextBlock, memoryBlock].filter(Boolean);
+          if (injections.length > 0) {
+            const combined = injections.join("\n\n---\n\n");
+            parsed.systemPrompt = combined + "\n\n" + (parsed.systemPrompt || "");
           }
 
           routerReq.end(JSON.stringify(parsed));
@@ -2901,6 +3557,32 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("[employee-activity] Alerts query failed", { error: err.message });
       json(res, { error: "Employee activity alerts query failed", detail: err.message }, 500);
+    }
+    return;
+  }
+
+  // ── POST /api/notifications — accept notifications from internal services (Ellie escalation, etc.) ──
+  if (url.pathname === "/api/notifications" && req.method === "POST") {
+    try {
+      let rawBody;
+      try { rawBody = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
+      const parsed = JSON.parse(rawBody);
+      const { type = "ellie.escalation", title = "Notification", body: notifBody = "", source = "system", severity = "info", sessionId } = parsed;
+      const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      // Persist to DB
+      chatDb.prepare(
+        "INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)"
+      ).run(notifId, type, title, notifBody, source, Date.now());
+
+      // Broadcast to all connected WS clients
+      broadcastNotification(type, { id: notifId, title, body: notifBody, source, severity, sessionId });
+
+      log.info("[notifications] Notification created", { id: notifId, type, title: title.slice(0, 60), source });
+      json(res, { ok: true, id: notifId });
+    } catch (err) {
+      log.warn("[notifications] Failed to create notification", { error: err.message });
+      json(res, { error: "Failed to create notification", detail: err.message }, 500);
     }
     return;
   }
@@ -3170,6 +3852,12 @@ async function requestHandler(req, res) {
   }
 
   // ── Status bar — lightweight endpoint for persistent status bar ──
+  // ── Voice quality stats — monitor failure rates ──
+  if (url.pathname === "/api/voice-quality" && req.method === "GET") {
+    const window = parseInt(url.searchParams?.get("window") || "3600000") || 3600000;
+    return json(res, getVoiceQualityStats(window));
+  }
+
   if (url.pathname === "/api/status-bar" && req.method === "GET") {
     const reminders = loadReminders();
     const now = new Date();
@@ -3254,7 +3942,7 @@ async function requestHandler(req, res) {
     let body;
     try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
-      const { text, due, recurring } = JSON.parse(body);
+      const { text, due, recurring, contact_email } = JSON.parse(body);
       if (!text || !due) return json(res, { error: "text and due required" }, 400);
       // Sanitize: strip HTML, enforce max length, validate due date
       const cleanText = String(text).replace(/<[^>]*>/g, "").slice(0, 500).trim();
@@ -3270,6 +3958,7 @@ async function requestHandler(req, res) {
         snoozed: null,
         createdAt: new Date().toISOString(),
         source: "manual",
+        contact_email: contact_email || null,
       };
       const reminders = loadReminders();
       reminders.push(reminder);
@@ -3385,6 +4074,7 @@ Examples:
       }
       if (updates.text !== undefined) reminders[idx].text = updates.text;
       if (updates.due !== undefined) reminders[idx].due = updates.due;
+      if (updates.contact_email !== undefined) reminders[idx].contact_email = updates.contact_email;
 
       saveReminders(reminders);
       return json(res, { ok: true, reminder: reminders[idx] });
@@ -3783,6 +4473,9 @@ function broadcastNotification(type, data) {
   }
 }
 
+// ── Voice Quality Monitor — auto-escalates voice hickups to Ellie ──
+initVoiceQualityMonitor({ chatDb, log, broadcastNotification, eventBus });
+
 // Check for due reminders every 30s and push via WebSocket
 setInterval(() => {
   try {
@@ -3834,8 +4527,24 @@ let activePty = null;
 let activePtyOutput = ""; // Rolling output buffer for exec capture
 let execResolvers = []; // Pending exec result callbacks
 
+// Ping/pong keepalive — prevent browser/proxy idle-timeout disconnects
+const TERM_PING_INTERVAL = 15_000; // 15s
+const termPingTimer = setInterval(() => {
+  termWss.clients.forEach((ws) => {
+    if (ws._shreAlive === false) {
+      log.warn("[terminal] Ping timeout — closing stale connection");
+      return ws.terminate();
+    }
+    ws._shreAlive = false;
+    try { ws.ping(); } catch {}
+  });
+}, TERM_PING_INTERVAL);
+termWss.on("close", () => clearInterval(termPingTimer));
+
 termWss.on("connection", (ws) => {
   log.info("[terminal] New PTY session (via python3 pty)");
+  ws._shreAlive = true;
+  ws.on("pong", () => { ws._shreAlive = true; });
 
   const cwd = process.env.HOME || "/Users/aibot";
 
