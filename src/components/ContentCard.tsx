@@ -7,20 +7,20 @@ const ChartRenderer = lazy(() => import("./ChartRenderer"));
 // ── Types ───────────────────────────────────────────────────────────
 
 interface ContentCardProps {
-  type: "html" | "json" | "chart" | "table";
+  type: string;
   content: string;
   title?: string;
   onExpand?: (content: string, type: string, title?: string) => void;
 }
 
-const TYPE_ICONS: Record<ContentCardProps["type"], string> = {
+const TYPE_ICONS: Record<string, string> = {
   html: "</>",
   json: "{}",
   chart: "\u{1F4CA}",
   table: "\u{1F4CB}",
 };
 
-const TYPE_LABELS: Record<ContentCardProps["type"], string> = {
+const TYPE_LABELS: Record<string, string> = {
   html: "HTML",
   json: "JSON",
   chart: "Chart",

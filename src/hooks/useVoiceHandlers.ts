@@ -4,7 +4,7 @@ import { playVoiceCue, MAX_RECORDING_SECONDS } from "../chat-utils";
 export interface UseVoiceHandlersParams {
   setInput: (v: string) => void;
   setIsRecording: (v: boolean) => void;
-  setVoicePhase: (v: string) => void;
+  setVoicePhase: React.Dispatch<React.SetStateAction<"idle" | "waiting" | "recording" | "transcribing">>;
   setInterimTranscript: (v: string) => void;
   setAudioLevel: (v: number) => void;
   setRecordingDuration: (v: number) => void;

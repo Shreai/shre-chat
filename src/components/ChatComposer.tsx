@@ -631,7 +631,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       : { color: "var(--c-text-4)" }
                   }
                   disabled={!input.trim() || syncing || !writeEnabled}
-                  title={!writeEnabled ? "Read-only mode — enable Write in settings" : streaming ? `Add to queue${queueCount ? ` (${queueCount} queued)` : ""}` : "Send (Ctrl+Enter)"}
+                  title={!writeEnabled ? "Read-only mode — enable Write in settings" : streaming ? `Add to queue${queueCount ? ` (${queueCount} queued)` : ""}` : "Send (Enter)"}
                   aria-label={streaming ? "Add to queue" : "Send message"}
                 >
                   {streaming ? (

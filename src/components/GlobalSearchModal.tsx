@@ -38,7 +38,7 @@ export function GlobalSearchModal({
   inputRef,
 }: GlobalSearchModalProps) {
   return (
-    <SDialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <SDialog open={isOpen} onOpenChange={(open: boolean) => { if (!open) onClose(); }}>
       <SDialogContent className="max-w-lg p-4 gap-3" style={{ marginTop: "15vh" }}>
         <div className="flex items-center gap-2">
           <svg className="h-4 w-4 shrink-0" style={{ color: "var(--color-text-muted, var(--c-text-4))" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

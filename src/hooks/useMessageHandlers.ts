@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { sendMessage, generateAITitle, type ChatMessage, type ToolResult, type ThreadContext } from "../openclaw";
 import { sendChatWS, isWSConnected, queueMessage, onStateChange } from "../gateway-ws";
-import { uid, generateTitle, getAgent, type UploadedFile, type Session } from "../store";
+import { uid, generateTitle, getAgent, type UploadedFile, type Session, type AppActions } from "../store";
 import { playNotifSound, mib007Link } from "../chat-utils";
 import { detectTaskIntent, createTaskFromChat, detectIssueIntent, createIssueFromChat } from "../taskDetector";
 
@@ -16,21 +16,7 @@ export interface UseMessageHandlersParams {
   sessions: Session[];
   messages: ChatMessage[];
   filteredMessages: ChatMessage[];
-  actions: {
-    setDraft: (id: string, v: string) => void;
-    setStreaming: (v: boolean) => void;
-    setStreamText: (v: string) => void;
-    setStatusLine: (s: string | null) => void;
-    addMessage: (id: string, msg: ChatMessage) => void;
-    addActivity: (id: string, status: string, text: string) => void;
-    addFeed: (id: string, type: string, text: string, meta?: Record<string, string>) => void;
-    addFile: (f: UploadedFile) => void;
-    replaceSessionMessages: (id: string, msgs: ChatMessage[]) => void;
-    updateSessionTitle: (id: string, title: string) => void;
-    newSession: () => string;
-    switchSession: (id: string) => void;
-    setReplyTo: (v: number | null) => void;
-  };
+  actions: Pick<AppActions, "setDraft" | "setStreaming" | "setStreamText" | "setStatusLine" | "addMessage" | "addActivity" | "addFeed" | "addFile" | "replaceSessionMessages" | "updateSessionTitle" | "newSession" | "switchSession" | "setReplyTo">;
   replyToIndex: number | null;
   pendingFiles: UploadedFile[];
   setPendingFiles: (v: UploadedFile[] | ((prev: UploadedFile[]) => UploadedFile[])) => void;
@@ -52,7 +38,7 @@ export interface UseMessageHandlersParams {
   extractMention?: (text: string) => { cleanText: string; agentId: string | null };
   clearMention?: () => void;
   // Stream state
-  setStreamPhase: (v: string) => void;
+  setStreamPhase: React.Dispatch<React.SetStateAction<"connecting" | "thinking" | "planning" | "tool_use" | "writing" | "compacting" | "done" | "attention" | "error">>;
   setActiveToolName: (v: string | null) => void;
   setCompacting: (v: boolean) => void;
   setPendingApproval: (v: any) => void;
@@ -1173,6 +1159,31 @@ Conversation Memory: You have access to the full conversation in this session. W
           status: result.status,
         });
         actions.addActivity(sessionId, "executing", `${statusIcon} ${toolLabel}${durationStr}`);
+      },
+      onModelFailed: (model: string, reason: string) => {
+        // Show compact failure line instead of full refusal text
+        const shortModel = model.includes("/") ? model.split("/").pop()! : model;
+        const failLine = `~~${shortModel}: Failed~~ — ${reason}\n\n`;
+        fullResponse = failLine;
+        actions.setStreamText(failLine);
+        actions.addActivity(sessionId, "error", `${shortModel} failed: ${reason}`);
+        actions.addFeed(sessionId, "error", `${shortModel}: ${reason}`);
+        if (processStepRef.current) updateStep(runId, processStepRef.current, { status: "completed", completedAt: Date.now() });
+        addStep(runId, { kind: "error", label: `${shortModel}: Failed` });
+      },
+      onClearResponse: () => {
+        // Discard failed response text, keep only failure attribution line
+        const failLine = fullResponse.match(/^~~.+?~~.*?\n\n/)?.[0] || "";
+        fullResponse = failLine;
+        actions.setStreamText(failLine);
+        streamStarted = false;
+      },
+      onModelSwitch: (from: string, to: string, _reason: string) => {
+        const shortTo = to.includes("/") ? to.split("/").pop()! : to;
+        actions.setStatusLine(`Retrying with ${shortTo}...`);
+        setStreamPhase("thinking");
+        const stepId = addStep(runId, { kind: "thinking", label: `Retrying → ${shortTo}` });
+        processStepRef.current = stepId;
       },
     }, controller.signal, sessionId, selectedModel || undefined, attachments.length > 0 ? attachments : undefined, openclawMode,
     // Phase 4: thread context propagation for branch/reply continuity

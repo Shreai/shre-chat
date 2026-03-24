@@ -232,7 +232,7 @@ export interface FeedEntry {
   id: string;
   sessionId: string;
   sessionTitle: string;
-  type: "sent" | "routed" | "streaming" | "received" | "error" | "fallback" | "gateway" | "system";
+  type: "sent" | "routed" | "streaming" | "received" | "error" | "fallback" | "gateway" | "system" | "tool_result";
   message: string;
   meta?: Record<string, string>; // model, confidence, tokens, etc.
   timestamp: number;

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useMemo } from "react";
 import type { Virtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "../openclaw";
+import type { UserProfile } from "../store";
 import type { ProcessRun } from "./process-bar/types";
 import MessageBubble, { SystemEventChip } from "./MessageBubble";
 import { WelcomeScreen } from "./WelcomeScreen";
@@ -48,7 +49,7 @@ export interface MessageListProps {
   PULL_THRESHOLD: number;
 
   // Stream state
-  streamStall: string | false;
+  streamStall: "stalling" | "retrying" | "clear" | null;
   stallCountdown: number;
   streamElapsed: number;
   streamPhase: string;
@@ -61,7 +62,7 @@ export interface MessageListProps {
   getRunForMessage: (msg: ChatMessage, idx: number) => ProcessRun | null;
 
   // User profile
-  userProfile: { name?: string } | null;
+  userProfile: UserProfile | null;
 
   // Callbacks
   onScroll: () => void;
@@ -308,10 +309,10 @@ export function MessageList(props: MessageListProps) {
                 <div className="text-amber-200 text-sm font-medium mb-1">Approval Required</div>
                 <div className="text-amber-100/80 text-xs mb-2">
                   <strong>{pendingApproval.tool}</strong>: {pendingApproval.reason}
-                  {pendingApproval.input?.command && (
+                  {!!pendingApproval.input?.command && (
                     <pre className="mt-1 p-1 bg-black/30 rounded text-xs overflow-x-auto">{String(pendingApproval.input.command).slice(0, 200)}</pre>
                   )}
-                  {pendingApproval.input?.path && (
+                  {!!pendingApproval.input?.path && (
                     <div className="mt-1 text-xs opacity-70">Path: {String(pendingApproval.input.path)}</div>
                   )}
                 </div>

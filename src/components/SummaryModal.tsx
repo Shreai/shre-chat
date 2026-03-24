@@ -23,7 +23,7 @@ export function SummaryModal({
   onCopy,
 }: SummaryModalProps) {
   return (
-    <SDialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <SDialog open={isOpen} onOpenChange={(open: boolean) => { if (!open) onClose(); }}>
       <SDialogContent className="max-w-lg">
         <SDialogHeader>
           <SDialogTitle className="flex items-center gap-2 text-sm">

@@ -586,6 +586,8 @@ export interface WSStreamCallbacks {
   onError: (error: string) => void;
   onStatus?: (status: string, detail?: string) => void;
   onActivity?: (text: string) => void;
+  /** Fired when the server acknowledges receipt of the message (RPC response OK). */
+  onAck?: (runId: string | null) => void;
 }
 
 /**
@@ -870,6 +872,9 @@ export async function sendChatWS(
       stream.status = "thinking";
     }
     notifyStreamChange();
+
+    // ACK: server confirmed receipt of the message
+    callbacks.onAck?.(currentRunId);
 
     console.log("[ws] chat.send OK, runId:", currentRunId, "sessionKey:", fullSessionKey);
     callbacks.onStatus?.("thinking");

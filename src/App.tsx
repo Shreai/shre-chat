@@ -1318,7 +1318,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
           <StatusBar />
           {workspaces && workspaces.length > 1 && (
             <WorkspaceSwitcher
-              activeWorkspace={activeWorkspace ?? undefined}
+              activeWorkspace={(activeWorkspace ?? null) as { id: string; name: string; role: string; isDefault?: boolean } | null}
               workspaces={workspaces}
               onSwitch={onWorkspaceSwitch}
             />

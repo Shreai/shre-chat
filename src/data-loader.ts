@@ -3,7 +3,8 @@
  * Fetches RapidRMS data for today, yesterday, week, etc.
  */
 
-const SHRE_URL = "http://localhost:5497";
+// VITE_ROUTER_URL should be set in .env (e.g. https://127.0.0.1:5497)
+const SHRE_URL = import.meta.env.VITE_ROUTER_URL || "";
 const RAPIDRMS_API = "https://rapidrmsapi.azurewebsites.net/api";
 
 export interface DailyMetrics {

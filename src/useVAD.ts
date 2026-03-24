@@ -37,7 +37,7 @@ export function useVAD(options: VADOptions = {}) {
   const silenceStartRef = useRef<number>(0);
   const hadSpeechRef = useRef(false);
   const activeRef = useRef(false);
-  const dataRef = useRef<Uint8Array | null>(null);
+  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
   // Store latest callbacks in refs so the animation frame loop sees current values
   const onSilenceRef = useRef(onSilence);

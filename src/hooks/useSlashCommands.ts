@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import type { ChatMessage } from "../openclaw";
-import type { Session } from "../store";
+import type { Session, AppActions } from "../store";
 import { formatTime, copyToClipboard } from "../chat-utils";
 
 export type SlashCategory = "session" | "app" | "platform";
@@ -28,16 +28,7 @@ export interface UseSlashCommandsParams {
   activeAgentId: string;
   activeSession: Session | undefined;
   messages: ChatMessage[];
-  actions: {
-    setStatusLine: (s: string | null) => void;
-    replaceSessionMessages: (id: string, msgs: ChatMessage[]) => void;
-    addFeed: (sessionId: string, type: string, text: string, meta?: Record<string, string>) => void;
-    addMessage: (sessionId: string, msg: ChatMessage) => void;
-    toggleCompact: () => void;
-    setSystemPrompt: (sessionId: string, prompt: string) => void;
-    newSession: () => string;
-    switchSession: (id: string) => void;
-  };
+  actions: Pick<AppActions, "setStatusLine" | "replaceSessionMessages" | "addFeed" | "addMessage" | "toggleCompact" | "setSystemPrompt" | "newSession" | "switchSession">;
   stateCompact: boolean;
   cliMode: boolean;
   setCliMode: (v: boolean) => void;

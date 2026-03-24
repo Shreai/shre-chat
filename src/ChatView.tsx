@@ -173,7 +173,7 @@ export function ChatView() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [termViewMode, setTermViewMode] = useState<"split" | "tabs">("split");
   const [activeView, setActiveView] = useState<string>("chat"); // "chat" | "terminal" | "preview"
-  const [previewContent, setPreviewContent] = useState<{ content: string; type: "html" | "json" | "chart" | "table"; title?: string } | null>(null);
+  const [previewContent, setPreviewContent] = useState<{ content: string; type: string; title?: string } | null>(null);
   // ── Share via link ────────────────────────────────────────────────
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -506,9 +506,19 @@ export function ChatView() {
       return;
     }
 
-    if (e.key === "Enter" && e.ctrlKey) {
+    // Tab → focus send button (when no dropdown is open)
+    if (e.key === "Tab" && !e.shiftKey) {
+      const sendBtn = document.querySelector<HTMLButtonElement>("[data-send-btn]");
+      if (sendBtn) {
+        e.preventDefault();
+        sendBtn.focus();
+        return;
+      }
+    }
+
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      // Ctrl+Enter: save queue edit or send
+      // Enter (or Ctrl+Enter): save queue edit or send
       if (editingQueueId !== null) {
         const newText = input.trim();
         if (newText) {
@@ -643,7 +653,7 @@ export function ChatView() {
   const showPreviewPanel = isTabMode && activeView === "preview" && previewContent;
 
   // Handler for content block expand (lego blocks)
-  const handleContentExpand = useCallback((content: string, type: "html" | "json" | "chart" | "table", title?: string) => {
+  const handleContentExpand = useCallback((content: string, type: string, title?: string) => {
     setPreviewContent({ content, type, title });
     setActiveView("preview");
     if (termViewMode !== "tabs") setTermViewMode("tabs");

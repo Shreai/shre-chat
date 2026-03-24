@@ -108,8 +108,8 @@ describe("scoreRelevance", () => {
     ];
     const scored = scoreRelevance(chunks, "sales");
     // Assistant chunk should score higher (same text but +2 bonus)
-    const assistantChunk = scored.find((c) => c.role === "assistant")!;
-    const userChunk = scored.find((c) => c.role === "user")!;
+    const assistantChunk = scored.find((c: any) => c.role === "assistant")!;
+    const userChunk = scored.find((c: any) => c.role === "user")!;
     expect(assistantChunk.score).toBeGreaterThan(userChunk.score);
   });
 
