@@ -1,0 +1,282 @@
+import React from "react";
+import type { ChatMessage } from "../openclaw";
+import type { Session } from "../store";
+import { exportSessions, importSessions } from "../store";
+import { ECOSYSTEM_APPS } from "../chat-utils";
+
+export interface HeaderMoreMenuProps {
+  open: boolean;
+  onClose: () => void;
+  // OpenClaw mode
+  openclawMode: boolean;
+  onToggleOpenclawMode: () => void;
+  // Compare
+  compareMode: boolean;
+  onToggleCompare: () => void;
+  comparePickerRef: React.RefObject<HTMLDivElement | null>;
+  // System prompt
+  activeSession: Session | undefined;
+  onOpenSystemPrompt: () => void;
+  // Compact
+  compact: boolean;
+  onToggleCompact: () => void;
+  // Sounds
+  notifSound: boolean;
+  onToggleNotifSound: () => void;
+  // Messages
+  messages: ChatMessage[];
+  userName: string;
+  currentAgentName: string;
+  // Summarize
+  summarizing: boolean;
+  onSummarize: () => void;
+  // Analytics
+  onOpenAnalytics: () => void;
+  // Share
+  activeSessionId: string | null;
+  onShare: () => void;
+  // Copy / Download
+  onCopyMarkdown: () => void;
+  onDownloadMd: () => void;
+  onDownloadJson: () => void;
+  // Apps
+  onToggleApps: () => void;
+  // Views
+  view: string;
+  onSetView: (v: string) => void;
+  // Export/Import
+  sessions: Session[];
+  importInputRef: React.RefObject<HTMLInputElement | null>;
+  onImportSessions: () => void;
+}
+
+export function HeaderMoreMenu({
+  open, onClose,
+  openclawMode, onToggleOpenclawMode,
+  compareMode, onToggleCompare, comparePickerRef,
+  activeSession, onOpenSystemPrompt,
+  compact, onToggleCompact,
+  notifSound, onToggleNotifSound,
+  messages, userName, currentAgentName,
+  summarizing, onSummarize,
+  onOpenAnalytics,
+  activeSessionId, onShare,
+  onCopyMarkdown, onDownloadMd, onDownloadJson,
+  onToggleApps,
+  view, onSetView,
+  sessions, importInputRef, onImportSessions,
+}: HeaderMoreMenuProps) {
+  if (!open) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        className="absolute right-0 top-10 z-50 w-56 rounded-xl shadow-xl py-1"
+        style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)", maxHeight: "min(580px, calc(100dvh - 80px))", overflowY: "auto" }}
+      >
+        <button
+          onClick={() => { onToggleOpenclawMode(); onClose(); }}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: "var(--c-text-1)" }}
+        >
+          <span className="inline-block h-2 w-2 rounded-full" style={{ background: openclawMode ? "#a855f7" : "#3b82f6" }} />
+          {openclawMode ? "Switch to Router" : "Switch to OpenClaw"}
+        </button>
+
+        <Divider />
+
+        <div className="relative" ref={comparePickerRef}>
+          <button
+            onClick={() => { onToggleCompare(); onClose(); }}
+            className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+            style={{ color: compareMode ? "var(--c-warning)" : "var(--c-text-1)" }}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+            {compareMode ? "Exit Compare" : "Compare Models"}
+          </button>
+        </div>
+
+        <button
+          onClick={() => { onOpenSystemPrompt(); onClose(); }}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: activeSession?.systemPrompt ? "var(--c-accent)" : "var(--c-text-1)" }}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          System Prompt
+        </button>
+
+        <button
+          onClick={() => { onToggleCompact(); onClose(); }}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: compact ? "var(--c-accent)" : "var(--c-text-1)" }}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            {compact
+              ? <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>
+              : <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>
+            }
+          </svg>
+          {compact ? "Comfortable View" : "Compact View"}
+        </button>
+
+        <button
+          onClick={() => { onToggleNotifSound(); onClose(); }}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: "var(--c-text-1)" }}
+          title={notifSound ? "Mute notification sounds when new messages arrive" : "Play a chime when new messages arrive while tab is in background"}
+        >
+          {notifSound ? (
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          ) : (
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+          )}
+          {notifSound ? "Mute Sounds" : "Enable Sounds"}
+        </button>
+
+        {messages.length > 0 && (
+          <>
+            <Divider />
+
+            {messages.length >= 4 && (
+              <button
+                onClick={() => { onClose(); onSummarize(); }}
+                className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                style={{ color: "var(--c-text-1)" }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                Summarize
+              </button>
+            )}
+
+            <button
+              onClick={() => { onOpenAnalytics(); onClose(); }}
+              className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+              style={{ color: "var(--c-text-1)" }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Analytics
+            </button>
+
+            {activeSessionId && (
+              <button
+                onClick={() => { onClose(); onShare(); }}
+                className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                style={{ color: "var(--c-text-1)" }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                Share
+              </button>
+            )}
+
+            <Divider />
+
+            <button
+              onClick={() => { onCopyMarkdown(); onClose(); }}
+              className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+              style={{ color: "var(--c-text-2)" }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+              Copy as Markdown
+            </button>
+
+            <button
+              onClick={() => { onDownloadMd(); onClose(); }}
+              className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+              style={{ color: "var(--c-text-2)" }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download .md
+            </button>
+
+            <button
+              onClick={() => { onDownloadJson(); onClose(); }}
+              className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+              style={{ color: "var(--c-text-2)" }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              Download .json
+            </button>
+          </>
+        )}
+
+        <Divider />
+
+        <button
+          onClick={() => { onToggleApps(); onClose(); }}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: "var(--c-text-1)" }}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="1" y="1" width="4" height="4" rx="1" />
+            <rect x="6" y="1" width="4" height="4" rx="1" />
+            <rect x="11" y="1" width="4" height="4" rx="1" />
+            <rect x="1" y="6" width="4" height="4" rx="1" />
+            <rect x="6" y="6" width="4" height="4" rx="1" />
+            <rect x="11" y="6" width="4" height="4" rx="1" />
+          </svg>
+          Ecosystem Apps
+        </button>
+
+        <Divider />
+
+        <SectionLabel>Views</SectionLabel>
+        <HeaderMenuItem label="Feed" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1" /></svg>} active={view === "feed"} onClick={() => onSetView("feed")} />
+        <HeaderMenuItem label="Feed Analytics" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>} active={view === "feed-analytics"} onClick={() => onSetView("feed-analytics")} />
+        <HeaderMenuItem label="Cost Dashboard" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>} active={view === "cost-dashboard"} onClick={() => onSetView("cost-dashboard")} />
+        <HeaderMenuItem label="Reports" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>} active={view === "reports"} onClick={() => onSetView("reports")} />
+
+        <Divider />
+
+        <SectionLabel>Apps</SectionLabel>
+        <HeaderMenuItem label="Marketplace" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z"/><line x1="3" y1="7" x2="21" y2="7"/><path d="M16 11a4 4 0 0 1-8 0"/></svg>} active={view === "marketplace"} onClick={() => onSetView("marketplace")} />
+        <HeaderMenuItem label="Task Timeline" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>} active={view === "task-timeline"} onClick={() => onSetView("task-timeline")} />
+        <HeaderMenuItem label="Tasks" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>} active={view === "tasks"} onClick={() => onSetView("tasks")} />
+        <HeaderMenuItem label="Reminders" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>} active={view === "reminders"} onClick={() => onSetView("reminders")} />
+        <HeaderMenuItem label="Projects" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>} active={view === "projects"} onClick={() => onSetView("projects")} />
+
+        <Divider />
+
+        <SectionLabel>Tools</SectionLabel>
+        <HeaderMenuItem label="Admin" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} active={view === "admin"} onClick={() => onSetView("admin")} />
+        <HeaderMenuItem label="Fine-Tuning" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>} active={view === "finetune"} onClick={() => onSetView("finetune")} />
+
+        <Divider />
+
+        <SectionLabel>Data</SectionLabel>
+        <HeaderMenuItem label="Export Sessions" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>} onClick={() => { exportSessions(sessions); onClose(); }} />
+        <HeaderMenuItem label="Import Sessions" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>} onClick={() => { onImportSessions(); onClose(); }} />
+      </div>
+    </>
+  );
+}
+
+function Divider() {
+  return <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>
+      {children}
+    </div>
+  );
+}
+
+function HeaderMenuItem({ label, icon, active, external, onClick }: {
+  label: string; icon: React.ReactNode; active?: boolean; external?: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+      style={{ color: active ? "var(--c-accent)" : "var(--c-text-1)" }}
+    >
+      <span style={{ color: active ? "var(--c-accent)" : "var(--c-text-3)" }}>{icon}</span>
+      {label}
+      {external && (
+        <svg className="h-3 w-3 ml-auto" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      )}
+    </button>
+  );
+}

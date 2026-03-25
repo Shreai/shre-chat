@@ -4,7 +4,7 @@ import { ProcessBar, ProcessDetail, useProcessRun } from "./components/process-b
 import type { ChatMessage, RouterModel } from "./openclaw";
 import ports from "../../ports.json";
 import { retryConnection } from "./gateway-ws";
-import { useApp, uid, generateTitle, getAgent, AGENTS, shareSession, exportSessions, importSessions, type UploadedFile, type Session } from "./store";
+import { useApp, uid, generateTitle, getAgent, AGENTS, shareSession, exportSessions, importSessions, type UploadedFile, type Session, type View } from "./store";
 import type { TerminalHandle } from "./TerminalView";
 const TerminalView = lazy(() => import("./TerminalView").then(m => ({ default: m.TerminalView })));
 const VoiceAssistant = lazy(() => import("./VoiceAssistant"));
@@ -12,11 +12,9 @@ const ContentCard = lazy(() => import("./components/ContentCard"));
 
 // Extracted modules
 import {
-  playNotifSound,
-  estimateTokens, formatTokenCount, providerIcon, providerLabel,
-  FALLBACK_MODELS, DEFAULT_CONTEXT_LIMIT,
-  getContextColor, getModelOverride, setModelOverride,
-  ECOSYSTEM_APPS, formatTime, copyToClipboard, mib007Link,
+  playNotifSound, providerIcon, providerLabel,
+  FALLBACK_MODELS, getModelOverride, setModelOverride,
+  ECOSYSTEM_APPS, formatTime,
 } from "./chat-utils";
 import { usePreferences } from "./preferences-store";
 import { Lightbox } from "./components/MessageBubble";
@@ -34,6 +32,7 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useVoiceHandlers } from "./hooks/useVoiceHandlers";
 import { useChatEffects } from "./hooks/useChatEffects";
 import { useMessageHandlers } from "./hooks/useMessageHandlers";
+import { useConversationTasks } from "./hooks/useConversationTasks";
 
 // Extracted UI components
 import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
@@ -48,6 +47,11 @@ import { CompareView } from "./components/CompareView";
 import { GlobalSearchModal } from "./components/GlobalSearchModal";
 import { ShareSnapshotView } from "./components/ShareSnapshotView";
 import { SuggestionsBar } from "./components/SuggestionsBar";
+import { HeaderMoreMenu } from "./components/HeaderMoreMenu";
+import { ChatSearchBar } from "./components/ChatSearchBar";
+import { ContextBar } from "./components/ContextBar";
+import { ShareBar } from "./components/ShareBar";
+import { useChatKeydown } from "./hooks/useChatKeydown";
 
 
 // ── Helpers, sub-components, and constants moved to:
@@ -67,7 +71,7 @@ export function ChatView() {
         window.history.replaceState({}, "", window.location.pathname);
         return urlPrompt;
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.debug("URL prompt parse", err); }
     if (activeSessionId) return actions.getDraft(activeSessionId);
     return "";
   });
@@ -130,6 +134,9 @@ export function ChatView() {
   }, [voiceAssistantOpen, voiceSessionId, actions, activeAgentId]);
   const voiceSession = sessions.find((s) => s.id === voiceSessionId);
   const voiceMessages = voiceSession?.messages || [];
+
+  // ── Conversation task loop (badge on messages) ──
+  const { latestTask } = useConversationTasks(activeSessionId);
 
   const [showModelPicker, setShowModelPicker] = useState(false);
   const notifSound = usePreferences((s) => s.notifSound);
@@ -269,8 +276,15 @@ export function ChatView() {
           return { ...msg, content: msg.content.replace(/^\[\[reply_to_current\]\]\s*/, "") };
         }
         return msg;
+      })
+      .map((msg, i, arr) => {
+        // Inject task badge on the last assistant message if a conversation-loop task exists
+        if (latestTask && msg.role === "assistant" && i === arr.length - 1) {
+          return { ...msg, meta: { ...msg.meta, taskId: latestTask.id, taskStatus: latestTask.status } };
+        }
+        return msg;
       }),
-    [messages],
+    [messages, latestTask],
   );
 
   // Match process runs to assistant messages by timestamp proximity
@@ -422,156 +436,17 @@ export function ChatView() {
     actions, virtualizer,
   });
 
-  // ── Textarea keydown handler ──────────────────────────────────────
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Slash command dropdown navigation
-    if (slashOpen && slashFiltered.length > 0) {
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSlashIndex((prev) => (prev - 1 + slashFiltered.length) % slashFiltered.length);
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSlashIndex((prev) => (prev + 1) % slashFiltered.length);
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        const selected = slashFiltered[slashIndex];
-        if (selected) {
-          const hasArg = selected.usage.includes("<");
-          setInput("/" + selected.name + (hasArg ? " " : ""));
-        }
-        return;
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        const selected = slashFiltered[slashIndex];
-        if (selected) {
-          const hasArg = selected.usage.includes("<");
-          if (hasArg && !input.includes(" ")) {
-            setInput("/" + selected.name + " ");
-          } else {
-            executeSlashCommand(input.slice(1));
-          }
-        }
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setSlashOpen(false);
-        return;
-      }
-    }
-
-    // @@ Mention dropdown navigation
-    if (mentionOpen && mentionFiltered.length > 0) {
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setMentionIndex((prev) => (prev - 1 + mentionFiltered.length) % mentionFiltered.length);
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setMentionIndex((prev) => (prev + 1) % mentionFiltered.length);
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        const selected = mentionFiltered[mentionIndex];
-        if (selected) onMentionSelect(selected);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setMentionOpen(false);
-        return;
-      }
-    }
-
-    // Escape cancels edit mode (queue or message)
-    if (e.key === "Escape" && editingQueueId !== null) {
-      e.preventDefault();
-      setEditingQueueId(null);
-      setEditingQueueText("");
-      setInput("");
-      return;
-    }
-    if (e.key === "Escape" && editingMsgIndex !== null) {
-      e.preventDefault();
-      setEditingMsgIndex(null);
-      setEditingMsgText("");
-      setInput("");
-      return;
-    }
-
-    // Tab → focus send button (when no dropdown is open)
-    if (e.key === "Tab" && !e.shiftKey) {
-      const sendBtn = document.querySelector<HTMLButtonElement>("[data-send-btn]");
-      if (sendBtn) {
-        e.preventDefault();
-        sendBtn.focus();
-        return;
-      }
-    }
-
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      // Enter (or Ctrl+Enter): save queue edit or send
-      if (editingQueueId !== null) {
-        const newText = input.trim();
-        if (newText) {
-          setQueue((prev) => prev.map((q) => q.id === editingQueueId ? { ...q, text: newText } : q));
-        }
-        setEditingQueueId(null);
-        setEditingQueueText("");
-        setInput("");
-        return;
-      }
-      // If editing a message, truncate history and resend
-      if (editingMsgIndex !== null && activeSessionId && input.trim()) {
-        const truncated = messages.slice(0, editingMsgIndex);
-        actions.replaceSessionMessages(activeSessionId, truncated);
-        setEditingMsgIndex(null);
-        setEditingMsgText("");
-      }
-      if (input.trim()) {
-        const hist = sentHistoryRef.current;
-        if (hist[hist.length - 1] !== input.trim()) {
-          hist.push(input.trim());
-          localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
-        }
-        sentHistoryIdxRef.current = hist.length;
-      }
-      handleSend();
-    } else if (e.key === "ArrowUp") {
-      const hist = sentHistoryRef.current;
-      if (hist.length === 0) return;
-      e.preventDefault();
-      // Clamp index to valid range before decrementing
-      const cur = Math.min(sentHistoryIdxRef.current, hist.length);
-      const idx = cur - 1;
-      if (idx >= 0) {
-        sentHistoryIdxRef.current = idx;
-        setInput(hist[idx]);
-      }
-    } else if (e.key === "ArrowDown") {
-      const hist = sentHistoryRef.current;
-      if (hist.length === 0) return;
-      const cur = sentHistoryIdxRef.current;
-      if (cur < 0 || cur >= hist.length) return;
-      e.preventDefault();
-      const idx = cur + 1;
-      if (idx < hist.length) {
-        sentHistoryIdxRef.current = idx;
-        setInput(hist[idx]);
-      } else {
-        sentHistoryIdxRef.current = hist.length;
-        setInput("");
-      }
-    }
-  };
+  // ── Textarea keydown handler (extracted hook) ──────────────────────
+  const handleKeyDown = useChatKeydown({
+    slashOpen, slashFiltered, slashIndex, setSlashIndex, setSlashOpen, executeSlashCommand,
+    mentionOpen, mentionFiltered, mentionIndex, setMentionIndex, setMentionOpen, onMentionSelect,
+    editingQueueId, setEditingQueueId, setEditingQueueText,
+    editingMsgIndex, setEditingMsgIndex, setEditingMsgText,
+    input, setInput, setQueue,
+    messages, activeSessionId, replaceSessionMessages: actions.replaceSessionMessages,
+    handleSend,
+    sentHistoryRef, sentHistoryIdxRef, HISTORY_KEY,
+  });
 
   // ── File handling ─────────────────────────────────────────────────
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -658,6 +533,134 @@ export function ChatView() {
     setActiveView("preview");
     if (termViewMode !== "tabs") setTermViewMode("tabs");
   }, [termViewMode]);
+
+  // ── Header menu callbacks ────────────────────────────────────────
+  const handleToggleOpenclawMode = useCallback(() => {
+    const next = !openclawMode;
+    setOpenclawMode(next);
+    localStorage.setItem("shre-openclaw-mode", String(next));
+  }, [openclawMode]);
+
+  const handleToggleCompare = useCallback(() => {
+    if (!compareMode) {
+      setCompareMode(true);
+      if (compareModels.length < 2) setComparePickerOpen(true);
+    } else {
+      setCompareMode(false);
+      setCompareStreams({});
+      setCompareWinner(null);
+      setComparePickerOpen(false);
+    }
+  }, [compareMode, compareModels.length]);
+
+  const handleOpenSystemPrompt = useCallback(() => {
+    setSystemPromptDraft(activeSession?.systemPrompt || "");
+    setShowSystemPrompt(true);
+  }, [activeSession?.systemPrompt]);
+
+  const handleToggleNotifSound = useCallback(() => {
+    const next = !notifSound;
+    setNotifSound(next);
+    if (next) playNotifSound();
+  }, [notifSound, setNotifSound]);
+
+  const handleSummarize = useCallback(async () => {
+    if (summarizing) return;
+    setSummarizing(true);
+    try {
+      const convoText = messages
+        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+        .join("\n\n")
+        .slice(0, 4000);
+      const res = await fetch("/v1/responses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "openai/gpt-4o-mini",
+          input: `Summarize this conversation concisely in bullet points. Include key decisions, questions asked, and conclusions reached.\n\nConversation:\n${convoText}`,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) throw new Error(`Gateway error: ${res.status}`);
+      const data = await res.json();
+      const text = data?.output
+        ?.filter((o: { type: string }) => o.type === "message")
+        ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content?.filter((c: { type: string }) => c.type === "output_text")?.map((c: { text: string }) => c.text) ?? [])
+        ?.join("") || "";
+      if (!text) throw new Error("Empty summary returned");
+      setSummaryText(text);
+      setShowSummary(true);
+    } catch (err: unknown) {
+      actions.setStatusLine(`Summary failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      setTimeout(() => actions.setStatusLine(null), 4000);
+    } finally {
+      setSummarizing(false);
+    }
+  }, [summarizing, messages, actions]);
+
+  const handleShare = useCallback(async () => {
+    if (!activeSessionId) return;
+    setShareLoading(true);
+    setShareCopied(false);
+    try {
+      const url = await shareSession(activeSessionId);
+      setShareUrl(url);
+    } catch (err) {
+      console.warn("share session", err);
+      actions.setStatusLine("Failed to create share link");
+      setTimeout(() => actions.setStatusLine(null), 3000);
+    }
+    setShareLoading(false);
+  }, [activeSessionId, actions]);
+
+  const handleCopyMarkdown = useCallback(() => {
+    const md = messages.map((m) =>
+      `**${m.role === "user" ? userName : currentAgent.name}** (${formatTime(m.timestamp)}):\n${m.content}`
+    ).join("\n\n---\n\n");
+    navigator.clipboard?.writeText(md).then(() => {
+      actions.setStatusLine("Copied to clipboard");
+      setTimeout(() => actions.setStatusLine(null), 2000);
+    });
+  }, [messages, userName, currentAgent.name, actions]);
+
+  const handleDownloadMd = useCallback(() => {
+    const md = `# ${activeSession?.title || "Chat"}\n\n` + messages.map((m) =>
+      `## ${m.role === "user" ? userName : currentAgent.name} (${formatTime(m.timestamp)})\n\n${m.content}`
+    ).join("\n\n---\n\n");
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    actions.setStatusLine("Downloaded as Markdown");
+    setTimeout(() => actions.setStatusLine(null), 2000);
+  }, [messages, userName, currentAgent.name, activeSession?.title, actions]);
+
+  const handleDownloadJson = useCallback(() => {
+    const data = {
+      title: activeSession?.title || "Chat",
+      agent: currentAgent.id,
+      exportedAt: new Date().toISOString(),
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+        model: m.meta?.model,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    actions.setStatusLine("Downloaded as JSON");
+    setTimeout(() => actions.setStatusLine(null), 2000);
+  }, [messages, currentAgent.id, activeSession?.title, actions]);
 
   // ── Shared snapshot view (read-only) ──────────────────────────────
   if (sharedSnapshot || sharedLoading || sharedError) {
@@ -890,303 +893,38 @@ export function ChatView() {
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
             </button>
 
-            {showHeaderMore && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowHeaderMore(false)} />
-                <div
-                  className="absolute right-0 top-10 z-50 w-56 rounded-xl shadow-xl py-1"
-                  style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)", maxHeight: "min(580px, calc(100dvh - 80px))", overflowY: "auto" }}
-                >
-                  <button
-                    onClick={() => {
-                      const next = !openclawMode;
-                      setOpenclawMode(next);
-                      localStorage.setItem("shre-openclaw-mode", String(next));
-                      setShowHeaderMore(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                    style={{ color: "var(--c-text-1)" }}
-                  >
-                    <span className="inline-block h-2 w-2 rounded-full" style={{ background: openclawMode ? "#a855f7" : "#3b82f6" }} />
-                    {openclawMode ? "Switch to Router" : "Switch to OpenClaw"}
-                  </button>
-
-                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                  <div className="relative" ref={comparePickerRef}>
-                    <button
-                      onClick={() => {
-                        if (!compareMode) {
-                          setCompareMode(true);
-                          if (compareModels.length < 2) setComparePickerOpen(true);
-                        } else {
-                          setCompareMode(false);
-                          setCompareStreams({});
-                          setCompareWinner(null);
-                          setComparePickerOpen(false);
-                        }
-                        setShowHeaderMore(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                      style={{ color: compareMode ? "var(--c-warning)" : "var(--c-text-1)" }}
-                    >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
-                      {compareMode ? "Exit Compare" : "Compare Models"}
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setSystemPromptDraft(activeSession?.systemPrompt || "");
-                      setShowSystemPrompt(true);
-                      setShowHeaderMore(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                    style={{ color: activeSession?.systemPrompt ? "var(--c-accent)" : "var(--c-text-1)" }}
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    System Prompt
-                  </button>
-
-                  <button
-                    onClick={() => { actions.toggleCompact(); setShowHeaderMore(false); }}
-                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                    style={{ color: state.compact ? "var(--c-accent)" : "var(--c-text-1)" }}
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      {state.compact
-                        ? <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>
-                        : <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>
-                      }
-                    </svg>
-                    {state.compact ? "Comfortable View" : "Compact View"}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      const next = !notifSound;
-                      setNotifSound(next);
-                      if (next) playNotifSound();
-                      setShowHeaderMore(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                    style={{ color: "var(--c-text-1)" }}
-                    title={notifSound ? "Mute notification sounds when new messages arrive" : "Play a chime when new messages arrive while tab is in background"}
-                  >
-                    {notifSound ? (
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                    ) : (
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-                    )}
-                    {notifSound ? "Mute Sounds" : "Enable Sounds"}
-                  </button>
-
-                  {messages.length > 0 && (
-                    <>
-                      <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                      {messages.length >= 4 && (
-                        <button
-                          onClick={async () => {
-                            setShowHeaderMore(false);
-                            if (summarizing) return;
-                            setSummarizing(true);
-                            try {
-                              const convoText = messages
-                                .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-                                .join("\n\n")
-                                .slice(0, 4000);
-                              const res = await fetch("/v1/responses", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  model: "anthropic/claude-haiku",
-                                  input: `Summarize this conversation concisely in bullet points. Include key decisions, questions asked, and conclusions reached.\n\nConversation:\n${convoText}`,
-                                  stream: false,
-                                }),
-                                signal: AbortSignal.timeout(15000),
-                              });
-                              if (!res.ok) throw new Error(`Gateway error: ${res.status}`);
-                              const data = await res.json();
-                              const text = data?.output
-                                ?.filter((o: { type: string }) => o.type === "message")
-                                ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content?.filter((c: { type: string }) => c.type === "output_text")?.map((c: { text: string }) => c.text) ?? [])
-                                ?.join("") || "";
-                              if (!text) throw new Error("Empty summary returned");
-                              setSummaryText(text);
-                              setShowSummary(true);
-                            } catch (err: unknown) {
-                              actions.setStatusLine(`Summary failed: ${err instanceof Error ? err.message : "unknown error"}`);
-                              setTimeout(() => actions.setStatusLine(null), 4000);
-                            } finally {
-                              setSummarizing(false);
-                            }
-                          }}
-                          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                          style={{ color: "var(--c-text-1)" }}
-                        >
-                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                          Summarize
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => { setShowAnalytics(true); setShowHeaderMore(false); }}
-                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                        style={{ color: "var(--c-text-1)" }}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                        Analytics
-                      </button>
-
-                      {activeSessionId && (
-                        <button
-                          onClick={async () => {
-                            setShowHeaderMore(false);
-                            setShareLoading(true);
-                            setShareCopied(false);
-                            try {
-                              const url = await shareSession(activeSessionId);
-                              setShareUrl(url);
-                            } catch {
-                              actions.setStatusLine("Failed to create share link");
-                              setTimeout(() => actions.setStatusLine(null), 3000);
-                            }
-                            setShareLoading(false);
-                          }}
-                          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                          style={{ color: "var(--c-text-1)" }}
-                        >
-                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                          Share
-                        </button>
-                      )}
-
-                      <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                      <button
-                        onClick={() => {
-                          const md = messages.map((m) =>
-                            `**${m.role === "user" ? userName : currentAgent.name}** (${formatTime(m.timestamp)}):\n${m.content}`
-                          ).join("\n\n---\n\n");
-                          navigator.clipboard?.writeText(md).then(() => {
-                            actions.setStatusLine("Copied to clipboard");
-                            setTimeout(() => actions.setStatusLine(null), 2000);
-                          });
-                          setShowHeaderMore(false);
-                        }}
-                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                        style={{ color: "var(--c-text-2)" }}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
-                        Copy as Markdown
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const md = `# ${activeSession?.title || "Chat"}\n\n` + messages.map((m) =>
-                            `## ${m.role === "user" ? userName : currentAgent.name} (${formatTime(m.timestamp)})\n\n${m.content}`
-                          ).join("\n\n---\n\n");
-                          const blob = new Blob([md], { type: "text/markdown" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                          actions.setStatusLine("Downloaded as Markdown");
-                          setTimeout(() => actions.setStatusLine(null), 2000);
-                          setShowHeaderMore(false);
-                        }}
-                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                        style={{ color: "var(--c-text-2)" }}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Download .md
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const data = {
-                            title: activeSession?.title || "Chat",
-                            agent: currentAgent.id,
-                            exportedAt: new Date().toISOString(),
-                            messages: messages.map((m) => ({
-                              role: m.role,
-                              content: m.content,
-                              timestamp: m.timestamp,
-                              model: m.meta?.model,
-                            })),
-                          };
-                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                          actions.setStatusLine("Downloaded as JSON");
-                          setTimeout(() => actions.setStatusLine(null), 2000);
-                          setShowHeaderMore(false);
-                        }}
-                        className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                        style={{ color: "var(--c-text-2)" }}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                        Download .json
-                      </button>
-                    </>
-                  )}
-
-                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                  <button
-                    onClick={() => { setShowApps(!showApps); setShowHeaderMore(false); }}
-                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                    style={{ color: "var(--c-text-1)" }}
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
-                      <rect x="1" y="1" width="4" height="4" rx="1" />
-                      <rect x="6" y="1" width="4" height="4" rx="1" />
-                      <rect x="11" y="1" width="4" height="4" rx="1" />
-                      <rect x="1" y="6" width="4" height="4" rx="1" />
-                      <rect x="6" y="6" width="4" height="4" rx="1" />
-                      <rect x="11" y="6" width="4" height="4" rx="1" />
-                    </svg>
-                    Ecosystem Apps
-                  </button>
-
-                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Views</div>
-                  <HeaderMenuItem label="Feed" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1" /></svg>} active={view === "feed"} onClick={() => { actions.setView("feed"); }} />
-                  <HeaderMenuItem label="Feed Analytics" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>} active={view === "feed-analytics"} onClick={() => { actions.setView("feed-analytics"); }} />
-                  <HeaderMenuItem label="Cost Dashboard" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>} active={view === "cost-dashboard"} onClick={() => { actions.setView("cost-dashboard"); }} />
-                  <HeaderMenuItem label="Reports" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>} active={view === "reports"} onClick={() => { actions.setView("reports"); }} />
-
-                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Apps</div>
-                  <HeaderMenuItem label="Marketplace" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z"/><line x1="3" y1="7" x2="21" y2="7"/><path d="M16 11a4 4 0 0 1-8 0"/></svg>} active={view === "marketplace"} onClick={() => { actions.setView("marketplace"); }} />
-                  <HeaderMenuItem label="Task Timeline" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>} active={view === "task-timeline"} onClick={() => { actions.setView("task-timeline"); }} />
-                  <HeaderMenuItem label="Tasks" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>} active={view === "tasks"} onClick={() => { actions.setView("tasks"); }} />
-                  <HeaderMenuItem label="Reminders" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>} active={view === "reminders"} onClick={() => { actions.setView("reminders"); }} />
-                  <HeaderMenuItem label="Projects" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>} active={view === "projects"} onClick={() => { actions.setView("projects"); }} />
-
-                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Tools</div>
-                  <HeaderMenuItem label="Admin" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} active={view === "admin"} onClick={() => { actions.setView("admin"); }} />
-                  <HeaderMenuItem label="Fine-Tuning" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>} active={view === "finetune"} onClick={() => { actions.setView("finetune"); }} />
-
-                  <div style={{ height: 1, background: "var(--c-border-2)", margin: "4px 12px" }} />
-
-                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-text-4)" }}>Data</div>
-                  <HeaderMenuItem label="Export Sessions" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>} onClick={() => { exportSessions(sessions); setShowHeaderMore(false); }} />
-                  <HeaderMenuItem label="Import Sessions" icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>} onClick={() => { importInputRef.current?.click(); setShowHeaderMore(false); }} />
-                </div>
-              </>
-            )}
+            <HeaderMoreMenu
+              open={showHeaderMore}
+              onClose={() => setShowHeaderMore(false)}
+              openclawMode={openclawMode}
+              onToggleOpenclawMode={handleToggleOpenclawMode}
+              compareMode={compareMode}
+              onToggleCompare={handleToggleCompare}
+              comparePickerRef={comparePickerRef}
+              activeSession={activeSession}
+              onOpenSystemPrompt={handleOpenSystemPrompt}
+              compact={state.compact}
+              onToggleCompact={() => actions.toggleCompact()}
+              notifSound={notifSound}
+              onToggleNotifSound={handleToggleNotifSound}
+              messages={messages}
+              userName={userName}
+              currentAgentName={currentAgent.name}
+              summarizing={summarizing}
+              onSummarize={handleSummarize}
+              onOpenAnalytics={() => setShowAnalytics(true)}
+              activeSessionId={activeSessionId}
+              onShare={handleShare}
+              onCopyMarkdown={handleCopyMarkdown}
+              onDownloadMd={handleDownloadMd}
+              onDownloadJson={handleDownloadJson}
+              onToggleApps={() => setShowApps(!showApps)}
+              view={view}
+              onSetView={(v) => actions.setView(v as View)}
+              sessions={sessions}
+              importInputRef={importInputRef}
+              onImportSessions={() => importInputRef.current?.click()}
+            />
           </div>
 
           <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={(e) => {
@@ -1209,41 +947,17 @@ export function ChatView() {
       </header>
 
       {shareUrl && (
-        <div
-          className="shrink-0 flex items-center gap-2 px-4 py-2"
-          style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-2)" }}
-        >
-          <input
-            type="text"
-            readOnly
-            value={shareUrl}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-lg outline-none truncate"
-            style={{ background: "var(--c-bg-input)", color: "var(--c-text-2)" }}
-            onFocus={(e) => e.target.select()}
-          />
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(shareUrl).then(() => {
-                setShareCopied(true);
-                setTimeout(() => setShareCopied(false), 2000);
-              });
-            }}
-            className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all shrink-0"
-            style={{
-              background: shareCopied ? "var(--c-success-bg)" : "var(--c-accent)",
-              color: shareCopied ? "var(--c-success)" : "var(--c-on-accent)",
-            }}
-          >
-            {shareCopied ? "Copied" : "Copy"}
-          </button>
-          <button
-            onClick={() => setShareUrl(null)}
-            className="p-1 rounded-lg transition-colors hover:bg-white/5"
-            style={{ color: "var(--c-text-3)" }}
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
+        <ShareBar
+          shareUrl={shareUrl}
+          shareCopied={shareCopied}
+          onCopy={() => {
+            navigator.clipboard.writeText(shareUrl).then(() => {
+              setShareCopied(true);
+              setTimeout(() => setShareCopied(false), 2000);
+            });
+          }}
+          onClose={() => setShareUrl(null)}
+        />
       )}
 
       {/* Gateway WS reconnection banner removed — all chat routes via HTTP/SSE through shre-router */}
@@ -1266,100 +980,24 @@ export function ChatView() {
       )}
 
       {/* ── Context window usage bar ─────────────────────────────────── */}
-      {messages.length > 0 && (() => {
-        const totalTokens = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-        const modelId = selectedModel || "anthropic/claude-sonnet-4-6";
-        const knownLimit = MODEL_CONTEXT_LIMITS[modelId];
-        if (!knownLimit && dynamicModels.length > 0) return null; // unknown context window — don't show misleading bar
-        const contextLimit = knownLimit || DEFAULT_CONTEXT_LIMIT;
-        const usagePct = Math.min((totalTokens / contextLimit) * 100, 100);
-        const color = getContextColor(usagePct);
-        return (
-          <div className="shrink-0 relative" style={{ height: "3px", background: "var(--c-border-1)" }}
-            title={`Context usage: ~${formatTokenCount(totalTokens)} / ${(contextLimit / 1000).toFixed(0)}k limit (${usagePct.toFixed(1)}%)`}>
-            <div style={{
-              position: "absolute", left: 0, top: 0, bottom: 0,
-              width: `${usagePct}%`,
-              background: color,
-              transition: "width 0.3s ease, background 0.3s ease",
-            }} />
-            {usagePct > 80 && (
-              <div className="absolute right-1 flex items-center gap-1" style={{ top: "4px" }}>
-                <span className="text-[9px] font-medium px-1 py-0.5 rounded"
-                  style={{ color: "var(--c-on-accent)", background: color, lineHeight: 1, opacity: 0.9 }}>
-                  {usagePct.toFixed(0)}% context
-                </span>
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      <ContextBar
+        messages={messages}
+        selectedModel={selectedModel}
+        modelContextLimits={MODEL_CONTEXT_LIMITS}
+        dynamicModelsCount={dynamicModels.length}
+      />
 
       {/* ── In-chat search bar (Cmd+F) ───────────────────────────────── */}
       {chatSearchOpen && (
-        <div className="flex items-center gap-2 px-3 py-1.5 shrink-0"
-          style={{
-            background: "var(--c-bg-glass)",
-            borderBottom: "1px solid var(--c-border-1)",
-            backdropFilter: "blur(12px)",
-            zIndex: 25,
-          }}>
-          <svg className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            ref={chatSearchRef}
-            type="text"
-            value={chatSearch}
-            onChange={(e) => setChatSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") { e.preventDefault(); closeChatSearch(); }
-              if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); chatSearchNavigate(-1); }
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSearchNavigate(1); }
-            }}
-            placeholder="Search in conversation..."
-            aria-label="Search in conversation"
-            className="flex-1 bg-transparent text-xs outline-none"
-            style={{ color: "var(--c-text-1)" }}
-            autoFocus
-          />
-          {chatSearch.trim() && (
-            <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--c-text-4)" }}>
-              {chatSearchResults.length > 0
-                ? `${chatSearchIndex + 1} of ${chatSearchResults.length}`
-                : "No results"}
-            </span>
-          )}
-          <button
-            onClick={() => chatSearchNavigate(-1)}
-            disabled={chatSearchResults.length === 0}
-            className="p-0.5 rounded transition-colors disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: "var(--c-text-3)" }}
-            title="Previous match (Shift+Enter)"
-            aria-label="Previous search match"
-          >
-            <svg className="h-3.5 w-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-          </button>
-          <button
-            onClick={() => chatSearchNavigate(1)}
-            disabled={chatSearchResults.length === 0}
-            className="p-0.5 rounded transition-colors disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: "var(--c-text-3)" }}
-            title="Next match (Enter)"
-            aria-label="Next search match"
-          >
-            <svg className="h-3.5 w-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <button
-            onClick={closeChatSearch}
-            className="p-0.5 rounded transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-            style={{ color: "var(--c-text-4)" }}
-            title="Close search (Escape)"
-            aria-label="Close search"
-          >
-            <svg className="h-3.5 w-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
+        <ChatSearchBar
+          chatSearchRef={chatSearchRef}
+          chatSearch={chatSearch}
+          onSearchChange={setChatSearch}
+          onClose={closeChatSearch}
+          onNavigate={chatSearchNavigate}
+          chatSearchResults={chatSearchResults}
+          chatSearchIndex={chatSearchIndex}
+        />
       )}
 
       {/* Apps drawer */}
@@ -1822,20 +1460,3 @@ export function ChatView() {
   );
 }
 
-function HeaderMenuItem({ label, icon, active, external, onClick }: {
-  label: string; icon: React.ReactNode; active?: boolean; external?: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-      style={{ color: active ? "var(--c-accent)" : "var(--c-text-1)" }}
-    >
-      <span style={{ color: active ? "var(--c-accent)" : "var(--c-text-3)" }}>{icon}</span>
-      {label}
-      {external && (
-        <svg className="h-3 w-3 ml-auto" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      )}
-    </button>
-  );
-}
