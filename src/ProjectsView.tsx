@@ -81,7 +81,7 @@ export function ProjectsView() {
       const data = await apiFetch(`/api/tasks?project_id=${projectId}&limit=20`);
       const list = Array.isArray(data) ? data : data.tasks || data || [];
       setProjectTasks((prev) => ({ ...prev, [projectId]: list }));
-    } catch {}
+    } catch (_) { void _; }
   }, [projectTasks]);
 
   const toggleProject = (id: string) => {

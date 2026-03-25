@@ -28,13 +28,13 @@ export class ErrorBoundary extends Component<Props, State> {
   handleClearAndReload = async () => {
     try {
       localStorage.clear();
-    } catch {}
+    } catch (_) { void _; }
     try {
       const dbs = await indexedDB.databases();
       for (const db of dbs) {
         if (db.name) indexedDB.deleteDatabase(db.name);
       }
-    } catch {}
+    } catch (_) { void _; }
     window.location.reload();
   };
 

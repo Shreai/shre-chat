@@ -34,7 +34,7 @@ const LinkPreview = memo(function LinkPreview({ url }: { url: string }) {
   if (!data || (!data.title && !data.description && !data.image)) return null;
 
   let domain = "";
-  try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+  try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch (_) { void _; }
 
   return (
     <a

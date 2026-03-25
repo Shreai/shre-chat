@@ -81,9 +81,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     }
 
     // Clean up previous sessions
-    if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch { /* */ } recognitionRef.current = null; }
-    if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch { /* */ } wakeListenerRef.current = null; }
-    if (mediaRecorderRef.current) { try { mediaRecorderRef.current.stop(); } catch { /* */ } mediaRecorderRef.current = null; }
+    if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch (_) { void _; } recognitionRef.current = null; }
+    if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch (_) { void _; } wakeListenerRef.current = null; }
+    if (mediaRecorderRef.current) { try { mediaRecorderRef.current.stop(); } catch (_) { void _; } mediaRecorderRef.current = null; }
     audioChunksRef.current = [];
 
     // Clear ALL voice state for a completely fresh recording
@@ -127,7 +127,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           || text.includes("shree shree") || text.includes("shri shri")) {
           wakeDetected = true;
           playVoiceCue("wake");
-          try { wakeRec.stop(); } catch { /* */ }
+          try { wakeRec.stop(); } catch (_) { void _; }
           recognitionRef.current = null;
           beginCapture();
           return;
@@ -257,7 +257,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         rec.onend = () => {
           if (!hasStarted || stopped) { recognitionRef.current = null; return; }
           if (recognitionRef.current === rec) {
-            try { rec.start(); return; } catch { /* */ }
+            try { rec.start(); return; } catch (_) { void _; }
           }
           recognitionRef.current = null;
         };
@@ -274,7 +274,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     cleanupAudioLevel();
 
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* */ }
+      try { recognitionRef.current.stop(); } catch (_) { void _; }
       recognitionRef.current = null;
     }
 
@@ -370,11 +370,11 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch { /* */ }
+        try { recognitionRef.current.abort(); } catch (_) { void _; }
         recognitionRef.current = null;
       }
       if (wakeListenerRef.current) {
-        try { wakeListenerRef.current.abort(); } catch { /* */ }
+        try { wakeListenerRef.current.abort(); } catch (_) { void _; }
         wakeListenerRef.current = null;
       }
       if (levelRafRef.current) cancelAnimationFrame(levelRafRef.current);
@@ -386,7 +386,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   // Hands-free wake word listener — "shre shre"
   useEffect(() => {
     if (!isHandsFree) {
-      if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch { /* */ } wakeListenerRef.current = null; }
+      if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch (_) { void _; } wakeListenerRef.current = null; }
       return;
     }
     const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -404,7 +404,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const text = e.results[i][0].transcript.toLowerCase().trim();
           if (text.includes("shre shre") || text.includes("shrey shrey") || text.includes("shray shray")) {
-            try { w.stop(); } catch { /* */ }
+            try { w.stop(); } catch (_) { void _; }
             wakeListenerRef.current = null;
             skipWakeRef.current = true;
             startRecording();
@@ -434,7 +434,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     setTimeout(startWakeListener, 200);
     return () => {
       active = false;
-      if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch { /* */ } wakeListenerRef.current = null; }
+      if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch (_) { void _; } wakeListenerRef.current = null; }
     };
   }, [isHandsFree, isRecording, startRecording]);
 

@@ -27,7 +27,7 @@ export function getUserLanguage(): string {
 
 /** Set user's preferred language */
 export function setUserLanguage(lang: string): void {
-  try { if (lang) localStorage.setItem("shre-user-language", lang); else localStorage.removeItem("shre-user-language"); } catch {}
+  try { if (lang) localStorage.setItem("shre-user-language", lang); else localStorage.removeItem("shre-user-language"); } catch (_) { void _; }
 }
 
 /** Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6").

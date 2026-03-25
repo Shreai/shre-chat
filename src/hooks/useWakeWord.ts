@@ -46,7 +46,7 @@ export function useWakeWord(
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const t = e.results[i][0].transcript.toLowerCase();
           if (t.includes("shre shre") || t.includes("shrey shrey") || t.includes("hey shre") || t.includes("shray shray")) {
-            try { w.stop(); } catch {}
+            try { w.stop(); } catch (_) { void _; }
             wake = null;
             setVoiceAssistantOpen(true);
             return;
@@ -63,7 +63,7 @@ export function useWakeWord(
       try { w.start(); wake = w; retryCount = 0; } catch { /* gesture required */ }
     }
     startWake();
-    return () => { active = false; if (wake) { try { wake.abort(); } catch {} } };
+    return () => { active = false; if (wake) { try { wake.abort(); } catch (_) { void _; } } };
   }, [wakeListenerReady, voiceAssistantOpen, isRecording, setVoiceAssistantOpen]);
 
   return { wakeListenerReady };

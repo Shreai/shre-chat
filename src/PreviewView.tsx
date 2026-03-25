@@ -19,7 +19,7 @@ export interface PreviewEntry {
 function loadLibrary(): PreviewEntry[] {
   try {
     return JSON.parse(localStorage.getItem(LIBRARY_KEY) || "[]");
-  } catch {
+  } catch (_) { void _;
     return [];
   }
 }
@@ -27,7 +27,7 @@ function loadLibrary(): PreviewEntry[] {
 function saveLibrary(entries: PreviewEntry[]) {
   try {
     localStorage.setItem(LIBRARY_KEY, JSON.stringify(entries.slice(0, MAX_LIBRARY)));
-  } catch {}
+  } catch (_) { void _; }
 }
 
 function deriveTitle(html: string): string {
@@ -71,7 +71,7 @@ export function PreviewView() {
         setLibrary(loadLibrary());
         sessionStorage.removeItem(PREVIEW_KEY);
       }
-    } catch {}
+    } catch (_) { void _; }
   }, []);
 
   // Create blob URL when active entry changes
