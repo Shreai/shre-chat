@@ -270,7 +270,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
         try {
           const stored = localStorage.getItem("shre-sessions");
           if (stored) liveSessions = JSON.parse(stored);
-        } catch {}
+        } catch (_) { void _; }
         const existingSession = liveSessions.find((s: Session) => (s.agentId || "main") === activeAgentId);
 
         if (existingSession) {

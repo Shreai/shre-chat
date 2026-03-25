@@ -229,7 +229,7 @@ export async function getAvailableLocales(): Promise<{ locale: Locale; label: st
       const { locales } = await res.json();
       return locales.map((l: Locale) => ({ locale: l, label: LOCALE_LABELS[l] || l }));
     }
-  } catch {}
+  } catch (_) { void _; }
 
   // Fallback — return all
   return Object.entries(LOCALE_LABELS).map(([locale, label]) => ({ locale: locale as Locale, label }));

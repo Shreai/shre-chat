@@ -105,7 +105,7 @@ export function TasksView() {
     try {
       await apiFetch(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
       load();
-    } catch {}
+    } catch (_) { void _; }
   };
 
   const filtered = tasks.filter((t) => {
