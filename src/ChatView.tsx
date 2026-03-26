@@ -54,8 +54,6 @@ import { useChatKeydown } from "./hooks/useChatKeydown";
 //    ./chat-utils.ts, ./components/MessageBubble.tsx,
 //    ./components/WelcomeScreen.tsx, ./components/LinkPreview.tsx
 
-const openClawUrl = "/openclaw/";
-
 export function ChatView() {
   const { state, actions } = useApp();
   const { sessions, activeSessionId, activeAgentId, openTabs, streaming, streamText, statusLine, gatewayUp, syncing, view } = state;
@@ -154,7 +152,6 @@ export function ChatView() {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
-  const [showOpenClaw, setShowOpenClaw] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [termViewMode, setTermViewMode] = useState<"split" | "tabs">("split");
   const [activeView, setActiveView] = useState<string>("chat"); // "chat" | "terminal" | "preview"
@@ -402,10 +399,9 @@ export function ChatView() {
     sentHistoryRef, sentHistoryIdxRef, HISTORY_KEY,
   });
 
-  const isTabMode = termViewMode === "tabs" && (showTerminal || showOpenClaw || activeView === "preview");
+  const isTabMode = termViewMode === "tabs" && (showTerminal || activeView === "preview");
   const showChat = !isTabMode || activeView === "chat";
   const showTermPanel = showTerminal && (!isTabMode || activeView === "terminal");
-  const showOpenClawPanel = showOpenClaw && (!isTabMode || activeView === "openclaw");
   const showPreviewPanel = isTabMode && activeView === "preview" && previewContent;
 
   // Handler for content block expand (lego blocks)
@@ -468,7 +464,6 @@ export function ChatView() {
           setActiveView={setActiveView}
           setTermViewMode={setTermViewMode}
           previewContent={previewContent}
-          showOpenClaw={showOpenClaw}
         />
       )}
 
@@ -484,51 +479,6 @@ export function ChatView() {
           <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: "var(--c-bg-1)", color: "var(--c-text-4)" }}>Loading terminal...</div>}>
             <TerminalView ref={terminalRef} visible={showTerminal} onClose={() => { setShowTerminal(false); setActiveView("chat"); }} />
           </Suspense>
-        </ViewErrorBoundary>
-      </div>
-
-      {/* OpenClaw panel — embedded gateway UI */}
-      <div
-        className={isTabMode ? "flex-1 min-h-0" : "shrink-0"}
-        style={{
-          ...(isTabMode ? {} : { height: "50%", minHeight: 300, borderBottom: "2px solid rgba(255,255,255,0.1)" }),
-          display: (isTabMode ? showOpenClawPanel : showOpenClaw) ? (isTabMode ? "flex" : "block") : "none",
-        }}
-      >
-        <ViewErrorBoundary viewName="OpenClaw">
-          <div className="w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-            <div className="flex items-center justify-between px-3 py-1.5 shrink-0" style={{ borderBottom: "1px solid var(--c-border-1)" }}>
-              <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white text-[9px] font-bold">O</div>
-                <span className="text-[11px] font-medium" style={{ color: "var(--c-text-1)" }}>OpenClaw Gateway</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => window.open(openClawUrl, "openclaw", "noopener,noreferrer")}
-                  className="h-6 w-6 rounded flex items-center justify-center transition-colors hover:bg-white/10"
-                  style={{ color: "var(--c-text-3)" }}
-                  title="Open in new tab"
-                >
-                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                </button>
-                <button
-                  onClick={() => { setShowOpenClaw(false); setActiveView("chat"); }}
-                  className="h-6 w-6 rounded flex items-center justify-center transition-colors hover:bg-white/10"
-                  style={{ color: "var(--c-text-3)" }}
-                  title="Close OpenClaw"
-                >
-                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-            </div>
-            <iframe
-              src={openClawUrl}
-              className="flex-1 w-full border-0"
-              title="OpenClaw Gateway"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              style={{ background: "#1a1a2e" }}
-            />
-          </div>
         </ViewErrorBoundary>
       </div>
 
@@ -764,8 +714,6 @@ export function ChatView() {
         termViewMode={termViewMode}
         onToggleTerminal={() => { if (!showTerminal) { setShowTerminal(true); } else { setShowTerminal(false); setActiveView("chat"); } }}
         onToggleTermViewMode={() => { const next = termViewMode === "split" ? "tabs" : "split"; setTermViewMode(next); if (next === "tabs") setActiveView("chat"); }}
-        showOpenClaw={showOpenClaw}
-        onToggleOpenClaw={() => { if (!showOpenClaw) { setShowOpenClaw(true); } else { setShowOpenClaw(false); setActiveView("chat"); } }}
         slashOpen={slashOpen}
         slashFiltered={slashFiltered}
         slashIndex={slashIndex}
