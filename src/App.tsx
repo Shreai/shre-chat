@@ -212,6 +212,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
   });
   const [compact, setCompact] = useState(() => localStorage.getItem("shre-compact") === "true");
   const [writeEnabled, setWriteEnabled] = useState(() => localStorage.getItem("shre-write-enabled") !== "false");
+  const [claudeCliMode, setClaudeCliMode] = useState(() => localStorage.getItem("shre-claude-cli-mode") === "true");
   const [replyToIndex, setReplyToIndex] = useState<number | null>(null);
   const [themeCustom, setThemeCustomState] = useState<ThemeCustom>(() => loadThemeCustom());
   const queueRef = useRef<QueuedMessage[]>(loadQueue());
@@ -256,7 +257,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
     setActivity, setFeed, setFiles, setStreaming, setStreamText,
     setStatusLine, setGatewayUp, setSidebarOpen, setSyncing, setTheme,
     setCompact, setWriteEnabled, setReplyToIndex, setThemeCustomState,
-    updateSessions, onLogout,
+    setClaudeCliMode, updateSessions, onLogout,
   });
 
   useFoldDetection(actions);
@@ -284,11 +285,12 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
     writeEnabled,
     replyToIndex,
     userProfile,
+    claudeCliMode,
   }), [
     sessions, activeSessionId, activeAgentId, openTabs, view,
     activity, feed, files, streaming, streamText, statusLine,
     gatewayUp, sidebarOpen, syncing, theme, themeCustom, compact,
-    writeEnabled, replyToIndex, userProfile,
+    writeEnabled, replyToIndex, userProfile, claudeCliMode,
   ]);
 
   const actionsRef = useRef(actions);

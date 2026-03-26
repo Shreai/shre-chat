@@ -62,6 +62,7 @@ export interface ActionDeps {
   setTheme: Dispatch<SetStateAction<Theme>>;
   setCompact: Dispatch<SetStateAction<boolean>>;
   setWriteEnabled: Dispatch<SetStateAction<boolean>>;
+  setClaudeCliMode: Dispatch<SetStateAction<boolean>>;
   setReplyToIndex: Dispatch<SetStateAction<number | null>>;
   setThemeCustomState: Dispatch<SetStateAction<ThemeCustom>>;
 
@@ -76,7 +77,7 @@ export function buildActions(deps: ActionDeps): AppActions {
     setActiveSessionId, setOpenTabs, setActiveAgentId, setView,
     setActivity, setFeed, setFiles, setStreaming, setStreamText,
     setStatusLine, setGatewayUp, setSidebarOpen, setSyncing, setTheme,
-    setCompact, setWriteEnabled, setReplyToIndex, setThemeCustomState,
+    setCompact, setWriteEnabled, setClaudeCliMode, setReplyToIndex, setThemeCustomState,
     updateSessions, onLogout,
   } = deps;
 
@@ -375,6 +376,10 @@ export function buildActions(deps: ActionDeps): AppActions {
         localStorage.setItem(WRITE_ENABLED_KEY, String(next));
         return next;
       });
+    },
+    setClaudeCliMode: (on: boolean) => {
+      setClaudeCliMode(on);
+      localStorage.setItem("shre-claude-cli-mode", String(on));
     },
 
     setSystemPrompt: (sessionId: string, prompt: string) => {
