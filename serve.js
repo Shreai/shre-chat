@@ -785,8 +785,7 @@ function isOriginAllowed(req) {
   ];
   if (origin && allowed.some((a) => origin.startsWith(a))) return true;
   if (referer && allowed.some((a) => referer.startsWith(a))) return true;
-  if (origin && origin.endsWith(".replit.dev")) return true;
-  if (referer && referer.includes(".replit.dev")) return true;
+  // .replit.dev CORS removed — not used in production
   // Cloudflare tunnel: trust requests where X-Forwarded-Host matches *.nirtek.net
   const fwdHost = req.headers["x-forwarded-host"] || "";
   if (fwdHost.endsWith(".nirtek.net") || fwdHost === "nirtek.net") return true;
@@ -1214,7 +1213,7 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  `connect-src 'self' ws: wss:`,
+  `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`,
   "font-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -1226,6 +1225,8 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
 };
 
 // ── Geo-blocking — only allow US and India ──────────────────────
@@ -1365,7 +1366,8 @@ async function requestHandler(req, res) {
       const total = stmtCountMessages.get(sessionId)?.count || 0;
       return json(res, { messages, total, limit, offset });
     } catch (err) {
-      return json(res, { error: err.message }, 500);
+      log.error("[chat-sessions] Message query failed", { error: err.message });
+      return json(res, { error: "Internal server error" }, 500);
     }
   }
 
@@ -1812,7 +1814,7 @@ async function requestHandler(req, res) {
       res.end(buf);
     } catch (err) {
       log.warn("Attachment download failed:", err.message);
-      json(res, { error: err.message }, 502);
+      json(res, { error: "Attachment download failed" }, 502);
     }
     return;
   }
@@ -1853,7 +1855,7 @@ async function requestHandler(req, res) {
       return json(res, { to: body.to, subject: body.subject, body: draft });
     } catch (err) {
       log.warn("Email draft failed:", err.message);
-      json(res, { error: err.message || "Draft failed" }, 500);
+      json(res, { error: "Draft failed" }, 500);
     }
     return;
   }
@@ -1871,7 +1873,7 @@ async function requestHandler(req, res) {
       json(res, { ok: true });
     } catch (err) {
       log.warn("Email send failed:", err.message);
-      json(res, { error: err.message || "Email send failed" }, 500);
+      json(res, { error: "Email send failed" }, 500);
     }
     return;
   }
@@ -2154,7 +2156,13 @@ async function requestHandler(req, res) {
   }
 
   // ── Run endpoint — execute shell commands directly on the host ──
+  // SECURITY: localhost-only — blocks access via Cloudflare tunnel / external networks
   if (url.pathname === "/api/run" && req.method === "POST") {
+    const clientIp = (req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1") {
+      log.warn("run_command blocked — non-local access", { ip: clientIp });
+      return json(res, { error: "Forbidden" }, 403);
+    }
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
     req.on("end", async () => {
@@ -2193,17 +2201,23 @@ async function requestHandler(req, res) {
         });
 
         proc.on("error", (err) => {
-          json(res, { error: `Spawn failed: ${err.message}`, exitCode: -1 }, 500);
+          json(res, { error: "Command execution failed", exitCode: -1 }, 500);
         });
       } catch (err) {
-        return json(res, { error: "Invalid request: " + err.message }, 400);
+        return json(res, { error: "Invalid request body" }, 400);
       }
     });
     return;
   }
 
   // ── Gateway token endpoint — client fetches token at runtime ──
+  // SECURITY: localhost-only — gateway token must never leak externally
   if (url.pathname === "/api/gateway-token" && req.method === "GET") {
+    const clientIp = (req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1") {
+      log.warn("gateway-token blocked — non-local access", { ip: clientIp });
+      return json(res, { error: "Forbidden" }, 403);
+    }
     return json(res, { token: GATEWAY_TOKEN });
   }
 
@@ -2388,7 +2402,8 @@ async function requestHandler(req, res) {
         hasMore: limit > 0 && (totalMessages - offset - limit) > 0,
       });
     } catch (err) {
-      return json(res, { error: err.message }, 500);
+      log.error("[activity] Query failed", { error: err.message });
+      return json(res, { error: "Internal server error" }, 500);
     }
   }
 
@@ -2464,7 +2479,8 @@ async function requestHandler(req, res) {
         archiveFile: `${entry.sessionId}.archive.jsonl`,
       });
     } catch (err) {
-      return json(res, { error: err.message }, 500);
+      log.error("[archive] Archive operation failed", { error: err.message });
+      return json(res, { error: "Internal server error" }, 500);
     }
   }
 
@@ -2688,6 +2704,117 @@ async function requestHandler(req, res) {
     }
   }
 
+  // ── Claude CLI Tool Execution — proxy to shre-router /v1/execute/claude ──
+  // This is the preferred path for tool-based Claude CLI execution from the chat UI.
+  // It goes through shre-router's budget guards, permissions, and monitoring.
+
+  if (url.pathname === "/api/claude-tool/execute" && req.method === "POST") {
+    let body;
+    try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
+    try {
+      const { prompt, agentId, cwd, maxTurns, stream } = JSON.parse(body);
+      if (!prompt) return json(res, { error: "prompt required" }, 400);
+
+      const routerUrl = serviceUrl("shre-router");
+      const routerBody = {
+        prompt,
+        agentId: agentId || "shre",
+        cwd: cwd || null,
+        maxTurns: maxTurns || undefined,
+        stream: stream !== false,
+      };
+
+      if (stream === false) {
+        // Non-streaming: proxy and return JSON
+        const upstream = await fetch(`${routerUrl}/v1/execute/claude`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(routerBody),
+          signal: AbortSignal.timeout(300000), // 5 min timeout for long tasks
+        });
+        const data = await upstream.text();
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(data);
+        return;
+      }
+
+      // Streaming: forward SSE from shre-router
+      const routerReqMod = (routerUrl.startsWith("https") ? await import("https") : await import("http")).default;
+      const routerReq = routerReqMod.request(
+        `${routerUrl}/v1/execute/claude`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          rejectUnauthorized: false,
+        },
+        (routerRes) => {
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+          });
+
+          let fullText = "";
+          routerRes.on("data", (chunk) => {
+            const text = chunk.toString();
+            res.write(text);
+
+            // Parse SSE events to extract final response for learning
+            for (const line of text.split("\n")) {
+              if (!line.startsWith("data: ")) continue;
+              try {
+                const evt = JSON.parse(line.slice(6));
+                if (evt.type === "delta" && evt.text) fullText += evt.text;
+              } catch { /* not JSON */ }
+            }
+          });
+
+          routerRes.on("end", () => {
+            res.end();
+            // Log conversation for learning pipeline
+            if (fullText.length > 50) {
+              logConversationToCortex(agentId || "shre", prompt, fullText, "claude-tool", "claude-cli").catch(() => {});
+              emitConversationComplete(agentId || "shre", prompt, fullText, "claude-tool", "claude-cli").catch(() => {});
+            }
+          });
+        }
+      );
+
+      routerReq.on("error", (err) => {
+        if (!res.headersSent) {
+          json(res, { error: "shre-router unreachable: " + err.message }, 502);
+        }
+      });
+
+      routerReq.end(JSON.stringify(routerBody));
+
+      // Handle client disconnect
+      req.on("close", () => {
+        routerReq.destroy();
+      });
+    } catch (err) {
+      if (!res.headersSent) json(res, { error: "Invalid request: " + err.message }, 400);
+    }
+    return;
+  }
+
+  // ── GET /api/claude-tool/status — active Claude CLI sessions ──
+  if (url.pathname === "/api/claude-tool/status" && req.method === "GET") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const upstream = await fetch(`${routerUrl}/v1/execute/claude/status`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      json(res, { error: "shre-router unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── CLI Mode: spawn `claude` CLI and stream response via SSE ────
 
   if (url.pathname === "/api/cli/chat" && req.method === "POST") {
@@ -2853,7 +2980,8 @@ async function requestHandler(req, res) {
 
         proc.on("error", (err) => {
           releaseSlot();
-          res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`);
+          log.error("[run] Process error", { error: err.message });
+          res.write(`data: ${JSON.stringify({ type: "error", error: "Command execution failed" })}\n\n`);
           res.end();
         });
 
@@ -4733,8 +4861,10 @@ function handleUpgrade(req, socket, head) {
       notifyWss.emit("connection", ws, req);
     });
   } else if (pathname === "/ws/openclaw" && req.headers["x-shre-admin"]) {
-    // Admin-only OpenClaw proxy (debug/diagnostic use only)
-    proxyOpenClawWS(req, socket, head);
+    // Admin-only OpenClaw proxy — disabled in production (use shre-router instead)
+    log.warn("[ws] Rejected /ws/openclaw admin bypass attempt", { ip: req.socket.remoteAddress });
+    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+    socket.destroy();
   } else {
     log.warn("[ws] Rejected unknown WebSocket path", { pathname });
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
@@ -4804,6 +4934,46 @@ eventBus.subscribe("briefing.daily", async (event) => {
 }).catch((err) => {
   log.warn("[briefing] Failed to subscribe to briefing.daily events", {}, err);
 });
+
+// ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
+const PROGRESS_EVENT_TYPES = ["task.assigned", "task.completed", "task.failed", "project.created", "project.decomposed", "project.completed", "project.quality_gate_failed"];
+
+// Live file diff events from claude_exec sessions
+eventBus.subscribe("diff.file_changed", async (event) => {
+  const data = event?.data || {};
+  const diff = data.diff || {};
+  broadcastNotification("file_diff", {
+    path: diff.path || "",
+    subtype: diff.action || "edit",
+    tool: diff.tool || "",
+    linesChanged: diff.linesChanged || 0,
+    preview: (diff.preview || "").slice(0, 500),
+    agentId: data.agentId || "",
+    taskId: data.taskId || "",
+    projectId: data.projectId || "",
+    sessionId: data.sessionId || "",
+  });
+}).catch((err) => {
+  log.warn("[file-diff] Failed to subscribe to diff.file_changed", {}, err);
+});
+for (const eventType of PROGRESS_EVENT_TYPES) {
+  eventBus.subscribe(eventType, async (event) => {
+    const data = event?.data || {};
+    const subtype = eventType.replace(".", "_");
+    broadcastNotification("project_progress", {
+      subtype,
+      taskTitle: data.title || data.taskTitle || data.name || "Task",
+      agent: data.agent || data.agentId || "",
+      quality: data.quality || data.qualityScore || data.quality_score || null,
+      progress: data.progress || "",
+      projectId: data.projectId || data.project_id || "",
+      reason: data.reason || data.error || "",
+    });
+    log.debug(`[project-progress] ${eventType} forwarded to chat clients`, { subtype });
+  }).catch((err) => {
+    log.warn(`[project-progress] Failed to subscribe to ${eventType}`, {}, err);
+  });
+}
 
 // ── StorePulse 30-min performance reporter ──────────────────────────────────
 setInterval(async () => {
