@@ -210,12 +210,23 @@ const isRemote = typeof window !== "undefined" && window.location.hostname !== "
 
 export const ECOSYSTEM_APPS = [
   // ── Platform apps (proxied — work both local and remote) ──
-  { id: "mib007", name: "MIB007", icon: "M", url: MIB007_BASE, color: "from-blue-500 to-cyan-500", description: "Agents & Issues", localOnly: false },
-  { id: "shre-platform", name: "Shre AI", icon: "S", url: "/shre-dashboard/", color: "from-violet-500 to-fuchsia-500", description: "Dashboard", localOnly: false },
-  { id: "openclaw", name: "OpenClaw", icon: "O", url: "/openclaw/", color: "from-amber-500 to-orange-500", description: "AI Gateway", localOnly: false },
-  { id: "cortexdb", name: "CortexDB", icon: "C", url: "/cortexdb-ui/", color: "from-emerald-500 to-teal-500", description: "Knowledge DB", localOnly: false },
+  { id: "mib007", name: "MIB007", icon: "M", url: MIB007_BASE, color: "from-blue-500 to-cyan-500", description: "Agents & Issues" },
+  { id: "shre-platform", name: "Shre AI", icon: "S", url: "/shre-dashboard/", color: "from-violet-500 to-fuchsia-500", description: "Dashboard" },
+  { id: "openclaw", name: "OpenClaw", icon: "O", url: "/openclaw/", color: "from-amber-500 to-orange-500", description: "AI Gateway" },
+  { id: "cortexdb", name: "CortexDB", icon: "C", url: "/cortexdb-ui/", color: "from-emerald-500 to-teal-500", description: "Knowledge DB" },
   // ── Subdomain apps (nirtek.net) ──
-  { id: "peytm", name: "Peytm", icon: "P", url: "https://peytm.nirtek.net", color: "from-indigo-500 to-purple-500", description: "Domain Registry", localOnly: false },
+  { id: "marketplace", name: "Marketplace", icon: "A", url: "https://marketplace.nirtek.net", color: "from-pink-500 to-rose-500", description: "Agent Store" },
+  { id: "storepulse", name: "StorePulse", icon: "R", url: "https://storepulse.nirtek.net", color: "from-green-500 to-emerald-500", description: "POS Analytics" },
+  { id: "peytm", name: "Peytm", icon: "P", url: "https://peytm.nirtek.net", color: "from-indigo-500 to-purple-500", description: "Domain Registry" },
+  { id: "bos", name: "BOS", icon: "B", url: "https://bos.nirtek.net", color: "from-sky-500 to-blue-500", description: "Back Office" },
+  { id: "developers", name: "Developers", icon: "D", url: "https://developers.nirtek.net", color: "from-slate-500 to-gray-500", description: "Developer Portal" },
+  { id: "voice", name: "Voice", icon: "V", url: "https://voice.nirtek.net", color: "from-cyan-500 to-teal-500", description: "Voice Assistant" },
+  { id: "status", name: "Status", icon: "H", url: "https://status.nirtek.net", color: "from-lime-500 to-green-500", description: "Health Monitor" },
+  { id: "shreroute", name: "ShreRoute", icon: "R", url: "https://shreroute.nirtek.net", color: "from-orange-500 to-red-500", description: "Dev Tool" },
+  { id: "api", name: "API", icon: "A", url: "https://api.nirtek.net", color: "from-yellow-500 to-amber-500", description: "Platform API" },
+  { id: "cpg", name: "CPG Intel", icon: "C", url: "https://cpg.nirtek.net", color: "from-fuchsia-500 to-pink-500", description: "Brand Intelligence" },
+  { id: "benchmark", name: "Benchmark", icon: "B", url: "https://benchmark.nirtek.net", color: "from-red-500 to-orange-500", description: "Platform Score" },
+  { id: "pos-site", name: "Nirtek", icon: "N", url: "https://nirtek.net", color: "from-neutral-600 to-neutral-400", description: "Main Site" },
 ];
 
 export function formatTime(ts?: number): string {
