@@ -11,6 +11,7 @@ import {
   flushPendingSave,
   saveSessionImmediate,
   fetchAgentModels,
+  fetchAgentCapabilities,
   initStorage,
   debouncedSaveSessions,
   markSessionDirty,
@@ -72,7 +73,7 @@ export function useInitEffects(
   setActiveSessionId: Dispatch<SetStateAction<string | null>>,
   setSyncing: Dispatch<SetStateAction<boolean>>,
 ) {
-  useEffect(() => { fetchAgentModels(); }, []);
+  useEffect(() => { fetchAgentModels(); fetchAgentCapabilities(); }, []);
   useEffect(() => { initStorage(); }, []);
 
   useEffect(() => {

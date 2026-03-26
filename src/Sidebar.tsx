@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { useApp, AGENTS, getAgent, type Session } from "./store";
+import { useApp, AGENTS, getAgent, DOMAIN_META, type Session } from "./store";
 import { fetchAllAgentMessages } from "./openclaw";
 import { onStreamChange, type ActiveStream } from "./gateway-ws";
 import { ThemeCustomizer } from "./ThemeCustomizer";
@@ -32,6 +32,8 @@ export function Sidebar() {
   const { sessions, activeSessionId, activeAgentId, view, sidebarOpen, theme } = state;
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
+  const [domainFilter, setDomainFilter] = useState<string | null>(null);
+  const [groupByMode, setGroupByMode] = useState<"role" | "domain">("role");
   const agentSearchRef = useRef<HTMLInputElement>(null);
 
   const currentAgent = getAgent(activeAgentId);
@@ -278,14 +280,28 @@ export function Sidebar() {
           <div className="px-4 py-3 shrink-0" style={{ borderBottom: "1px solid var(--c-border-2)" }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold" style={{ color: "var(--c-text-1)" }}>Select Agent</span>
-              <button
-                onClick={() => setShowAgentPicker(false)}
-                className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-                style={{ color: "var(--c-text-3)" }}
-                aria-label="Close"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { setGroupByMode(groupByMode === "role" ? "domain" : "role"); setDomainFilter(null); }}
+                  className="h-7 px-2 rounded-md flex items-center gap-1 text-[10px] font-medium transition-colors"
+                  style={{
+                    color: "var(--c-text-3)",
+                    background: "var(--c-bg-3)",
+                    border: "1px solid var(--c-border-2)",
+                  }}
+                  title={groupByMode === "role" ? "Group by capability" : "Group by role"}
+                >
+                  {groupByMode === "role" ? "By Role" : "By Capability"}
+                </button>
+                <button
+                  onClick={() => setShowAgentPicker(false)}
+                  className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+                  style={{ color: "var(--c-text-3)" }}
+                  aria-label="Close"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
             </div>
             <div className="relative">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--c-text-4)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -293,7 +309,7 @@ export function Sidebar() {
                 ref={agentSearchRef}
                 value={agentSearch}
                 onChange={(e) => setAgentSearch(e.target.value)}
-                placeholder="Search agents..."
+                placeholder="Search agents or capabilities..."
                 className="w-full h-8 pl-8 pr-3 rounded-lg text-[12px] outline-none transition-colors"
                 style={{
                   background: "var(--c-bg-3)",
@@ -304,75 +320,112 @@ export function Sidebar() {
                 onBlur={(e) => { e.currentTarget.style.borderColor = "var(--c-border-2)"; }}
               />
             </div>
+            {/* Domain filter chips — shown in domain mode */}
+            {groupByMode === "domain" && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {(() => {
+                  const allDomains = new Set<string>();
+                  AGENTS.forEach(a => (a.domains || []).forEach(d => allDomains.add(d)));
+                  return [...allDomains].sort().map(domain => {
+                    const meta = DOMAIN_META[domain] || { label: domain, color: "#94a3b8" };
+                    const isActive = domainFilter === domain;
+                    return (
+                      <button
+                        key={domain}
+                        onClick={() => setDomainFilter(isActive ? null : domain)}
+                        className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-all"
+                        style={{
+                          background: isActive ? meta.color + "30" : "var(--c-bg-3)",
+                          color: isActive ? meta.color : "var(--c-text-4)",
+                          border: `1px solid ${isActive ? meta.color + "60" : "var(--c-border-2)"}`,
+                        }}
+                      >
+                        {meta.label}
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {(["core", "department", "council"] as const).map((group) => {
-              const allGroupAgents = AGENTS.filter((a) => a.group === group);
-              const groupAgents = agentSearch.trim()
-                ? allGroupAgents.filter((a) =>
-                    a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
-                    a.id.toLowerCase().includes(agentSearch.toLowerCase()) ||
-                    a.model.toLowerCase().includes(agentSearch.toLowerCase())
-                  )
-                : allGroupAgents;
-              if (groupAgents.length === 0) return null;
-              return (
-                <div key={group}>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: "var(--c-text-4)", background: "var(--c-bg-3)" }}>
-                    {group === "core" ? "Core" : group === "department" ? "Department" : "Council"}
+            {groupByMode === "role" ? (
+              /* ── Role-based grouping (original) ── */
+              (["core", "department", "council"] as const).map((group) => {
+                const allGroupAgents = AGENTS.filter((a) => a.group === group);
+                const groupAgents = agentSearch.trim()
+                  ? allGroupAgents.filter((a) =>
+                      a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                      a.id.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                      a.model.toLowerCase().includes(agentSearch.toLowerCase()) ||
+                      (a.domains || []).some(d => d.toLowerCase().includes(agentSearch.toLowerCase())) ||
+                      (a.description || "").toLowerCase().includes(agentSearch.toLowerCase())
+                    )
+                  : allGroupAgents;
+                if (groupAgents.length === 0) return null;
+                return (
+                  <div key={group}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: "var(--c-text-4)", background: "var(--c-bg-3)" }}>
+                      {group === "core" ? "Core" : group === "department" ? "Department" : "Council"}
+                    </div>
+                    {groupAgents.map((agent) => (
+                      <AgentPickerRow key={agent.id} agent={agent} activeAgentId={activeAgentId} streamingAgents={streamingAgents} onSelect={() => { actions.setActiveAgent(agent.id); setShowAgentPicker(false); if (window.innerWidth < 768) actions.setSidebarOpen(false); }} />
+                    ))}
                   </div>
-                  {groupAgents.map((agent) => (
-                    <button
-                      key={agent.id}
-                      onClick={() => {
-                        actions.setActiveAgent(agent.id);
-                        setShowAgentPicker(false);
-                        if (window.innerWidth < 768) actions.setSidebarOpen(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
-                      style={{
-                        background: agent.id === activeAgentId ? "var(--c-accent-soft)" : "transparent",
-                        color: agent.id === activeAgentId ? "var(--c-accent)" : "var(--c-text-2)",
-                      }}
-                      onMouseEnter={(e) => { if (agent.id !== activeAgentId) e.currentTarget.style.background = "var(--c-bg-hover)"; }}
-                      onMouseLeave={(e) => { if (agent.id !== activeAgentId) e.currentTarget.style.background = agent.id === activeAgentId ? "var(--c-accent-soft)" : "transparent"; }}
-                    >
-                      <span className="text-lg relative">
-                        {agent.emoji}
-                        {streamingAgents.has(agent.id) && (
-                          <span
-                            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
-                            style={{
-                              background: streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)",
-                              boxShadow: `0 0 6px ${streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)"}`,
-                              animation: "pulse 1.5s ease-in-out infinite",
-                            }}
-                          />
-                        )}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">{agent.name}</div>
-                        {streamingAgents.has(agent.id) ? (
-                          <div className="text-[10px] font-mono" style={{ color: streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)" }}>
-                            {streamingAgents.get(agent.id)}
-                          </div>
-                        ) : (
-                          <div className="text-[10px] font-mono truncate" style={{ color: "var(--c-text-4)" }}>{agent.model.split("/")[1]?.split("-").slice(0, 2).join("-") || agent.model}</div>
-                        )}
+                );
+              })
+            ) : (
+              /* ── Domain-based grouping ── */
+              (() => {
+                // Collect all domains present in agents
+                const domainAgentsMap = new Map<string, typeof AGENTS>();
+                for (const agent of AGENTS) {
+                  for (const d of agent.domains || ["general"]) {
+                    if (!domainAgentsMap.has(d)) domainAgentsMap.set(d, []);
+                    domainAgentsMap.get(d)!.push(agent);
+                  }
+                }
+                // Sort domains: "all" first, then alphabetical
+                const sortedDomains = [...domainAgentsMap.keys()].sort((a, b) => {
+                  if (a === "all") return -1;
+                  if (b === "all") return 1;
+                  return a.localeCompare(b);
+                });
+                // If a domain filter is active, only show that domain
+                const domainsToShow = domainFilter ? [domainFilter] : sortedDomains;
+                return domainsToShow.map(domain => {
+                  const domainAgents = (domainAgentsMap.get(domain) || []).filter(a => {
+                    if (!agentSearch.trim()) return true;
+                    const q = agentSearch.toLowerCase();
+                    return a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q) ||
+                      (a.description || "").toLowerCase().includes(q);
+                  });
+                  if (domainAgents.length === 0) return null;
+                  const meta = DOMAIN_META[domain] || { label: domain, color: "#94a3b8" };
+                  return (
+                    <div key={domain}>
+                      <div className="flex items-center gap-2 px-4 py-2" style={{ background: "var(--c-bg-3)" }}>
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ background: meta.color }} />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: meta.color }}>
+                          {meta.label}
+                        </span>
+                        <span className="text-[10px]" style={{ color: "var(--c-text-4)" }}>({domainAgents.length})</span>
                       </div>
-                      {agent.id === activeAgentId && (
-                        <svg className="h-4 w-4 shrink-0" style={{ color: "var(--c-accent)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
+                      {domainAgents.map((agent) => (
+                        <AgentPickerRow key={`${domain}-${agent.id}`} agent={agent} activeAgentId={activeAgentId} streamingAgents={streamingAgents} onSelect={() => { actions.setActiveAgent(agent.id); setShowAgentPicker(false); if (window.innerWidth < 768) actions.setSidebarOpen(false); }} />
+                      ))}
+                    </div>
+                  );
+                });
+              })()
+            )}
             {agentSearch.trim() && AGENTS.filter((a) =>
               a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
               a.id.toLowerCase().includes(agentSearch.toLowerCase()) ||
-              a.model.toLowerCase().includes(agentSearch.toLowerCase())
+              a.model.toLowerCase().includes(agentSearch.toLowerCase()) ||
+              (a.domains || []).some(d => d.toLowerCase().includes(agentSearch.toLowerCase())) ||
+              (a.description || "").toLowerCase().includes(agentSearch.toLowerCase())
             ).length === 0 && (
               <div className="px-4 py-8 text-center text-[12px]" style={{ color: "var(--c-text-4)" }}>
                 No agents match "{agentSearch}"
@@ -702,4 +755,76 @@ function groupSessionsByDate(sessions: Session[]): DateGroup[] {
   return order
     .filter((label) => groups[label].length > 0)
     .map((label) => ({ label, sessions: groups[label] }));
+}
+
+// ── Agent Picker Row (extracted for reuse in both role and domain views) ──
+function AgentPickerRow({
+  agent,
+  activeAgentId,
+  streamingAgents,
+  onSelect,
+}: {
+  agent: import("./store").Agent;
+  activeAgentId: string;
+  streamingAgents: Map<string, string>;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+      style={{
+        background: agent.id === activeAgentId ? "var(--c-accent-soft)" : "transparent",
+        color: agent.id === activeAgentId ? "var(--c-accent)" : "var(--c-text-2)",
+      }}
+      onMouseEnter={(e) => { if (agent.id !== activeAgentId) e.currentTarget.style.background = "var(--c-bg-hover)"; }}
+      onMouseLeave={(e) => { if (agent.id !== activeAgentId) e.currentTarget.style.background = agent.id === activeAgentId ? "var(--c-accent-soft)" : "transparent"; }}
+    >
+      <span className="text-lg relative">
+        {agent.emoji}
+        {streamingAgents.has(agent.id) && (
+          <span
+            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
+            style={{
+              background: streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)",
+              boxShadow: `0 0 6px ${streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)"}`,
+              animation: "pulse 1.5s ease-in-out infinite",
+            }}
+          />
+        )}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm">{agent.name}</div>
+        {agent.description ? (
+          <div className="text-[10px] truncate" style={{ color: "var(--c-text-4)" }}>{agent.description}</div>
+        ) : streamingAgents.has(agent.id) ? (
+          <div className="text-[10px] font-mono" style={{ color: streamingAgents.get(agent.id) === "thinking" ? "var(--c-warning)" : "var(--c-success)" }}>
+            {streamingAgents.get(agent.id)}
+          </div>
+        ) : (
+          <div className="text-[10px] font-mono truncate" style={{ color: "var(--c-text-4)" }}>{agent.model.split("/")[1]?.split("-").slice(0, 2).join("-") || agent.model}</div>
+        )}
+        {/* Domain badges */}
+        {(agent.domains || []).length > 0 && !(agent.domains || []).includes("all") && (
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {(agent.domains || []).slice(0, 3).map(d => {
+              const meta = DOMAIN_META[d] || { label: d, color: "#94a3b8" };
+              return (
+                <span key={d} className="inline-block px-1.5 py-px rounded text-[8px] font-medium"
+                  style={{ background: meta.color + "20", color: meta.color, border: `1px solid ${meta.color}30` }}>
+                  {meta.label}
+                </span>
+              );
+            })}
+            {(agent.domains || []).length > 3 && (
+              <span className="text-[8px]" style={{ color: "var(--c-text-4)" }}>+{(agent.domains || []).length - 3}</span>
+            )}
+          </div>
+        )}
+      </div>
+      {agent.id === activeAgentId && (
+        <svg className="h-4 w-4 shrink-0" style={{ color: "var(--c-accent)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      )}
+    </button>
+  );
 }

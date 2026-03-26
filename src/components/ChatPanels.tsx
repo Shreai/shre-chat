@@ -176,11 +176,12 @@ export function ChatPanels(props: ChatPanelsProps) {
             onClose={() => setShowModelPicker(false)}
             selectedModel={selectedModel}
             onSelectModel={(modelId) => {
-              const prevName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name ?? selectedModel;
+              const providerLabels: Record<string, string> = { "provider:openai": "ChatGPT", "provider:anthropic": "Claude", "provider:ollama": "Local", "provider:google": "Google" };
+              const prevName = providerLabels[selectedModel ?? ""] ?? AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name ?? selectedModel ?? "Auto";
               setSelectedModel(modelId);
               setModelOverride(activeAgentId, modelId);
               const sid = ensureSession();
-              const newName = AVAILABLE_MODELS.find(m => m.id === modelId)?.name ?? modelId;
+              const newName = providerLabels[modelId ?? ""] ?? AVAILABLE_MODELS.find(m => m.id === modelId)?.name ?? modelId ?? "Auto";
               actions.addMessage(sid, {
                 role: "assistant",
                 content: `[system] Model switched from ${prevName} to ${newName}. Connected.`,

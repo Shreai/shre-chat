@@ -393,6 +393,7 @@ export default function VoiceAssistant({ open, onClose, messages, agentName, age
       onVoiceTurn?.({ role: "assistant", content: response });
 
       dispatch({ type: "AI_RESPONSE" });
+      // stripMd removes <think>...</think> blocks before TTS to avoid speaking internal reasoning
       await speak(stripMd(response));
 
       if (activeRef.current) {

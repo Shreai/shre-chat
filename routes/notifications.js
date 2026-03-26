@@ -24,6 +24,24 @@ const EVENT_FORMATTERS = {
     body: data.reason || data.error || null,
     source: data.agent || "fleet",
   }),
+  "task.started": (data) => ({
+    type: "task.started",
+    title: `Agent picked up: ${data.title || data.task_title || "task"}`,
+    body: data.agent ? `Assigned to ${data.agent}` : null,
+    source: data.agent || "fleet",
+  }),
+  "task.assigned": (data) => ({
+    type: "task.assigned",
+    title: `Task assigned: ${data.title || data.task_title || "task"}`,
+    body: data.agent ? `Assigned to ${data.agent}` : null,
+    source: data.assigned_by || "fleet",
+  }),
+  "task.unblocked": (data) => ({
+    type: "task.unblocked",
+    title: `Task unblocked: ${data.title || data.task_title || "task"}`,
+    body: data.reason || "Dependencies resolved",
+    source: data.agent || "fleet",
+  }),
   "service.unhealthy": (data) => ({
     type: "service.unhealthy",
     title: `${data.service || data.name || "Service"} is down`,

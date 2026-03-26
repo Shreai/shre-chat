@@ -72,6 +72,7 @@
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.577.0",
     "partysocket": "^1.1.16",
+    "pg": "^8.20.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
