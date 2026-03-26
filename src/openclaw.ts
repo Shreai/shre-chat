@@ -391,6 +391,26 @@ export interface ToolResult {
   duration_ms?: number;
 }
 
+export interface ToolStartEvent {
+  tool: string;
+  input: any;
+  iteration: number;
+}
+
+export interface ToolResultEvent {
+  tool: string;
+  success: boolean;
+  outputPreview: string;
+  latencyMs: number;
+  iteration: number;
+}
+
+export interface ToolErrorEvent {
+  tool: string;
+  error: string;
+  iteration: number;
+}
+
 export interface StreamCallbacks {
   onToken: (token: string) => void;
   onDone: (fullText: string) => void;
@@ -398,6 +418,10 @@ export interface StreamCallbacks {
   onStatus?: (status: ActivityStatus, detail?: string) => void;
   onApprovalRequired?: (approval: { approvalId: string; tool: string; input: any; reason: string }) => void;
   onToolResult?: (result: ToolResult) => void;
+  /** Fired when a tool call begins execution */
+  onToolStart?: (event: ToolStartEvent) => void;
+  /** Fired when a tool call fails */
+  onToolError?: (event: ToolErrorEvent) => void;
   onBillingWarning?: (message: string, balanceCents: number) => void;
   /** Fired when a model's response failed quality checks and will be retried */
   onModelFailed?: (model: string, reason: string) => void;
@@ -429,6 +453,7 @@ export async function sendMessage(
   openclawMode?: boolean,
   threadContext?: ThreadContext,
   contextHealth?: Record<string, "ok" | "missing" | "error">,
+  claudeCliMode?: boolean,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? "main";
@@ -445,7 +470,7 @@ export async function sendMessage(
   // - Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
   // - OpenClaw: shre-router → OpenClaw gateway → agent workspace (SOUL.md, tools, session memory)
   try {
-    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode, threadContext, contextHealth);
+    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode, threadContext, contextHealth, claudeCliMode);
   } catch (err) {
     if (done) return;
     if (signal?.aborted) {
@@ -517,6 +542,7 @@ async function streamViaFallback(
   openclawMode?: boolean,
   threadContext?: ThreadContext,
   contextHealth?: Record<string, "ok" | "missing" | "error">,
+  claudeCliMode?: boolean,
 ): Promise<void> {
   callbacks.onStatus?.("connecting");
 
@@ -539,6 +565,7 @@ async function streamViaFallback(
       promptVersion: SYSTEM_PROMPT_VERSION,
       ...(attachments?.length ? { attachments } : {}),
       ...(openclawMode ? { openclawMode: true } : {}),
+      ...(claudeCliMode ? { claudeCliMode: true } : {}),
       ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
       ...(threadContext ? { threadContext } : {}),
       ...(contextHealth ? { contextHealth } : {}),
@@ -629,13 +656,26 @@ async function streamViaFallback(
             } else if (evt.status === "continuing") {
               callbacks.onStatus?.("thinking", `Continuing (step ${evt.iteration}/${evt.max})...`);
             }
+          } else if (evt.type === "tool_start") {
+            callbacks.onToolStart?.({
+              tool: evt.tool || "unknown",
+              input: evt.input,
+              iteration: evt.iteration || 1,
+            });
+            callbacks.onStatus?.("tool_call", evt.tool);
+          } else if (evt.type === "tool_error") {
+            callbacks.onToolError?.({
+              tool: evt.tool || "unknown",
+              error: evt.error || "Unknown error",
+              iteration: evt.iteration || 1,
+            });
           } else if (evt.type === "tool_result") {
             callbacks.onToolResult?.({
               tool: evt.tool || "unknown",
               input: evt.input,
-              output: evt.output,
+              output: evt.output || evt.outputPreview,
               status: evt.error ? "error" : "success",
-              duration_ms: evt.duration_ms,
+              duration_ms: evt.duration_ms || evt.latencyMs,
             });
           } else if (evt.type === "approval_required") {
             callbacks.onApprovalRequired?.({

@@ -37,46 +37,98 @@ export interface Agent {
   emoji: string;
   model: string;
   group: "core" | "department" | "council";
+  domains?: string[];
+  description?: string;
 }
 
 // Agent UI metadata — models are fetched dynamically from shre-router config API
 const AGENT_META: Omit<Agent, "model">[] = [
   // Core
-  { id: "main", name: "Ellie", emoji: "✨", group: "core" },
-  { id: "shre", name: "Shre", emoji: "🤖", group: "core" },
-  { id: "nova", name: "Nova", emoji: "🌟", group: "core" },
-  { id: "president", name: "President", emoji: "🏛️", group: "core" },
-  { id: "storepulse", name: "StorePulse", emoji: "🛍️", group: "core" },
+  { id: "main", name: "Ellie", emoji: "✨", group: "core", domains: ["all"], description: "Company president — full platform access" },
+  { id: "shre", name: "Shre", emoji: "🤖", group: "core", domains: ["all"], description: "CEO — full platform access, all agents report to Shre" },
+  { id: "nova", name: "Nova", emoji: "🌟", group: "core", domains: ["research", "analytics"], description: "Public assistant — general queries and research" },
+  { id: "president", name: "President", emoji: "🏛️", group: "core", domains: ["all"], description: "Executive — strategic oversight" },
+  { id: "storepulse", name: "StorePulse", emoji: "🛍️", group: "core", domains: ["pos", "analytics"], description: "Retail analytics dashboard" },
   // Department heads
-  { id: "engineering-manager", name: "Engineering", emoji: "⚙️", group: "department" },
-  { id: "founding-engineer", name: "Forge", emoji: "🔧", group: "department" },
-  { id: "product-manager", name: "Product", emoji: "🎯", group: "department" },
-  { id: "ops-manager", name: "Operations", emoji: "🔄", group: "department" },
-  { id: "devops-manager", name: "DevOps", emoji: "🖥️", group: "department" },
-  { id: "qa-manager", name: "QA", emoji: "🔍", group: "department" },
-  { id: "finance-manager", name: "Finance", emoji: "💰", group: "department" },
-  { id: "hr-manager", name: "HR", emoji: "🤝", group: "department" },
-  { id: "sales-manager", name: "Sales", emoji: "📈", group: "department" },
-  { id: "marketing-manager", name: "Marketing", emoji: "📣", group: "department" },
-  { id: "mailroom", name: "Mailroom", emoji: "📬", group: "department" },
+  { id: "engineering-manager", name: "Engineering", emoji: "⚙️", group: "department", domains: ["code", "infra"], description: "Engineering management and planning" },
+  { id: "founding-engineer", name: "Forge", emoji: "🔧", group: "department", domains: ["code", "infra"], description: "Code generation, debugging, architecture" },
+  { id: "product-manager", name: "Product", emoji: "🎯", group: "department", domains: ["analytics", "research"], description: "Product strategy and requirements" },
+  { id: "ops-manager", name: "Operations", emoji: "🔄", group: "department", domains: ["infra"], description: "Operational management and workflows" },
+  { id: "devops-manager", name: "DevOps", emoji: "🖥️", group: "department", domains: ["infra", "code"], description: "CI/CD, deployments, infrastructure" },
+  { id: "qa-manager", name: "QA", emoji: "🔍", group: "department", domains: ["code"], description: "Testing, quality assurance, validation" },
+  { id: "finance-manager", name: "Finance", emoji: "💰", group: "department", domains: ["finance"], description: "Budgets, costs, financial analysis" },
+  { id: "hr-manager", name: "HR", emoji: "🤝", group: "department", domains: ["hr"], description: "Hiring, team management, HR operations" },
+  { id: "sales-manager", name: "Sales", emoji: "📈", group: "department", domains: ["sales"], description: "Leads, deals, pipeline management" },
+  { id: "marketing-manager", name: "Marketing", emoji: "📣", group: "department", domains: ["marketing"], description: "Campaigns, content, brand management" },
+  { id: "mailroom", name: "Mailroom", emoji: "📬", group: "department", domains: ["infra"], description: "Message routing and notifications" },
   // Council
-  { id: "council-eagle", name: "Eagle", emoji: "🦅", group: "council" },
-  { id: "council-viper", name: "Viper", emoji: "🐍", group: "council" },
-  { id: "council-spike", name: "Spike", emoji: "🦔", group: "council" },
-  { id: "council-crane", name: "Crane", emoji: "🏗️", group: "council" },
-  { id: "council-shark", name: "Shark", emoji: "🦈", group: "council" },
-  { id: "council-sentinel", name: "Sentinel", emoji: "🔐", group: "council" },
-  { id: "council-argus", name: "Argus", emoji: "👁️", group: "council" },
-  { id: "council-compass", name: "Compass", emoji: "🧭", group: "council" },
-  { id: "council-panther", name: "Panther", emoji: "🐈‍⬛", group: "council" },
-  { id: "council-oracle", name: "Oracle", emoji: "🔮", group: "council" },
-  { id: "council-octavius", name: "Octavius", emoji: "🐙", group: "council" },
-  { id: "council-whale", name: "Whale", emoji: "🐋", group: "council" },
-  { id: "council-fox", name: "Fox", emoji: "🦊", group: "council" },
-  { id: "council-owl", name: "Owl", emoji: "🦉", group: "council" },
-  { id: "council-sage", name: "Sage", emoji: "🌿", group: "council" },
-  { id: "council-raven", name: "Raven", emoji: "🐦‍⬛", group: "council" },
+  { id: "council-eagle", name: "Eagle", emoji: "🦅", group: "council", domains: ["code", "security"], description: "Architecture review and oversight" },
+  { id: "council-viper", name: "Viper", emoji: "🐍", group: "council", domains: ["security"], description: "Security review and threat assessment" },
+  { id: "council-spike", name: "Spike", emoji: "🦔", group: "council", domains: ["code"], description: "Performance and optimization review" },
+  { id: "council-crane", name: "Crane", emoji: "🏗️", group: "council", domains: ["code", "infra"], description: "Infrastructure architecture review" },
+  { id: "council-shark", name: "Shark", emoji: "🦈", group: "council", domains: ["finance", "analytics"], description: "Business and cost efficiency review" },
+  { id: "council-sentinel", name: "Sentinel", emoji: "🔐", group: "council", domains: ["security"], description: "Security operations lead" },
+  { id: "council-argus", name: "Argus", emoji: "👁️", group: "council", domains: ["infra"], description: "Monitoring and observability review" },
+  { id: "council-compass", name: "Compass", emoji: "🧭", group: "council", domains: ["analytics", "research"], description: "Strategic direction and planning" },
+  { id: "council-panther", name: "Panther", emoji: "🐈‍⬛", group: "council", domains: ["code"], description: "Stealth operations and automation" },
+  { id: "council-oracle", name: "Oracle", emoji: "🔮", group: "council", domains: ["research", "analytics"], description: "Predictive analysis and forecasting" },
+  { id: "council-octavius", name: "Octavius", emoji: "🐙", group: "council", domains: ["code", "infra"], description: "Multi-system integration review" },
+  { id: "council-whale", name: "Whale", emoji: "🐋", group: "council", domains: ["analytics"], description: "Large-scale data analysis" },
+  { id: "council-fox", name: "Fox", emoji: "🦊", group: "council", domains: ["research"], description: "Investigation and discovery" },
+  { id: "council-owl", name: "Owl", emoji: "🦉", group: "council", domains: ["code", "security"], description: "Wisdom and deep code review" },
+  { id: "council-sage", name: "Sage", emoji: "🌿", group: "council", domains: ["research", "analytics"], description: "Knowledge synthesis and advice" },
+  { id: "council-raven", name: "Raven", emoji: "🐦‍⬛", group: "council", domains: ["infra", "security"], description: "Dark ops, incident response" },
 ];
+
+// ── Domain labels + colors for capability badges ────────────────────
+export const DOMAIN_META: Record<string, { label: string; color: string }> = {
+  all:       { label: "All",       color: "#a78bfa" },
+  code:      { label: "Code",      color: "#60a5fa" },
+  pos:       { label: "POS",       color: "#34d399" },
+  analytics: { label: "Analytics", color: "#fbbf24" },
+  security:  { label: "Security",  color: "#f87171" },
+  infra:     { label: "Infra",     color: "#38bdf8" },
+  hr:        { label: "HR",        color: "#a3e635" },
+  finance:   { label: "Finance",   color: "#facc15" },
+  marketing: { label: "Marketing", color: "#f472b6" },
+  sales:     { label: "Sales",     color: "#fb923c" },
+  research:  { label: "Research",  color: "#c084fc" },
+  retail:    { label: "Retail",    color: "#2dd4bf" },
+  general:   { label: "General",   color: "#94a3b8" },
+  architecture: { label: "Arch",   color: "#818cf8" },
+  messaging: { label: "Messaging", color: "#67e8f9" },
+  product:   { label: "Product",   color: "#e879f9" },
+};
+
+/** Fetch agent capabilities from shre-router and merge domains into AGENTS */
+export async function fetchAgentCapabilities(): Promise<void> {
+  try {
+    const res = await fetch("/api/agents/capabilities");
+    if (!res.ok) return;
+    const data = await res.json() as { agents: Array<{ id: string; tier: string; domains: string[]; specializations: string[] }> };
+    for (const remote of data.agents) {
+      const local = AGENTS.find(a => a.id === remote.id);
+      if (local && remote.domains.length > 0) {
+        // Merge: keep local domains as fallback, add remote domains
+        const merged = new Set([...(local.domains || []), ...remote.domains]);
+        (local as any).domains = [...merged];
+      }
+      // If an agent exists in router but not in local AGENT_META, add it dynamically
+      if (!local && remote.id !== "shre-fleet" && remote.id !== "shre-voice") {
+        AGENTS.push({
+          id: remote.id,
+          name: remote.id.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+          emoji: remote.tier === "child-company" ? "\uD83C\uDFEA" : remote.tier === "execution" ? "\u2699\uFE0F" : "\u25CF",
+          model: DEFAULT_MODEL,
+          group: remote.tier === "council" ? "council" : remote.tier === "c-suite" ? "department" : "core",
+          domains: remote.domains,
+        });
+      }
+    }
+  } catch {
+    // shre-router unavailable — keep using static domains
+  }
+}
 
 const DEFAULT_MODEL = "ollama/qwen3:8b";
 
@@ -358,6 +410,7 @@ export interface AppState {
   writeEnabled: boolean; // false = read-only (default), true = can send messages/delete/etc
   replyToIndex: number | null;
   userProfile: UserProfile | null;
+  claudeCliMode: boolean; // When true, coding messages auto-route to Claude CLI execution
   // drafts now live in a ref (App.tsx) — no re-render on keystrokes
 }
 
@@ -802,6 +855,7 @@ export interface AppActions {
   getDraft: (sessionId: string) => string;
   setReplyTo: (index: number | null) => void;
   getOrCreateVoiceSession: (agentId: string) => string;
+  setClaudeCliMode: (on: boolean) => void;
   logout?: () => void;
 }
 

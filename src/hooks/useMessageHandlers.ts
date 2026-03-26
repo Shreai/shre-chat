@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { sendMessage, generateAITitle, type ChatMessage, type ToolResult, type ThreadContext } from "../openclaw";
+import { sendMessage, generateAITitle, type ChatMessage, type ToolResult, type ToolStartEvent, type ToolErrorEvent, type ThreadContext } from "../openclaw";
 import { sendChatWS, isWSConnected, queueMessage, onStateChange } from "../gateway-ws";
 import { uid, generateTitle, getAgent, type UploadedFile, type Session, type AppActions } from "../store";
 import { playNotifSound, mib007Link } from "../chat-utils";
@@ -34,6 +34,7 @@ export interface UseMessageHandlersParams {
   setCompareWinner: (v: string | null) => void;
   cliMode: boolean;
   openclawMode: boolean;
+  claudeCliMode: boolean;
   identityVerified: boolean;
   setIdentityVerified: (v: boolean) => void;
   pendingMessage: string | null;
@@ -99,7 +100,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     activeSessionId, activeAgentId, sessions, messages, filteredMessages,
     actions, replyToIndex, pendingFiles, setPendingFiles,
     selectedModel, compareMode, compareModels, setCompareStreams, setCompareWinner,
-    cliMode, openclawMode, identityVerified, setIdentityVerified,
+    cliMode, openclawMode, claudeCliMode, identityVerified, setIdentityVerified,
     pendingMessage, setPendingMessage, verifying, setVerifying,
     ensureSession, executeSlashCommand, extractMention, clearMention,
     setStreamPhase, setActiveToolName, setCompacting, setPendingApproval,
@@ -656,13 +657,44 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         }
       },
       onApprovalRequired: (approval) => { setPendingApproval(approval); actions.setStatusLine(`Approval needed: ${approval.reason}`); setStreamPhase("attention"); addStep(runId, { kind: "approval", label: `Awaiting approval: ${approval.tool}` }); },
+      onToolStart: (event: ToolStartEvent) => {
+        const toolLabel = event.tool.replace(/^(mib_|aros_)/, "").replace(/_/g, " ");
+        const inputPreview = event.input?.command ? `: \`${String(event.input.command).slice(0, 60)}\`` : event.input?.path ? `: ${String(event.input.path).slice(0, 60)}` : event.input?.query ? `: ${String(event.input.query).slice(0, 60)}` : "";
+        actions.addMessage(sessionId, {
+          role: "assistant",
+          content: `[tool_exec] \u{1F527} Running ${toolLabel}${inputPreview}...`,
+          timestamp: Date.now(),
+          meta: { system: "true", type: "tool_exec", event: "tool_start", tool: event.tool, status: "running", iteration: String(event.iteration), inputJson: event.input ? JSON.stringify(event.input).slice(0, 200) : "" },
+        });
+        actions.setStatusLine(`Running ${toolLabel}...`);
+        setStreamPhase("tool_use");
+        setActiveToolName(event.tool);
+      },
+      onToolError: (event: ToolErrorEvent) => {
+        const toolLabel = event.tool.replace(/^(mib_|aros_)/, "").replace(/_/g, " ");
+        actions.addMessage(sessionId, {
+          role: "assistant",
+          content: `[tool_exec] \u274C ${toolLabel} failed: ${event.error.slice(0, 120)}`,
+          timestamp: Date.now(),
+          meta: { system: "true", type: "tool_exec", event: "tool_error", tool: event.tool, status: "error", iteration: String(event.iteration), error: event.error.slice(0, 300) },
+        });
+        actions.addFeed(sessionId, "tool_result", `${toolLabel}: error`, { tool: event.tool, status: "error" });
+        actions.addActivity(sessionId, "error", `\u2717 ${toolLabel} failed`);
+      },
       onToolResult: (result: ToolResult) => {
         const toolLabel = result.tool.replace(/^(mib_|aros_)/, "").replace(/_/g, " ");
         const statusIcon = result.status === "success" ? "\u2713" : "\u2717";
-        const durationStr = result.duration_ms ? ` (${result.duration_ms}ms)` : "";
+        const durationStr = result.duration_ms ? ` (${(result.duration_ms / 1000).toFixed(1)}s)` : "";
         if (processStepRef.current) updateStep(runId, processStepRef.current, { status: "completed", completedAt: Date.now() });
         const stepId = addStep(runId, { kind: "tool_result", label: `${statusIcon} ${toolLabel}${durationStr}`, toolName: result.tool, detail: result.status === "error" ? String(result.output || "Error") : undefined });
         processStepRef.current = stepId;
+        // Add inline tool completion message
+        actions.addMessage(sessionId, {
+          role: "assistant",
+          content: `[tool_exec] ${result.status === "success" ? "\u2705" : "\u274C"} ${toolLabel} ${result.status === "success" ? "completed" : "failed"}${durationStr}`,
+          timestamp: Date.now(),
+          meta: { system: "true", type: "tool_exec", event: "tool_result", tool: result.tool, status: result.status, duration: result.duration_ms ? String(result.duration_ms) : "", outputPreview: result.status === "success" && typeof result.output === "string" ? result.output.slice(0, 200) : "" },
+        });
         actions.addFeed(sessionId, "tool_result", `${toolLabel}: ${result.status}${durationStr}`, { tool: result.tool, status: result.status });
         actions.addActivity(sessionId, "executing", `${statusIcon} ${toolLabel}${durationStr}`);
       },
@@ -689,8 +721,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       ...(session?.parentId ? { parentSessionId: session.parentId, branchPoint: session.messages.length } : {}),
       ...(replyToIndex !== null ? { replyToMessageIndex: replyToIndex } : {}),
     } as ThreadContext : undefined,
-    contextHealth);
-  }, [input, streaming, syncing, ensureSession, sessions, activeSessionId, actions, pendingFiles, wsConnected, wsReconnecting, activeAgentId, currentAgent.name, cliMode, openclawMode, sendViaCLI, selectedModel, compareMode, compareModels, startRun, addStep, updateStep, completeRun, executeSlashCommand, generateSuggestions, identityVerified, pendingMessage, verifyIdentity]);
+    contextHealth, claudeCliMode);
+  }, [input, streaming, syncing, ensureSession, sessions, activeSessionId, actions, pendingFiles, wsConnected, wsReconnecting, activeAgentId, currentAgent.name, cliMode, openclawMode, claudeCliMode, sendViaCLI, selectedModel, compareMode, compareModels, startRun, addStep, updateStep, completeRun, executeSlashCommand, generateSuggestions, identityVerified, pendingMessage, verifyIdentity]);
 
   const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;
