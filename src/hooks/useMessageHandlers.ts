@@ -229,6 +229,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       const res = await fetch("/api/cli/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ message: text, continueConversation: cliContinue, agentId: activeAgentId }),
         signal: controller.signal,
       });
