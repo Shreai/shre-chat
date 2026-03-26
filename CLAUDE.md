@@ -22,6 +22,15 @@ The StatusBar shows: gateway connection status (green/red dot), active agent cou
 ## Task Creation from Chat
 When a user types "remind me to...", "create task:...", "todo:...", or similar patterns, the `taskDetector.ts` module detects the intent and fires a POST to `/api/tasks/create` (serve.js proxy to shre-tasks). Rate limited to 10/min. 2s cooldown between creations. Task confirmation appears as a system message in chat.
 
+## Project Progress Events
+When autonomous project execution is active, real-time progress events flow via WebSocket `/ws/notifications`:
+- `project_progress:task_assigned` — "Agent picked up: [task title]"
+- `project_progress:task_completed` — "Task done: [title] (N/M tasks)"
+- `project_progress:task_failed` — "Task failed: [title] — self-correcting"
+- `project_progress:project_completed` — "Project complete!"
+
+Events rendered as inline system messages in chat via `useEscalationListener` hook. Classifications in `chat-utils.ts`.
+
 ## Chat Flow (v2.0)
 All chat messages route through shre-router — no bypass:
 1. Browser → `sendMessage()` in `openclaw.ts` → POST `/api/router/v1/chat`

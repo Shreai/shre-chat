@@ -10,6 +10,7 @@ interface ContentCardProps {
   type: string;
   content: string;
   title?: string;
+  chartType?: string;
   onExpand?: (content: string, type: string, title?: string) => void;
 }
 
@@ -192,7 +193,7 @@ function JsonPreview({ content }: { content: string }) {
   );
 }
 
-function ChartPreview({ content }: { content: string }) {
+function ChartPreview({ content, chartType }: { content: string; chartType?: string }) {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
@@ -200,16 +201,36 @@ function ChartPreview({ content }: { content: string }) {
     return <pre style={{ color: "#f85149", fontSize: 12, padding: 8 }}>Invalid chart data</pre>;
   }
 
+  // Normalize simplified format: { labels, values, title } → ChartData { type, labels, datasets, title }
+  const raw = parsed as Record<string, unknown>;
+  const chartData: import("./ChartRenderer").ChartData = {
+    type: (raw.type as "bar" | "line" | "pie" | "area") || (chartType as "bar" | "line" | "pie" | "area") || "bar",
+    title: raw.title as string | undefined,
+    labels: (raw.labels as string[]) || [],
+    datasets: Array.isArray(raw.datasets)
+      ? raw.datasets
+      : Array.isArray(raw.values)
+        ? [{ data: raw.values as number[], label: raw.label as string | undefined }]
+        : [{ data: [] }],
+    options: {
+      showValues: true,
+      currency: (raw.labels as string[] || []).some(() =>
+        Array.isArray(raw.values) && (raw.values as number[]).some(v => typeof v === "number" && v > 100),
+      ),
+      ...(typeof raw.options === "object" && raw.options ? raw.options as Record<string, unknown> : {}),
+    },
+  };
+
   return (
     <Suspense fallback={<div style={{ padding: 12, color: "var(--c-text-3)", fontSize: 12 }}>Loading chart...</div>}>
-      <ChartRenderer data={parsed as import("./ChartRenderer").ChartData} />
+      <ChartRenderer data={chartData} />
     </Suspense>
   );
 }
 
 // ── Main component ──────────────────────────────────────────────────
 
-export default function ContentCard({ type, content, title, onExpand }: ContentCardProps) {
+export default function ContentCard({ type, content, title, chartType, onExpand }: ContentCardProps) {
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -274,7 +295,7 @@ export default function ContentCard({ type, content, title, onExpand }: ContentC
         <div style={{ padding: type === "html" ? 0 : 4 }}>
           {type === "html" && <HtmlPreview content={content} />}
           {type === "json" && <JsonPreview content={content} />}
-          {type === "chart" && <ChartPreview content={content} />}
+          {type === "chart" && <ChartPreview content={content} chartType={chartType} />}
           {type === "table" && <TablePreview content={content} />}
         </div>
         {/* Fade gradient at bottom */}
