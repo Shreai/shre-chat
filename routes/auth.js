@@ -378,8 +378,7 @@ if (!existsSync(USERS_PATH)) {
   const dir = join(homedir(), ".shre", "vault");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(USERS_PATH, JSON.stringify({
-    rapidnir: { hash: hashPassword("rapid@nir"), role: "admin", name: "Nir" },
-    niradmin: { hash: hashPassword("Meer@109"), role: "admin", name: "NirAdmin" }
+    [process.env.SHRE_ADMIN_USER || "admin"]: { hash: hashPassword(process.env.SHRE_ADMIN_PASSWORD || (() => { throw new Error("SHRE_ADMIN_PASSWORD env var required"); })()), role: "admin", name: "Admin" }
   }, null, 2), { mode: 0o600 });
 }
 

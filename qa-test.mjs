@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 
 const BASE = "http://127.0.0.1:5510";
 const GW_WS = "ws://127.0.0.1:18789";
-const CREDS = { username: "rapidnir", password: "rapid@nir" };
+const CREDS = { username: process.env.SHRE_ADMIN_USER || "admin", password: process.env.SHRE_ADMIN_PASSWORD || (() => { throw new Error("SHRE_ADMIN_PASSWORD required"); })() };
 
 // Load gateway token for WS auth
 let GW_TOKEN = "";

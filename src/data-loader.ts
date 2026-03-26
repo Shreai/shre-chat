@@ -50,11 +50,7 @@ async function getCredentials(tenant: string = "party-liquor") {
   } catch (error) {
     console.error("Failed to get credentials:", error);
     // Return mock data for demo
-    return {
-      clientId: 2,
-      email: "partyliquor@hotmail.com",
-      password: "Admin$101"
-    };
+    throw new Error("Failed to load RapidRMS credentials — set RAPIDRMS_EMAIL and RAPIDRMS_PASSWORD env vars");
   }
 }
 
@@ -69,8 +65,8 @@ async function authenticateRapidRMS(credentials: any) {
       body: JSON.stringify({
         grant_type: "token",
         client_id: String(credentials.clientId || 2),
-        Username: credentials.email || "partyliquor@hotmail.com",
-        Password: credentials.password || "Admin$101"
+        Username: credentials.email,
+        Password: credentials.password
       })
     });
     
