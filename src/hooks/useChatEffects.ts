@@ -511,8 +511,14 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
   // Abort active stream on session change or unmount
   useEffect(() => {
+    const sessionAtMount = activeSessionId;
     return () => {
       if (sendingRef.current) return;
+      // Flush any in-flight streaming response as a partial message before clearing
+      const pending = streamBufferRef.current;
+      if (pending.trim() && sessionAtMount) {
+        actions.addMessage(sessionAtMount, { role: "assistant", content: pending, meta: { partial: "true" } });
+      }
       abortRef.current?.abort();
       abortRef.current = null;
       if (isWSConnected()) {
@@ -531,6 +537,11 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   // When switching agents, reset local UI streaming state
   useEffect(() => {
     if (prevAgentRef.current !== activeAgentId) {
+      // Flush any in-flight streaming response as a partial message before clearing
+      const pending = streamBufferRef.current;
+      if (pending.trim() && activeSessionId) {
+        actions.addMessage(activeSessionId, { role: "assistant", content: pending, meta: { partial: "true" } });
+      }
       actions.setStreaming(false);
       actions.setStreamText("");
       streamBufferRef.current = "";

@@ -587,6 +587,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       onToken: (token) => {
         if (firstTokenTimeRef.current === 0) firstTokenTimeRef.current = Date.now();
         fullResponse += token;
+        streamBufferRef.current = fullResponse;
         actions.setStreamText(fullResponse);
         actions.setStatusLine(`${currentAgent.name} is writing...`);
         if (!streamStarted) {
