@@ -215,8 +215,8 @@ export const ECOSYSTEM_APPS = [
   { id: "openclaw", name: "OpenClaw", icon: "O", url: "/openclaw/", color: "from-amber-500 to-orange-500", description: "AI Gateway" },
   { id: "cortexdb", name: "CortexDB", icon: "C", url: "/cortexdb-ui/", color: "from-emerald-500 to-teal-500", description: "Knowledge DB" },
   // ── Subdomain apps (nirtek.net) ──
-  { id: "marketplace", name: "Marketplace", icon: "A", url: "https://marketplace.nirtek.net", color: "from-pink-500 to-rose-500", description: "Agent Store" },
-  { id: "storepulse", name: "StorePulse", icon: "R", url: "https://storepulse.nirtek.net", color: "from-green-500 to-emerald-500", description: "POS Analytics" },
+  { id: "marketplace", name: "Marketplace", icon: "A", url: "/app-marketplace/", color: "from-pink-500 to-rose-500", description: "Agent Store" },
+  { id: "storepulse", name: "StorePulse", icon: "R", url: "/storepulse/", color: "from-green-500 to-emerald-500", description: "POS Analytics" },
   { id: "peytm", name: "Peytm", icon: "P", url: "https://peytm.nirtek.net", color: "from-indigo-500 to-purple-500", description: "Domain Registry" },
   { id: "bos", name: "BOS", icon: "B", url: "https://bos.nirtek.net", color: "from-sky-500 to-blue-500", description: "Back Office" },
   { id: "developers", name: "Developers", icon: "D", url: "https://developers.nirtek.net", color: "from-slate-500 to-gray-500", description: "Developer Portal" },

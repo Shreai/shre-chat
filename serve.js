@@ -1262,7 +1262,7 @@ async function requestHandler(req, res) {
     let reason = typeof reasonOrHeaders === "string" ? reasonOrHeaders : undefined;
 
     // Apply security headers to all responses (skip frame restrictions for embedded app proxies)
-    const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui"];
+    const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui", "/storepulse", "/app-marketplace"];
     const isEmbedProxy = EMBED_PREFIXES.some(p => url.pathname.startsWith(p));
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
       if (isEmbedProxy && k === "X-Frame-Options") continue;
@@ -4714,8 +4714,10 @@ Examples:
   // X-Frame-Options and CSP are removed so iframe embedding works.
   const EMBEDDED_PROXIES = [
     { prefix: "/openclaw", host: OPENCLAW_HOST, port: OPENCLAW_PORT, proto: "http", label: "OpenClaw Gateway" },
-    { prefix: "/shre-dashboard", host: "127.0.0.1", port: MIB007_PORT ? 5500 : 5500, proto: "https", label: "Shre AI Dashboard" },
+    { prefix: "/shre-dashboard", host: "127.0.0.1", port: 5500, proto: "https", label: "Shre AI Dashboard" },
     { prefix: "/cortexdb-ui", host: "127.0.0.1", port: 3400, proto: "http", label: "CortexDB Dashboard" },
+    { prefix: "/storepulse", host: "127.0.0.1", port: 8899, proto: "http", label: "StorePulse" },
+    { prefix: "/app-marketplace", host: "127.0.0.1", port: 5458, proto: "http", label: "Marketplace" },
   ];
   for (const ep of EMBEDDED_PROXIES) {
     if (url.pathname.startsWith(ep.prefix + "/") || url.pathname === ep.prefix) {
