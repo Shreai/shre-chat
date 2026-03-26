@@ -5,9 +5,10 @@ interface ViewTabsProps {
   setActiveView: (view: string) => void;
   setTermViewMode: (mode: "split" | "tabs") => void;
   previewContent: { content: string; type: string; title?: string } | null;
+  showOpenClaw?: boolean;
 }
 
-export function ViewTabs({ activeView, setActiveView, setTermViewMode, previewContent }: ViewTabsProps) {
+export function ViewTabs({ activeView, setActiveView, setTermViewMode, previewContent, showOpenClaw }: ViewTabsProps) {
   return (
     <nav className="flex items-center shrink-0 px-2 gap-0.5" role="tablist" aria-label="View switcher"
       style={{ background: "var(--c-bg-glass)", borderBottom: "1px solid var(--c-border-1)" }}>
@@ -39,6 +40,22 @@ export function ViewTabs({ activeView, setActiveView, setTermViewMode, previewCo
         <svg className="h-3 w-3" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         Terminal
       </button>
+      {showOpenClaw && (
+        <button
+          onClick={() => setActiveView("openclaw")}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] transition-colors"
+          style={{
+            color: activeView === "openclaw" ? "var(--c-text-1)" : "var(--c-text-4)",
+            borderBottom: activeView === "openclaw" ? "2px solid #f59e0b" : "2px solid transparent",
+          }}
+          aria-label="OpenClaw view"
+          aria-selected={activeView === "openclaw"}
+          role="tab"
+        >
+          <svg className="h-3 w-3" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          OpenClaw
+        </button>
+      )}
       {previewContent && (
         <button
           onClick={() => setActiveView("preview")}
