@@ -1261,17 +1261,18 @@ async function requestHandler(req, res) {
     let headers = maybeHeaders || (typeof reasonOrHeaders === "object" ? reasonOrHeaders : undefined);
     let reason = typeof reasonOrHeaders === "string" ? reasonOrHeaders : undefined;
 
-    // Apply security headers to all responses (skip frame restrictions for /openclaw/ proxy)
-    const isOpenClawProxy = url.pathname.startsWith("/openclaw");
+    // Apply security headers to all responses (skip frame restrictions for embedded app proxies)
+    const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui"];
+    const isEmbedProxy = EMBED_PREFIXES.some(p => url.pathname.startsWith(p));
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
-      if (isOpenClawProxy && k === "X-Frame-Options") continue;
+      if (isEmbedProxy && k === "X-Frame-Options") continue;
       res.setHeader(k, v);
     }
 
-    // Apply CSP only to HTML responses (relax frame-ancestors for /openclaw/ embed)
+    // Apply CSP only to HTML responses (relax frame-ancestors for embedded proxies)
     const ct = (headers && (headers["Content-Type"] || headers["content-type"])) || res.getHeader("content-type") || "";
     if (typeof ct === "string" && ct.includes("text/html")) {
-      if (isOpenClawProxy) {
+      if (isEmbedProxy) {
         res.setHeader("Content-Security-Policy", CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
       } else {
         res.setHeader("Content-Security-Policy", CSP);
@@ -4708,34 +4709,43 @@ Examples:
     }
   }
 
-  // ── Proxy /openclaw/* → OpenClaw Gateway (iframe embed for remote access) ──
-  if (url.pathname.startsWith("/openclaw/") || url.pathname === "/openclaw") {
-    const ocPath = url.pathname.replace(/^\/openclaw/, "") || "/";
-    const ocUrl = `http://${OPENCLAW_HOST}:${OPENCLAW_PORT}${ocPath}${url.search}`;
-    try {
-      const ocHeaders = { ...req.headers, host: `${OPENCLAW_HOST}:${OPENCLAW_PORT}` };
-      delete ocHeaders["accept-encoding"];
-      const ocReq = httpRequest(ocUrl, { method: req.method, headers: ocHeaders }, (ocRes) => {
-        const rHeaders = { ...ocRes.headers };
-        // Remove X-Frame-Options so iframe embedding works
-        delete rHeaders["x-frame-options"];
-        delete rHeaders["content-security-policy"];
-        res.writeHead(ocRes.statusCode ?? 502, rHeaders);
-        ocRes.pipe(res);
-      });
-      ocReq.on("error", (err) => {
-        log.warn("[openclaw-proxy] upstream error", { error: err.message });
-        if (!res.headersSent) {
-          res.writeHead(502, { "content-type": "text/html" });
-          res.end(`<div style="padding:2rem;font-family:monospace;color:#f59e0b;background:#1a1a2e;height:100vh;display:flex;align-items:center;justify-content:center"><div><h2>OpenClaw Gateway Offline</h2><p>Port ${OPENCLAW_PORT} is not responding.</p></div></div>`);
-        }
-      });
-      req.pipe(ocReq);
-    } catch (err) {
-      log.error("[openclaw-proxy] error", { error: err.message });
-      return json(res, { error: "OpenClaw proxy failed" }, 502);
+  // ── Embedded app proxies (iframe embed for remote access) ──────
+  // Each prefix strips its path and forwards to the upstream service.
+  // X-Frame-Options and CSP are removed so iframe embedding works.
+  const EMBEDDED_PROXIES = [
+    { prefix: "/openclaw", host: OPENCLAW_HOST, port: OPENCLAW_PORT, proto: "http", label: "OpenClaw Gateway" },
+    { prefix: "/shre-dashboard", host: "127.0.0.1", port: MIB007_PORT ? 5500 : 5500, proto: "https", label: "Shre AI Dashboard" },
+    { prefix: "/cortexdb-ui", host: "127.0.0.1", port: 3400, proto: "http", label: "CortexDB Dashboard" },
+  ];
+  for (const ep of EMBEDDED_PROXIES) {
+    if (url.pathname.startsWith(ep.prefix + "/") || url.pathname === ep.prefix) {
+      const upPath = url.pathname.replace(new RegExp(`^${ep.prefix}`), "") || "/";
+      const upUrl = `${ep.proto}://${ep.host}:${ep.port}${upPath}${url.search}`;
+      try {
+        const upHeaders = { ...req.headers, host: `${ep.host}:${ep.port}` };
+        delete upHeaders["accept-encoding"];
+        const reqFn = ep.proto === "https" ? httpsRequest : httpRequest;
+        const upReq = reqFn(upUrl, { method: req.method, headers: upHeaders, rejectUnauthorized: false }, (upRes) => {
+          const rHeaders = { ...upRes.headers };
+          delete rHeaders["x-frame-options"];
+          delete rHeaders["content-security-policy"];
+          res.writeHead(upRes.statusCode ?? 502, rHeaders);
+          upRes.pipe(res);
+        });
+        upReq.on("error", (err) => {
+          log.warn(`[${ep.prefix}-proxy] upstream error`, { error: err.message });
+          if (!res.headersSent) {
+            res.writeHead(502, { "content-type": "text/html" });
+            res.end(`<div style="padding:2rem;font-family:monospace;color:#f59e0b;background:#1a1a2e;height:100vh;display:flex;align-items:center;justify-content:center"><div><h2>${ep.label} Offline</h2><p>Port ${ep.port} is not responding.</p></div></div>`);
+          }
+        });
+        req.pipe(upReq);
+      } catch (err) {
+        log.error(`[${ep.prefix}-proxy] error`, { error: err.message });
+        return json(res, { error: `${ep.label} proxy failed` }, 502);
+      }
+      return;
     }
-    return;
   }
 
   // ── Serve static files ───────────────────────────────────────────

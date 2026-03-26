@@ -454,12 +454,21 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
                   {view === "openclaw" && (
                     <ViewErrorBoundary viewName="OpenClaw">
                       <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-                        <iframe
-                          src="/openclaw/"
-                          className="flex-1 w-full border-0"
-                          title="OpenClaw Gateway"
-                          style={{ background: "#1a1a2e", minHeight: 0 }}
-                        />
+                        <iframe src="/openclaw/" className="flex-1 w-full border-0" title="OpenClaw Gateway" style={{ background: "#1a1a2e", minHeight: 0 }} />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === "shre-dashboard" && (
+                    <ViewErrorBoundary viewName="Shre Dashboard">
+                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
+                        <iframe src="/shre-dashboard/" className="flex-1 w-full border-0" title="Shre AI Dashboard" style={{ background: "#1a1a2e", minHeight: 0 }} />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === "cortexdb" && (
+                    <ViewErrorBoundary viewName="CortexDB">
+                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
+                        <iframe src="/cortexdb-ui/" className="flex-1 w-full border-0" title="CortexDB Dashboard" style={{ background: "#1a1a2e", minHeight: 0 }} />
                       </div>
                     </ViewErrorBoundary>
                   )}
