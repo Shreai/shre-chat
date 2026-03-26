@@ -1530,6 +1530,29 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Task assignment proxy (shre-tasks) ──
+  const assignMatch = url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9_-]+)\/assignment$/);
+  if (assignMatch && req.method === "PATCH") {
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      const taskId = assignMatch[1];
+      const body = await collectBody(req);
+      const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}/assignment`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Task assignment proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Projects proxy (shre-tasks) ──
   if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
     try {
@@ -1921,20 +1944,92 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Agents list proxy ──
+  // ── Agents list proxy (enriched with fleet session data) ──
   if (url.pathname === "/api/agents" && req.method === "GET") {
     try {
-      const routerUrl = serviceUrl("shre-router");
-      const upstream = await fetch(`${routerUrl}/v1/config/agents`, { signal: AbortSignal.timeout(5000) });
-      if (upstream.ok) {
-        const agentModels = await upstream.json();
-        // Merge with known agent metadata
-        const agents = Object.entries(agentModels).filter(([k]) => k !== "_default").map(([id, model]) => ({
-          id, name: id, model, status: "idle", emoji: "●",
-        }));
-        return json(res, agents);
+      // Fetch agent config + fleet sessions + CLI sessions in parallel
+      const [configRes, fleetRes, cliRes] = await Promise.allSettled([
+        fetch(`${serviceUrl("shre-router")}/v1/config/agents`, { signal: AbortSignal.timeout(3000) }),
+        fetch(`${serviceUrl("shre-fleet")}/v1/fleet`, { signal: AbortSignal.timeout(3000) }),
+        fetch(`${serviceUrl("shre-fleet")}/v1/cli-sessions`, { signal: AbortSignal.timeout(3000) }),
+      ]);
+
+      // Parse agent config
+      let agentModels = {};
+      if (configRes.status === "fulfilled" && configRes.value.ok) {
+        agentModels = await configRes.value.json();
       }
-      json(res, []);
+
+      // Parse fleet sessions (active spawned agents)
+      let fleetSessions = [];
+      if (fleetRes.status === "fulfilled" && fleetRes.value.ok) {
+        const fleetData = await fleetRes.value.json();
+        fleetSessions = fleetData.sessions || [];
+      }
+
+      // Parse CLI sessions (active Claude Code sessions)
+      let cliSessions = [];
+      if (cliRes.status === "fulfilled" && cliRes.value.ok) {
+        const cliData = await cliRes.value.json();
+        cliSessions = (cliData.sessions || []).filter(s => s.status === "active");
+      }
+
+      // Build agent → active session lookup
+      const agentSessionMap = new Map();
+      for (const s of fleetSessions) {
+        agentSessionMap.set(s.agent, {
+          taskId: s.task_id,
+          title: s.title,
+          phase: s.phase,
+          progress: s.progress,
+          elapsedMs: s.elapsed_ms,
+          type: "fleet",
+        });
+      }
+      for (const s of cliSessions) {
+        if (s.agent && !agentSessionMap.has(s.agent)) {
+          agentSessionMap.set(s.agent, {
+            taskId: s.task_id,
+            title: s.intent || "CLI session",
+            phase: "active",
+            progress: `${s.prompt_count} prompts`,
+            elapsedMs: s.age_ms,
+            type: "cli",
+          });
+        }
+      }
+
+      // Merge: agent config + live session data
+      const agents = Object.entries(agentModels)
+        .filter(([k]) => k !== "_default")
+        .map(([id, model]) => {
+          const session = agentSessionMap.get(id);
+          return {
+            id,
+            name: id,
+            model,
+            status: session ? "busy" : "idle",
+            currentTask: session || null,
+          };
+        });
+
+      // Also add any agents that are active in fleet but not in router config
+      for (const [agentId, session] of agentSessionMap) {
+        if (!agentModels[agentId]) {
+          agents.push({
+            id: agentId,
+            name: agentId,
+            model: fleetSessions.find(s => s.agent === agentId)?.model || "unknown",
+            status: "busy",
+            currentTask: session,
+          });
+        }
+      }
+
+      // Sort: busy agents first
+      agents.sort((a, b) => (a.status === "busy" ? 0 : 1) - (b.status === "busy" ? 0 : 1));
+
+      return json(res, agents);
     } catch (err) {
       log.warn("Agents proxy failed:", err.message);
       json(res, [], 502);
@@ -1942,33 +2037,92 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Platform status (aggregated health) ──
+  // ── Platform status (aggregated health — full service list) ──
   if (url.pathname === "/api/platform-status" && req.method === "GET") {
     try {
       const healthUrl = serviceUrl("shre-health");
-      const upstream = await fetch(`${healthUrl}/v1/status`, { signal: AbortSignal.timeout(8000) });
-      if (upstream.ok) {
-        const data = await upstream.json();
-        return json(res, data);
+
+      // Try shre-health /v1/services first (full list with latency/uptime)
+      let servicesData = null;
+      try {
+        const svcRes = await fetch(`${healthUrl}/v1/services`, { signal: AbortSignal.timeout(8000) });
+        if (svcRes.ok) servicesData = await svcRes.json();
+      } catch { /* try fallback */ }
+
+      if (servicesData && servicesData.services) {
+        const svcList = servicesData.services.map(s => ({
+          name: s.name,
+          port: s.port,
+          type: s.type || "service",
+          healthy: s.status === "ok",
+          status: s.status || "unknown",
+          latency_ms: s.latency_ms ?? null,
+          uptime_pct: s.uptime_pct ?? null,
+        }));
+        // Sort: unhealthy first, then by name
+        svcList.sort((a, b) => (a.healthy ? 1 : 0) - (b.healthy ? 1 : 0) || a.name.localeCompare(b.name));
+        const healthy = svcList.filter(s => s.healthy).length;
+        return json(res, {
+          services: svcList,
+          summary: `${healthy}/${svcList.length} services healthy`,
+        });
       }
-      // Fallback: basic health checks
-      const services = ["shre-router", "shre-tasks", "shre-contacts", "shre-chat", "shre-health"];
+
+      // Fallback: try /v1/status
+      try {
+        const statusRes = await fetch(`${healthUrl}/v1/status`, { signal: AbortSignal.timeout(5000) });
+        if (statusRes.ok) {
+          const data = await statusRes.json();
+          return json(res, data);
+        }
+      } catch { /* try final fallback */ }
+
+      // Final fallback: read ports.json and probe top services
+      const { readFileSync } = await import("node:fs");
+      const portsPath = join(import.meta.dirname || process.cwd(), "..", "ports.json");
+      let ports = {};
+      try { ports = JSON.parse(readFileSync(portsPath, "utf-8")); } catch { /* no ports.json */ }
+      const svcNames = Object.keys(ports).filter(k => ports[k]?.port && ports[k]?.health_check !== false).slice(0, 25);
       const results = await Promise.allSettled(
-        services.map(async (svc) => {
+        svcNames.map(async (svc) => {
+          const start = Date.now();
           try {
             const svcUrl = serviceUrl(svc);
             const r = await fetch(`${svcUrl}/health`, { signal: AbortSignal.timeout(3000) });
-            return { name: svc, healthy: r.ok, status: r.ok ? "up" : `HTTP ${r.status}` };
+            return { name: svc, port: ports[svc].port, healthy: r.ok, status: r.ok ? "ok" : "down", latency_ms: Date.now() - start, uptime_pct: null };
           } catch {
-            return { name: svc, healthy: false, status: "unreachable" };
+            return { name: svc, port: ports[svc].port, healthy: false, status: "unreachable", latency_ms: null, uptime_pct: null };
           }
         })
       );
       const svcList = results.map((r) => r.status === "fulfilled" ? r.value : { name: "unknown", healthy: false, status: "error" });
-      json(res, { services: svcList, summary: `${svcList.filter(s => s.healthy).length}/${svcList.length} services healthy` });
+      svcList.sort((a, b) => (a.healthy ? 1 : 0) - (b.healthy ? 1 : 0) || a.name.localeCompare(b.name));
+      const healthy = svcList.filter(s => s.healthy).length;
+      json(res, { services: svcList, summary: `${healthy}/${svcList.length} services healthy` });
     } catch (err) {
       log.warn("Platform status failed:", err.message);
       json(res, { services: [], summary: "Health check failed" }, 502);
+    }
+    return;
+  }
+
+  // ── Service restart proxy (shre-health) ──
+  const restartMatch = url.pathname.match(/^\/api\/services\/([a-zA-Z0-9_-]+)\/restart$/);
+  if (restartMatch && req.method === "POST") {
+    try {
+      const svcName = restartMatch[1];
+      const healthUrl = serviceUrl("shre-health");
+      const upstream = await fetch(`${healthUrl}/v1/services/${svcName}/restart`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15000), // restart can take up to 8s (unload + load + 3s health check)
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Service restart proxy failed:", err.message);
+      json(res, { ok: false, error: "shre-health unreachable" }, 502);
     }
     return;
   }
@@ -4547,6 +4701,36 @@ Examples:
     }
   }
 
+  // ── Proxy /openclaw/* → OpenClaw Gateway (iframe embed for remote access) ──
+  if (url.pathname.startsWith("/openclaw/") || url.pathname === "/openclaw") {
+    const ocPath = url.pathname.replace(/^\/openclaw/, "") || "/";
+    const ocUrl = `http://${OPENCLAW_HOST}:${OPENCLAW_PORT}${ocPath}${url.search}`;
+    try {
+      const ocHeaders = { ...req.headers, host: `${OPENCLAW_HOST}:${OPENCLAW_PORT}` };
+      delete ocHeaders["accept-encoding"];
+      const ocReq = httpRequest(ocUrl, { method: req.method, headers: ocHeaders }, (ocRes) => {
+        const rHeaders = { ...ocRes.headers };
+        // Remove X-Frame-Options so iframe embedding works
+        delete rHeaders["x-frame-options"];
+        delete rHeaders["content-security-policy"];
+        res.writeHead(ocRes.statusCode ?? 502, rHeaders);
+        ocRes.pipe(res);
+      });
+      ocReq.on("error", (err) => {
+        log.warn("[openclaw-proxy] upstream error", { error: err.message });
+        if (!res.headersSent) {
+          res.writeHead(502, { "content-type": "text/html" });
+          res.end(`<div style="padding:2rem;font-family:monospace;color:#f59e0b;background:#1a1a2e;height:100vh;display:flex;align-items:center;justify-content:center"><div><h2>OpenClaw Gateway Offline</h2><p>Port ${OPENCLAW_PORT} is not responding.</p></div></div>`);
+        }
+      });
+      req.pipe(ocReq);
+    } catch (err) {
+      log.error("[openclaw-proxy] error", { error: err.message });
+      return json(res, { error: "OpenClaw proxy failed" }, 502);
+    }
+    return;
+  }
+
   // ── Serve static files ───────────────────────────────────────────
 
   let filePath = resolve(DIST, url.pathname === "/" ? "index.html" : "." + url.pathname);
@@ -4666,6 +4850,31 @@ function broadcastNotification(type, data) {
       url: "/",
     }).catch(() => {});
   }
+}
+
+// ── Panel push — notify connected clients when task/agent/service events fire ──
+// Debounced: at most one push per type per 5 seconds
+const _panelPushTimers = {};
+function panelPush(category) {
+  if (_panelPushTimers[category]) return; // already scheduled
+  _panelPushTimers[category] = setTimeout(() => {
+    delete _panelPushTimers[category];
+    if (notifyClients.size === 0) return;
+    broadcastNotification("panel.refresh", { category });
+  }, 2000);
+}
+
+// Subscribe to task events → push panel.refresh for tasks tab
+for (const evt of ["task.started", "task.assigned", "task.completed", "task.failed", "task.unblocked", "task.updated"]) {
+  eventBus.subscribe(evt, () => panelPush("tasks"));
+}
+// Subscribe to fleet/agent events → push for agents tab
+for (const evt of ["fleet.agent_status", "agent.quality_alert"]) {
+  eventBus.subscribe(evt, () => panelPush("agents"));
+}
+// Subscribe to service events → push for services tab
+for (const evt of ["service.unhealthy", "service.started"]) {
+  eventBus.subscribe(evt, () => panelPush("services"));
 }
 
 // ── Voice Quality Monitor — auto-escalates voice hickups to Ellie ──
@@ -4936,7 +5145,7 @@ eventBus.subscribe("briefing.daily", async (event) => {
 });
 
 // ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
-const PROGRESS_EVENT_TYPES = ["task.assigned", "task.completed", "task.failed", "project.created", "project.decomposed", "project.completed", "project.quality_gate_failed"];
+const PROGRESS_EVENT_TYPES = ["task.assigned", "task.completed", "task.failed", "project.created", "project.decomposed", "project.completed", "project.quality_gate_failed", "project.pending_approval", "fleet.merge.pr_created", "budget.threshold"];
 
 // Live file diff events from claude_exec sessions
 eventBus.subscribe("diff.file_changed", async (event) => {
@@ -4959,6 +5168,22 @@ eventBus.subscribe("diff.file_changed", async (event) => {
 for (const eventType of PROGRESS_EVENT_TYPES) {
   eventBus.subscribe(eventType, async (event) => {
     const data = event?.data || {};
+
+    // Budget events get translated to budget_blocked / budget_warning types
+    if (eventType === "budget.threshold") {
+      const budgetType = data.action === "block" ? "budget_blocked" : "budget_warning";
+      broadcastNotification(budgetType, {
+        subtype: "budget_threshold",
+        agentId: data.agentId || "",
+        action: data.action || "",
+        spent: data.spent || 0,
+        limit: data.limit || 0,
+        reason: data.reason || data.message || "",
+      });
+      log.debug(`[project-progress] budget.threshold forwarded as ${budgetType}`, { action: data.action });
+      return;
+    }
+
     const subtype = eventType.replace(".", "_");
     broadcastNotification("project_progress", {
       subtype,
