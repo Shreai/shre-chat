@@ -1218,6 +1218,7 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  "frame-src 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
 
@@ -1260,15 +1261,21 @@ async function requestHandler(req, res) {
     let headers = maybeHeaders || (typeof reasonOrHeaders === "object" ? reasonOrHeaders : undefined);
     let reason = typeof reasonOrHeaders === "string" ? reasonOrHeaders : undefined;
 
-    // Apply security headers to all responses
+    // Apply security headers to all responses (skip frame restrictions for /openclaw/ proxy)
+    const isOpenClawProxy = url.pathname.startsWith("/openclaw");
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
+      if (isOpenClawProxy && k === "X-Frame-Options") continue;
       res.setHeader(k, v);
     }
 
-    // Apply CSP only to HTML responses
+    // Apply CSP only to HTML responses (relax frame-ancestors for /openclaw/ embed)
     const ct = (headers && (headers["Content-Type"] || headers["content-type"])) || res.getHeader("content-type") || "";
     if (typeof ct === "string" && ct.includes("text/html")) {
-      res.setHeader("Content-Security-Policy", CSP);
+      if (isOpenClawProxy) {
+        res.setHeader("Content-Security-Policy", CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
+      } else {
+        res.setHeader("Content-Security-Policy", CSP);
+      }
     }
 
     if (reason) {

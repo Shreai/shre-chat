@@ -66,9 +66,7 @@ interface ChatComposerProps {
   onToggleTerminal: () => void;
   onToggleTermViewMode: () => void;
 
-  // OpenClaw
-  showOpenClaw: boolean;
-  onToggleOpenClaw: () => void;
+
 
   // Slash commands
   slashOpen: boolean;
@@ -131,7 +129,6 @@ export function ChatComposer(props: ChatComposerProps) {
     hasSpeechRecognition, onStartRecording, onStopRecording,
     setIsHandsFree, setVoiceMode, setTtsVoice, onStopTTS,
     showTerminal, termViewMode, onToggleTerminal, onToggleTermViewMode,
-    showOpenClaw, onToggleOpenClaw,
     slashOpen, slashFiltered, slashIndex, slashRef, setSlashIndex, onSlashSelect,
     mentionOpen, mentionFiltered, mentionIndex, mentionRef, setMentionIndex, onMentionSelect, mentionAgent,
     replyToIndex, replyToContent, onCancelReply,
@@ -575,18 +572,6 @@ export function ChatComposer(props: ChatComposerProps) {
                   )}
                 </button>
               )}
-
-              {/* OpenClaw toggle */}
-              <button
-                tabIndex={-1}
-                onClick={onToggleOpenClaw}
-                className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 ${showOpenClaw ? "bg-amber-500/20 text-amber-400" : ""}`}
-                style={showOpenClaw ? {} : { color: "var(--c-text-2)" }}
-                title={showOpenClaw ? "Close OpenClaw" : "Open OpenClaw Gateway"}
-                aria-label={showOpenClaw ? "Close OpenClaw" : "Open OpenClaw Gateway"}
-              >
-                <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              </button>
 
               {/* Voice status indicators */}
               {isRecording && voicePhase === "waiting" && (
