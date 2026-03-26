@@ -929,7 +929,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/api/health", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -1391,6 +1391,21 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Cost proxy failed:", err.message);
       json(res, { error: "shre-meter unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Agent capabilities proxy (shre-router) ──
+  if (url.pathname === "/api/agents/capabilities" && req.method === "GET") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const upstream = await fetch(`${routerUrl}/v1/agents/capabilities`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Agent capabilities proxy failed:", err.message);
+      json(res, { error: "shre-router unreachable" }, 502);
     }
     return;
   }
