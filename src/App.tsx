@@ -472,6 +472,20 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
                       </div>
                     </ViewErrorBoundary>
                   )}
+                  {view === "storepulse" && (
+                    <ViewErrorBoundary viewName="StorePulse">
+                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
+                        <iframe src="/storepulse/" className="flex-1 w-full border-0" title="StorePulse" style={{ background: "#1a1a2e", minHeight: 0 }} />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === "app-marketplace" && (
+                    <ViewErrorBoundary viewName="Marketplace">
+                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
+                        <iframe src="/app-marketplace/" className="flex-1 w-full border-0" title="Marketplace" style={{ background: "#1a1a2e", minHeight: 0 }} />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
                 </Suspense>
               </div>
             )}
