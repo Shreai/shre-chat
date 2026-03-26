@@ -3,7 +3,8 @@ import type { Virtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "../openclaw";
 import type { UserProfile } from "../store";
 import type { ProcessRun } from "./process-bar/types";
-import MessageBubble, { SystemEventChip } from "./MessageBubble";
+import MessageBubble, { SystemEventChip, ToolExecutionChip } from "./MessageBubble";
+import type { ToolExecStep } from "./MessageBubble";
 import { WelcomeScreen } from "./WelcomeScreen";
 import { formatTime } from "../chat-utils";
 
@@ -11,6 +12,22 @@ interface Agent {
   id: string;
   name: string;
   emoji: string;
+}
+
+/** Convert a tool_exec meta message into a ToolExecStep for the ToolExecutionChip */
+function toToolExecStep(msg: ChatMessage): ToolExecStep {
+  const m = msg.meta || {};
+  return {
+    id: `tool-${msg.timestamp}-${m.tool || "unknown"}`,
+    tool: m.tool || "unknown",
+    status: m.status === "error" ? "error" : m.status === "running" ? "running" : "success",
+    input: m.inputJson ? (() => { try { return JSON.parse(m.inputJson); } catch { return undefined; } })() : undefined,
+    outputPreview: m.outputPreview || undefined,
+    error: m.error || undefined,
+    latencyMs: m.duration ? parseInt(m.duration, 10) || undefined : undefined,
+    iteration: m.iteration ? parseInt(m.iteration, 10) : 1,
+    timestamp: msg.timestamp || Date.now(),
+  };
 }
 
 export interface MessageListProps {
@@ -231,7 +248,9 @@ export function MessageList(props: MessageListProps) {
                     paddingBottom: compact ? "4px" : "12px",
                   }}
                 >
-                  {(msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
+                  {msg.meta?.type === "tool_exec" ? (
+                    <ToolExecutionChip step={toToolExecStep(msg)} />
+                  ) : (msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
                     <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : (
                     <MessageBubble
@@ -254,7 +273,9 @@ export function MessageList(props: MessageListProps) {
                 className={newMsgStartIndex.current !== null && i >= newMsgStartIndex.current ? "msg-enter" : undefined}
                 style={{ paddingBottom: compact ? "4px" : "12px" }}
               >
-                {(msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
+                {msg.meta?.type === "tool_exec" ? (
+                  <ToolExecutionChip step={toToolExecStep(msg)} />
+                ) : (msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
                   <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
                 ) : (
                   <MessageBubble

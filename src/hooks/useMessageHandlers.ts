@@ -565,6 +565,13 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     abortRef.current = controller;
     let fullResponse = "";
     let streamStarted = false;
+    // Claude CLI state tracking
+    let isClaudeCliResponse = false;
+    let claudeToolEvents: Array<{ type: string; [key: string]: any }> = [];
+    let claudeSessionId = "";
+    let claudeCost: number | undefined;
+    let claudeDuration: number | undefined;
+    let claudeModel: string | undefined;
     const allMessages = session?.messages ?? [];
     const currentMessages = replyToIndex !== null ? allMessages.slice(0, replyToIndex + 1) : allMessages;
 
@@ -593,6 +600,17 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         const httpMeta: Record<string, string> = { route: "http", model: selectedModel ? (selectedModel.split("/").pop() || selectedModel) : "auto" };
         if (firstTokenTimeRef.current > 0 && sendTimeRef.current > 0) httpMeta.ttft_ms = String(firstTokenTimeRef.current - sendTimeRef.current);
         if (sendTimeRef.current > 0) httpMeta.total_ms = String(Date.now() - sendTimeRef.current);
+        // Attach Claude CLI metadata if this was a Claude CLI response
+        if (isClaudeCliResponse) {
+          httpMeta.type = "claude_cli_response";
+          httpMeta.claudeMode = "true";
+          if (claudeSessionId) httpMeta.claudeSessionId = claudeSessionId;
+          if (claudeCost != null) httpMeta.claudeCost = String(claudeCost);
+          if (claudeDuration != null) httpMeta.claudeDuration = String(claudeDuration);
+          if (claudeModel) httpMeta.model = claudeModel;
+          httpMeta.route = "claude-cli";
+          if (claudeToolEvents.length > 0) httpMeta.claudeToolEvents = JSON.stringify(claudeToolEvents);
+        }
         if (full.trim()) actions.addMessage(sessionId, { role: "assistant", content: full, meta: httpMeta });
         actions.setStreamText(""); actions.setStreaming(false); actions.setStatusLine(null);
         actions.addActivity(sessionId, "done", "Response complete");
@@ -658,6 +676,10 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       },
       onApprovalRequired: (approval) => { setPendingApproval(approval); actions.setStatusLine(`Approval needed: ${approval.reason}`); setStreamPhase("attention"); addStep(runId, { kind: "approval", label: `Awaiting approval: ${approval.tool}` }); },
       onToolStart: (event: ToolStartEvent) => {
+        // Accumulate for Claude CLI rich view
+        if (isClaudeCliResponse) {
+          claudeToolEvents.push({ type: "tool_start", tools: [{ name: event.tool, input: event.input }] });
+        }
         const toolLabel = event.tool.replace(/^(mib_|aros_)/, "").replace(/_/g, " ");
         const inputPreview = event.input?.command ? `: \`${String(event.input.command).slice(0, 60)}\`` : event.input?.path ? `: ${String(event.input.path).slice(0, 60)}` : event.input?.query ? `: ${String(event.input.query).slice(0, 60)}` : "";
         actions.addMessage(sessionId, {
@@ -682,6 +704,10 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         actions.addActivity(sessionId, "error", `\u2717 ${toolLabel} failed`);
       },
       onToolResult: (result: ToolResult) => {
+        // Accumulate for Claude CLI rich view
+        if (isClaudeCliResponse) {
+          claudeToolEvents.push({ type: "tool_result", tool: result.tool, result: typeof result.output === "string" ? result.output : JSON.stringify(result.output), isError: result.status === "error" });
+        }
         const toolLabel = result.tool.replace(/^(mib_|aros_)/, "").replace(/_/g, " ");
         const statusIcon = result.status === "success" ? "\u2713" : "\u2717";
         const durationStr = result.duration_ms ? ` (${(result.duration_ms / 1000).toFixed(1)}s)` : "";
@@ -715,6 +741,41 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         const shortTo = to.includes("/") ? to.split("/").pop()! : to;
         actions.setStatusLine(`Retrying with ${shortTo}...`); setStreamPhase("thinking");
         const stepId = addStep(runId, { kind: "thinking", label: `Retrying \u2192 ${shortTo}` }); processStepRef.current = stepId;
+      },
+      // ── Claude CLI callbacks ──
+      onClaudeCliRoute: (_mode: string) => {
+        isClaudeCliResponse = true;
+        claudeToolEvents = [];
+        actions.addMessage(sessionId, {
+          role: "assistant",
+          content: "[system] Routing to Claude Code CLI for execution",
+          timestamp: Date.now(),
+          meta: { system: "true", type: "system", event: "route-change" },
+        });
+        setStreamPhase("tool_use"); setActiveToolName("Claude CLI");
+        actions.setStatusLine("Claude Code CLI executing...");
+      },
+      onClaudeSessionStart: (sid: string) => {
+        claudeSessionId = sid;
+        claudeToolEvents.push({ type: "session_start", sessionId: sid });
+        actions.setStatusLine("Claude CLI session started...");
+      },
+      onClaudeSessionEnd: (data) => {
+        if (data.costUsd != null) claudeCost = data.costUsd;
+        if (data.durationMs != null) claudeDuration = data.durationMs;
+        claudeToolEvents.push({ type: "session_end", ...data });
+      },
+      onClaudeResult: (data) => {
+        if (data.costUsd != null) claudeCost = data.costUsd;
+        if (data.durationMs != null) claudeDuration = data.durationMs;
+        if (data.model) claudeModel = data.model;
+        claudeToolEvents.push({ type: "claude_result", ...data });
+      },
+      onFileDiff: (data) => {
+        claudeToolEvents.push({ type: "file_diff", ...data });
+      },
+      onClaudeSystem: (message: string) => {
+        claudeToolEvents.push({ type: "status", text: message });
       },
     }, controller.signal, sessionId, selectedModel || undefined, attachments.length > 0 ? attachments : undefined, openclawMode,
     (session?.parentId || replyToIndex !== null) ? {

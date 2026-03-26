@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo, lazy, Suspense } from "react";
+import React, { useState, useRef, useEffect, useCallback, memo, lazy, Suspense, useMemo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js/lib/common";
@@ -7,6 +7,8 @@ const MibWidgetBlock = lazy(() => import("./MibWidgetBlock"));
 const DataCard = lazy(() => import("./DataCard"));
 import type { ChatMessage } from "../openclaw";
 import type { ProcessRun } from "./process-bar/types";
+import { ChatMessageTools, type ToolCall } from "./ChatMessageTools";
+import type { ClaudeToolEvent } from "./ClaudeToolView";
 import {
   formatTime,
   estimateTokens,
@@ -27,6 +29,8 @@ import { StableMarkdownBlock } from "./message-parts/SystemEventChip";
 
 // Re-export extracted components so existing imports from MessageBubble still work
 export { Lightbox, StableMarkdownBlock, SystemEventChip } from "./message-parts/SystemEventChip";
+export { ToolExecutionChip, ToolExecutionGroup } from "./message-parts/ToolExecutionChip";
+export type { ToolExecStep } from "./message-parts/ToolExecutionChip";
 
 // ── MessageBubble ───────────────────────────────────────────────────
 const MessageBubble = memo(function MessageBubble({ message, streaming, agentName, agentEmoji, userName, onRunCommand, onFeedback, editing, editText, onEditStart, onEditChange, onEditCancel, onEdit, searchHighlight, isCurrentSearchHit, onImageClick, compact, onRegenerate, selected, onAnnotate, onBranch, onReaction, onReply, replyPreview, onReplyClick, processRun, onRetry, onContentExpand, isBookmarked, onToggleBookmark }: { message: ChatMessage; streaming?: boolean; agentName: string; agentEmoji: string; userName?: string; onRunCommand?: (cmd: string) => void; onFeedback?: (fb: "like" | "dislike") => void; editing?: boolean; editText?: string; onEditStart?: () => void; onEditChange?: (text: string) => void; onEditCancel?: () => void; onEdit?: (newText: string) => void; searchHighlight?: string; isCurrentSearchHit?: boolean; onImageClick?: (src: string) => void; compact?: boolean; onRegenerate?: () => void; selected?: boolean; onAnnotate?: (text: string) => void; onBranch?: () => void; onReaction?: (emoji: string) => void; onReply?: () => void; replyPreview?: string | null; onReplyClick?: () => void; processRun?: ProcessRun | null; onRetry?: () => void; onContentExpand?: (content: string, type: string, title?: string) => void; isBookmarked?: boolean; onToggleBookmark?: () => void }) {
@@ -224,9 +228,11 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                     };
                     const contentType = contentTypes[lang];
                     if (contentType) {
+                      // Extract chart subtype from language tag (e.g. "chart:bar" → "bar")
+                      const chartSubtype = contentType === "chart" && lang.includes(":") ? lang.split(":")[1] : undefined;
                       return (
                         <Suspense fallback={<div style={{ padding: 8, color: "var(--c-text-4)", fontSize: 12 }}>Loading preview...</div>}>
-                          <ContentCard type={contentType} content={codeText} onExpand={onContentExpand} />
+                          <ContentCard type={contentType} content={codeText} chartType={chartSubtype} onExpand={onContentExpand} />
                         </Suspense>
                       );
                     }
@@ -266,6 +272,21 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
               {!isUser && meta?.taskId && (
                 <TaskBadge taskId={meta.taskId} status={meta.taskStatus} />
               )}
+              {/* Claude CLI tool events */}
+              {!isUser && meta?.type === "claude_cli_response" && meta.claudeToolEvents && (() => {
+                try {
+                  const events: ClaudeToolEvent[] = JSON.parse(meta.claudeToolEvents);
+                  if (events.length === 0) return null;
+                  const toolCall: ToolCall = {
+                    name: "claude_cli",
+                    toolEvents: events,
+                    costUsd: meta.claudeCost ? parseFloat(meta.claudeCost) : undefined,
+                    durationMs: meta.claudeDuration ? parseFloat(meta.claudeDuration) : undefined,
+                    sessionId: meta.claudeSessionId,
+                  };
+                  return <ChatMessageTools tools={[toolCall]} />;
+                } catch { return null; }
+              })()}
             </div>
           )}
           {!isUser && meta?.partial && (
@@ -285,9 +306,9 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
               onClick={() => setRouteExpanded((v) => !v)}
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium transition-all duration-150 hover:brightness-110"
               style={{
-                background: meta.route === "ws" ? "rgba(99,102,241,0.12)" : meta.route === "cli" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
-                color: meta.route === "ws" ? "rgb(129,140,248)" : meta.route === "cli" ? "rgb(52,211,153)" : "rgb(251,191,36)",
-                border: `1px solid ${meta.route === "ws" ? "rgba(99,102,241,0.2)" : meta.route === "cli" ? "rgba(16,185,129,0.2)" : "rgba(245,158,11,0.2)"}`,
+                background: meta.route === "ws" ? "rgba(99,102,241,0.12)" : meta.route === "cli" || meta.route === "claude-cli" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
+                color: meta.route === "ws" ? "rgb(129,140,248)" : meta.route === "cli" || meta.route === "claude-cli" ? "rgb(52,211,153)" : "rgb(251,191,36)",
+                border: `1px solid ${meta.route === "ws" ? "rgba(99,102,241,0.2)" : meta.route === "cli" || meta.route === "claude-cli" ? "rgba(16,185,129,0.2)" : "rgba(245,158,11,0.2)"}`,
               }}
               title="Click to show routing details"
             >
