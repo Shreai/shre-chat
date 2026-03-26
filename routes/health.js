@@ -39,8 +39,8 @@ export function registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, getAct
 
   return async function handleHealthRoute(req, res, url, { json }) {
 
-    // ── Health endpoint ──
-    if (url.pathname === "/api/health" && req.method === "GET") {
+    // ── Health endpoint (both /health and /api/health for platform compatibility) ──
+    if ((url.pathname === "/health" || url.pathname === "/api/health") && req.method === "GET") {
       json(res, {
         ok: true,
         service: "shre-chat",
@@ -61,7 +61,7 @@ export function registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, getAct
     }
 
     // ── Readyz — check gateway reachability ──
-    if (url.pathname === "/api/readyz" && req.method === "GET") {
+    if ((url.pathname === "/readyz" || url.pathname === "/api/readyz") && req.method === "GET") {
       try {
         const r = await fetch(`${infraUrl("openclaw-gateway")}/health`, { signal: AbortSignal.timeout(2000) });
         if (!r.ok) return json(res, { ready: false, reason: "openclaw gateway unhealthy" }, 503);
