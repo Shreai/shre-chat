@@ -209,10 +209,13 @@ export function mib007Link(view: string, params?: string): string {
 const isRemote = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
 export const ECOSYSTEM_APPS = [
+  // ── Platform apps (proxied — work both local and remote) ──
   { id: "mib007", name: "MIB007", icon: "M", url: MIB007_BASE, color: "from-blue-500 to-cyan-500", description: "Agents & Issues", localOnly: false },
-  { id: "shre-platform", name: "Shre AI", icon: "S", url: isRemote ? "" : `https://localhost:${ports.services?.["mib-desktop"]?.port ?? 5500}`, color: "from-violet-500 to-fuchsia-500", description: "Dashboard", localOnly: true },
-  { id: "openclaw", name: "OpenClaw", icon: "O", url: isRemote ? "" : `http://localhost:${ports.infrastructure?.["openclaw-gateway"]?.port ?? 18789}`, color: "from-amber-500 to-orange-500", description: "AI Gateway", localOnly: true },
-  { id: "cortexdb", name: "CortexDB", icon: "C", url: isRemote ? "" : `http://localhost:${ports.infrastructure?.["cortexdb-dashboard"]?.port ?? 3400}`, color: "from-emerald-500 to-teal-500", description: "Knowledge DB", localOnly: true },
+  { id: "shre-platform", name: "Shre AI", icon: "S", url: "/shre-dashboard/", color: "from-violet-500 to-fuchsia-500", description: "Dashboard", localOnly: false },
+  { id: "openclaw", name: "OpenClaw", icon: "O", url: "/openclaw/", color: "from-amber-500 to-orange-500", description: "AI Gateway", localOnly: false },
+  { id: "cortexdb", name: "CortexDB", icon: "C", url: "/cortexdb-ui/", color: "from-emerald-500 to-teal-500", description: "Knowledge DB", localOnly: false },
+  // ── Subdomain apps (nirtek.net) ──
+  { id: "peytm", name: "Peytm", icon: "P", url: "https://peytm.nirtek.net", color: "from-indigo-500 to-purple-500", description: "Domain Registry", localOnly: false },
 ];
 
 export function formatTime(ts?: number): string {
@@ -347,11 +350,36 @@ export function splitStableAndPending(text: string): { stable: string; pending: 
 
 export function classifySystemEvent(content: string): { icon: string; label: string; color: string } {
   const t = content.toLowerCase();
+  // Tool execution events — rendered by ToolExecutionChip but classifiable as fallback
+  if (t.startsWith("[tool_exec]")) {
+    if (t.includes("running")) return { icon: "\u{1F527}", label: "Tool running", color: "var(--c-terminal-accent)" };
+    if (t.includes("completed")) return { icon: "\u2705", label: "Tool completed", color: "var(--c-success, #34d399)" };
+    if (t.includes("failed")) return { icon: "\u274C", label: "Tool failed", color: "var(--c-danger-soft, #f87171)" };
+    return { icon: "\u2699", label: "Tool execution", color: "var(--c-warning)" };
+  }
   if (t.includes("compaction") || t.includes("compacted")) return { icon: "⟳", label: "Context compacted", color: "var(--c-orange)" };
   if (t.includes("model switched")) return { icon: "⚡", label: "Model changed", color: "var(--c-info-soft)" };
   if (t.includes("session startup") || t.includes("startup sequence")) return { icon: "🔄", label: "Session refresh", color: "var(--c-info-soft)" };
   if (t.includes("agents.md") || t.includes("identity verification")) return { icon: "📋", label: "Agent startup", color: "var(--c-purple)" };
   if (t.includes("sender (untrusted")) return { icon: "🏷", label: "Sender metadata", color: "var(--c-slate)" };
+  if (t.includes("ellie is investigating") || t.includes("couldn't complete your request")) return { icon: "⏳", label: "Escalation", color: "var(--c-warning)" };
+  if (t.includes("ellie resolved")) return { icon: "✅", label: "Resolved", color: "var(--c-success, #34d399)" };
+  if (t.includes("council has been notified") || t.includes("couldn't be resolved")) return { icon: "⚠️", label: "Escalation failed", color: "var(--c-error, #f87171)" };
+  // Budget events
+  if (t.includes("[budget_blocked]")) return { icon: "🛑", label: "Budget blocked", color: "var(--c-danger-soft, #f87171)" };
+  if (t.includes("[budget_warning]")) return { icon: "💰", label: "Budget warning", color: "var(--c-warning)" };
+  // Project fallback event
+  if (t.includes("project decomposition unavailable")) return { icon: "⚠️", label: "Project fallback", color: "var(--c-warning)" };
+  // Project progress events
+  if (t.includes("[project_progress:task_assigned]")) return { icon: "🏃", label: "Agent assigned", color: "var(--c-info-soft)" };
+  if (t.includes("[project_progress:task_completed]")) return { icon: "✅", label: "Task completed", color: "var(--c-success, #34d399)" };
+  if (t.includes("[project_progress:task_failed]")) return { icon: "❌", label: "Task failed", color: "var(--c-danger-soft, #f87171)" };
+  if (t.includes("[project_progress:project_created]")) return { icon: "📋", label: "Project created", color: "var(--c-info-soft)" };
+  if (t.includes("[project_progress:project_decomposed]")) return { icon: "🔀", label: "Project decomposed", color: "var(--c-info-soft)" };
+  if (t.includes("[project_progress:project_completed]")) return { icon: "🎉", label: "Project done", color: "var(--c-success, #34d399)" };
+  if (t.includes("[project_progress:quality_gate_failed]")) return { icon: "⚠️", label: "Quality gate", color: "var(--c-warning, #fbbf24)" };
+  if (t.includes("[file_diff]")) return { icon: "📝", label: "File changed", color: "var(--c-info-soft)" };
+  if (t.includes("[project_pending]")) return { icon: "📋", label: "Plan pending", color: "var(--c-warning)" };
   if (t.includes("security") || t.includes("vault")) return { icon: "🔒", label: "Security check", color: "var(--c-warning)" };
   if (t.includes("system:")) return { icon: "⚙", label: "System event", color: "var(--c-slate)" };
   return { icon: "⚙", label: "System", color: "var(--c-slate)" };
