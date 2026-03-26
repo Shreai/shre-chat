@@ -429,6 +429,19 @@ export interface StreamCallbacks {
   onClearResponse?: () => void;
   /** Fired when switching to a fallback model after failure */
   onModelSwitch?: (from: string, to: string, reason: string) => void;
+  // ── Claude CLI callbacks ──
+  /** Fired when route event indicates Claude CLI mode */
+  onClaudeCliRoute?: (mode: string) => void;
+  /** Fired when Claude CLI session starts */
+  onClaudeSessionStart?: (sessionId: string) => void;
+  /** Fired when Claude CLI session ends */
+  onClaudeSessionEnd?: (data: { costUsd?: number; durationMs?: number; sessionId?: string }) => void;
+  /** Fired with Claude CLI final result metadata */
+  onClaudeResult?: (data: { costUsd?: number; durationMs?: number; model?: string }) => void;
+  /** Fired when Claude CLI produces a file diff */
+  onFileDiff?: (data: { file: string; diff?: string; action?: string }) => void;
+  /** Fired for Claude CLI system messages */
+  onClaudeSystem?: (message: string) => void;
 }
 
 /**
@@ -617,7 +630,34 @@ async function streamViaFallback(
 
           if (evt.type === "route") {
             routedModel = evt.model || "";
+            // Detect Claude CLI auto-routing
+            if (evt.mode === "claude-cli-auto" || evt.route === "claude-cli") {
+              callbacks.onClaudeCliRoute?.(evt.mode || evt.route);
+            }
             callbacks.onStatus?.("thinking", `Routed → ${routedModel}`);
+          } else if (evt.type === "session_start") {
+            callbacks.onClaudeSessionStart?.(evt.sessionId || "");
+            callbacks.onStatus?.("executing", "Claude CLI starting...");
+          } else if (evt.type === "session_end") {
+            callbacks.onClaudeSessionEnd?.({
+              costUsd: evt.costUsd ?? evt.cost_usd,
+              durationMs: evt.durationMs ?? evt.duration_ms,
+              sessionId: evt.sessionId,
+            });
+          } else if (evt.type === "claude_result") {
+            callbacks.onClaudeResult?.({
+              costUsd: evt.costUsd ?? evt.cost_usd,
+              durationMs: evt.durationMs ?? evt.duration_ms,
+              model: evt.model,
+            });
+          } else if (evt.type === "file_diff") {
+            callbacks.onFileDiff?.({
+              file: evt.file || evt.path || "",
+              diff: evt.diff || evt.content,
+              action: evt.action,
+            });
+          } else if (evt.type === "claude_system") {
+            callbacks.onClaudeSystem?.(evt.message || evt.text || "");
           } else if (evt.type === "status") {
             callbacks.onStatus?.("thinking", `${evt.model || routedModel} via ${evt.provider || "..."}`);
           } else if (evt.type === "delta" && evt.text) {
