@@ -10,11 +10,13 @@ import { join, extname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { URL } from "node:url";
 import { spawn, execSync } from "node:child_process";
+import pg from "pg";
 import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline } from "shre-sdk";
 import { createConversationLearner } from "shre-sdk/rag";
 import { writeConversation, startWALReplay } from "shre-sdk/training";
+import { createHeartbeatMonitor } from "shre-sdk/heartbeat";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVoiceRoutes } from "./routes/voice.js";
 import { registerIntentRouter } from "./routes/intent-router.js";
@@ -41,12 +43,32 @@ const eventBus = createEventBus("shre-chat");
 const conversationLearner = createConversationLearner("shre-chat", { logger: log, eventBus });
 const feedbackPipeline = createFeedbackPipeline({ agentId: "chat-service", workspaceId: "shre" });
 const lifecycle = createLifecycleEmitter(eventBus, "shre-chat", { port: PORT });
+const heartbeat = createHeartbeatMonitor("shre-chat", {
+  intervalMs: 30_000,
+  publishFn: (event, severity, data) => eventBus.publish(event, severity, data),
+});
+heartbeat.registerDependency("cortexdb", "http://127.0.0.1:5400/health/live");
+heartbeat.registerDependency("shre-router", "https://127.0.0.1:5497/health");
 const DIST = join(import.meta.dirname, "dist");
 const OPENCLAW_HOST = "127.0.0.1";
 const OPENCLAW_PORT = Number(new URL(infraUrl("openclaw-gateway")).port);
 const OPENCLAW_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
+
+// ── CortexDB PostgreSQL pool (replaces execSync docker exec psql) ──
+const cortexPool = new pg.Pool({
+  host: "127.0.0.1",
+  port: 5433,
+  user: "cortex",
+  password: process.env.CORTEX_PG_PASSWORD || "",
+  database: "cortexdb",
+  max: 5,
+  idleTimeoutMillis: 120_000,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 30_000,
+});
+cortexPool.on("error", (err) => log.warn("[cortexPool] Idle client error", { error: err.message }));
 
 // ── Gateway token — read from openclaw.json server-side (never expose in bundle) ──
 let GATEWAY_TOKEN = "";
@@ -3605,10 +3627,12 @@ async function requestHandler(req, res) {
       // Strip client-supplied trust headers to prevent spoofing, then set from validated JWT
       delete routerHeaders["x-tenant-id"];
       delete routerHeaders["x-user-id"];
+      delete routerHeaders["x-channel"];
       if (authClaims?.activeWorkspaceId) {
         routerHeaders["x-tenant-id"] = authClaims.activeWorkspaceId;
         routerHeaders["x-user-id"] = authClaims.sub;
       }
+      routerHeaders["x-channel"] = "shre-chat";
       const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
         routerUrl,
         { method: req.method, headers: routerHeaders, rejectUnauthorized: false },
@@ -3778,37 +3802,45 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Employee Activity API (CortexDB party_liquor) ──
+  // ── Employee Activity API (CortexDB — async via cortexPool) ──
   if (url.pathname === "/api/employee-activity" && req.method === "GET") {
     try {
+      const schema = url.searchParams?.get("schema") || "party_liquor";
       const period = url.searchParams?.get("period") || "today";
       const { from, to } = getDateRange(period);
-      const sql = `SELECT cashier_name as name, COUNT(*) as transactions, ROUND(SUM(bill_amount)::numeric, 2) as sales, ROUND(AVG(bill_amount)::numeric, 2) as avg_ticket, SUM(CASE WHEN is_void THEN 1 ELSE 0 END) as voids, SUM(CASE WHEN bill_amount = 0 AND NOT is_void THEN 1 ELSE 0 END) as no_sales, SUM(CASE WHEN bill_amount < 0 THEN 1 ELSE 0 END) as refunds, ROUND(SUM(CASE WHEN is_void THEN bill_amount ELSE 0 END)::numeric, 2) as void_amount FROM party_liquor.invoices WHERE invoice_date >= '${from}' AND invoice_date <= '${to}T23:59:59' GROUP BY cashier_name ORDER BY sales DESC`;
-      const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
+      const { rows } = await cortexPool.query(
+        `SELECT cashier_name as name, COUNT(*) as transactions,
+                ROUND(SUM(bill_amount)::numeric, 2) as sales,
+                ROUND(AVG(bill_amount)::numeric, 2) as avg_ticket,
+                SUM(CASE WHEN is_void THEN 1 ELSE 0 END) as voids,
+                SUM(CASE WHEN bill_amount = 0 AND NOT is_void THEN 1 ELSE 0 END) as no_sales,
+                SUM(CASE WHEN bill_amount < 0 THEN 1 ELSE 0 END) as refunds,
+                ROUND(SUM(CASE WHEN is_void THEN bill_amount ELSE 0 END)::numeric, 2) as void_amount
+         FROM ${pgIdent(schema)}.invoices
+         WHERE invoice_date >= $1 AND invoice_date <= $2
+         GROUP BY cashier_name ORDER BY sales DESC`,
+        [from, to + "T23:59:59"]
+      );
       const employees = [];
       let totalSales = 0, totalTransactions = 0, totalVoids = 0, totalNoSales = 0, totalRefunds = 0, totalVoidAmount = 0;
-      if (result) {
-        for (const line of result.split("\n")) {
-          if (!line.trim()) continue;
-          const [name, transactions, sales, avg_ticket, voids, no_sales, refunds, void_amount] = line.split("|");
-          const emp = {
-            name: name || "Unknown",
-            transactions: parseInt(transactions) || 0,
-            sales: parseFloat(sales) || 0,
-            avgTicket: parseFloat(avg_ticket) || 0,
-            voids: parseInt(voids) || 0,
-            noSales: parseInt(no_sales) || 0,
-            refunds: parseInt(refunds) || 0,
-            voidAmount: parseFloat(void_amount) || 0,
-          };
-          employees.push(emp);
-          totalSales += emp.sales;
-          totalTransactions += emp.transactions;
-          totalVoids += emp.voids;
-          totalNoSales += emp.noSales;
-          totalRefunds += emp.refunds;
-          totalVoidAmount += emp.voidAmount;
-        }
+      for (const r of rows) {
+        const emp = {
+          name: r.name || "Unknown",
+          transactions: parseInt(r.transactions) || 0,
+          sales: parseFloat(r.sales) || 0,
+          avgTicket: parseFloat(r.avg_ticket) || 0,
+          voids: parseInt(r.voids) || 0,
+          noSales: parseInt(r.no_sales) || 0,
+          refunds: parseInt(r.refunds) || 0,
+          voidAmount: parseFloat(r.void_amount) || 0,
+        };
+        employees.push(emp);
+        totalSales += emp.sales;
+        totalTransactions += emp.transactions;
+        totalVoids += emp.voids;
+        totalNoSales += emp.noSales;
+        totalRefunds += emp.refunds;
+        totalVoidAmount += emp.voidAmount;
       }
       json(res, {
         period,
@@ -3831,29 +3863,31 @@ async function requestHandler(req, res) {
 
   if (url.pathname === "/api/employee-activity/alerts" && req.method === "GET") {
     try {
+      const schema = url.searchParams?.get("schema") || "party_liquor";
       const since = url.searchParams?.get("since");
-      const limit = parseInt(url.searchParams?.get("limit")) || 50;
+      const limitVal = parseInt(url.searchParams?.get("limit")) || 50;
       const sinceDate = since ? new Date(parseInt(since)).toISOString() : new Date(Date.now() - 86400000).toISOString();
-      const sql = `SELECT invoice_no, invoice_date, cashier_name, bill_amount, is_void, discount_amount FROM party_liquor.invoices WHERE (is_void = true OR bill_amount = 0 OR bill_amount < 0) AND invoice_date >= '${sinceDate}' ORDER BY invoice_date DESC LIMIT ${limit}`;
-      const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
-      const alerts = [];
-      if (result) {
-        for (const line of result.split("\n")) {
-          if (!line.trim()) continue;
-          const [invoiceNo, invoiceDate, cashier, amount, isVoid, discount] = line.split("|");
-          let type = "no_sale";
-          if (isVoid === "t") type = "void";
-          else if (parseFloat(amount) < 0) type = "refund";
-          alerts.push({
-            id: `alert-${invoiceNo}-${invoiceDate}`,
-            timestamp: invoiceDate,
-            type,
-            employee: cashier || "Unknown",
-            invoiceNo,
-            amount: parseFloat(amount) || 0,
-          });
-        }
-      }
+      const { rows } = await cortexPool.query(
+        `SELECT invoice_no, invoice_date, cashier_name, bill_amount, is_void, discount_amount
+         FROM ${pgIdent(schema)}.invoices
+         WHERE (is_void = true OR bill_amount = 0 OR bill_amount < 0)
+           AND invoice_date >= $1
+         ORDER BY invoice_date DESC LIMIT $2`,
+        [sinceDate, limitVal]
+      );
+      const alerts = rows.map((r) => {
+        let type = "no_sale";
+        if (r.is_void) type = "void";
+        else if (parseFloat(r.bill_amount) < 0) type = "refund";
+        return {
+          id: `alert-${r.invoice_no}-${r.invoice_date}`,
+          timestamp: r.invoice_date,
+          type,
+          employee: r.cashier_name || "Unknown",
+          invoiceNo: r.invoice_no,
+          amount: parseFloat(r.bill_amount) || 0,
+        };
+      });
       json(res, alerts);
     } catch (err) {
       log.warn("[employee-activity] Alerts query failed", { error: err.message });
@@ -5129,6 +5163,7 @@ if (tlsOpts && httpsServer) {
     log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications (no raw OpenClaw proxy)`);
     lifecycle.started();
     feedbackPipeline.start();
+    heartbeat.start();
     startWALReplay(60_000); // Retry failed training writes every 60s
   });
 } else {
@@ -5140,6 +5175,7 @@ if (tlsOpts && httpsServer) {
     log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications (no raw OpenClaw proxy)`);
     lifecycle.started();
     feedbackPipeline.start();
+    heartbeat.start();
     startWALReplay(60_000); // Retry failed training writes every 60s
   });
 }
@@ -5219,55 +5255,159 @@ for (const eventType of PROGRESS_EVENT_TYPES) {
   });
 }
 
-// ── StorePulse 30-min performance reporter ──────────────────────────────────
+// ── StorePulse: discover active store schemas + resolve display names ────────
+async function getStoreSchemas() {
+  const { rows } = await cortexPool.query(
+    "SELECT schemaname FROM pg_catalog.pg_tables WHERE tablename = 'invoices' GROUP BY schemaname"
+  );
+  return rows.map((r) => r.schemaname);
+}
+
+// Resolve schema → display name from rapidrms.store, disambiguate duplicates
+async function resolveStoreNames(schemas) {
+  const nameMap = new Map(); // schema → display name
+  try {
+    const { rows } = await cortexPool.query(
+      "SELECT store_name, db_name FROM rapidrms.store WHERE store_name IS NOT NULL AND store_name != ''"
+    );
+    // Build lookup: normalized db_name → store_name AND normalized store_name → store_name
+    const lookup = new Map();
+    for (const r of rows) {
+      if (r.db_name) lookup.set(r.db_name.toLowerCase().replace(/[^a-z0-9]/g, "_"), r.store_name);
+      lookup.set(r.store_name.toLowerCase().replace(/[^a-z0-9]/g, "_"), r.store_name);
+    }
+    for (const schema of schemas) {
+      nameMap.set(schema, lookup.get(schema) || null);
+    }
+  } catch { /* rapidrms.store not available — fall back to schema-derived names */ }
+
+  // Count occurrences of each resolved name to detect duplicates
+  const nameCounts = new Map();
+  for (const [schema, name] of nameMap) {
+    const display = name || schema.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    nameCounts.set(display, (nameCounts.get(display) || 0) + 1);
+  }
+
+  // Build final map — append schema suffix if name appears more than once
+  const result = new Map();
+  for (const schema of schemas) {
+    const raw = nameMap.get(schema);
+    let display = raw || schema.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    if (nameCounts.get(display) > 1) {
+      display = `${display} (${schema})`;
+    }
+    result.set(schema, display);
+  }
+  return result;
+}
+
+// Quote a PG identifier (schema names from pg_catalog are trusted, this is defense-in-depth)
+function pgIdent(name) { return '"' + name.replace(/"/g, '""') + '"'; }
+
+// Track last txn count per schema — skip notification if nothing changed
+const _lastPerfTxns = new Map();
+
+// ── StorePulse 30-min performance reporter (per-store, async via cortexPool) ─
 setInterval(async () => {
   try {
-    const sql = `SELECT COUNT(*) as txns, ROUND(SUM(bill_amount)::numeric, 2) as sales, ROUND(AVG(bill_amount)::numeric, 2) as avg_ticket, SUM(CASE WHEN is_void THEN 1 ELSE 0 END) as voids, SUM(CASE WHEN bill_amount = 0 AND NOT is_void THEN 1 ELSE 0 END) as no_sales FROM party_liquor.invoices WHERE invoice_date >= CURRENT_DATE`;
-    const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
-    const [txns, sales, avgTicket, voids, noSales] = result.split("|");
+    const schemas = await getStoreSchemas();
+    if (!schemas.length) return;
+    const storeNames = await resolveStoreNames(schemas);
 
-    const title = `Party Liquor Performance Update`;
-    const body = `Sales: $${sales || "0"} | Txns: ${txns || "0"} | Avg: $${avgTicket || "0"} | Voids: ${voids || "0"} | No-Sales: ${noSales || "0"}`;
+    for (const schema of schemas) {
+      const storeName = storeNames.get(schema);
 
-    // Insert notification
-    const notifId = `perf-${Date.now()}`;
-    chatDb.prepare("INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(notifId, "storepulse.performance", title, body, "storepulse", Date.now());
+      // Try today first (Eastern time)
+      const todayRes = await cortexPool.query(
+        `SELECT COUNT(*) as txns, ROUND(SUM(bill_amount)::numeric, 2) as sales,
+                ROUND(AVG(bill_amount)::numeric, 2) as avg_ticket,
+                SUM(CASE WHEN is_void THEN 1 ELSE 0 END) as voids,
+                SUM(CASE WHEN bill_amount = 0 AND NOT is_void THEN 1 ELSE 0 END) as no_sales
+         FROM ${pgIdent(schema)}.invoices
+         WHERE invoice_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')::date
+           AND (is_void IS NULL OR is_void = false)`
+      );
+      let { txns, sales, avg_ticket: avgTicket, voids, no_sales: noSales } = todayRes.rows[0] || {};
+      let dateLabel = "Today";
 
-    // Broadcast to WS clients
-    broadcastNotification("storepulse.performance", { id: notifId, title, body, source: "storepulse" });
+      // No data today — fall back to most recent day
+      if (!txns || txns === "0") {
+        const fbRes = await cortexPool.query(
+          `WITH latest AS (SELECT MAX(invoice_date::date) as d FROM ${pgIdent(schema)}.invoices)
+           SELECT COUNT(*) as txns, ROUND(SUM(i.bill_amount)::numeric, 2) as sales,
+                  ROUND(AVG(i.bill_amount)::numeric, 2) as avg_ticket,
+                  SUM(CASE WHEN i.is_void THEN 1 ELSE 0 END) as voids,
+                  SUM(CASE WHEN i.bill_amount = 0 AND NOT i.is_void THEN 1 ELSE 0 END) as no_sales,
+                  l.d::text as report_date
+           FROM ${pgIdent(schema)}.invoices i, latest l
+           WHERE i.invoice_date::date = l.d AND (i.is_void IS NULL OR i.is_void = false)
+           GROUP BY l.d`
+        );
+        const row = fbRes.rows[0] || {};
+        txns = row.txns; sales = row.sales; avgTicket = row.avg_ticket; voids = row.voids; noSales = row.no_sales;
+        if (row.report_date) {
+          const d = new Date(row.report_date + "T00:00:00");
+          dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        }
+      }
 
-    log.info("[storepulse] Performance report sent", { txns, sales, voids, noSales });
+      if (!txns || txns === "0") continue;
+
+      // Skip if txn count unchanged since last report (no new activity)
+      const txnNum = parseInt(txns);
+      if (_lastPerfTxns.get(schema) === txnNum) {
+        log.debug("[storepulse] Skipping — no new transactions", { schema, txns });
+        continue;
+      }
+      _lastPerfTxns.set(schema, txnNum);
+
+      const title = `${storeName} Performance Update`;
+      const body = `${dateLabel} — Sales: $${sales || "0"} | Txns: ${txns || "0"} | Avg: $${avgTicket || "0"} | Voids: ${voids || "0"} | No-Sales: ${noSales || "0"}`;
+      const notifId = `perf-${schema}-${Date.now()}`;
+
+      chatDb.prepare("INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(notifId, "storepulse.performance", title, body, "storepulse", Date.now());
+      broadcastNotification("storepulse.performance", { id: notifId, title, body, source: "storepulse" });
+      log.info("[storepulse] Performance report sent", { schema, storeName, txns, sales, voids, noSales });
+    }
   } catch (err) {
     log.warn("[storepulse] Performance report failed", { error: err.message });
   }
 }, 1800000); // 30 minutes
 
-// ── StorePulse instant alert watcher ────────────────────────────────────────
+// ── StorePulse instant alert watcher (per-store, async via cortexPool) ───────
 let lastAlertCheck = Date.now();
 setInterval(async () => {
   try {
-    const sinceDate = new Date(lastAlertCheck - 120000).toISOString(); // 2min overlap for safety
-    const sql = `SELECT invoice_no, invoice_date, cashier_name, bill_amount, is_void FROM party_liquor.invoices WHERE (is_void = true OR bill_amount = 0 OR bill_amount < 0) AND invoice_date >= '${sinceDate}' AND invoice_date >= CURRENT_DATE ORDER BY invoice_date DESC LIMIT 10`;
-    const result = execSync(`/usr/local/bin/docker exec cortex-relational psql -U cortex -d cortexdb -h 127.0.0.1 -p 5432 -t -A -F "|" -c "${sql}"`, { timeout: 10000, encoding: "utf8" }).trim();
+    const schemas = await getStoreSchemas();
+    if (!schemas.length) { lastAlertCheck = Date.now(); return; }
+    const storeNames = await resolveStoreNames(schemas);
 
-    if (!result) { lastAlertCheck = Date.now(); return; }
+    const sinceDate = new Date(lastAlertCheck - 120000).toISOString();
 
-    for (const line of result.split("\n")) {
-      const [invoiceNo, invoiceDate, cashier, amount, isVoid] = line.split("|");
-      const alertId = `alert-${invoiceNo}-${invoiceDate}`;
+    for (const schema of schemas) {
+      const storeName = storeNames.get(schema);
+      const { rows } = await cortexPool.query(
+        `SELECT invoice_no, invoice_date, cashier_name, bill_amount, is_void
+         FROM ${pgIdent(schema)}.invoices
+         WHERE (is_void = true OR bill_amount = 0 OR bill_amount < 0)
+           AND invoice_date >= $1 AND invoice_date >= CURRENT_DATE
+         ORDER BY invoice_date DESC LIMIT 10`,
+        [sinceDate]
+      );
 
-      // Dedup: only insert if not already notified
-      const existing = chatDb.prepare("SELECT id FROM notifications WHERE id = ?").get(alertId);
-      if (existing) continue;
+      for (const row of rows) {
+        const alertId = `alert-${schema}-${row.invoice_no}-${row.invoice_date}`;
+        const existing = chatDb.prepare("SELECT id FROM notifications WHERE id = ?").get(alertId);
+        if (existing) continue;
 
-      const type = isVoid === "t" ? "VOID" : parseFloat(amount) === 0 ? "NO-SALE" : "REFUND";
-      const severity = type === "VOID" ? "warning" : "info";
-      const title = `${type}: ${cashier || "Unknown"} — Invoice #${invoiceNo}`;
-      const body = `Amount: $${Math.abs(parseFloat(amount) || 0).toFixed(2)} at ${new Date(invoiceDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`;
+        const type = row.is_void ? "VOID" : parseFloat(row.bill_amount) === 0 ? "NO-SALE" : "REFUND";
+        const severity = type === "VOID" ? "warning" : "info";
+        const title = `${type}: ${row.cashier_name || "Unknown"} — Invoice #${row.invoice_no} (${storeName})`;
+        const body = `Amount: $${Math.abs(parseFloat(row.bill_amount) || 0).toFixed(2)} at ${new Date(row.invoice_date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`;
 
-      chatDb.prepare("INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(alertId, `storepulse.alert.${type.toLowerCase()}`, title, body, "storepulse", Date.now());
-
-      broadcastNotification(`storepulse.alert.${type.toLowerCase()}`, { id: alertId, title, body, source: "storepulse", severity });
+        chatDb.prepare("INSERT OR IGNORE INTO notifications (id, type, title, body, source, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(alertId, `storepulse.alert.${type.toLowerCase()}`, title, body, "storepulse", Date.now());
+        broadcastNotification(`storepulse.alert.${type.toLowerCase()}`, { id: alertId, title, body, source: "storepulse", severity });
+      }
     }
 
     lastAlertCheck = Date.now();
@@ -5286,6 +5426,7 @@ function shutdown(signal) {
   // Close the listening server
   feedbackPipeline.stop().catch(() => {});
   eventBus.shutdown().catch(() => {});
+  cortexPool.end().catch(() => {});
   (_listenServer || server).close(() => {
     log.info("Server closed");
     process.exit(0);
