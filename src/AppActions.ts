@@ -29,6 +29,9 @@ import {
   saveDrafts,
   saveThemeCustom,
   saveSessionImmediate,
+  fetchFullSessionMessages,
+  loadSessions,
+  saveSessions,
 } from "./store";
 import type { ActivityStatus, ChatMessage } from "./openclaw";
 
@@ -241,27 +244,37 @@ export function buildActions(deps: ActionDeps): AppActions {
       const pinnedId = pinned[agentId];
       const pinnedSession = pinnedId ? sessionsRef.current.find((s) => s.id === pinnedId) : null;
 
-      if (pinnedSession) {
-        setActiveSessionId(pinnedSession.id);
-        saveActiveSession(pinnedSession.id);
+      const activateSession = (target: Session) => {
+        setActiveSessionId(target.id);
+        saveActiveSession(target.id);
         setOpenTabs((prev) => {
-          if (prev.includes(pinnedSession.id)) return prev;
-          const next = [...prev, pinnedSession.id];
+          if (prev.includes(target.id)) return prev;
+          const next = [...prev, target.id];
           saveTabs(next);
           return next;
         });
+        // Restore trimmed sessions from server (localStorage quota may have stripped messages)
+        if (target.trimmed || (target.messages.length <= 2 && target.updatedAt > target.createdAt + 60_000)) {
+          fetchFullSessionMessages(target.id).then((serverMessages) => {
+            if (serverMessages && serverMessages.length > target.messages.length) {
+              updateSessions((prev) =>
+                prev.map((s) => s.id === target.id
+                  ? { ...s, messages: serverMessages, trimmed: undefined }
+                  : s
+                )
+              );
+            }
+          });
+        }
+      };
+
+      if (pinnedSession) {
+        activateSession(pinnedSession);
       } else {
         const agentSessions = sessionsRef.current.filter((s) => (s.agentId || "main") === agentId);
         if (agentSessions.length > 0) {
           const mostRecent = agentSessions.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-          setActiveSessionId(mostRecent.id);
-          saveActiveSession(mostRecent.id);
-          setOpenTabs((prev) => {
-            if (prev.includes(mostRecent.id)) return prev;
-            const next = [...prev, mostRecent.id];
-            saveTabs(next);
-            return next;
-          });
+          activateSession(mostRecent);
         }
       }
     },

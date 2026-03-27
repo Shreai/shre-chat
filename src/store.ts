@@ -249,6 +249,7 @@ export interface Session {
   systemPrompt?: string;
   parentId?: string;
   type?: "chat" | "voice";
+  trimmed?: boolean; // true when localStorage quota trimmed this session's messages
 }
 
 export interface ActivityEvent {
@@ -603,10 +604,23 @@ function _trimLocalStorage(sessions: Session[], keepId: string): void {
   const sorted = [...sessions].sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
   for (const s of sorted) {
     if (s.id === keepId) continue;
-    // Strip messages from oldest sessions first (server has the full copy)
-    s.messages = s.messages.slice(-2); // keep last 2 as preview
+    if (s.messages.length > 2) {
+      // Strip messages from oldest sessions first (server has the full copy)
+      s.messages = s.messages.slice(-2); // keep last 2 as preview
+      s.trimmed = true; // flag for restore on next access
+    }
   }
   try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(sorted)); } catch { /* still too big — give up, server is the backup */ }
+}
+
+/** Fetch full session messages from the server (for restoring trimmed sessions). */
+export async function fetchFullSessionMessages(sessionId: string): Promise<ChatMessage[] | null> {
+  try {
+    const res = await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages?limit=200`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data.messages) ? data.messages : null;
+  } catch { return null; }
 }
 
 /** Debounced saveSessions — delays write by 500ms, coalescing rapid calls.

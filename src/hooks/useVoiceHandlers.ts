@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { playVoiceCue, MAX_RECORDING_SECONDS } from "../chat-utils";
+import { getOrRequestStream } from "./useVoiceRecording";
 
 export interface UseVoiceHandlersParams {
   setInput: (v: string) => void;
@@ -155,7 +156,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await getOrRequestStream();
       } catch (err: any) {
         const msg = err?.name === "NotAllowedError"
           ? "Microphone blocked — tap the lock icon in your browser's address bar to allow mic access, then try again."
@@ -253,7 +254,15 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           const live = (voiceFinalTranscriptRef.current + interim).trim();
           setInput(live);
         };
-        rec.onerror = () => { /* non-fatal */ };
+        rec.onerror = (e: any) => {
+          // Show user that browser speech failed but Whisper is still capturing
+          const errType = e?.error || "unknown";
+          if (errType === "no-speech" || errType === "network" || errType === "audio-capture") {
+            if (!voiceFinalTranscriptRef.current) {
+              setInterimTranscript("Recording audio for transcription...");
+            }
+          }
+        };
         rec.onend = () => {
           if (!hasStarted || stopped) { recognitionRef.current = null; return; }
           if (recognitionRef.current === rec) {
@@ -264,6 +273,12 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         const origStop = rec.stop.bind(rec);
         rec.stop = () => { stopped = true; origStop(); };
         try { rec.start(); recognitionRef.current = rec; } catch { /* Whisper handles it */ }
+        // If SpeechRecognition produces nothing after 3s, show feedback so user knows audio is still capturing
+        setTimeout(() => {
+          if (recognitionRef.current === rec && !voiceFinalTranscriptRef.current && !interimTranscriptRef.current) {
+            setInterimTranscript("Capturing audio...");
+          }
+        }, 3000);
       }
     }
   }, []);
@@ -287,7 +302,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         recorder.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
           audioChunksRef.current = [];
-          recorder.stream.getTracks().forEach((t) => t.stop());
+          // Don't stop shared stream tracks — they're cached for reuse (avoids re-prompting permissions)
 
           if (audioBlob.size < 5000) {
             setInterimTranscript("Recording too short — try again");
@@ -321,11 +336,17 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           setIsRecording(false);
           setVoicePhase("idle");
 
-          let finalText = transcribedText || (document.getElementById("shre-chat-textarea") as HTMLTextAreaElement)?.value?.trim() || "";
+          // Use Whisper result first, then accumulated SpeechRecognition transcript from ref
+          let finalText = transcribedText || voiceFinalTranscriptRef.current.trim() || "";
           finalText = finalText.replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, "").replace(/\b(shre|shrey|shray)\s+send\b/gi, "").trim();
           if (finalText) {
             setInterimTranscript("");
             setInput(finalText);
+            // Also sync to textarea DOM for any listeners (autogrow, etc.)
+            requestAnimationFrame(() => {
+              const ta = document.getElementById("shre-chat-textarea") as HTMLTextAreaElement;
+              if (ta && ta.value !== finalText) { ta.value = finalText; ta.dispatchEvent(new Event("input", { bubbles: true })); }
+            });
             setVoicePendingSend(finalText);
           } else {
             if (!interimTranscriptRef.current.includes("failed") && !interimTranscriptRef.current.includes("timed out")) {
@@ -380,6 +401,8 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       if (levelRafRef.current) cancelAnimationFrame(levelRafRef.current);
       if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      // Note: we do NOT release the cached stream on unmount — it persists for reuse
+      // to avoid re-prompting mic permissions. It's released when the page unloads.
     };
   }, []);
 

@@ -48,6 +48,33 @@ export interface UseVoiceRecordingReturn {
   cleanupAudioLevel: () => void;
 }
 
+// Module-level cached MediaStream to avoid repeated permission prompts on mobile
+let _cachedStream: MediaStream | null = null;
+
+/** Get or request a MediaStream, reusing the cached one if tracks are still live. */
+export async function getOrRequestStream(): Promise<MediaStream> {
+  if (_cachedStream) {
+    const alive = _cachedStream.getAudioTracks().some((t) => t.readyState === "live");
+    if (alive) return _cachedStream;
+    // Tracks died — clean up
+    _cachedStream.getTracks().forEach((t) => t.stop());
+    _cachedStream = null;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  _cachedStream = stream;
+  return stream;
+}
+
+/** Release the cached stream (call on full cleanup). */
+export function releaseCachedStream(): void {
+  if (_cachedStream) {
+    _cachedStream.getTracks().forEach((t) => t.stop());
+    _cachedStream = null;
+  }
+}
+
 export function useVoiceRecording(): UseVoiceRecordingReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [voicePhase, setVoicePhase] = useState<"idle" | "waiting" | "recording" | "transcribing">("idle");
