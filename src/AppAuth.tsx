@@ -44,8 +44,27 @@ export function getStoredAuth(): AuthState | null {
   return null;
 }
 
-// Inject auth token into all fetch calls to /api/* (same-origin only)
+// Inject auth token + CSRF token into all fetch calls to /api/* (same-origin only)
 const _nativeFetch = window.fetch.bind(window);
+
+// ── CSRF token cache — fetched once per session, injected on state-changing requests ──
+let _csrfToken: string | null = null;
+async function ensureCsrfToken(): Promise<string> {
+  if (_csrfToken) return _csrfToken;
+  try {
+    const res = await _nativeFetch("/api/csrf-token", {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY) || ""}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      _csrfToken = data.csrfToken || "";
+    }
+  } catch { /* CSRF fetch failed — proceed without token */ }
+  return _csrfToken || "";
+}
+
+/** Reset cached CSRF token (call on login/logout/workspace switch) */
+export function resetCsrfToken() { _csrfToken = null; }
 export function installAuthFetch() {
   const token = sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
   if (!token) return;
@@ -56,12 +75,20 @@ export function installAuthFetch() {
       if (!headers.has("Authorization")) {
         headers.set("Authorization", `Bearer ${token}`);
       }
+      // Inject CSRF token on state-changing methods
+      const method = (init?.method || "GET").toUpperCase();
+      if (["POST", "PUT", "DELETE", "PATCH"].includes(method) && _csrfToken && !headers.has("X-CSRF-Token")) {
+        headers.set("X-CSRF-Token", _csrfToken);
+      }
       return _nativeFetch(input, { ...init, headers });
     }
     return _nativeFetch(input, init);
   };
 }
 installAuthFetch();
+
+// Pre-fetch CSRF token on module load (fire-and-forget)
+ensureCsrfToken().catch(() => {});
 
 interface PendingWorkspaceSelection {
   workspaces: AuthWorkspace[];
@@ -146,7 +173,9 @@ export function useAuth(devBypass: boolean) {
     if (loginData?.workspaces) {
       localStorage.setItem(AUTH_WORKSPACES_KEY, JSON.stringify(loginData.workspaces));
     }
+    resetCsrfToken();
     installAuthFetch();
+    ensureCsrfToken().catch(() => {});
     setAuthState({ token, user, workspace: loginData?.workspace, workspaces: loginData?.workspaces });
     const params = new URLSearchParams(window.location.search);
     const redirect = params.get("redirect");
@@ -206,6 +235,7 @@ export function useAuth(devBypass: boolean) {
     localStorage.removeItem(AUTH_USER_KEY);
     localStorage.removeItem(AUTH_WORKSPACE_KEY);
     localStorage.removeItem(AUTH_WORKSPACES_KEY);
+    resetCsrfToken();
     setAuthState(null);
     setPendingWorkspaceSelection(null);
   }, [devBypass]);

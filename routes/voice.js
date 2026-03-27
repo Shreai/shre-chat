@@ -731,7 +731,7 @@ Examples:
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 agentId: agentId || "shre",
-                tenantId: "platform",
+                tenantId: req.authClaims?.activeWorkspaceId || "default",
                 prompt,
                 format: "prompt",
               }),
@@ -756,17 +756,19 @@ Examples:
           let actionMemoryMsg = "";
           if (dbReady) {
             try {
+              const voiceUserId = req.authClaims?.sub || "system";
+              const voiceTenantId = req.authClaims?.activeWorkspaceId || "default";
               const prevSessions = chatDb.prepare(
-                `SELECT summary FROM voice_sessions ORDER BY created_at DESC LIMIT 3`
-              ).all();
+                `SELECT summary FROM voice_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 3`
+              ).all(voiceUserId, voiceTenantId);
               if (prevSessions.length > 0) {
                 prevSessionsMsg = "Previous voice sessions: " + prevSessions.map((s, i) => `${i + 1}. ${s.summary}`).join(" ");
               }
             } catch {}
             try {
               const recentActions = chatDb.prepare(
-                `SELECT action_type, target, result, status, created_at FROM voice_actions ORDER BY created_at DESC LIMIT 10`
-              ).all();
+                `SELECT action_type, target, result, status, created_at FROM voice_actions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 10`
+              ).all(voiceUserId, voiceTenantId);
               if (recentActions.length > 0) {
                 actionMemoryMsg = "Actions you've taken this session: " + recentActions.map((a) =>
                   `${a.action_type}${a.target ? ` on "${a.target}"` : ""} → ${a.status}${a.result ? `: ${String(a.result).slice(0, 100)}` : ""}`
@@ -843,7 +845,7 @@ What NOT to do:
               model: "auto",
               max_tokens: 800,
               messages: allMessages,
-              tenantId: "platform",
+              tenantId: req.authClaims?.activeWorkspaceId || "default",
               agentId: agentId || "shre",
               sessionId: sessionId || undefined,
               modality: "voice",
@@ -893,7 +895,7 @@ What NOT to do:
             }
             // 2. Conversation learner (shre-sdk/rag)
             if (conversationLearner?.learn) {
-              conversationLearner.learn(prompt, response, "platform", effectiveAgent).catch(() => {});
+              conversationLearner.learn(prompt, response, req.authClaims?.activeWorkspaceId || "default", effectiveAgent).catch(() => {});
             }
             // 3. Durable training write
             try {
@@ -906,7 +908,7 @@ What NOT to do:
                   { role: "assistant", content: response },
                 ],
                 model: "auto",
-                tenantId: "platform",
+                tenantId: req.authClaims?.activeWorkspaceId || "default",
                 conversationType: "voice",
               }).catch(() => {});
             } catch {}

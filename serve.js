@@ -140,6 +140,8 @@ chatDb.exec(`
     tags         TEXT,
     system_prompt TEXT,
     parent_id    TEXT,
+    user_id      TEXT NOT NULL DEFAULT 'system',
+    tenant_id    TEXT NOT NULL DEFAULT 'default',
     created_at   INTEGER NOT NULL,
     updated_at   INTEGER NOT NULL
   );
@@ -154,6 +156,8 @@ chatDb.exec(`
     tags         TEXT,
     system_prompt TEXT,
     parent_id    TEXT,
+    user_id      TEXT,
+    tenant_id    TEXT,
     created_at   INTEGER,
     updated_at   INTEGER,
     deleted_at   INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
@@ -324,6 +328,14 @@ chatDb.exec(`
 try { chatDb.exec(`ALTER TABLE voice_sessions ADD COLUMN ended_at INTEGER`); } catch {}
 try { chatDb.exec(`ALTER TABLE voice_sessions ADD COLUMN context_summary TEXT`); } catch {}
 try { chatDb.exec(`ALTER TABLE voice_sessions ADD COLUMN text_session_id TEXT`); } catch {} // Bridge voice ↔ text
+try { chatDb.exec(`ALTER TABLE voice_sessions ADD COLUMN user_id TEXT DEFAULT 'system'`); } catch {}
+try { chatDb.exec(`ALTER TABLE voice_sessions ADD COLUMN tenant_id TEXT DEFAULT 'default'`); } catch {}
+try { chatDb.exec(`ALTER TABLE voice_turns ADD COLUMN user_id TEXT DEFAULT 'system'`); } catch {}
+try { chatDb.exec(`ALTER TABLE voice_turns ADD COLUMN tenant_id TEXT DEFAULT 'default'`); } catch {}
+try { chatDb.exec(`ALTER TABLE voice_actions ADD COLUMN user_id TEXT DEFAULT 'system'`); } catch {}
+try { chatDb.exec(`ALTER TABLE voice_actions ADD COLUMN tenant_id TEXT DEFAULT 'default'`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_actions ADD COLUMN user_id TEXT DEFAULT 'system'`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_actions ADD COLUMN tenant_id TEXT DEFAULT 'default'`); } catch {}
 
 // ── Chat Audit Log — parity with voice_audit_log for text conversations ──
 chatDb.exec(`
@@ -389,21 +401,21 @@ const stmtUpsert = chatDb.prepare(`
   INSERT OR REPLACE INTO chat_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
-const stmtGetAll = chatDb.prepare(`SELECT id, title, agent_id, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100`);
-const stmtGetOne = chatDb.prepare(`SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?`);
-const stmtDelete = chatDb.prepare(`DELETE FROM chat_sessions WHERE id = ? AND user_id = ?`);
+const stmtGetAll = chatDb.prepare(`SELECT id, title, agent_id, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id FROM chat_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY updated_at DESC LIMIT 100`);
+const stmtGetOne = chatDb.prepare(`SELECT * FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
+const stmtDelete = chatDb.prepare(`DELETE FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
 const stmtSoftDelete = chatDb.prepare(`
   INSERT OR REPLACE INTO deleted_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, deleted_at, deleted_by, user_id, tenant_id)
   SELECT id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, unixepoch() * 1000, ?, user_id, tenant_id
-  FROM chat_sessions WHERE id = ? AND user_id = ?
+  FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?
 `);
 const stmtRestoreDeleted = chatDb.prepare(`
   INSERT OR REPLACE INTO chat_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id)
   SELECT id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id
-  FROM deleted_sessions WHERE id = ? AND user_id = ?
+  FROM deleted_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?
 `);
-const stmtRemoveFromTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE id = ? AND user_id = ?`);
-const stmtListDeleted = chatDb.prepare(`SELECT id, title, agent_id, deleted_at, deleted_by FROM deleted_sessions WHERE user_id = ? ORDER BY deleted_at DESC LIMIT 50`);
+const stmtRemoveFromTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
+const stmtListDeleted = chatDb.prepare(`SELECT id, title, agent_id, deleted_at, deleted_by FROM deleted_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY deleted_at DESC LIMIT 50`);
 // Auto-purge trash older than 30 days
 const stmtPurgeTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE deleted_at < ?`);
 
@@ -598,7 +610,7 @@ async function fetchContextInjection(agentId, prompt, tenantId) {
       body: JSON.stringify({
         agentId: agentId || "shre",
         prompt: prompt || "",
-        tenantId: tenantId || "platform",
+        tenantId: tenantId || "default",
         // Skip soul — shre-router injects it during routing. Include live data layers only.
         layers: ["platform", "rag", "data", "contacts"],
         format: "markdown",
@@ -715,7 +727,7 @@ async function emitConversationComplete(agentId, userMessage, assistantResponse,
  * Fires for every user↔agent exchange — captures both OpenClaw WS and CLI paths.
  * Fire-and-forget: never blocks the user.
  */
-async function logConversationToCortex(agentId, userMessage, assistantResponse, source = "openclaw", model = "unknown") {
+async function logConversationToCortex(agentId, userMessage, assistantResponse, source = "openclaw", model = "unknown", tenantId = "default") {
   if (!userMessage || !assistantResponse || assistantResponse.length < 20) return;
   try {
     const event = {
@@ -724,6 +736,7 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
         agentId: agentId || "shre",
         source,
         model,
+        tenantId,
         userMessage: userMessage.slice(0, 5000),
         assistantResponse: assistantResponse.slice(0, 10000),
         userMessageLength: userMessage.length,
@@ -752,7 +765,7 @@ async function logConversationToCortex(agentId, userMessage, assistantResponse, 
         { role: "assistant", content: assistantResponse },
       ],
       model: model || "unknown",
-      tenantId: "platform",
+      tenantId: tenantId || "default",
     }).catch(() => {});
 
   } catch { /* never block */ }
@@ -946,12 +959,35 @@ function authCookie(name, value, maxAge, req) {
   const domainPart = isNirtek ? "; Domain=.nirtek.net" : "";
   const secure = tlsOpts || isNirtek ? "; Secure" : "";
   // SameSite=None required for cross-origin cookie delivery via Cloudflare tunnel on mobile Safari
-  const sameSite = isNirtek ? "None" : "Lax";
+  // Strict for same-origin (local dev / direct access) — tightest XSS protection
+  const sameSite = isNirtek ? "None" : "Strict";
   return `${name}=${value}; Path=/; HttpOnly; SameSite=${sameSite}${domainPart}; Max-Age=${maxAge}${secure}`;
 }
 
 // Routes that don't require auth
 const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo"]);
+
+// ── CSRF token generation + validation ─────────────────────────────
+// Token = HMAC-SHA256(sessionSeed, authSigningKey || fallback). Validated on POST/PUT/DELETE.
+// Bearer-token-authed API requests are exempt (API clients don't use cookies).
+const CSRF_FALLBACK_KEY = randomUUID(); // per-process fallback if no signing key
+function generateCsrfToken(sessionSeed) {
+  const key = authSigningKey || Buffer.from(CSRF_FALLBACK_KEY, "utf-8");
+  return createHmac("sha256", key).update(`csrf:${sessionSeed}`).digest("hex");
+}
+function validateCsrfToken(req, token) {
+  // Requests with Bearer auth header are exempt — they don't rely on cookies
+  if (req.headers["authorization"]?.startsWith("Bearer ")) return true;
+  if (!token) return false;
+  // Derive session seed from auth cookie
+  const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+  const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
+  if (!tokenCookie) return true; // No cookie-based auth — CSRF not applicable
+  const sessionSeed = createHash("sha256").update(tokenCookie.split("=")[1] || "").digest("hex").slice(0, 16);
+  const expected = generateCsrfToken(sessionSeed);
+  if (token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token, "utf-8"), Buffer.from(expected, "utf-8"));
+}
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -1231,12 +1267,16 @@ const server = httpsServer || httpServer;
 
 
 // ── Content Security Policy ──────────────────────────────────────
+const IS_DEV = process.env.NODE_ENV !== "production";
+const CSP_CONNECT_SRC = IS_DEV
+  ? `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`
+  : `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net`;
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`,
+  CSP_CONNECT_SRC,
   "font-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -1311,6 +1351,34 @@ async function requestHandler(req, res) {
   // ── CSRF check on all POST/PUT/DELETE ──────────────────────────
   if (["POST", "PUT", "DELETE"].includes(req.method) && !isOriginAllowed(req)) {
     return json(res, { error: "Origin not allowed" }, 403);
+  }
+
+  // ── GET /api/csrf-token — issue a CSRF token for the current session ──
+  if (url.pathname === "/api/csrf-token" && req.method === "GET") {
+    const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+    const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
+    const sessionSeed = tokenCookie
+      ? createHash("sha256").update(tokenCookie.split("=")[1] || "").digest("hex").slice(0, 16)
+      : randomUUID().slice(0, 16);
+    const csrfToken = generateCsrfToken(sessionSeed);
+    return json(res, { csrfToken });
+  }
+
+  // ── CSRF token validation on state-changing requests ──────────
+  // Exempt: Bearer-token-authed requests (API clients), public auth paths, router proxy (has its own auth)
+  if (["POST", "PUT", "DELETE", "PATCH"].includes(req.method)) {
+    const csrfExempt = PUBLIC_PATHS.has(url.pathname)
+      || url.pathname.startsWith("/api/auth/")
+      || url.pathname.startsWith("/api/router/")
+      || url.pathname.startsWith("/v1/")
+      || req.headers["authorization"]?.startsWith("Bearer ");
+    if (!csrfExempt) {
+      const csrfToken = req.headers["x-csrf-token"] || "";
+      if (!validateCsrfToken(req, csrfToken)) {
+        log.warn("[csrf] Token validation failed", { path: url.pathname });
+        return json(res, { error: "CSRF token invalid or missing", code: "CSRF_FAILED" }, 403);
+      }
+    }
   }
 
   // ── Route module delegation ────────────────────────────────────
@@ -3417,13 +3485,14 @@ async function requestHandler(req, res) {
             extractAndLogSkills(agent, conversationForSkills).catch(() => {});
 
             // Log conversation to CortexDB for learning pipeline
-            logConversationToCortex(agent, message, fullResponseText, "openclaw-cli", "claude-cli").catch(() => {});
+            const cliTenantId = authClaims?.activeWorkspaceId || "default";
+            logConversationToCortex(agent, message, fullResponseText, "openclaw-cli", "claude-cli", cliTenantId).catch(() => {});
 
             // Emit task.complete → shre-scorer evaluates, feeds muscle memory + skills + training data
             emitConversationComplete(agent, message, fullResponseText, "openclaw-cli", "claude-cli").catch(() => {});
 
             // RAG conversation learner — extract insights into CortexDB vectors for semantic recall
-            conversationLearner.learn(message, fullResponseText, "platform", agent).catch(() => {});
+            conversationLearner.learn(message, fullResponseText, cliTenantId, agent).catch(() => {});
 
             // Feedback pipeline — report conversation to MIB + Shre + Ellie
             feedbackPipeline.reportKnowledgeLearned("conversation", fullResponseText.slice(0, 200), `chat:${agent}`).catch(() => {});
@@ -3863,7 +3932,8 @@ async function requestHandler(req, res) {
       } catch (auditErr) { log.warn("Chat audit log failed", {}, auditErr); }
 
       // Fire-and-forget: log to CortexDB + extract skills
-      logConversationToCortex(agentId || "shre", userMessage, assistantResponse, "openclaw-ws", model || "unknown").catch(() => {});
+      const wsTenantId = authClaims?.activeWorkspaceId || "default";
+      logConversationToCortex(agentId || "shre", userMessage, assistantResponse, "openclaw-ws", model || "unknown", wsTenantId).catch(() => {});
       const conversationForSkills = `User: ${userMessage}\n\nAssistant: ${assistantResponse}`;
       extractAndLogSkills(agentId || "shre", conversationForSkills).catch(() => {});
 
@@ -3871,7 +3941,7 @@ async function requestHandler(req, res) {
       emitConversationComplete(agentId || "shre", userMessage, assistantResponse, "openclaw-ws", model || "unknown").catch(() => {});
 
       // RAG conversation learner — extract insights into CortexDB vectors for semantic recall
-      conversationLearner.learn(userMessage, assistantResponse, "platform", agentId || "shre").catch(() => {});
+      conversationLearner.learn(userMessage, assistantResponse, wsTenantId, agentId || "shre").catch(() => {});
 
       // Feedback pipeline — report conversation to MIB + Shre + Ellie
       feedbackPipeline.reportKnowledgeLearned("conversation", assistantResponse.slice(0, 200), `ws:${agentId || "shre"}`).catch(() => {});
@@ -3979,9 +4049,10 @@ async function requestHandler(req, res) {
 
               if (userMessage && assistantResponse.length >= 80) {
                 const model = parsed.model || "unknown";
-                logConversationToCortex(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
+                const proxyTenantId = authClaims?.activeWorkspaceId || parsed.tenantId || "default";
+                logConversationToCortex(agentId, userMessage, assistantResponse, "router-proxy", model, proxyTenantId).catch(() => {});
                 emitConversationComplete(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
-                conversationLearner.learn(userMessage, assistantResponse, "platform", agentId).catch(() => {});
+                conversationLearner.learn(userMessage, assistantResponse, proxyTenantId, agentId).catch(() => {});
                 extractAndLogSkills(agentId, `User: ${userMessage}\n\nAssistant: ${assistantResponse}`).catch(() => {});
                 // Post-conversation quality evaluation — auto-scores, flags issues, writes training data
                 conversationEvaluator.evaluate(sessionId, userMessage, assistantResponse, agentId, model).catch(() => {});
@@ -4045,7 +4116,7 @@ async function requestHandler(req, res) {
           const parsed = JSON.parse(reqBody || "{}");
           const agentId = parsed.agentId || "shre";
           const lastUserMsg = [...(parsed.messages || [])].reverse().find(m => m.role === "user")?.content || "";
-          const tenantId = parsed.tenantId || "platform";
+          const tenantId = authClaims?.activeWorkspaceId || parsed.tenantId || "default";
 
           // ── Context + Memory injection (parallel) ──
           const [contextBlock, memoryBlock] = await Promise.all([
