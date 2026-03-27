@@ -48,7 +48,7 @@ const heartbeat = createHeartbeatMonitor("shre-chat", {
   intervalMs: 30_000,
   publishFn: (event, severity, data) => eventBus.publish(event, severity, data),
 });
-heartbeat.registerDependency("cortexdb", "http://127.0.0.1:5400/health/live");
+heartbeat.registerDependency("cortexdb", `${infraUrl("cortexservice-api")}/health/live`);
 heartbeat.registerDependency("shre-router", "https://127.0.0.1:5497/health");
 const DIST = join(import.meta.dirname, "dist");
 const OPENCLAW_HOST = "127.0.0.1";
