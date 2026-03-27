@@ -2390,35 +2390,62 @@ async function requestHandler(req, res) {
       const boundary = (req.headers["content-type"] || "").match(/boundary=([^\s;]+)/)?.[1];
       if (!boundary) return json(res, { error: "Missing multipart boundary" }, 400);
       const sttStart = Date.now();
-      try {
-        const routerRes = await fetch(`${serviceUrl("shre-router")}/v1/audio/transcriptions`, {
-          method: "POST",
-          headers: { "Content-Type": req.headers["content-type"] },
-          body,
-        });
-        const oaBody = await routerRes.text();
+
+      // Fallback chain: shre-router (OpenAI) → shre-voice → browser SpeechRecognition signal
+      const sttEndpoints = [
+        `${serviceUrl("shre-router")}/v1/audio/transcriptions`,
+        `http://127.0.0.1:5456/v1/audio/transcriptions`,
+      ];
+
+      for (let i = 0; i < sttEndpoints.length; i++) {
+        const endpoint = sttEndpoints[i];
         try {
-          const result = JSON.parse(oaBody);
-          if (routerRes.status >= 400) {
-            recordVoiceFailure("stt_error", { detail: `HTTP ${routerRes.status}: ${(result.error?.message || "Whisper error").slice(0, 200)}` });
-            return json(res, { error: result.error?.message || "Whisper error" }, routerRes.status);
+          const sttRes = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": req.headers["content-type"], "X-Source": "shre-chat" },
+            body,
+            signal: AbortSignal.timeout(15_000),
+          });
+
+          if (sttRes.status === 429 || sttRes.status >= 500) {
+            // Rate limited or server error — try next endpoint
+            const errBody = await sttRes.text().catch(() => "");
+            log.warn(`[transcribe] ${sttRes.status} from ${endpoint}, trying fallback`, { status: sttRes.status, detail: errBody.slice(0, 100) });
+            continue;
           }
-          if (!result.text || result.text.trim().length === 0) {
-            const latency = Date.now() - sttStart;
-            if (latency > 12000) {
-              recordVoiceFailure("stt_timeout", { detail: `Whisper returned empty after ${latency}ms` });
+
+          const oaBody = await sttRes.text();
+          try {
+            const result = JSON.parse(oaBody);
+            if (sttRes.status >= 400) {
+              recordVoiceFailure("stt_error", { detail: `HTTP ${sttRes.status}: ${(result.error?.message || "Whisper error").slice(0, 200)}` });
+              return json(res, { error: result.error?.message || "Whisper error" }, sttRes.status);
             }
+            if (!result.text || result.text.trim().length === 0) {
+              const latency = Date.now() - sttStart;
+              if (latency > 12000) {
+                recordVoiceFailure("stt_timeout", { detail: `Whisper returned empty after ${latency}ms` });
+              }
+            }
+            return json(res, { text: result.text || "" });
+          } catch {
+            recordVoiceFailure("stt_error", { detail: "Invalid Whisper response (JSON parse failed)" });
+            return json(res, { error: "Invalid Whisper response" }, 502);
           }
-          return json(res, { text: result.text || "" });
-        } catch {
-          recordVoiceFailure("stt_error", { detail: "Invalid Whisper response (JSON parse failed)" });
-          return json(res, { error: "Invalid Whisper response" }, 502);
+        } catch (err) {
+          const isTimeout = err.name === "AbortError" || err.name === "TimeoutError";
+          if (i < sttEndpoints.length - 1) {
+            log.warn(`[transcribe] ${isTimeout ? "timeout" : "error"} from ${endpoint}, trying fallback`, { error: err.message });
+            continue;
+          }
+          recordVoiceFailure(isTimeout ? "stt_timeout" : "stt_error", { detail: err.message });
         }
-      } catch (err) {
-        const isTimeout = err.name === "AbortError" || err.name === "TimeoutError";
-        recordVoiceFailure(isTimeout ? "stt_timeout" : "stt_error", { detail: err.message });
-        return json(res, { error: "Whisper request failed: " + err.message }, 502);
       }
+
+      // All server-side STT failed — signal client to use browser SpeechRecognition
+      log.warn("[transcribe] All STT endpoints failed, signaling browser fallback");
+      recordVoiceFailure("stt_all_failed", { detail: "All STT endpoints exhausted, browser fallback" });
+      return json(res, { text: "", fallback: "browser", message: "Server transcription unavailable — using browser speech recognition" });
     });
     return;
   }
