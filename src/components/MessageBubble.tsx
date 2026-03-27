@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, memo, lazy, Suspense, 
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js/lib/common";
+import DOMPurify from "dompurify";
 const ContentCard = lazy(() => import("./ContentCard"));
 const MibWidgetBlock = lazy(() => import("./MibWidgetBlock"));
 const DataCard = lazy(() => import("./DataCard"));
@@ -240,11 +241,10 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                     const isShell = ["bash", "sh", "zsh", "shell", "terminal", "console"].includes(lang);
                     let highlightedHtml = "";
                     try {
-                      if (lang && hljs.getLanguage(lang)) {
-                        highlightedHtml = hljs.highlight(codeText, { language: lang }).value;
-                      } else {
-                        highlightedHtml = hljs.highlightAuto(codeText).value;
-                      }
+                      const raw = lang && hljs.getLanguage(lang)
+                        ? hljs.highlight(codeText, { language: lang }).value
+                        : hljs.highlightAuto(codeText).value;
+                      highlightedHtml = DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
                     } catch (err) {
                       console.debug("syntax highlight failed", err);
                       highlightedHtml = "";

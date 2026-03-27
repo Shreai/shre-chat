@@ -20,6 +20,19 @@ const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.or
 let currentAgentId = "shre";
 let currentAgentModel = "claude-sonnet-4-6";
 
+/** Get the active tenant/workspace ID from the stored auth workspace (set at login/workspace switch).
+ *  Falls back to "default" when no workspace is selected. */
+export function getTenantId(): string {
+  try {
+    const ws = localStorage.getItem("shre-auth-workspace");
+    if (ws) {
+      const parsed = JSON.parse(ws);
+      if (parsed?.id) return parsed.id;
+    }
+  } catch { /* fallback */ }
+  return "default";
+}
+
 /** Get user's preferred language from localStorage (set via profile or chat settings) */
 export function getUserLanguage(): string {
   try { return localStorage.getItem("shre-user-language") || ""; } catch { return ""; }
@@ -574,7 +587,7 @@ async function streamViaFallback(
       stream: true,
       agentId: currentAgentId,
       sessionId: activeSessionKey,
-      tenantId: "platform",
+      tenantId: getTenantId(),
       promptVersion: SYSTEM_PROMPT_VERSION,
       ...(attachments?.length ? { attachments } : {}),
       ...(openclawMode ? { openclawMode: true } : {}),

@@ -60,7 +60,8 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions') {
       const claims = checkAuth(req);
       const userId = claims?.sub || 'system';
-      const rows = stmtGetAll.all(userId);
+      const tenantId = claims?.activeWorkspaceId || 'default';
+      const rows = stmtGetAll.all(userId, tenantId);
       const sessions = rows.map(r => ({
         id: r.id,
         title: r.title,
@@ -78,6 +79,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       try {
         const claims = checkAuth(req);
         const userId = claims?.sub || 'system';
+        const tenantId = claims?.activeWorkspaceId || 'default';
         const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
         // Last 5 sessions (metadata + message count, not full messages)
@@ -85,9 +87,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           `SELECT id, title, agent_id, updated_at,
                   json_array_length(messages) as messageCount
            FROM chat_sessions
-           WHERE user_id = ? AND updated_at > ? AND title != 'New chat'
+           WHERE user_id = ? AND tenant_id = ? AND updated_at > ? AND title != 'New chat'
            ORDER BY updated_at DESC LIMIT 5`
-        ).all(userId, sevenDaysAgo);
+        ).all(userId, tenantId, sevenDaysAgo);
 
         // Recent voice session summaries
         let voiceSummaries = [];
@@ -95,9 +97,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           voiceSummaries = chatDb.prepare(
             `SELECT summary, agent_id, created_at, turn_count, topics
              FROM voice_sessions
-             WHERE created_at > ? AND summary IS NOT NULL AND summary != ''
+             WHERE user_id = ? AND tenant_id = ? AND created_at > ? AND summary IS NOT NULL AND summary != ''
              ORDER BY created_at DESC LIMIT 5`
-          ).all(sevenDaysAgo);
+          ).all(userId, tenantId, sevenDaysAgo);
         } catch { /* voice tables may not exist yet */ }
 
         // Recent voice actions (what the agent DID)
@@ -106,9 +108,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           recentActions = chatDb.prepare(
             `SELECT action_type, target, result, status, created_at
              FROM voice_actions
-             WHERE created_at > ?
+             WHERE user_id = ? AND tenant_id = ? AND created_at > ?
              ORDER BY created_at DESC LIMIT 10`
-          ).all(sevenDaysAgo);
+          ).all(userId, tenantId, sevenDaysAgo);
         } catch { /* voice_actions may not exist yet */ }
 
         // Recent chat actions (text chat equivalent)
@@ -117,9 +119,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           recentChatActions = chatDb.prepare(
             `SELECT action_type, target, result, status, agent_id, created_at
              FROM chat_actions
-             WHERE created_at > ?
+             WHERE user_id = ? AND tenant_id = ? AND created_at > ?
              ORDER BY created_at DESC LIMIT 10`
-          ).all(sevenDaysAgo);
+          ).all(userId, tenantId, sevenDaysAgo);
         } catch { /* chat_actions may not exist yet */ }
 
         // Merge voice + chat actions, sorted by date
@@ -144,6 +146,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
         const limit = Math.min(parseInt(url.searchParams.get("limit") || "20"), 50);
         if (!query || query.length < 2) return json(res, { error: "Query must be at least 2 characters" }, 400);
 
+        const tenantId = claims?.activeWorkspaceId || 'default';
         const sinceMs = isNaN(Number(since)) ? new Date(since).getTime() : Number(since);
         const results = [];
 
@@ -152,9 +155,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           `SELECT id, title, agent_id, updated_at,
                   json_array_length(messages) as messageCount
            FROM chat_sessions
-           WHERE user_id = ? AND (title LIKE ? OR messages LIKE ?) AND updated_at > ?
+           WHERE user_id = ? AND tenant_id = ? AND (title LIKE ? OR messages LIKE ?) AND updated_at > ?
            ORDER BY updated_at DESC LIMIT ?`
-        ).all(userId, `%${query}%`, `%${query}%`, sinceMs || 0, limit);
+        ).all(userId, tenantId, `%${query}%`, `%${query}%`, sinceMs || 0, limit);
         for (const s of sessionHits) {
           results.push({ type: "session", id: s.id, title: s.title, agent_id: s.agent_id, updated_at: s.updated_at, messageCount: s.messageCount });
         }
@@ -198,9 +201,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
           const voiceHits = chatDb.prepare(
             `SELECT id, session_id, role, content, created_at
              FROM voice_turns
-             WHERE content LIKE ? AND created_at > ?
+             WHERE user_id = ? AND tenant_id = ? AND content LIKE ? AND created_at > ?
              ORDER BY created_at DESC LIMIT ?`
-          ).all(`%${query}%`, sinceMs || 0, limit);
+          ).all(userId, tenantId, `%${query}%`, sinceMs || 0, limit);
           for (const v of voiceHits) {
             results.push({
               type: "voice_turn",
@@ -227,7 +230,8 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/trash') {
       const claims = checkAuth(req);
       const userId = claims?.sub || 'system';
-      const rows = stmtListDeleted.all(userId);
+      const tenantId = claims?.activeWorkspaceId || 'default';
+      const rows = stmtListDeleted.all(userId, tenantId);
       json(res, { sessions: rows });
       return true;
     }
@@ -238,11 +242,12 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       const id = parts[parts.length - 2];
       const claims = checkAuth(req);
       const userId = claims?.sub || 'system';
-      const restored = stmtRestoreDeleted.run(id, userId);
+      const tenantId = claims?.activeWorkspaceId || 'default';
+      const restored = stmtRestoreDeleted.run(id, userId, tenantId);
       if (restored.changes === 0) {
         return json(res, { error: 'Not found in trash' }, 404);
       }
-      stmtRemoveFromTrash.run(id, userId);
+      stmtRemoveFromTrash.run(id, userId, tenantId);
       json(res, { ok: true, restored: true, id });
       return true;
     }
@@ -252,7 +257,8 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       const id = url.pathname.split('/').pop();
       const claims = checkAuth(req);
       const userId = claims?.sub || 'system';
-      const row = stmtGetOne.get(id, userId);
+      const tenantId = claims?.activeWorkspaceId || 'default';
+      const row = stmtGetOne.get(id, userId, tenantId);
       if (!row) return json(res, { error: 'not found' }, 404);
       json(res, dbSessionToClient(row));
       return true;
@@ -281,8 +287,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       const id = url.pathname.split('/').pop();
       const claims = checkAuth(req);
       const userId = claims?.sub || 'unknown';
-      stmtSoftDelete.run(userId, id, userId);
-      stmtDelete.run(id, userId);
+      const tenantId = claims?.activeWorkspaceId || 'default';
+      stmtSoftDelete.run(userId, id, userId, tenantId);
+      stmtDelete.run(id, userId, tenantId);
       stmtPurgeTrash.run(Date.now() - 30 * 24 * 60 * 60 * 1000);
       json(res, { ok: true, recoverable: true });
       return true;
@@ -295,8 +302,9 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       try {
         const claims = checkAuth(req);
         const userId = claims?.sub || 'system';
+        const tenantId = claims?.activeWorkspaceId || 'default';
         const { sessions: clientSessions = [] } = JSON.parse(body);
-        const serverRows = chatDb.prepare('SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
+        const serverRows = chatDb.prepare('SELECT * FROM chat_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY updated_at DESC').all(userId, tenantId);
         const serverMap = new Map(serverRows.map(r => [r.id, r]));
 
         const bulkUpsert = chatDb.transaction((sessions) => {
@@ -308,13 +316,13 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
             const clientMsgCount = Array.isArray(cs.messages) ? cs.messages.length : 0;
             const serverMsgCount = existing ? JSON.parse(existing.messages || '[]').length : 0;
             if (clientMsgCount >= serverMsgCount || clientUpdated >= serverUpdated) {
-              upsertSession(cs, userId, claims?.activeWorkspaceId || 'default');
+              upsertSession(cs, userId, tenantId);
             }
           }
         });
         bulkUpsert(clientSessions);
 
-        const mergedRows = chatDb.prepare('SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100').all(userId);
+        const mergedRows = chatDb.prepare('SELECT * FROM chat_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY updated_at DESC LIMIT 100').all(userId, tenantId);
         const merged = mergedRows.map(dbSessionToClient);
         json(res, { sessions: merged });
         return true;
