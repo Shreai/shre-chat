@@ -34,6 +34,7 @@ const ESCALATION_TYPES = new Set([
   "budget_warning",
   "budget_blocked",
   "file_diff",
+  "approval.requested",
 ]);
 
 interface UseEscalationListenerOptions {
@@ -167,6 +168,22 @@ export function useEscalationListener({ activeSessionId, addMessage }: UseEscala
               const budgetMsg = (data as Record<string, unknown>).message
                 || `Budget ${data.type === "budget_blocked" ? "exceeded" : "warning"} for agent ${(data as Record<string, unknown>).agentId || "unknown"}.`;
               injectSystemMessage(currentSession, String(budgetMsg), data.type);
+              break;
+            }
+
+            case "approval.requested": {
+              const d = data as unknown as Record<string, unknown>;
+              const approvalId = d.approvalId || "";
+              const action = d.action || "browser action";
+              const target = d.target || "";
+              const agent = d.agentId || d.agent || "";
+              const reason = d.reason || "";
+              const risk = d.risk || "medium";
+              injectSystemMessage(
+                currentSession,
+                `[browser_approval] Approval ID: ${approvalId}\nAction: ${action}\nTarget: ${target}\nAgent: ${agent}\nReason: ${reason}\nRisk: ${risk}`,
+                "approval.requested",
+              );
               break;
             }
 

@@ -391,6 +391,10 @@ export function classifySystemEvent(content: string): { icon: string; label: str
   if (t.includes("[project_progress:quality_gate_failed]")) return { icon: "⚠️", label: "Quality gate", color: "var(--c-warning, #fbbf24)" };
   if (t.includes("[file_diff]")) return { icon: "📝", label: "File changed", color: "var(--c-info-soft)" };
   if (t.includes("[project_pending]")) return { icon: "📋", label: "Plan pending", color: "var(--c-warning)" };
+  // Browser approval events
+  if (t.includes("[browser_approval]")) return { icon: "🔐", label: "Approval needed", color: "var(--c-warning, #fbbf24)" };
+  if (t.includes("[browser_approved]")) return { icon: "✅", label: "Browser approved", color: "var(--c-success, #34d399)" };
+  if (t.includes("[browser_denied]")) return { icon: "🚫", label: "Browser denied", color: "var(--c-danger-soft, #f87171)" };
   if (t.includes("security") || t.includes("vault")) return { icon: "🔒", label: "Security check", color: "var(--c-warning)" };
   if (t.includes("system:")) return { icon: "⚙", label: "System event", color: "var(--c-slate)" };
   return { icon: "⚙", label: "System", color: "var(--c-slate)" };

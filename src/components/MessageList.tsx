@@ -4,6 +4,7 @@ import type { ChatMessage } from "../openclaw";
 import type { UserProfile } from "../store";
 import type { ProcessRun } from "./process-bar/types";
 import MessageBubble, { SystemEventChip, ToolExecutionChip } from "./MessageBubble";
+import { BrowserApprovalCard } from "./message-parts/BrowserApprovalCard";
 import type { ToolExecStep } from "./MessageBubble";
 import { WelcomeScreen } from "./WelcomeScreen";
 import { formatTime } from "../chat-utils";
@@ -251,7 +252,11 @@ export function MessageList(props: MessageListProps) {
                   {msg.meta?.type === "tool_exec" ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : (msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
-                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
+                    msg.content?.includes("[browser_approval]") ? (
+                      <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
+                    ) : (
+                      <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
+                    )
                   ) : (
                     <MessageBubble
                       {...renderMessageProps(msg, i)}
