@@ -2,9 +2,8 @@
   "service": "shre-chat",
   "version": "1.0",
   "port": 5510,
-  "protocol": "http",
-  "description": "Web-based chat interface — proxies to shre-router, manages sessions, suggestions, voice, tasks, reports, and notifications",
-
+  "protocol": "https",
+  "description": "Web-based chat interface \u2014 proxies to shre-router, manages sessions, suggestions, voice, tasks, reports, and notifications",
   "endpoints": {
     "GET /api/health": {
       "returns": "HealthResponse",
@@ -12,7 +11,10 @@
       "description": "Liveness check"
     },
     "POST /api/auth/login": {
-      "accepts": { "username": "string", "password": "string" },
+      "accepts": {
+        "username": "string",
+        "password": "string"
+      },
       "returns": "AuthResult",
       "auth": false,
       "description": "User login"
@@ -23,7 +25,9 @@
       "description": "Check authentication status"
     },
     "POST /api/verify-identity": {
-      "accepts": { "code": "string" },
+      "accepts": {
+        "code": "string"
+      },
       "returns": "{ verified: boolean }",
       "auth": false,
       "description": "Identity verification gate via vault"
@@ -71,7 +75,9 @@
       "description": "List available agents"
     },
     "POST /api/model": {
-      "accepts": { "model": "string" },
+      "accepts": {
+        "model": "string"
+      },
       "returns": "{ ok: boolean }",
       "auth": true,
       "description": "Switch active model"
@@ -88,13 +94,17 @@
       "description": "Speech-to-text via shre-router/Whisper"
     },
     "POST /api/tts": {
-      "accepts": { "text": "string" },
+      "accepts": {
+        "text": "string"
+      },
       "returns": "audio/mpeg",
       "auth": true,
       "description": "Text-to-speech"
     },
     "POST /api/tts/stream": {
-      "accepts": { "text": "string" },
+      "accepts": {
+        "text": "string"
+      },
       "returns": "SSE audio stream",
       "auth": true,
       "description": "Streaming text-to-speech"
@@ -111,7 +121,10 @@
       "description": "Search contacts (proxy to shre-contacts)"
     },
     "POST /api/share": {
-      "accepts": { "sessionId": "string", "agentId": "string" },
+      "accepts": {
+        "sessionId": "string",
+        "agentId": "string"
+      },
       "returns": "{ shareId: string, url: string }",
       "auth": true,
       "description": "Create a shareable link for a chat session"
@@ -142,25 +155,46 @@
       "description": "WebSocket notification stream (reminders, status updates)"
     }
   },
-
   "events": {
     "publishes": [
-      { "type": "task.complete", "schema": { "sessionId": "string", "agentId": "string" } },
-      { "type": "reminder.due", "schema": { "reminders": "Reminder[]" } }
+      {
+        "type": "task.complete",
+        "schema": {
+          "sessionId": "string",
+          "agentId": "string"
+        }
+      },
+      {
+        "type": "reminder.due",
+        "schema": {
+          "reminders": "Reminder[]"
+        }
+      }
     ],
     "subscribes": []
   },
-
   "cortex_types": [],
-
   "depends_on": {
-    "services": ["shre-router", "sqlite"],
-    "optional": ["shre-tasks", "shre-fleet", "shre-meter", "shre-contacts", "openclaw-gateway", "redis"]
+    "services": [
+      "shre-router",
+      "sqlite"
+    ],
+    "optional": [
+      "shre-tasks",
+      "shre-fleet",
+      "shre-meter",
+      "shre-contacts",
+      "openclaw-gateway",
+      "redis"
+    ]
   },
-
   "health": {
     "liveness": "GET /api/health",
     "readiness": "GET /api/health",
-    "response": { "status": "string", "service": "string", "port": "number" }
+    "response": {
+      "status": "string",
+      "service": "string",
+      "port": "number"
+    }
   }
 }
