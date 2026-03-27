@@ -5460,6 +5460,36 @@ eventBus.subscribe("approval.requested", async (event) => {
   log.warn("[approval] Failed to subscribe to approval.requested events", {}, err);
 });
 
+eventBus.subscribe("approval.approved", async (event) => {
+  const data = event?.data || {};
+  broadcastNotification("approval.resolved", {
+    approvalId: data.id || "",
+    status: "approved",
+    action: data.action || "browser action",
+    target: data.target || "",
+    agentId: data.agentId || "",
+    resolvedBy: data.resolvedBy || "user",
+  });
+  log.debug("[approval] Browser action approved, forwarded to chat clients", { approvalId: data.id });
+}).catch((err) => {
+  log.warn("[approval] Failed to subscribe to approval.approved events", {}, err);
+});
+
+eventBus.subscribe("approval.denied", async (event) => {
+  const data = event?.data || {};
+  broadcastNotification("approval.resolved", {
+    approvalId: data.id || "",
+    status: "denied",
+    action: data.action || "browser action",
+    target: data.target || "",
+    agentId: data.agentId || "",
+    resolvedBy: data.resolvedBy || "user",
+  });
+  log.debug("[approval] Browser action denied, forwarded to chat clients", { approvalId: data.id });
+}).catch((err) => {
+  log.warn("[approval] Failed to subscribe to approval.denied events", {}, err);
+});
+
 // ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
 const PROGRESS_EVENT_TYPES = ["task.assigned", "task.completed", "task.failed", "project.created", "project.decomposed", "project.completed", "project.quality_gate_failed", "project.pending_approval", "fleet.merge.pr_created", "budget.threshold"];
 

@@ -79,6 +79,8 @@ const EmployeeActivityView = lazy(() => import("./EmployeeActivityView").then(m 
 const TasksView = lazy(() => import("./TasksView").then(m => ({ default: m.TasksView })));
 const ProjectsView = lazy(() => import("./ProjectsView").then(m => ({ default: m.ProjectsView })));
 const EmailView = lazy(() => import("./EmailView").then(m => ({ default: m.EmailView })));
+const BillingView = lazy(() => import("./BillingView").then(m => ({ default: m.BillingView })));
+const DemoView = lazy(() => import("./DemoView").then(m => ({ default: m.DemoView })));
 
 const LazyFallback = () => (
   <div className="flex-1 flex items-center justify-center" style={{ color: "var(--c-text-3)" }}>
@@ -90,6 +92,20 @@ const AGENT_KEY = "shre-active-agent";
 const THEME_KEY = "shre-theme";
 
 export function App() {
+  // ── Demo mode — no auth required, shows sandbox experience ──
+  const isDemoMode = !!(
+    (window as any).__SHRE_DEMO_MODE__ ||
+    new URLSearchParams(window.location.search).get("demo") === "true"
+  );
+
+  if (isDemoMode) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #000)", color: "var(--c-text-4)" }}>Loading demo...</div>}>
+        <DemoView />
+      </Suspense>
+    );
+  }
+
   const DEV_BYPASS_AUTH = false;
 
   const {
@@ -451,6 +467,7 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
                   {view === "tasks" && <ViewErrorBoundary viewName="Tasks"><TasksView /></ViewErrorBoundary>}
                   {view === "projects" && <ViewErrorBoundary viewName="Projects"><ProjectsView /></ViewErrorBoundary>}
                   {view === "email" && <ViewErrorBoundary viewName="Email"><EmailView /></ViewErrorBoundary>}
+                  {view === "billing" && <ViewErrorBoundary viewName="Billing"><BillingView /></ViewErrorBoundary>}
                   {view === "openclaw" && (
                     <ViewErrorBoundary viewName="OpenClaw">
                       <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>

@@ -35,6 +35,7 @@ const ESCALATION_TYPES = new Set([
   "budget_blocked",
   "file_diff",
   "approval.requested",
+  "approval.resolved",
 ]);
 
 interface UseEscalationListenerOptions {
@@ -183,6 +184,22 @@ export function useEscalationListener({ activeSessionId, addMessage }: UseEscala
                 currentSession,
                 `[browser_approval] Approval ID: ${approvalId}\nAction: ${action}\nTarget: ${target}\nAgent: ${agent}\nReason: ${reason}\nRisk: ${risk}`,
                 "approval.requested",
+              );
+              break;
+            }
+
+            case "approval.resolved": {
+              const d = data as unknown as Record<string, unknown>;
+              const status = d.status || "resolved";
+              const action = d.action || "browser action";
+              const target = d.target || "";
+              const agent = d.agentId || "";
+              const tag = status === "approved" ? "[browser_approved]" : "[browser_denied]";
+              const verb = status === "approved" ? "approved — executing" : "denied — cancelled";
+              injectSystemMessage(
+                currentSession,
+                `${tag} Browser ${String(action).replace("browser_", "")} ${verb}${target ? ` (${target})` : ""}${agent ? ` for ${agent}` : ""}`,
+                "approval.resolved",
               );
               break;
             }

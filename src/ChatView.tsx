@@ -47,6 +47,7 @@ import { AppsDrawer } from "./components/AppsDrawer";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { DragOverlay } from "./components/DragOverlay";
 import { ChatPanels } from "./components/ChatPanels";
+import { TrialBanner } from "./components/TrialBanner";
 import { useChatKeydown } from "./hooks/useChatKeydown";
 
 
@@ -489,6 +490,8 @@ export function ChatView() {
 
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && <>
+      {/* Trial status banner */}
+      <TrialBanner />
       <ChatPanels
         sessions={sessions} activeSessionId={activeSessionId} activeSession={activeSession}
         activeAgentId={activeAgentId} editingTabId={editingTabId} editingTabText={editingTabText}
