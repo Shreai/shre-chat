@@ -8,6 +8,8 @@
     "./rag": "./rag.js",
     "./discovery": "./discovery.js",
     "./logger": "./logger.js",
-    "./training": "./training.js"
+    "./training": "./training.js",
+    "./heartbeat": "./heartbeat.js",
+    "./trace": "./trace.js"
   }
 }

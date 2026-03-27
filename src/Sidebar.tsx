@@ -118,6 +118,13 @@ export function Sidebar() {
     const preview = lastMsg ? lastMsg.content.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim().slice(0, 50) : "";
     const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
     return (
+      <SwipeableRow
+        key={`swipe-${s.id}`}
+        enabled={state.writeEnabled}
+        onDelete={() => actions.deleteSession(s.id)}
+        onPin={() => actions.togglePin(s.id)}
+        pinned={s.pinned}
+      >
       <div
         key={s.id}
         onClick={() => {
@@ -194,6 +201,7 @@ export function Sidebar() {
           )}
         </div>
       </div>
+      </SwipeableRow>
     );
   };
 
@@ -669,6 +677,86 @@ export function Sidebar() {
       }}
     />
     </>
+  );
+}
+
+/** Swipeable wrapper for session rows — swipe left to reveal Delete/Pin actions. */
+function SwipeableRow({ onDelete, onPin, pinned, enabled, children }: {
+  onDelete: () => void; onPin: () => void; pinned?: boolean; enabled: boolean; children: React.ReactNode;
+}) {
+  const [tx, setTx] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const dirLocked = useRef<"h" | "v" | null>(null);
+
+  if (!enabled) return <>{children}</>;
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 8 }}>
+      {/* Action buttons behind */}
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: 100,
+        display: "flex", alignItems: "stretch", opacity: Math.min(1, Math.abs(tx) / 40),
+        transition: swiping ? "none" : "opacity 200ms",
+      }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onPin(); setTx(0); }}
+          style={{
+            flex: 1, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            background: pinned ? "rgba(251,191,36,0.2)" : "rgba(99,102,241,0.2)",
+            color: pinned ? "#fbbf24" : "#818cf8", fontSize: 11, fontWeight: 600,
+          }}
+        >
+          {pinned ? "Unpin" : "Pin"}
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          style={{
+            flex: 1, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(239,68,68,0.2)", color: "#f87171", fontSize: 11, fontWeight: 600,
+          }}
+        >
+          Delete
+        </button>
+      </div>
+      {/* Content — translateX on swipe */}
+      <div
+        style={{
+          transform: `translateX(${tx}px)`,
+          transition: swiping ? "none" : "transform 200ms ease-out",
+          position: "relative",
+          zIndex: 1,
+          background: "inherit",
+        }}
+        onTouchStart={(e) => {
+          startX.current = e.touches[0].clientX;
+          startY.current = e.touches[0].clientY;
+          dirLocked.current = null;
+          setSwiping(false);
+        }}
+        onTouchMove={(e) => {
+          const dx = e.touches[0].clientX - startX.current;
+          const dy = e.touches[0].clientY - startY.current;
+          if (!dirLocked.current) {
+            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+              dirLocked.current = Math.abs(dy) > Math.abs(dx) ? "v" : "h";
+            }
+            return;
+          }
+          if (dirLocked.current === "v") return; // vertical scroll — don't swipe
+          setSwiping(true);
+          setTx(Math.max(-100, Math.min(0, dx)));
+        }}
+        onTouchEnd={() => {
+          setSwiping(false);
+          dirLocked.current = null;
+          setTx(tx < -50 ? -100 : 0);
+        }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
