@@ -223,14 +223,15 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const controller = new AbortController();
     abortRef.current = controller;
     let fullResponse = "";
-    actions.setStatusLine("Starting Claude CLI...");
-    actions.addActivity(sessionId, "connecting", "Launching Claude CLI");
+    const isAutoMode = claudeCliMode; // auto mode = --dangerously-skip-permissions
+    actions.setStatusLine(isAutoMode ? "Starting Claude Code (auto)..." : "Starting Claude CLI...");
+    actions.addActivity(sessionId, "connecting", isAutoMode ? "Launching Claude Code (autonomous)" : "Launching Claude CLI");
     try {
       const res = await fetch("/api/cli/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: text, continueConversation: cliContinue, agentId: activeAgentId }),
+        body: JSON.stringify({ message: text, continueConversation: cliContinue, agentId: activeAgentId, autoMode: isAutoMode }),
         signal: controller.signal,
       });
       if (!res.ok) { const err = await res.text().catch(() => "CLI unavailable"); throw new Error(err); }
@@ -253,7 +254,20 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             if (evt.type === "delta" && evt.text) {
               fullResponse += evt.text;
               bufferToken(fullResponse);
-              actions.setStatusLine("Claude CLI is writing...");
+              actions.setStatusLine(isAutoMode ? "Claude Code executing..." : "Claude CLI is writing...");
+            } else if (evt.type === "tool_start") {
+              // Tool execution — show in activity feed
+              const toolLabel = evt.tool === "Bash" ? `Running: ${(evt.input || "").slice(0, 80)}` :
+                evt.tool === "Edit" ? `Editing file` :
+                evt.tool === "Write" ? `Writing file` :
+                evt.tool === "Read" ? `Reading file` :
+                `Tool: ${evt.tool}`;
+              actions.addActivity(sessionId, "thinking", toolLabel);
+              actions.setStatusLine(`${evt.tool}...`);
+            } else if (evt.type === "tool_result") {
+              const status = evt.isError ? "error" : "done";
+              const preview = (evt.output || "").slice(0, 120);
+              actions.addActivity(sessionId, status, preview || `Tool ${status}`);
             } else if (evt.type === "done") {
               const finalText = evt.text || fullResponse;
               if (streamFlushRaf.current) { clearTimeout(streamFlushRaf.current); streamFlushRaf.current = null; }
@@ -264,7 +278,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
               if (firstTokenTimeRef.current > 0 && sendTimeRef.current > 0) cliDoneMeta.ttft_ms = String(firstTokenTimeRef.current - sendTimeRef.current);
               actions.addMessage(sessionId, { role: "assistant", content: finalText, timestamp: Date.now(), meta: cliDoneMeta });
               actions.setStreamText(""); actions.setStreaming(false); actions.setStatusLine(null);
-              actions.addActivity(sessionId, "done", `CLI complete${evt.model ? ` (${evt.model})` : ""}${evt.cost ? ` \u2014 $${evt.cost.toFixed(4)}` : ""}`);
+              actions.addActivity(sessionId, "done", `${isAutoMode ? "Code" : "CLI"} complete${evt.model ? ` (${evt.model})` : ""}${evt.cost ? ` \u2014 $${evt.cost.toFixed(4)}` : ""}`);
               setCliContinue(true);
               return;
             } else if (evt.type === "error") { throw new Error(evt.error); }

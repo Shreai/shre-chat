@@ -3017,7 +3017,7 @@ async function requestHandler(req, res) {
     let body;
     try { body = await collectBody(req, 5 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
-      const { message, continueConversation, agentId } = JSON.parse(body);
+      const { message, continueConversation, agentId, autoMode } = JSON.parse(body);
       if (!message) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "message required" }));
@@ -3066,6 +3066,11 @@ async function requestHandler(req, res) {
           args[1] = message;
           args.push("--continue");
         }
+        // Auto mode: skip all permission prompts — Claude executes autonomously
+        if (autoMode) {
+          args.push("--dangerously-skip-permissions");
+          log.info("[cli] Auto mode: --dangerously-skip-permissions enabled");
+        }
 
         const cliEnv = { ...process.env, NO_COLOR: "1" };
         delete cliEnv.CLAUDECODE;
@@ -3074,6 +3079,7 @@ async function requestHandler(req, res) {
 
         const proc = spawn("claude", args, {
           env: cliEnv,
+          cwd: process.env.SHRE_DIR || join(process.env.HOME || "~", "Documents", "Projects", "shreai"),
           stdio: ["pipe", "pipe", "pipe"],
         });
 
@@ -3094,7 +3100,9 @@ async function requestHandler(req, res) {
               // { type: "assistant", message: { content: [...] }, error: "..." } — response or error
               // { type: "result", result: "...", total_cost_usd: N, duration_ms: N } — final
               if (evt.type === "system") {
-                res.write(`data: ${JSON.stringify({ type: "status", event: "init", model: evt.model })}\n\n`);
+                const initData = { type: "status", event: "init", model: evt.model };
+                if (autoMode) initData.autoMode = true;
+                res.write(`data: ${JSON.stringify(initData)}\n\n`);
               } else if (evt.type === "assistant") {
                 // Extract text from content blocks
                 const content = evt.message?.content;
@@ -3104,7 +3112,25 @@ async function requestHandler(req, res) {
                       fullResponseText += block.text;
                       res.write(`data: ${JSON.stringify({ type: "delta", text: block.text })}\n\n`);
                     } else if (block.type === "tool_use") {
-                      res.write(`data: ${JSON.stringify({ type: "status", event: "tool_use", tool: block.name })}\n\n`);
+                      // Rich tool events: name, input preview, ID
+                      const toolEvt = {
+                        type: "tool_start",
+                        tool: block.name,
+                        toolId: block.id,
+                        input: typeof block.input === "string"
+                          ? block.input.slice(0, 500)
+                          : JSON.stringify(block.input || {}).slice(0, 500),
+                      };
+                      res.write(`data: ${JSON.stringify(toolEvt)}\n\n`);
+                    } else if (block.type === "tool_result") {
+                      res.write(`data: ${JSON.stringify({
+                        type: "tool_result",
+                        toolId: block.tool_use_id,
+                        output: typeof block.content === "string"
+                          ? block.content.slice(0, 2000)
+                          : JSON.stringify(block.content || "").slice(0, 2000),
+                        isError: block.is_error || false,
+                      })}\n\n`);
                     }
                   }
                 }
