@@ -9,6 +9,7 @@
  *   - escalation.failed   — escalation failed, council notified
  */
 import { useEffect, useRef, useCallback } from "react";
+import { setPlan, updateTaskStatus, updatePlanStatus, parsePlanTasks } from "../planStore";
 
 interface EscalationEvent {
   type: string;
@@ -135,12 +136,27 @@ export function useEscalationListener({ activeSessionId, addMessage }: UseEscala
 
             case "project.pending_approval": {
               const subtaskCount = (data as Record<string, unknown>).subtaskCount || 0;
-              const summary = (data as Record<string, unknown>).summary || "";
-              const projectId = (data as Record<string, unknown>).projectId || "";
+              const summary = String((data as Record<string, unknown>).summary || "");
+              const projectId = String((data as Record<string, unknown>).projectId || "");
               const planText = summary ? `\n${summary}` : "";
+
+              // Populate plan store for interactive checklist
+              if (projectId) {
+                const tasks = parsePlanTasks(summary);
+                setPlan(projectId, {
+                  projectId,
+                  tasks: tasks.length > 0 ? tasks : Array.from({ length: Number(subtaskCount) || 0 }, (_, i) => ({
+                    id: `task-${i + 1}`,
+                    title: `Task ${i + 1}`,
+                    status: "pending" as const,
+                  })),
+                  status: "pending_approval",
+                });
+              }
+
               injectSystemMessage(
                 currentSession,
-                `[project_pending] Project plan ready — ${subtaskCount} tasks.${planText}\nReply 'approve' or visit MIB007 to review. Project ID: ${projectId}`,
+                `[project_pending] Project plan ready — ${subtaskCount} tasks.${planText}\nProject ID: ${projectId}`,
                 "project.pending_approval",
               );
               break;
@@ -161,6 +177,25 @@ export function useEscalationListener({ activeSessionId, addMessage }: UseEscala
               const quality = (data as Record<string, unknown>).quality;
               const progress = (data as Record<string, unknown>).progress || "";
               const reason = (data as Record<string, unknown>).reason || "";
+              const progressProjectId = String((data as Record<string, unknown>).projectId || "");
+
+              // Update plan store based on subtype
+              if (progressProjectId) {
+                switch (subtype) {
+                  case "task_assigned":
+                    updateTaskStatus(progressProjectId, String(taskTitle), "assigned", String(agent));
+                    break;
+                  case "task_completed":
+                    updateTaskStatus(progressProjectId, String(taskTitle), "completed", String(agent), quality != null ? Number(quality) : undefined);
+                    break;
+                  case "task_failed":
+                    updateTaskStatus(progressProjectId, String(taskTitle), "failed", String(agent));
+                    break;
+                  case "project_completed":
+                    updatePlanStatus(progressProjectId, "completed");
+                    break;
+                }
+              }
 
               let message = "";
               switch (subtype) {

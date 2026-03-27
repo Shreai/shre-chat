@@ -1,6 +1,7 @@
 import React, { useState, useEffect, memo } from "react";
 import type { ChatMessage } from "../../openclaw";
 import { classifySystemEvent, lightweightMarkdown } from "../../chat-utils";
+import { PlanChecklist } from "./PlanChecklist";
 
 // ── Image Lightbox ──
 export function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
@@ -76,6 +77,18 @@ export const StableMarkdownBlock = memo(function StableMarkdownBlock({ text }: {
 export function SystemEventChip({ message, timestamp }: { message: ChatMessage; timestamp?: string }) {
   const [expanded, setExpanded] = useState(false);
   const content = message.content.trim().replace(/^\[system\]\s*/i, "");
+
+  // If this is a project_pending message, render the interactive PlanChecklist instead
+  if (content.includes("[project_pending]")) {
+    const projectIdMatch = content.match(/Project ID:\s*(\S+)/);
+    const subtaskMatch = content.match(/(\d+)\s*tasks?\b/);
+    const projectId = projectIdMatch?.[1] || "";
+    const subtaskCount = subtaskMatch ? parseInt(subtaskMatch[1], 10) : 0;
+
+    if (projectId) {
+      return <PlanChecklist projectId={projectId} subtaskCount={subtaskCount} timestamp={timestamp} />;
+    }
+  }
 
   const chips: { icon: string; label: string; color: string }[] = [];
   const seen = new Set<string>();

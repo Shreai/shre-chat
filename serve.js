@@ -17,6 +17,7 @@ import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmit
 import { createConversationLearner } from "shre-sdk/rag";
 import { writeConversation, startWALReplay } from "shre-sdk/training";
 import { createHeartbeatMonitor } from "shre-sdk/heartbeat";
+import { createTraceMiddleware, getRecentTraces, getRecentFailures, getTraceStats } from "shre-sdk/trace";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVoiceRoutes } from "./routes/voice.js";
 import { registerIntentRouter } from "./routes/intent-router.js";
@@ -1347,6 +1348,17 @@ async function requestHandler(req, res) {
 
   // Health routes (after auth for readyz, but health is in PUBLIC_PATHS)
   if (await handleHealth(req, res, url, _routeUtils)) return;
+
+  // Trace endpoints
+  if (url.pathname === "/v1/traces" && req.method === "GET") {
+    return json(res, getRecentTraces(Number(url.searchParams.get("limit") || 50)));
+  }
+  if (url.pathname === "/v1/traces/failures" && req.method === "GET") {
+    return json(res, getRecentFailures(Number(url.searchParams.get("limit") || 50)));
+  }
+  if (url.pathname === "/v1/traces/stats" && req.method === "GET") {
+    return json(res, getTraceStats());
+  }
 
   // ── GET /api/sitemap — view registry for agent deep-linking ──
   if (url.pathname === "/api/sitemap" && req.method === "GET") {

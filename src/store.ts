@@ -45,9 +45,9 @@ export interface Agent {
 const AGENT_META: Omit<Agent, "model">[] = [
   // Core
   { id: "main", name: "Ellie", emoji: "✨", group: "core", domains: ["all"], description: "Company president — full platform access" },
-  { id: "shre", name: "Shre", emoji: "🤖", group: "core", domains: ["all"], description: "CEO — full platform access, all agents report to Shre" },
+  { id: "shre", name: "Shre", emoji: "🤖", group: "core", domains: ["all"], description: "Platform Brain — full platform access" },
   { id: "nova", name: "Nova", emoji: "🌟", group: "core", domains: ["research", "analytics"], description: "Public assistant — general queries and research" },
-  { id: "president", name: "President", emoji: "🏛️", group: "core", domains: ["all"], description: "Executive — strategic oversight" },
+  { id: "ellie", name: "Ellie", emoji: "✨", group: "core", domains: ["all"], description: "Company President — all agents report to Ellie" },
   { id: "storepulse", name: "StorePulse", emoji: "🛍️", group: "core", domains: ["pos", "analytics"], description: "Retail analytics dashboard" },
   // Department heads
   { id: "engineering-manager", name: "Engineering", emoji: "⚙️", group: "department", domains: ["code", "infra"], description: "Engineering management and planning" },
