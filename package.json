@@ -14,7 +14,12 @@
     "build:all": "vite build && tsc -p electron/tsconfig.json && cp electron/dist/main.js electron/dist/main.cjs",
     "build:app": "vite build && tsc -p electron/tsconfig.json && cp electron/dist/main.js electron/dist/main.cjs && electron-builder",
     "start:app": "tsc -p electron/tsconfig.json && cp electron/dist/main.js electron/dist/main.cjs && electron .",
-    "test:e2e": "npx playwright test"
+    "test:e2e": "npx playwright test",
+    "qa": "node scripts/qa-orchestrator.mjs",
+    "qa:rerun": "node scripts/qa-orchestrator.mjs --rerun-failed",
+    "qa:agent": "node scripts/qa-orchestrator.mjs --agent",
+    "qa:report": "node scripts/qa-orchestrator.mjs --report-only",
+    "qa:dry": "node scripts/qa-orchestrator.mjs --dry-run"
   },
   "build": {
     "appId": "ai.shre.chat",
