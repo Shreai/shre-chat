@@ -1268,9 +1268,7 @@ const server = httpsServer || httpServer;
 
 // ── Content Security Policy ──────────────────────────────────────
 const IS_DEV = process.env.NODE_ENV !== "production";
-const CSP_CONNECT_SRC = IS_DEV
-  ? `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`
-  : `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net`;
+const CSP_CONNECT_SRC = `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`;
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
