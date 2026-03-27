@@ -6,7 +6,7 @@ interface UseMessageListHandlersOptions {
   messages: ChatMessage[];
   filteredMessages: ChatMessage[];
   actions: {
-    setMessageFeedback: (sessionId: string, msgIndex: number, feedback: string | null) => void;
+    setMessageFeedback: (sessionId: string, msgIndex: number, feedback: "like" | "dislike" | null) => void;
     replaceSessionMessages: (sessionId: string, messages: ChatMessage[]) => void;
     setAnnotation: (sessionId: string, msgIndex: number, text: string) => void;
     branchFrom: (sessionId: string, msgIndex: number) => string | null;
@@ -19,12 +19,12 @@ interface UseMessageListHandlersOptions {
   setEditingMsgText: (val: string) => void;
   setBranchToast: (val: boolean) => void;
   setShowTerminal: (val: boolean) => void;
-  setPendingApproval: (val: string | null) => void;
+  setPendingApproval: (val: { approvalId: string; tool: string; input: any; reason: string } | null) => void;
   pendingEditSendRef: React.MutableRefObject<boolean>;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   terminalRef: React.RefObject<{ sendCommand: (cmd: string) => void } | null>;
   setLightboxSrc: (src: string | null) => void;
-  sendFeedbackToRapidRMS: (msgIndex: number, feedback: string) => void;
+  sendFeedbackToRapidRMS: (msgIndex: number, feedback: "like" | "dislike") => void;
   handleContentExpand: (content: string, type: string, title?: string) => void;
 }
 
@@ -52,10 +52,10 @@ export function useMessageListHandlers({
     inputRef.current?.focus();
   }, [setInput, inputRef]);
 
-  const onFeedback = useCallback((msgIndex: number, fb: string) => {
+  const onFeedback = useCallback((msgIndex: number, fb: "like" | "dislike") => {
     if (activeSessionId) {
       const msg = filteredMessages[msgIndex];
-      const newFeedback = msg.feedback === fb ? null : fb;
+      const newFeedback: "like" | "dislike" | null = msg.feedback === fb ? null : fb;
       actions.setMessageFeedback(activeSessionId, msgIndex, newFeedback);
       if (newFeedback !== null && msg.role === "assistant") {
         sendFeedbackToRapidRMS(msgIndex, newFeedback);

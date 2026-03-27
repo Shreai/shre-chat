@@ -21,6 +21,7 @@ interface EscalationEvent {
   content?: string;
   role?: string;
   metadata?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 const ESCALATION_TYPES = new Set([
