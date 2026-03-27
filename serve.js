@@ -1281,7 +1281,7 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-src 'self'",
+  "frame-src 'self' blob:",
   "frame-ancestors 'none'",
 ].join("; ");
 
