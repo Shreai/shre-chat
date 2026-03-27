@@ -90,7 +90,7 @@ interface ChatPanelsProps {
   chatSearch: string;
   setChatSearch: (v: string) => void;
   closeChatSearch: () => void;
-  chatSearchNavigate: (dir: "next" | "prev") => void;
+  chatSearchNavigate: (dir: 1 | -1) => void;
   chatSearchResults: number[];
   chatSearchIndex: number;
   // System prompt
