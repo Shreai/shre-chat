@@ -608,6 +608,12 @@ export function Sidebar() {
           <NavIconBtn active={view === "briefing"} onClick={() => actions.setView("briefing")} title="Briefing" icon={
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
           } />
+          <NavIconBtn active={view === "marketplace"} onClick={() => actions.setView("marketplace")} title="Marketplace" icon={
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z" /><line x1="3" y1="7" x2="21" y2="7" /></svg>
+          } />
+          <NavIconBtn active={view === "billing"} onClick={() => actions.setView("billing")} title="Billing" icon={
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
+          } />
         </div>
 
         {/* Footer — minimal */}

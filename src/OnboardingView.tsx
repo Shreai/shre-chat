@@ -11,6 +11,28 @@ interface Props {
   onSkip: () => void;
 }
 
+/** POST to server to provision a workspace after onboarding */
+async function provisionWorkspace(profile: UserProfile): Promise<string | null> {
+  try {
+    const res = await fetch("/api/provision-workspace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: profile.id,
+        name: profile.name,
+        businessName: profile.business.name,
+        industry: profile.business.industry,
+        size: profile.business.size,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.workspaceId || null;
+  } catch {
+    return null;
+  }
+}
+
 const INDUSTRIES = [
   "Retail / C-Store", "Restaurant / QSR", "Grocery", "Gas Station",
   "Liquor Store", "Pharmacy", "E-commerce", "SaaS / Tech",
@@ -34,6 +56,8 @@ const COMM_STYLES = [
 export function OnboardingView({ profile, onComplete, onSkip }: Props) {
   const [step, setStep] = useState(0);
   const [p, setP] = useState<UserProfile>({ ...profile });
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
 
   const update = (partial: Partial<UserProfile>) => setP((prev) => ({ ...prev, ...partial }));
   const updateBiz = (partial: Partial<UserProfile["business"]>) =>
@@ -179,21 +203,38 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
               <button onClick={onSkip} className="text-sm px-4 py-2 rounded-lg" style={{ color: "var(--c-text-5)" }}>Skip for now</button>
             )}
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (isLast) {
-                  onComplete({ ...p, onboardedAt: Date.now() });
+                  setProvisioning(true);
+                  setProvisionError(null);
+                  const completed = { ...p, onboardedAt: Date.now() };
+                  try {
+                    const wsId = await provisionWorkspace(completed);
+                    if (wsId) {
+                      sessionStorage.setItem("shre-workspace-id", wsId);
+                    }
+                  } catch {
+                    // non-blocking — workspace can be provisioned later
+                  }
+                  setProvisioning(false);
+                  onComplete(completed);
                 } else {
                   setStep(step + 1);
                 }
               }}
-              disabled={!canNext}
+              disabled={!canNext || provisioning}
               className="text-sm px-5 py-2 rounded-lg font-medium transition-colors"
               style={{
-                background: canNext ? "var(--c-accent)" : "var(--c-border-2)",
-                color: canNext ? "#fff" : "var(--c-text-5)",
+                background: canNext && !provisioning ? "var(--c-accent)" : "var(--c-border-2)",
+                color: canNext && !provisioning ? "#fff" : "var(--c-text-5)",
               }}
             >
-              {isLast ? "Get Started" : "Next"}
+              {provisioning ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                  Setting up workspace...
+                </span>
+              ) : isLast ? "Get Started" : "Next"}
             </button>
           </div>
         </div>
