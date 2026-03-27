@@ -951,7 +951,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo"]);
 
 // TLS — load certs from ~/.shre/tls/ (mkcert)
 const TLS_DIR = join(homedir(), ".shre", "tls");
@@ -1439,6 +1439,136 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Usage summary proxy (shre-meter) ──
+  if (url.pathname === "/api/usage-summary" && req.method === "GET") {
+    const qs = url.search || "";
+    try {
+      const meterUrl = serviceUrl("shre-meter");
+      const upstream = await fetch(`${meterUrl}/v1/costs/summary${qs}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": upstream.headers.get("content-type") || "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Usage summary proxy failed:", err.message);
+      json(res, { error: "shre-meter unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Trial status proxy (shre-stripe) ──
+  if (url.pathname === "/api/trial-status" && req.method === "GET") {
+    const workspaceId = url.searchParams.get("workspaceId") || "";
+    if (!workspaceId) return json(res, { error: "Missing workspaceId" }, 400);
+    try {
+      const stripeUrl = serviceUrl("shre-stripe");
+      const upstream = await fetch(`${stripeUrl}/v1/trials/${encodeURIComponent(workspaceId)}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Trial status proxy failed:", err.message);
+      json(res, { error: "shre-stripe unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Checkout proxy (shre-stripe) ──
+  if (url.pathname === "/api/checkout" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      const stripeUrl = serviceUrl("shre-stripe");
+      const upstream = await fetch(`${stripeUrl}/v1/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Checkout proxy failed:", err.message);
+      json(res, { error: "shre-stripe unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Billing portal proxy (shre-stripe) ──
+  if (url.pathname === "/api/billing-portal" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      const stripeUrl = serviceUrl("shre-stripe");
+      const upstream = await fetch(`${stripeUrl}/v1/portal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Billing portal proxy failed:", err.message);
+      json(res, { error: "shre-stripe unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Workspace provisioning endpoint ──
+  if (url.pathname === "/api/provision-workspace" && req.method === "POST") {
+    try {
+      const body = JSON.parse(await collectBody(req));
+      const { userId, name, businessName, industry, size } = body;
+      if (!userId || !name) return json(res, { error: "Missing userId or name" }, 400);
+
+      // Try marketplace API first, fall back to local script
+      let workspaceId = null;
+      try {
+        const marketplaceUrl = serviceUrl("shre-marketplace");
+        const mpRes = await fetch(`${marketplaceUrl}/v1/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, name, businessName, industry, size, plan: "free" }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (mpRes.ok) {
+          const mpData = await mpRes.json();
+          workspaceId = mpData.workspaceId || mpData.id;
+        }
+      } catch {
+        // marketplace unavailable — fall back to provision script
+      }
+
+      if (!workspaceId) {
+        try {
+          const scriptPath = join(import.meta.dirname, "..", "scripts", "provision-workspace.mjs");
+          if (existsSync(scriptPath)) {
+            const result = execSync(
+              `node ${scriptPath} --user-id="${userId}" --name="${name.replace(/"/g, '\\"')}" --business="${(businessName || "").replace(/"/g, '\\"')}" --industry="${(industry || "").replace(/"/g, '\\"')}" --size="${size || "solo"}"`,
+              { timeout: 30000, encoding: "utf-8" }
+            );
+            const parsed = JSON.parse(result.trim().split("\n").pop() || "{}");
+            workspaceId = parsed.workspaceId || parsed.id;
+          }
+        } catch (scriptErr) {
+          log.warn("Provision script failed:", scriptErr.message);
+        }
+      }
+
+      // Generate a fallback workspace ID if all else fails
+      if (!workspaceId) {
+        workspaceId = `ws_${userId}_${Date.now().toString(36)}`;
+      }
+
+      log.info("Workspace provisioned", { workspaceId, userId });
+      json(res, { workspaceId, status: "created" });
+    } catch (err) {
+      log.error("Workspace provisioning failed:", err.message);
+      json(res, { error: "Provisioning failed" }, 500);
+    }
+    return;
+  }
+
   // ── Agent capabilities proxy (shre-router) ──
   if (url.pathname === "/api/agents/capabilities" && req.method === "GET") {
     try {
@@ -1480,6 +1610,37 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Marketplace proxy failed:", err.message);
       json(res, { error: "shre-hr unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Marketplace catalog proxy (shre-marketplace) ──
+  if (url.pathname === "/api/marketplace/catalog" && req.method === "GET") {
+    try {
+      const marketplaceUrl = serviceUrl("shre-marketplace");
+      const upstream = await fetch(`${marketplaceUrl}/v1/marketplace/catalog${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Marketplace catalog proxy failed:", err.message);
+      json(res, { error: "shre-marketplace unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Marketplace catalog detail proxy (shre-marketplace) ──
+  if (url.pathname.startsWith("/api/marketplace/catalog/detail/") && req.method === "GET") {
+    try {
+      const itemId = url.pathname.split("/api/marketplace/catalog/detail/")[1];
+      const marketplaceUrl = serviceUrl("shre-marketplace");
+      const upstream = await fetch(`${marketplaceUrl}/v1/marketplace/catalog/detail/${encodeURIComponent(itemId)}`, { signal: AbortSignal.timeout(8000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Marketplace detail proxy failed:", err.message);
+      json(res, { error: "shre-marketplace unreachable" }, 502);
     }
     return;
   }
@@ -2470,6 +2631,36 @@ async function requestHandler(req, res) {
     return json(res, global.__clientInfo || { error: "No client info yet" });
   }
 
+  // ── Browser Approval Proxy (shre-browser:5476) ────────────────────
+  if (url.pathname === "/api/browser/approvals/resolve" && req.method === "POST") {
+    let body;
+    try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
+    try {
+      const parsed = JSON.parse(body);
+      const approvalId = parsed.approvalId;
+      if (!approvalId) return json(res, { error: "approvalId required" }, 400);
+      const upstream = await fetch(`http://127.0.0.1:5476/v1/approvals/${encodeURIComponent(approvalId)}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: parsed.status, resolvedBy: parsed.resolvedBy || "user", comment: parsed.comment }),
+      });
+      const data = await upstream.json();
+      return json(res, data, upstream.status);
+    } catch (err) {
+      return json(res, { error: "Browser service unavailable" }, 502);
+    }
+  }
+
+  if (url.pathname === "/api/browser/approvals" && req.method === "GET") {
+    try {
+      const upstream = await fetch("http://127.0.0.1:5476/v1/approvals");
+      const data = await upstream.json();
+      return json(res, data);
+    } catch (err) {
+      return json(res, { error: "Browser service unavailable", approvals: [] }, 502);
+    }
+  }
+
   // ── Share API — create and retrieve conversation snapshots ───────
 
   // POST /api/share — create a shareable snapshot
@@ -2511,6 +2702,22 @@ async function requestHandler(req, res) {
     shareStore.delete(id);
     shareStore.set(id, snapshot);
     return json(res, snapshot);
+  }
+
+  // GET /demo — serve SPA with demo mode enabled (no auth required)
+  if (url.pathname === "/demo") {
+    try {
+      let content = readFileSync(join(DIST, "index.html"), "utf-8");
+      // Inject demo flag into HTML so the React app detects it
+      content = content.replace("</head>", `<script>window.__SHRE_DEMO_MODE__=true;</script></head>`);
+      res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": "no-cache, no-store, must-revalidate" });
+      res.end(content);
+      return;
+    } catch {
+      res.writeHead(404);
+      res.end("Not found");
+      return;
+    }
   }
 
   // GET /shared/:id — serve SPA so frontend handles rendering
@@ -5235,6 +5442,22 @@ eventBus.subscribe("briefing.daily", async (event) => {
   }
 }).catch((err) => {
   log.warn("[briefing] Failed to subscribe to briefing.daily events", {}, err);
+});
+
+// ─── Subscribe to browser approval events ────────────────────────────────────
+eventBus.subscribe("approval.requested", async (event) => {
+  const data = event?.data || {};
+  broadcastNotification("approval.requested", {
+    approvalId: data.approvalId || data.id || "",
+    action: data.action || "browser action",
+    target: data.target || "",
+    agentId: data.agentId || "",
+    reason: data.reason || "",
+    risk: data.risk || "medium",
+  });
+  log.debug("[approval] Browser approval request forwarded to chat clients", { approvalId: data.approvalId || data.id });
+}).catch((err) => {
+  log.warn("[approval] Failed to subscribe to approval.requested events", {}, err);
 });
 
 // ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
