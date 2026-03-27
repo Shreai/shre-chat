@@ -36,22 +36,30 @@ export function CodeCopyButton({ code }: { code: string }) {
   );
 }
 
+// ── Previewable langs ──
+const PREVIEW_LANGS = new Set(["html", "csv", "json", "txt", "text", "log", "markdown", "md"]);
+
+function langToPreviewType(lang: string): string {
+  const map: Record<string, string> = { html: "html", csv: "csv", json: "json", txt: "txt", text: "txt", log: "txt", md: "markdown", markdown: "markdown" };
+  return map[lang] || "txt";
+}
+
 // ── HtmlCodeBlock — code block with always-visible Preview button ──
 export function HtmlCodeBlock({ lang, className, highlightedHtml, codeText, isShell, onRunCommand, props, children }: {
   lang: string; className?: string; highlightedHtml: string; codeText: string;
   isShell: boolean; onRunCommand?: (cmd: string) => void; props: any; children: React.ReactNode;
 }) {
+  const canPreview = PREVIEW_LANGS.has(lang);
+
   const openPreview = () => {
-    sessionStorage.setItem("shre-preview-html", JSON.stringify({
-      id: `prev_${Date.now()}`,
-      title: (codeText.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()) || "Preview",
-      html: codeText,
-      savedAt: Date.now(),
-    }));
+    const type = langToPreviewType(lang);
+    const title = (lang === "html" ? codeText.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() : null) || `Preview.${type === "markdown" ? "md" : type}`;
+    const entry = { id: `prev_${Date.now()}`, title, html: codeText, savedAt: Date.now(), type };
+    sessionStorage.setItem("shre-preview-html", JSON.stringify(entry));
     try {
       const lib = JSON.parse(localStorage.getItem("shre-preview-library") || "[]");
       const deduped = lib.filter((e: any) => e.html !== codeText);
-      deduped.unshift({ id: `prev_${Date.now()}`, title: (codeText.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()) || "Preview", html: codeText, savedAt: Date.now() });
+      deduped.unshift(entry);
       localStorage.setItem("shre-preview-library", JSON.stringify(deduped.slice(0, 20)));
     } catch (err) { console.debug("save preview to localStorage", err); }
     window.dispatchEvent(new CustomEvent("shre:switch-view", { detail: "preview" }));
@@ -67,9 +75,9 @@ export function HtmlCodeBlock({ lang, className, highlightedHtml, codeText, isSh
           <code className={className} {...props}>{children}</code>
         )}
       </pre>
-      <div className={`absolute top-1 right-1 flex gap-0.5 transition-opacity ${lang === "html" || isShell ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+      <div className={`absolute top-1 right-1 flex gap-0.5 transition-opacity ${canPreview || isShell ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         <CodeCopyButton code={codeText} />
-        {lang === "html" && (
+        {canPreview && (
           <button
             onClick={openPreview}
             className="text-[10px] px-2 py-0.5 rounded"
