@@ -32,6 +32,7 @@ import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { LoginView } from './LoginView';
 import { loadUserProfile, saveUserProfile, createDefaultProfile, type UserProfile } from './store';
 import { useAnomalyStream } from './hooks/useAnomalyStream';
+import InstallBanner from './components/InstallBanner';
 
 // ── Extracted modules ──
 import {
@@ -286,7 +287,10 @@ function MainApp({
   const [activeAgentId, setActiveAgentId] = useState(
     () => localStorage.getItem(AGENT_KEY) || 'shre',
   );
-  const [view, setView] = useState<View>('chat');
+  const [view, setView] = useState<View>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('view') as View) || 'chat';
+  });
   const [activity, setActivity] = useState(() => loadActivity());
   const [feed, setFeed] = useState(() => loadFeed());
   const [files, setFiles] = useState(() => loadFiles());
@@ -549,6 +553,7 @@ function MainApp({
             </div>
           )}
           <StatusBar />
+          <InstallBanner />
           {workspaces && workspaces.length > 1 && (
             <WorkspaceSwitcher
               activeWorkspace={
