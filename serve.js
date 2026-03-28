@@ -5514,6 +5514,9 @@ setInterval(() => {
 }, 60_000).unref();
 
 // ── Terminal WebSocket — interactive PTY via /ws/terminal ─────────
+// PTY sessions persist across WebSocket disconnects (screen change, tab switch,
+// fold/unfold on foldable phones). The PTY stays alive for PTY_IDLE_TIMEOUT_MS
+// after the last client disconnects; reconnecting clients get scrollback replay.
 
 const termWss = new WebSocketServer({ noServer: true });
 
@@ -5522,24 +5525,21 @@ let activePty = null;
 let activePtyOutput = ""; // Rolling output buffer for exec capture
 let execResolvers = []; // Pending exec result callbacks
 
-// Ping/pong keepalive — prevent browser/proxy idle-timeout disconnects
-const TERM_PING_INTERVAL = 15_000; // 15s
-const termPingTimer = setInterval(() => {
-  termWss.clients.forEach((ws) => {
-    if (ws._shreAlive === false) {
-      log.warn("[terminal] Ping timeout — closing stale connection");
-      return ws.terminate();
-    }
-    ws._shreAlive = false;
-    try { ws.ping(); } catch {}
-  });
-}, TERM_PING_INTERVAL);
-termWss.on("close", () => clearInterval(termPingTimer));
+// Persistent PTY session pool (keyed by session ID)
+const PTY_IDLE_TIMEOUT_MS = 5 * 60_000; // Kill orphaned PTY after 5 min with no clients
+const SCROLLBACK_MAX = 50_000; // Max chars to replay on reconnect
+const ptySessions = new Map(); // sessionId → { proc, scrollback, clients, idleTimer, shellHandle }
 
-termWss.on("connection", (ws) => {
-  log.info("[terminal] New PTY session (via python3 pty)");
-  ws._shreAlive = true;
-  ws.on("pong", () => { ws._shreAlive = true; });
+function getOrCreatePtySession(sessionId) {
+  if (ptySessions.has(sessionId)) {
+    const session = ptySessions.get(sessionId);
+    // Cancel idle kill timer — client is back
+    if (session.idleTimer) {
+      clearTimeout(session.idleTimer);
+      session.idleTimer = null;
+    }
+    return session;
+  }
 
   const cwd = process.env.HOME || "/Users/aibot";
 
@@ -5549,19 +5549,30 @@ termWss.on("connection", (ws) => {
   delete termEnv.CLAUDE_CODE_SESSION;
   delete termEnv.CLAUDE_CODE_CONVERSATION_ID;
 
-  // Use Python's pty.fork() to get a real PTY (echo, line editing, job control)
+  // Python PTY with resize support via SIGUSR1 + shared state file
+  const resizeFile = `/tmp/shre-pty-resize-${sessionId}.json`;
   const ptyScript = `
-import pty, os, sys, select, signal, struct, fcntl, termios
+import pty, os, sys, select, signal, struct, fcntl, termios, json
 
 cols, rows = 80, 24
+resize_file = ${JSON.stringify(resizeFile)}
 
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir(${JSON.stringify(cwd)})
     os.execv("/bin/zsh", ["/bin/zsh", "-l"])
 else:
-    # Set initial window size
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+
+    def handle_resize(sig, frame):
+        try:
+            with open(resize_file) as f:
+                d = json.load(f)
+            c, r = d.get("cols", cols), d.get("rows", rows)
+            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", r, c, 0, 0))
+            os.kill(pid, signal.SIGWINCH)
+        except: pass
+    signal.signal(signal.SIGUSR1, handle_resize)
 
     def handle_sigterm(sig, frame):
         try: os.kill(pid, signal.SIGTERM)
@@ -5588,6 +5599,8 @@ else:
     finally:
         try: os.kill(pid, signal.SIGTERM)
         except: pass
+        try: os.unlink(resize_file)
+        except: pass
 `;
 
   let proc;
@@ -5599,53 +5612,137 @@ else:
     });
   } catch (err) {
     log.error("[terminal] Failed to spawn PTY:", err.message);
-    try { ws.send(`\r\n\x1b[31m[Terminal error: ${err.message}]\x1b[0m\r\n`); } catch {}
-    try { ws.close(); } catch {}
-    return;
+    return null;
   }
 
-  const shellHandle = {
-    write(data) { try { proc.stdin.write(data); } catch {} },
-    kill() { proc.kill(); },
-    resize(cols, rows) {
-      // Send resize via stdin as special escape sequence
-      // Python script handles TIOCSWINSZ on the pty fd
+  const session = {
+    id: sessionId,
+    proc,
+    scrollback: "",
+    clients: new Set(),
+    idleTimer: null,
+    resizeFile,
+    shellHandle: {
+      write(data) { try { proc.stdin.write(data); } catch {} },
+      kill() { proc.kill(); },
+      resize(cols, rows) {
+        // Write resize dimensions to file, then signal Python to read them
+        try {
+          const { writeFileSync } = require("node:fs");
+          writeFileSync(resizeFile, JSON.stringify({ cols, rows }));
+          proc.kill("SIGUSR1");
+        } catch {}
+      },
     },
   };
-  activePty = shellHandle;
 
   proc.stdout.on("data", (data) => {
-    try { ws.send(data.toString()); } catch {}
-    if (execResolvers.length > 0) activePtyOutput += data.toString();
+    const str = data.toString();
+    // Append to scrollback ring buffer
+    session.scrollback += str;
+    if (session.scrollback.length > SCROLLBACK_MAX) {
+      session.scrollback = session.scrollback.slice(-SCROLLBACK_MAX);
+    }
+    // Broadcast to all connected clients
+    for (const client of session.clients) {
+      try { client.send(str); } catch {}
+    }
+    if (execResolvers.length > 0) activePtyOutput += str;
   });
 
   proc.stderr.on("data", (data) => {
-    try { ws.send(data.toString()); } catch {}
+    const str = data.toString();
+    for (const client of session.clients) {
+      try { client.send(str); } catch {}
+    }
   });
 
   proc.on("exit", (code) => {
     log.info("[terminal] PTY exited:", code);
-    try { ws.send("\r\n[Process exited]\r\n"); } catch {}
-    try { ws.close(); } catch {}
-    if (activePty === shellHandle) activePty = null;
+    for (const client of session.clients) {
+      try { client.send("\r\n[Process exited]\r\n"); } catch {}
+      try { client.close(); } catch {}
+    }
+    if (activePty === session.shellHandle) activePty = null;
+    ptySessions.delete(sessionId);
+    try { require("node:fs").unlinkSync(resizeFile); } catch {}
   });
+
+  ptySessions.set(sessionId, session);
+  activePty = session.shellHandle;
+  log.info("[terminal] New PTY session created", { sessionId });
+  return session;
+}
+
+// Ping/pong keepalive — prevent browser/proxy idle-timeout disconnects
+const TERM_PING_INTERVAL = 15_000; // 15s
+const termPingTimer = setInterval(() => {
+  termWss.clients.forEach((ws) => {
+    if (ws._shreAlive === false) {
+      log.warn("[terminal] Ping timeout — closing stale connection");
+      return ws.terminate();
+    }
+    ws._shreAlive = false;
+    try { ws.ping(); } catch {}
+  });
+}, TERM_PING_INTERVAL);
+termWss.on("close", () => clearInterval(termPingTimer));
+
+termWss.on("connection", (ws, req) => {
+  ws._shreAlive = true;
+  ws.on("pong", () => { ws._shreAlive = true; });
+
+  // Parse session ID from query string (allows reconnecting to same PTY)
+  const url = new URL(req.url, `${SCHEME}://${req.headers.host}`);
+  const sessionId = url.searchParams.get("session") || "default";
+
+  const session = getOrCreatePtySession(sessionId);
+  if (!session) {
+    try { ws.send(`\r\n\x1b[31m[Terminal error: failed to create PTY]\x1b[0m\r\n`); } catch {}
+    try { ws.close(); } catch {}
+    return;
+  }
+
+  // Add this client to the session
+  session.clients.add(ws);
+  log.info("[terminal] Client connected", { sessionId, clients: session.clients.size });
+
+  // Replay scrollback so reconnecting clients see previous output
+  if (session.scrollback.length > 0) {
+    try {
+      ws.send("\x1b[2J\x1b[H"); // Clear screen first
+      ws.send(session.scrollback);
+    } catch {}
+  }
 
   ws.on("message", (msg) => {
     const str = msg.toString();
     if (str.startsWith("{")) {
       try {
         const cmd = JSON.parse(str);
-        if (cmd.type === "resize") return; // TODO: resize support
+        if (cmd.type === "resize" && cmd.cols && cmd.rows) {
+          session.shellHandle.resize(cmd.cols, cmd.rows);
+          return;
+        }
       } catch {}
     }
     // Real PTY — send raw input (including \r for Enter)
-    try { proc.stdin.write(str); } catch {}
+    session.shellHandle.write(str);
   });
 
   ws.on("close", () => {
-    log.info("[terminal] WebSocket closed, killing PTY");
-    proc.kill();
-    if (activePty === shellHandle) activePty = null;
+    session.clients.delete(ws);
+    log.info("[terminal] Client disconnected", { sessionId, remaining: session.clients.size });
+
+    // If no clients left, start idle kill timer (don't kill PTY immediately)
+    if (session.clients.size === 0) {
+      session.idleTimer = setTimeout(() => {
+        log.info("[terminal] PTY idle timeout — killing", { sessionId });
+        session.proc.kill();
+        ptySessions.delete(sessionId);
+        if (activePty === session.shellHandle) activePty = null;
+      }, PTY_IDLE_TIMEOUT_MS);
+    }
   });
 });
 

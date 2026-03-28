@@ -695,7 +695,10 @@ export function ChatView() {
     HISTORY_KEY,
   });
 
-  const isTabMode = termViewMode === 'tabs' && (showTerminal || activeView === 'preview');
+  // Force tab mode on mobile — split mode is unusable on small screens
+  const isMobileLayout = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const isTabMode =
+    (isMobileLayout || termViewMode === 'tabs') && (showTerminal || activeView === 'preview');
   const showChat = !isTabMode || activeView === 'chat';
   const showTermPanel = showTerminal && (!isTabMode || activeView === 'terminal');
   const showPreviewPanel = isTabMode && activeView === 'preview' && previewContent;
