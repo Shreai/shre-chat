@@ -1450,8 +1450,69 @@ async function requestHandler(req, res) {
       { id: "mib-agents", label: "Agents (MIB007)", description: "Agent management in MIB007", category: "external", type: "external", url: `${mib007Base}/${prefix}/agents/all`, keywords: ["mib agents"] },
       { id: "mib-issues", label: "Issues (MIB007)", description: "Issue tracker in MIB007", category: "external", type: "external", url: `${mib007Base}/${prefix}/issues`, keywords: ["mib issues", "bugs"] },
       { id: "mib-home", label: "MIB007 Home", description: "MIB007 main dashboard", category: "external", type: "external", url: `${mib007Base}/${prefix}/home`, keywords: ["mib", "mib007", "home"] },
+      { id: "investor", label: "Investor Dashboard", description: "Real-time investor KPIs — business metrics, platform health, AI agent ROI, opportunities, roadmap", category: "analytics", type: "view", keywords: ["investor", "kpi", "metrics", "revenue", "arr", "pipeline", "roi", "fundraising"] },
     ];
     return json(res, { sitemap, navigation_event: "shre:switch-view", note: "Dispatch CustomEvent with view id as detail to navigate" });
+  }
+
+  // ── Investor KPI API — versioned, auto-updated ──
+  if (url.pathname === "/api/investor/kpis" && req.method === "GET") {
+    try {
+      const kpiPath = join(import.meta.dirname, ".investor-kpis.json");
+      if (existsSync(kpiPath)) {
+        const data = JSON.parse(readFileSync(kpiPath, "utf-8"));
+        return json(res, data);
+      }
+      // Default state
+      return json(res, {
+        version: "1.0.0",
+        updatedAt: new Date().toISOString(),
+        stage: "Pre-Launch / Beta",
+        customers: 0,
+        revenue: { mrr: 0, arr: 0 },
+        pipeline: { leads: 0, pilots: 0, converted: 0 },
+        dataAdvantage: { locations: 200, partner: "RapidRMS", views: 22 },
+        techStack: { services: 30, agents: 17, sdkModules: 15, e2eTests: 110 },
+        costStructure: { infra: 45, compute: 30, total: 75 },
+      });
+    } catch { return json(res, { error: "Failed to load KPIs" }, 500); }
+  }
+  if (url.pathname === "/api/investor/kpis" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => { body += c; });
+    req.on("end", () => {
+      try {
+        const update = JSON.parse(body);
+        const kpiPath = join(import.meta.dirname, ".investor-kpis.json");
+        let existing = { version: "1.0.0", changelog: [] };
+        if (existsSync(kpiPath)) existing = JSON.parse(readFileSync(kpiPath, "utf-8"));
+        if (!existing.changelog) existing.changelog = [];
+        // Auto-increment version
+        const [major, minor, patch] = (existing.version || "1.0.0").split(".").map(Number);
+        const newVersion = update.bumpMajor ? `${major + 1}.0.0` : update.bumpMinor ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`;
+        // Build changelog entry from changes
+        const changes = [];
+        if (update.customers !== undefined && update.customers !== existing.customers) changes.push(`Customers: ${existing.customers || 0} → ${update.customers}`);
+        if (update.revenue?.mrr !== undefined && update.revenue.mrr !== existing.revenue?.mrr) changes.push(`MRR: $${existing.revenue?.mrr || 0} → $${update.revenue.mrr}`);
+        if (update.stage !== undefined && update.stage !== existing.stage) changes.push(`Stage: ${existing.stage} → ${update.stage}`);
+        if (update.pipeline) {
+          for (const k of ["leads", "pilots", "converted"]) {
+            if (update.pipeline[k] !== undefined && update.pipeline[k] !== existing.pipeline?.[k]) changes.push(`Pipeline ${k}: ${existing.pipeline?.[k] || 0} → ${update.pipeline[k]}`);
+          }
+        }
+        if (update.changeNote) changes.push(update.changeNote);
+        const entry = { version: newVersion, date: new Date().toISOString(), changes };
+        existing.changelog.unshift(entry);
+        // Keep last 50 entries
+        if (existing.changelog.length > 50) existing.changelog = existing.changelog.slice(0, 50);
+        delete update.bumpMajor; delete update.bumpMinor; delete update.changeNote;
+        const merged = { ...existing, ...update, version: newVersion, updatedAt: new Date().toISOString() };
+        writeFileSync(kpiPath, JSON.stringify(merged, null, 2));
+        log.info("[investor] KPIs updated", { version: newVersion, changes });
+        return json(res, { ok: true, version: newVersion, changes });
+      } catch { return json(res, { error: "Invalid JSON" }, 400); }
+    });
+    return;
   }
 
   // Voice routes
