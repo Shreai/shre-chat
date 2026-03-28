@@ -432,6 +432,34 @@ const stmtCountMessages = chatDb.prepare(`
   SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?
 `);
 
+// ── Emergency response cache — FTS5 search for similar past Q&A when router is down ──
+const stmtFTSSearch = chatDb.prepare(`
+  SELECT user_message, assistant_response, agent_id, model
+  FROM chat_audit_log
+  WHERE rowid IN (SELECT rowid FROM chat_audit_fts WHERE chat_audit_fts MATCH ?)
+  ORDER BY created_at DESC LIMIT 1
+`);
+
+function emergencyResponseLookup(userMessage) {
+  try {
+    if (!userMessage || userMessage.length < 10) return null;
+    // Build FTS5 query: take first 5 significant words
+    const words = userMessage.replace(/[^\w\s]/g, "").split(/\s+/).filter(w => w.length > 2).slice(0, 5);
+    if (words.length < 2) return null;
+    const ftsQuery = words.join(" OR ");
+    const row = stmtFTSSearch.get(ftsQuery);
+    if (row && row.assistant_response && row.assistant_response.length > 50) {
+      return {
+        content: row.assistant_response,
+        agent_id: row.agent_id || "shre",
+        model: row.model || "cached",
+        cached: true,
+      };
+    }
+  } catch { /* FTS search failed — no fallback available */ }
+  return null;
+}
+
 // ── Helper: date range for employee activity queries ──
 function getDateRange(period) {
   const tz = "America/New_York";
@@ -4165,7 +4193,28 @@ async function requestHandler(req, res) {
       );
       routerReq.on("error", (err) => {
         log.error("[router-proxy] shre-router error:", err.message);
-        if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: "shre-router unreachable" })); }
+        if (!res.headersSent) {
+          // Emergency fallback: search local message history for similar Q&A
+          try {
+            const parsed = JSON.parse(reqBody || "{}");
+            const lastUserMsg = [...(parsed.messages || [])].reverse().find(m => m.role === "user")?.content || "";
+            const cached = emergencyResponseLookup(lastUserMsg);
+            if (cached) {
+              log.info("[router-proxy] Serving cached response (router unavailable)");
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({
+                content: cached.content,
+                model: "cached-local",
+                agent: cached.agent_id,
+                _cached: true,
+                _notice: "AI router is temporarily unavailable. This is a cached response from a similar previous conversation.",
+              }));
+              return;
+            }
+          } catch { /* fallback lookup failed */ }
+          res.writeHead(502);
+          res.end(JSON.stringify({ error: "shre-router unreachable", _notice: "AI is temporarily unavailable. Please try again in a moment." }));
+        }
       });
       // Buffer request body for memory injection
       const reqChunks = [];
