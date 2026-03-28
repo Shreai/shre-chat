@@ -1,9 +1,12 @@
 {
-  "name": "AROS Chat",
-  "short_name": "AROS",
-  "description": "AI agent chat interface",
+  "name": "Shre AI",
+  "short_name": "Shre",
+  "description": "AI-powered store intelligence — chat, tasks, agents, analytics",
   "start_url": "/",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
   "orientation": "any",
   "background_color": "#0a1628",
   "theme_color": "#0a1628",
@@ -22,6 +25,29 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "url": "/?view=chat",
+      "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tasks",
+      "short_name": "Tasks",
+      "url": "/?view=tasks",
+      "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Briefing",
+      "short_name": "Briefing",
+      "url": "/?view=briefing",
+      "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "prefer_related_applications": false
 }
