@@ -269,8 +269,17 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
     fit.fit();
 
     // ── Auto-reconnecting WebSocket for terminal ──────────────
+    // Use a stable session ID so reconnects reattach to the same server-side PTY
+    // (survives screen changes, tab switches, foldable phone fold/unfold)
+    const termSessionId =
+      sessionStorage.getItem('shre-term-session') ||
+      (() => {
+        const id = `t-${Date.now().toString(36)}`;
+        sessionStorage.setItem('shre-term-session', id);
+        return id;
+      })();
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${location.host}/ws/terminal`;
+    const wsUrl = `${proto}//${location.host}/ws/terminal?session=${termSessionId}`;
     let currentWs: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempt = 0;
@@ -379,16 +388,72 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
     }
   }, [visible, activeTab?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Detect mobile / foldable viewport
+  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768);
+
+  useEffect(() => {
+    const checkViewport = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobileView(mobile);
+      // Re-fit terminal on viewport change (fold/unfold, orientation)
+      if (activeTab?.fit) {
+        setTimeout(() => activeTab.fit?.fit(), 100);
+      }
+    };
+    window.addEventListener('resize', checkViewport);
+    // Foldable phone: visualViewport fires on fold/unfold
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener('resize', checkViewport);
+    return () => {
+      window.removeEventListener('resize', checkViewport);
+      if (vv) vv.removeEventListener('resize', checkViewport);
+    };
+  }, [activeTab?.fit]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!visible) return null;
 
+  // On mobile, show fewer shortcut keys to save vertical space
+  const shortcutKeys = isMobileView
+    ? [
+        { label: 'Esc', seq: '\x1b' },
+        { label: 'Tab', seq: '\t' },
+        { label: 'Ctrl+C', seq: '\x03' },
+        { label: 'Ctrl+D', seq: '\x04' },
+        { label: 'Ctrl+L', seq: '\x0c' },
+        { label: '↑', seq: '\x1b[A' },
+        { label: '↓', seq: '\x1b[B' },
+      ]
+    : [
+        { label: 'Esc', seq: '\x1b' },
+        { label: 'Tab', seq: '\t' },
+        { label: '⇧Tab', seq: '\x1b[Z' },
+        { label: 'Ctrl+C', seq: '\x03' },
+        { label: 'Ctrl+D', seq: '\x04' },
+        { label: 'Ctrl+Z', seq: '\x1a' },
+        { label: 'Ctrl+L', seq: '\x0c' },
+        { label: 'Ctrl+A', seq: '\x01' },
+        { label: 'Ctrl+E', seq: '\x05' },
+        { label: '↑', seq: '\x1b[A' },
+        { label: '↓', seq: '\x1b[B' },
+      ];
+
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--c-bg-1, #0a1628)' }}>
-      {/* Tab bar */}
+    <div
+      className="flex flex-col"
+      style={{
+        background: 'var(--c-bg-1, #0a1628)',
+        height: '100%',
+        // On mobile, use dvh to account for browser chrome and virtual keyboard
+        ...(isMobileView ? { height: '100dvh', maxHeight: '100dvh' } : {}),
+      }}
+    >
+      {/* Tab bar — compact on mobile */}
       <div
         className="flex items-center shrink-0"
         style={{
           background: 'rgba(255,255,255,0.03)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
+          minHeight: isMobileView ? 32 : 36,
         }}
       >
         {/* Tabs */}
@@ -397,7 +462,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
             <button
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] shrink-0 transition-colors"
+              className={`flex items-center gap-1 shrink-0 transition-colors ${isMobileView ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-[11px]'}`}
               style={{
                 color: tab.id === activeTabId ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)',
                 background: tab.id === activeTabId ? 'rgba(255,255,255,0.06)' : 'transparent',
@@ -408,7 +473,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
               <span
                 style={{
                   fontFamily: 'monospace',
-                  fontSize: 10,
+                  fontSize: isMobileView ? 8 : 10,
                   color: tab.id === activeTabId ? '#6cb4ee' : 'inherit',
                 }}
               >
@@ -438,7 +503,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
             onClick={createTab}
             style={{
               color: 'rgba(255,255,255,0.3)',
-              fontSize: 16,
+              fontSize: isMobileView ? 14 : 16,
               background: 'none',
               border: 'none',
               cursor: 'pointer',
@@ -475,30 +540,26 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
         </div>
       </div>
 
-      {/* Terminal container */}
-      <div ref={containerRef} className="flex-1 min-h-0" style={{ padding: '4px 8px' }} />
-
-      {/* Shortcut keys bar */}
+      {/* Terminal container — takes all remaining space */}
       <div
-        className="flex items-center gap-1 px-2 py-1 shrink-0 overflow-x-auto scrollbar-none"
+        ref={containerRef}
+        className="flex-1 min-h-0"
+        style={{
+          padding: isMobileView ? '2px 4px' : '4px 8px',
+          overflow: 'hidden',
+        }}
+      />
+
+      {/* Shortcut keys bar — fewer keys on mobile */}
+      <div
+        className="flex items-center gap-1 px-2 shrink-0 overflow-x-auto scrollbar-none"
         style={{
           background: 'rgba(255,255,255,0.03)',
           borderTop: '1px solid rgba(255,255,255,0.06)',
+          padding: isMobileView ? '2px 4px' : '4px 8px',
         }}
       >
-        {[
-          { label: 'Esc', seq: '\x1b' },
-          { label: 'Tab', seq: '\t' },
-          { label: '⇧Tab', seq: '\x1b[Z' },
-          { label: 'Ctrl+C', seq: '\x03' },
-          { label: 'Ctrl+D', seq: '\x04' },
-          { label: 'Ctrl+Z', seq: '\x1a' },
-          { label: 'Ctrl+L', seq: '\x0c' },
-          { label: 'Ctrl+A', seq: '\x01' },
-          { label: 'Ctrl+E', seq: '\x05' },
-          { label: '↑', seq: '\x1b[A' },
-          { label: '↓', seq: '\x1b[B' },
-        ].map(({ label, seq }) => (
+        {shortcutKeys.map(({ label, seq }) => (
           <button
             key={label}
             onClick={() => {
@@ -508,13 +569,15 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
               }
               tab?.term?.focus();
             }}
-            className="px-2 py-0.5 rounded text-[10px] font-medium shrink-0 transition-colors"
+            className="rounded font-medium shrink-0 transition-colors"
             style={{
               background: 'rgba(255,255,255,0.06)',
               color: 'rgba(255,255,255,0.5)',
               border: '1px solid rgba(255,255,255,0.08)',
               fontFamily: "'SF Mono', Menlo, monospace",
               cursor: 'pointer',
+              padding: isMobileView ? '1px 6px' : '2px 8px',
+              fontSize: isMobileView ? 9 : 10,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
