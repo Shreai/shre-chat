@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
 import {
   AppContext,
   type AppState,
@@ -21,17 +21,17 @@ import {
   loadQueue,
   loadThemeCustom,
   loadDrafts,
-} from "./store";
-import type { ChatMessage } from "./openclaw";
-import { Sidebar } from "./Sidebar";
-import { StatusBar } from "./StatusBar";
-import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
-import { ChatView } from "./ChatView";
-import { ErrorBoundary } from "./ErrorBoundary";
-import { ViewErrorBoundary } from "./ViewErrorBoundary";
-import { LoginView } from "./LoginView";
-import { loadUserProfile, saveUserProfile, createDefaultProfile, type UserProfile } from "./store";
-import { useAnomalyStream } from "./hooks/useAnomalyStream";
+} from './store';
+import type { ChatMessage } from './openclaw';
+import { Sidebar } from './Sidebar';
+import { StatusBar } from './StatusBar';
+import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
+import { ChatView } from './ChatView';
+import { ErrorBoundary } from './ErrorBoundary';
+import { ViewErrorBoundary } from './ViewErrorBoundary';
+import { LoginView } from './LoginView';
+import { loadUserProfile, saveUserProfile, createDefaultProfile, type UserProfile } from './store';
+import { useAnomalyStream } from './hooks/useAnomalyStream';
 
 // ── Extracted modules ──
 import {
@@ -40,9 +40,9 @@ import {
   type AuthWorkspace,
   type AuthUser,
   WorkspaceSelectionScreen,
-} from "./AppAuth";
-import { ViewNavHeader } from "./ViewNavHeader";
-import { buildActions, type ActionDeps } from "./AppActions";
+} from './AppAuth';
+import { ViewNavHeader } from './ViewNavHeader';
+import { buildActions, type ActionDeps } from './AppActions';
 import {
   useThemeEffect,
   useThemeCustomEffect,
@@ -56,51 +56,91 @@ import {
   useVisualViewport,
   useFoldDetection,
   useUpdateSessions,
-} from "./AppEffects";
+} from './AppEffects';
 
 // Lazy-load non-default views for code splitting
-const ActivityView = lazy(() => import("./ActivityView").then(m => ({ default: m.ActivityView })));
-const FilesView = lazy(() => import("./FilesView").then(m => ({ default: m.FilesView })));
-const CronView = lazy(() => import("./CronView").then(m => ({ default: m.CronView })));
-const FeedView = lazy(() => import("./FeedView").then(m => ({ default: m.FeedView })));
-const AgentFeedView = lazy(() => import("./AgentFeedView").then(m => ({ default: m.AgentFeedView })));
-const PreviewView = lazy(() => import("./PreviewView").then(m => ({ default: m.PreviewView })));
-const SpendView = lazy(() => import("./SpendView").then(m => ({ default: m.SpendView })));
-const BriefingView = lazy(() => import("./BriefingView").then(m => ({ default: m.BriefingView })));
-const RemindersView = lazy(() => import("./RemindersView").then(m => ({ default: m.RemindersView })));
-const CostDashboardView = lazy(() => import("./CostDashboardView").then(m => ({ default: m.CostDashboardView })));
-const MarketplaceView = lazy(() => import("./MarketplaceView").then(m => ({ default: m.MarketplaceView })));
-const AdminView = lazy(() => import("./AdminView").then(m => ({ default: m.AdminView })));
-const FeedAnalyticsView = lazy(() => import("./FeedAnalyticsView").then(m => ({ default: m.FeedAnalyticsView })));
-const TaskTimelineView = lazy(() => import("./TaskTimelineView").then(m => ({ default: m.TaskTimelineView })));
-const FinetuneView = lazy(() => import("./FinetuneView").then(m => ({ default: m.FinetuneView })));
-const ReportsView = lazy(() => import("./ReportsView").then(m => ({ default: m.ReportsView })));
-const EmployeeActivityView = lazy(() => import("./EmployeeActivityView").then(m => ({ default: m.EmployeeActivityView })));
-const TasksView = lazy(() => import("./TasksView").then(m => ({ default: m.TasksView })));
-const ProjectsView = lazy(() => import("./ProjectsView").then(m => ({ default: m.ProjectsView })));
-const EmailView = lazy(() => import("./EmailView").then(m => ({ default: m.EmailView })));
-const BillingView = lazy(() => import("./BillingView").then(m => ({ default: m.BillingView })));
-const DemoView = lazy(() => import("./DemoView").then(m => ({ default: m.DemoView })));
+const ActivityView = lazy(() =>
+  import('./ActivityView').then((m) => ({ default: m.ActivityView })),
+);
+const FilesView = lazy(() => import('./FilesView').then((m) => ({ default: m.FilesView })));
+const CronView = lazy(() => import('./CronView').then((m) => ({ default: m.CronView })));
+const FeedView = lazy(() => import('./FeedView').then((m) => ({ default: m.FeedView })));
+const AgentFeedView = lazy(() =>
+  import('./AgentFeedView').then((m) => ({ default: m.AgentFeedView })),
+);
+const PreviewView = lazy(() => import('./PreviewView').then((m) => ({ default: m.PreviewView })));
+const SpendView = lazy(() => import('./SpendView').then((m) => ({ default: m.SpendView })));
+const BriefingView = lazy(() =>
+  import('./BriefingView').then((m) => ({ default: m.BriefingView })),
+);
+const RemindersView = lazy(() =>
+  import('./RemindersView').then((m) => ({ default: m.RemindersView })),
+);
+const CostDashboardView = lazy(() =>
+  import('./CostDashboardView').then((m) => ({ default: m.CostDashboardView })),
+);
+const MarketplaceView = lazy(() =>
+  import('./MarketplaceView').then((m) => ({ default: m.MarketplaceView })),
+);
+const AdminView = lazy(() => import('./AdminView').then((m) => ({ default: m.AdminView })));
+const FeedAnalyticsView = lazy(() =>
+  import('./FeedAnalyticsView').then((m) => ({ default: m.FeedAnalyticsView })),
+);
+const TaskTimelineView = lazy(() =>
+  import('./TaskTimelineView').then((m) => ({ default: m.TaskTimelineView })),
+);
+const FinetuneView = lazy(() =>
+  import('./FinetuneView').then((m) => ({ default: m.FinetuneView })),
+);
+const ReportsView = lazy(() => import('./ReportsView').then((m) => ({ default: m.ReportsView })));
+const EmployeeActivityView = lazy(() =>
+  import('./EmployeeActivityView').then((m) => ({ default: m.EmployeeActivityView })),
+);
+const TasksView = lazy(() => import('./TasksView').then((m) => ({ default: m.TasksView })));
+const ProjectsView = lazy(() =>
+  import('./ProjectsView').then((m) => ({ default: m.ProjectsView })),
+);
+const EmailView = lazy(() => import('./EmailView').then((m) => ({ default: m.EmailView })));
+const BillingView = lazy(() => import('./BillingView').then((m) => ({ default: m.BillingView })));
+const DemoView = lazy(() => import('./DemoView').then((m) => ({ default: m.DemoView })));
+const InvestorView = lazy(() =>
+  import('./InvestorView').then((m) => ({ default: m.InvestorView })),
+);
 
 const LazyFallback = () => (
-  <div className="flex-1 flex items-center justify-center" style={{ color: "var(--c-text-3)" }}>
+  <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--c-text-3)' }}>
     Loading…
   </div>
 );
 
-const AGENT_KEY = "shre-active-agent";
-const THEME_KEY = "shre-theme";
+const AGENT_KEY = 'shre-active-agent';
+const THEME_KEY = 'shre-theme';
 
 export function App() {
   // ── Demo mode — no auth required, shows sandbox experience ──
   const isDemoMode = !!(
     (window as any).__SHRE_DEMO_MODE__ ||
-    new URLSearchParams(window.location.search).get("demo") === "true"
+    new URLSearchParams(window.location.search).get('demo') === 'true'
   );
 
   if (isDemoMode) {
     return (
-      <Suspense fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #000)", color: "var(--c-text-4)" }}>Loading demo...</div>}>
+      <Suspense
+        fallback={
+          <div
+            style={{
+              minHeight: '100vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--c-bg-1, #000)',
+              color: 'var(--c-text-4)',
+            }}
+          >
+            Loading demo...
+          </div>
+        }
+      >
         <DemoView />
       </Suspense>
     );
@@ -119,11 +159,29 @@ export function App() {
   } = useAuth(DEV_BYPASS_AUTH);
 
   if (authChecking) {
-    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--c-bg-1, #000)", color: "var(--c-text-4)" }}>Loading...</div>;
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--c-bg-1, #000)',
+          color: 'var(--c-text-4)',
+        }}
+      >
+        Loading...
+      </div>
+    );
   }
 
   if (pendingWorkspaceSelection) {
-    return <WorkspaceSelectionScreen pending={pendingWorkspaceSelection} onSelect={handleWorkspaceSelected} />;
+    return (
+      <WorkspaceSelectionScreen
+        pending={pendingWorkspaceSelection}
+        onSelect={handleWorkspaceSelected}
+      />
+    );
   }
 
   if (!authState) {
@@ -141,7 +199,13 @@ export function App() {
   );
 }
 
-function AuthenticatedApp({ authUser, onLogout, activeWorkspace, workspaces, onWorkspaceSwitch }: {
+function AuthenticatedApp({
+  authUser,
+  onLogout,
+  activeWorkspace,
+  workspaces,
+  onWorkspaceSwitch,
+}: {
   authUser: AuthUser;
   onLogout: () => void;
   activeWorkspace?: AuthWorkspace | null;
@@ -151,7 +215,10 @@ function AuthenticatedApp({ authUser, onLogout, activeWorkspace, workspaces, onW
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
 
   if (!userProfile || userProfile.onboardedAt === 0) {
-    const completed = { ...(userProfile || createDefaultProfile(authUser)), onboardedAt: Date.now() };
+    const completed = {
+      ...(userProfile || createDefaultProfile(authUser)),
+      onboardedAt: Date.now(),
+    };
     saveUserProfile(completed);
     setUserProfile(completed);
     return null;
@@ -170,7 +237,15 @@ function AuthenticatedApp({ authUser, onLogout, activeWorkspace, workspaces, onW
   );
 }
 
-function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorkspace, workspaces, onWorkspaceSwitch }: {
+function MainApp({
+  authUser,
+  onLogout,
+  userProfile,
+  setUserProfile,
+  activeWorkspace,
+  workspaces,
+  onWorkspaceSwitch,
+}: {
   authUser: AuthUser;
   onLogout: () => void;
   activeWorkspace?: AuthWorkspace | null;
@@ -183,13 +258,15 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
     const loaded = loadSessions();
     if (loaded.length === 0) {
       try {
-        const old = JSON.parse(localStorage.getItem("shre-chat-history") || "[]");
+        const old = JSON.parse(localStorage.getItem('shre-chat-history') || '[]');
         if (old.length > 0) {
-          const migrated = createSession("Migrated chat", "main");
+          const migrated = createSession('Migrated chat', 'main');
           migrated.messages = old;
           return [migrated];
         }
-      } catch (err) { console.debug("legacy chat history migration", err); }
+      } catch (err) {
+        console.debug('legacy chat history migration', err);
+      }
     }
     return loaded;
   });
@@ -206,29 +283,41 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
     return activeSessionId ? [activeSessionId] : [];
   });
 
-  const [activeAgentId, setActiveAgentId] = useState(() => localStorage.getItem(AGENT_KEY) || "shre");
-  const [view, setView] = useState<View>("chat");
+  const [activeAgentId, setActiveAgentId] = useState(
+    () => localStorage.getItem(AGENT_KEY) || 'shre',
+  );
+  const [view, setView] = useState<View>('chat');
   const [activity, setActivity] = useState(() => loadActivity());
   const [feed, setFeed] = useState(() => loadFeed());
   const [files, setFiles] = useState(() => loadFiles());
   const [streaming, setStreaming] = useState(false);
-  const [streamText, setStreamText] = useState("");
+  const [streamText, setStreamText] = useState('');
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [gatewayUp, setGatewayUp] = useState<boolean | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [syncing, setSyncing] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem(THEME_KEY) as Theme) || "dark");
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem(THEME_KEY) as Theme) || 'dark',
+  );
 
   // ── RapidRMS live anomaly stream ──
-  const [rapidrmsWorkspace] = useState<string | null>(
-    () => localStorage.getItem("rapidrms-workspace")
+  const [rapidrmsWorkspace] = useState<string | null>(() =>
+    localStorage.getItem('rapidrms-workspace'),
   );
-  const { anomalies: rmsAnomalies, criticalCount: rmsCriticalCount, dismiss: dismissRmsAlerts } = useAnomalyStream({
+  const {
+    anomalies: rmsAnomalies,
+    criticalCount: rmsCriticalCount,
+    dismiss: dismissRmsAlerts,
+  } = useAnomalyStream({
     workspaceId: rapidrmsWorkspace,
   });
-  const [compact, setCompact] = useState(() => localStorage.getItem("shre-compact") === "true");
-  const [writeEnabled, setWriteEnabled] = useState(() => localStorage.getItem("shre-write-enabled") !== "false");
-  const [claudeCliMode, setClaudeCliMode] = useState(() => localStorage.getItem("shre-claude-cli-mode") === "true");
+  const [compact, setCompact] = useState(() => localStorage.getItem('shre-compact') === 'true');
+  const [writeEnabled, setWriteEnabled] = useState(
+    () => localStorage.getItem('shre-write-enabled') !== 'false',
+  );
+  const [claudeCliMode, setClaudeCliMode] = useState(
+    () => localStorage.getItem('shre-claude-cli-mode') === 'true',
+  );
   const [replyToIndex, setReplyToIndex] = useState<number | null>(null);
   const [themeCustom, setThemeCustomState] = useState<ThemeCustom>(() => loadThemeCustom());
   const queueRef = useRef<QueuedMessage[]>(loadQueue());
@@ -237,7 +326,9 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
 
   // Cleanup draft save timer on unmount
   useEffect(() => {
-    return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
+    return () => {
+      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+    };
   }, []);
 
   // ── Refs ──
@@ -267,47 +358,88 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
   const updateSessions = useUpdateSessions(setSessions, crossTabRef);
 
   const actions = buildActions({
-    sessionsRef, agentRef, queueRef, draftsRef, draftSaveTimer, crossTabRef,
+    sessionsRef,
+    agentRef,
+    queueRef,
+    draftsRef,
+    draftSaveTimer,
+    crossTabRef,
     activeSessionId,
-    setActiveSessionId, setOpenTabs, setActiveAgentId, setView,
-    setActivity, setFeed, setFiles, setStreaming, setStreamText,
-    setStatusLine, setGatewayUp, setSidebarOpen, setSyncing, setTheme,
-    setCompact, setWriteEnabled, setReplyToIndex, setThemeCustomState,
-    setClaudeCliMode, updateSessions, onLogout,
+    setActiveSessionId,
+    setOpenTabs,
+    setActiveAgentId,
+    setView,
+    setActivity,
+    setFeed,
+    setFiles,
+    setStreaming,
+    setStreamText,
+    setStatusLine,
+    setGatewayUp,
+    setSidebarOpen,
+    setSyncing,
+    setTheme,
+    setCompact,
+    setWriteEnabled,
+    setReplyToIndex,
+    setThemeCustomState,
+    setClaudeCliMode,
+    updateSessions,
+    onLogout,
   });
 
   useFoldDetection(actions);
 
   // ── Memoized context ──
-  const state: AppState = useMemo(() => ({
-    sessions,
-    activeSessionId,
-    activeAgentId,
-    openTabs,
-    view,
-    activity,
-    feed,
-    files,
-    queue: queueRef.current,
-    streaming,
-    streamText,
-    statusLine,
-    gatewayUp,
-    sidebarOpen,
-    syncing,
-    theme,
-    themeCustom,
-    compact,
-    writeEnabled,
-    replyToIndex,
-    userProfile,
-    claudeCliMode,
-  }), [
-    sessions, activeSessionId, activeAgentId, openTabs, view,
-    activity, feed, files, streaming, streamText, statusLine,
-    gatewayUp, sidebarOpen, syncing, theme, themeCustom, compact,
-    writeEnabled, replyToIndex, userProfile, claudeCliMode,
-  ]);
+  const state: AppState = useMemo(
+    () => ({
+      sessions,
+      activeSessionId,
+      activeAgentId,
+      openTabs,
+      view,
+      activity,
+      feed,
+      files,
+      queue: queueRef.current,
+      streaming,
+      streamText,
+      statusLine,
+      gatewayUp,
+      sidebarOpen,
+      syncing,
+      theme,
+      themeCustom,
+      compact,
+      writeEnabled,
+      replyToIndex,
+      userProfile,
+      claudeCliMode,
+    }),
+    [
+      sessions,
+      activeSessionId,
+      activeAgentId,
+      openTabs,
+      view,
+      activity,
+      feed,
+      files,
+      streaming,
+      streamText,
+      statusLine,
+      gatewayUp,
+      sidebarOpen,
+      syncing,
+      theme,
+      themeCustom,
+      compact,
+      writeEnabled,
+      replyToIndex,
+      userProfile,
+      claudeCliMode,
+    ],
+  );
 
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
@@ -324,51 +456,60 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const [swipeActive, setSwipeActive] = useState(false);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    if (touch.clientX < 30 && !sidebarOpen) {
-      setSwipeActive(true);
-    }
-  }, [sidebarOpen]);
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+      if (touch.clientX < 30 && !sidebarOpen) {
+        setSwipeActive(true);
+      }
+    },
+    [sidebarOpen],
+  );
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - touchStartRef.current.x;
-    if (touchStartRef.current.x < 30 && dx > 20 && !sidebarOpen) {
-      setSwipeActive(true);
-    }
-  }, [sidebarOpen]);
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchStartRef.current) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartRef.current.x;
+      if (touchStartRef.current.x < 30 && dx > 20 && !sidebarOpen) {
+        setSwipeActive(true);
+      }
+    },
+    [sidebarOpen],
+  );
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    setSwipeActive(false);
-    if (!touchStartRef.current) return;
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - touchStartRef.current.x;
-    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
-    const elapsed = Date.now() - touchStartRef.current.time;
-    if (touchStartRef.current.x < 30 && dx > 80 && dy < 100 && elapsed < 500) {
-      actions.setSidebarOpen(true);
-    }
-    if (sidebarOpen && dx < -80 && dy < 100 && elapsed < 500) {
-      actions.setSidebarOpen(false);
-    }
-    touchStartRef.current = null;
-  }, [sidebarOpen, actions]);
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      setSwipeActive(false);
+      if (!touchStartRef.current) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - touchStartRef.current.x;
+      const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+      const elapsed = Date.now() - touchStartRef.current.time;
+      if (touchStartRef.current.x < 30 && dx > 80 && dy < 100 && elapsed < 500) {
+        actions.setSidebarOpen(true);
+      }
+      if (sidebarOpen && dx < -80 && dy < 100 && elapsed < 500) {
+        actions.setSidebarOpen(false);
+      }
+      touchStartRef.current = null;
+    },
+    [sidebarOpen, actions],
+  );
 
   // Detect standalone (PWA / Add to Home Screen) mode
-  const isPWA = typeof window !== "undefined" && (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as any).standalone === true
-  );
+  const isPWA =
+    typeof window !== 'undefined' &&
+    (window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true);
 
   return (
     <ErrorBoundary>
       <AppContext.Provider value={contextValue}>
         <div
-          className={`h-full flex flex-col${isPWA ? " pwa-mode" : ""}`}
-          style={{ background: "var(--c-bg-1)" }}
+          className={`h-full flex flex-col${isPWA ? ' pwa-mode' : ''}`}
+          style={{ background: 'var(--c-bg-1)' }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -378,18 +519,31 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
               className="flex items-center justify-between px-3 shrink-0"
               style={{
                 height: `calc(44px + env(safe-area-inset-top, 0px))`,
-                paddingTop: "env(safe-area-inset-top, 0px)",
-                background: "var(--c-bg-2)",
-                borderBottom: "1px solid var(--c-border)",
+                paddingTop: 'env(safe-area-inset-top, 0px)',
+                background: 'var(--c-bg-2)',
+                borderBottom: '1px solid var(--c-border)',
               }}
             >
-              <span className="text-sm font-semibold" style={{ color: "var(--c-text-1)" }}>Shre</span>
+              <span className="text-sm font-semibold" style={{ color: 'var(--c-text-1)' }}>
+                Shre
+              </span>
               <button
-                onClick={() => { actions.switchView("chat"); }}
+                onClick={() => {
+                  actions.switchView('chat');
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-                style={{ color: "var(--c-text-2)" }}
+                style={{ color: 'var(--c-text-2)' }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                </svg>
                 Chat
               </button>
             </div>
@@ -397,7 +551,14 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
           <StatusBar />
           {workspaces && workspaces.length > 1 && (
             <WorkspaceSwitcher
-              activeWorkspace={(activeWorkspace ?? null) as { id: string; name: string; role: string; isDefault?: boolean } | null}
+              activeWorkspace={
+                (activeWorkspace ?? null) as {
+                  id: string;
+                  name: string;
+                  role: string;
+                  isDefault?: boolean;
+                } | null
+              }
               workspaces={workspaces}
               onSwitch={onWorkspaceSwitch}
             />
@@ -405,11 +566,12 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
           {rmsAnomalies.length > 0 && (
             <div
               style={{
-                background: rmsCriticalCount > 0 ? "var(--c-error, #dc2626)" : "var(--c-warning, #d97706)",
-                color: "#fff",
-                padding: "6px 12px",
-                display: "flex",
-                alignItems: "flex-start",
+                background:
+                  rmsCriticalCount > 0 ? 'var(--c-error, #dc2626)' : 'var(--c-warning, #d97706)',
+                color: '#fff',
+                padding: '6px 12px',
+                display: 'flex',
+                alignItems: 'flex-start',
                 gap: 8,
                 fontSize: 13,
                 lineHeight: 1.4,
@@ -421,17 +583,32 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
               <span style={{ fontSize: 16, flexShrink: 0, paddingTop: 1 }}>⚠️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {rmsAnomalies.slice(0, 3).map((a: any, i: number) => (
-                  <div key={i} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <strong style={{ textTransform: "capitalize" }}>{a.severity}</strong>: {a.message}
+                  <div
+                    key={i}
+                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    <strong style={{ textTransform: 'capitalize' }}>{a.severity}</strong>:{' '}
+                    {a.message}
                   </div>
                 ))}
                 {rmsAnomalies.length > 3 && (
-                  <div style={{ opacity: 0.85 }}>+{rmsAnomalies.length - 3} more alert{rmsAnomalies.length - 3 !== 1 ? "s" : ""}</div>
+                  <div style={{ opacity: 0.85 }}>
+                    +{rmsAnomalies.length - 3} more alert{rmsAnomalies.length - 3 !== 1 ? 's' : ''}
+                  </div>
                 )}
               </div>
               <button
                 onClick={dismissRmsAlerts}
-                style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, padding: "0 4px", opacity: 0.85, flexShrink: 0 }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  padding: '0 4px',
+                  opacity: 0.85,
+                  flexShrink: 0,
+                }}
                 title="Dismiss alerts"
                 aria-label="Dismiss RapidRMS alerts"
               >
@@ -440,66 +617,197 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
             </div>
           )}
           <div className="flex flex-1 min-h-0">
-            <div className={`swipe-indicator ${swipeActive ? "swipe-active" : ""}`} />
+            <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
             <Sidebar />
-            <div style={{ display: view === "chat" ? "contents" : "none" }}><ChatView /></div>
-            {view !== "chat" && (
+            <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
+              <ChatView />
+            </div>
+            {view !== 'chat' && (
               <div className="flex-1 flex flex-col min-h-0 min-w-0">
                 <ViewNavHeader view={view} onSwitch={actions.setView} />
                 <Suspense fallback={<LazyFallback />}>
-                  {view === "activity" && <ViewErrorBoundary viewName="Activity"><ActivityView /></ViewErrorBoundary>}
-                  {view === "files" && <ViewErrorBoundary viewName="Files"><FilesView /></ViewErrorBoundary>}
-                  {view === "cron" && <ViewErrorBoundary viewName="Cron"><CronView /></ViewErrorBoundary>}
-                  {view === "feed" && <ViewErrorBoundary viewName="Feed"><FeedView /></ViewErrorBoundary>}
-                  {view === "agent-feed" && <ViewErrorBoundary viewName="Agent Feed"><AgentFeedView /></ViewErrorBoundary>}
-                  {view === "preview" && <ViewErrorBoundary viewName="Preview"><PreviewView /></ViewErrorBoundary>}
-                  {view === "spend" && <ViewErrorBoundary viewName="Spend"><SpendView /></ViewErrorBoundary>}
-                  {view === "briefing" && <ViewErrorBoundary viewName="Briefing"><BriefingView /></ViewErrorBoundary>}
-                  {view === "reminders" && <ViewErrorBoundary viewName="Reminders"><RemindersView /></ViewErrorBoundary>}
-                  {view === "cost-dashboard" && <ViewErrorBoundary viewName="Cost Dashboard"><CostDashboardView /></ViewErrorBoundary>}
-                  {view === "marketplace" && <ViewErrorBoundary viewName="Marketplace"><MarketplaceView /></ViewErrorBoundary>}
-                  {view === "admin" && <ViewErrorBoundary viewName="Admin"><AdminView /></ViewErrorBoundary>}
-                  {view === "feed-analytics" && <ViewErrorBoundary viewName="Feed Analytics"><FeedAnalyticsView /></ViewErrorBoundary>}
-                  {view === "task-timeline" && <ViewErrorBoundary viewName="Task Timeline"><TaskTimelineView /></ViewErrorBoundary>}
-                  {view === "finetune" && <ViewErrorBoundary viewName="Fine-Tuning"><FinetuneView /></ViewErrorBoundary>}
-                  {view === "reports" && <ViewErrorBoundary viewName="Reports"><ReportsView /></ViewErrorBoundary>}
-                  {view === "employee-activity" && <ViewErrorBoundary viewName="Employee Activity"><EmployeeActivityView /></ViewErrorBoundary>}
-                  {view === "tasks" && <ViewErrorBoundary viewName="Tasks"><TasksView /></ViewErrorBoundary>}
-                  {view === "projects" && <ViewErrorBoundary viewName="Projects"><ProjectsView /></ViewErrorBoundary>}
-                  {view === "email" && <ViewErrorBoundary viewName="Email"><EmailView /></ViewErrorBoundary>}
-                  {view === "billing" && <ViewErrorBoundary viewName="Billing"><BillingView /></ViewErrorBoundary>}
-                  {view === "openclaw" && (
-                    <ViewErrorBoundary viewName="OpenClaw">
-                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-                        <iframe src="/openclaw/" className="flex-1 w-full border-0" title="OpenClaw Gateway" style={{ background: "#1a1a2e", minHeight: 0 }} />
-                      </div>
+                  {view === 'activity' && (
+                    <ViewErrorBoundary viewName="Activity">
+                      <ActivityView />
                     </ViewErrorBoundary>
                   )}
-                  {view === "shre-dashboard" && (
-                    <ViewErrorBoundary viewName="Shre Dashboard">
-                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-                        <iframe src="/shre-dashboard/" className="flex-1 w-full border-0" title="Shre AI Dashboard" style={{ background: "#1a1a2e", minHeight: 0 }} />
-                      </div>
+                  {view === 'files' && (
+                    <ViewErrorBoundary viewName="Files">
+                      <FilesView />
                     </ViewErrorBoundary>
                   )}
-                  {view === "cortexdb" && (
-                    <ViewErrorBoundary viewName="CortexDB">
-                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-                        <iframe src="/cortexdb-ui/" className="flex-1 w-full border-0" title="CortexDB Dashboard" style={{ background: "#1a1a2e", minHeight: 0 }} />
-                      </div>
+                  {view === 'cron' && (
+                    <ViewErrorBoundary viewName="Cron">
+                      <CronView />
                     </ViewErrorBoundary>
                   )}
-                  {view === "storepulse" && (
-                    <ViewErrorBoundary viewName="StorePulse">
-                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-                        <iframe src="/storepulse/" className="flex-1 w-full border-0" title="StorePulse" style={{ background: "#1a1a2e", minHeight: 0 }} />
-                      </div>
+                  {view === 'feed' && (
+                    <ViewErrorBoundary viewName="Feed">
+                      <FeedView />
                     </ViewErrorBoundary>
                   )}
-                  {view === "app-marketplace" && (
+                  {view === 'agent-feed' && (
+                    <ViewErrorBoundary viewName="Agent Feed">
+                      <AgentFeedView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'preview' && (
+                    <ViewErrorBoundary viewName="Preview">
+                      <PreviewView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'spend' && (
+                    <ViewErrorBoundary viewName="Spend">
+                      <SpendView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'briefing' && (
+                    <ViewErrorBoundary viewName="Briefing">
+                      <BriefingView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'reminders' && (
+                    <ViewErrorBoundary viewName="Reminders">
+                      <RemindersView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'cost-dashboard' && (
+                    <ViewErrorBoundary viewName="Cost Dashboard">
+                      <CostDashboardView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'marketplace' && (
                     <ViewErrorBoundary viewName="Marketplace">
-                      <div className="flex-1 w-full h-full flex flex-col" style={{ background: "var(--c-bg-1)" }}>
-                        <iframe src="/app-marketplace/" className="flex-1 w-full border-0" title="Marketplace" style={{ background: "#1a1a2e", minHeight: 0 }} />
+                      <MarketplaceView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'admin' && (
+                    <ViewErrorBoundary viewName="Admin">
+                      <AdminView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'feed-analytics' && (
+                    <ViewErrorBoundary viewName="Feed Analytics">
+                      <FeedAnalyticsView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'task-timeline' && (
+                    <ViewErrorBoundary viewName="Task Timeline">
+                      <TaskTimelineView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'finetune' && (
+                    <ViewErrorBoundary viewName="Fine-Tuning">
+                      <FinetuneView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'reports' && (
+                    <ViewErrorBoundary viewName="Reports">
+                      <ReportsView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'employee-activity' && (
+                    <ViewErrorBoundary viewName="Employee Activity">
+                      <EmployeeActivityView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'tasks' && (
+                    <ViewErrorBoundary viewName="Tasks">
+                      <TasksView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'projects' && (
+                    <ViewErrorBoundary viewName="Projects">
+                      <ProjectsView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'email' && (
+                    <ViewErrorBoundary viewName="Email">
+                      <EmailView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'billing' && (
+                    <ViewErrorBoundary viewName="Billing">
+                      <BillingView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'investor' && (
+                    <ViewErrorBoundary viewName="Investor Dashboard">
+                      <InvestorView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'openclaw' && (
+                    <ViewErrorBoundary viewName="OpenClaw">
+                      <div
+                        className="flex-1 w-full h-full flex flex-col"
+                        style={{ background: 'var(--c-bg-1)' }}
+                      >
+                        <iframe
+                          src="/openclaw/"
+                          className="flex-1 w-full border-0"
+                          title="OpenClaw Gateway"
+                          style={{ background: '#1a1a2e', minHeight: 0 }}
+                        />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'shre-dashboard' && (
+                    <ViewErrorBoundary viewName="Shre Dashboard">
+                      <div
+                        className="flex-1 w-full h-full flex flex-col"
+                        style={{ background: 'var(--c-bg-1)' }}
+                      >
+                        <iframe
+                          src="/shre-dashboard/"
+                          className="flex-1 w-full border-0"
+                          title="Shre AI Dashboard"
+                          style={{ background: '#1a1a2e', minHeight: 0 }}
+                        />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'cortexdb' && (
+                    <ViewErrorBoundary viewName="CortexDB">
+                      <div
+                        className="flex-1 w-full h-full flex flex-col"
+                        style={{ background: 'var(--c-bg-1)' }}
+                      >
+                        <iframe
+                          src="/cortexdb-ui/"
+                          className="flex-1 w-full border-0"
+                          title="CortexDB Dashboard"
+                          style={{ background: '#1a1a2e', minHeight: 0 }}
+                        />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'storepulse' && (
+                    <ViewErrorBoundary viewName="StorePulse">
+                      <div
+                        className="flex-1 w-full h-full flex flex-col"
+                        style={{ background: 'var(--c-bg-1)' }}
+                      >
+                        <iframe
+                          src="/storepulse/"
+                          className="flex-1 w-full border-0"
+                          title="StorePulse"
+                          style={{ background: '#1a1a2e', minHeight: 0 }}
+                        />
+                      </div>
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'app-marketplace' && (
+                    <ViewErrorBoundary viewName="Marketplace">
+                      <div
+                        className="flex-1 w-full h-full flex flex-col"
+                        style={{ background: 'var(--c-bg-1)' }}
+                      >
+                        <iframe
+                          src="/app-marketplace/"
+                          className="flex-1 w-full border-0"
+                          title="Marketplace"
+                          style={{ background: '#1a1a2e', minHeight: 0 }}
+                        />
                       </div>
                     </ViewErrorBoundary>
                   )}

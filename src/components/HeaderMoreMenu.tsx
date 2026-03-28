@@ -88,7 +88,7 @@ export function HeaderMoreMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="absolute right-0 top-10 z-50 w-56 rounded-xl shadow-xl py-1"
+        className="absolute right-0 top-full mt-1 z-[60] w-56 rounded-xl shadow-xl py-1"
         style={{
           background: 'var(--c-bg-2)',
           border: '1px solid var(--c-border-2)',
