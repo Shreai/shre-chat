@@ -553,10 +553,14 @@ export async function sendMessage(
     }
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[shre] shre-router failed:', msg);
-    // Classify error for better UX
-    if (msg.includes('iterations') || msg.includes('tool loop') || msg.includes('maximum')) {
-      safeCallbacks.onError('The agent ran out of tool iterations. Your message has been escalated for review. Please try again.');
-    } else if (msg.includes('fetch') || msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
+    // Classify error for better UX — order matters: check specific patterns before generic fallback
+    const isToolLoopError = msg.includes('iterations') || msg.includes('tool loop') || msg.includes('maximum iteration') || msg.includes('tool_loop');
+    const isNetworkError = msg.includes('Failed to fetch') || msg.includes('NetworkError') || (msg.includes('TypeError') && msg.includes('fetch'));
+    if (isToolLoopError) {
+      // Tool loop exhaustion — NOT a gateway error, NOT transient. Prefix with 'tool_loop_exhausted:'
+      // so useMessageHandlers knows not to auto-retry.
+      safeCallbacks.onError('tool_loop_exhausted: The agent ran out of tool iterations. Your message has been escalated for review. Try rephrasing or breaking the request into smaller steps.');
+    } else if (isNetworkError) {
       safeCallbacks.onError('Cannot reach the gateway — check if shre-router is running. Please try again.');
     } else {
       safeCallbacks.onError(`Gateway unavailable — ${msg}. Please try again.`);
