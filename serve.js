@@ -39,6 +39,9 @@ if (existsSync(_mkcertCA) && !process.env.NODE_EXTRA_CA_CERTS) {
 }
 
 const PORT = Number(process.env.PORT) || 5510;
+const _serverStartedAt = new Date().toISOString();
+let _investorCache = null;
+let _investorCacheAt = 0;
 const log = createLogger("shre-chat");
 const eventBus = createEventBus("shre-chat");
 const conversationLearner = createConversationLearner("shre-chat", { logger: log, eventBus });
@@ -1317,6 +1320,7 @@ const SECURITY_HEADERS = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+  "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate",
 };
 
 // ── Geo-blocking — only allow US and India ──────────────────────
@@ -1326,6 +1330,15 @@ async function requestHandler(req, res) {
   const url = new URL(req.url ?? "/", `${SCHEME}://localhost:${PORT}`);
   const correlationId = extractCorrelationId(req.headers);
   res.setHeader("x-correlation-id", correlationId);
+
+  // ── AI crawler blocking — reject known bot user-agents ────────
+  const ua = (req.headers["user-agent"] || "").toLowerCase();
+  const AI_BOTS = ["gptbot", "chatgpt-user", "google-extended", "ccbot", "anthropic-ai", "claudebot", "bytespider", "amazonbot", "facebookbot", "applebot-extended", "perplexitybot", "cohere-ai", "diffbot", "omgili", "youbot"];
+  if (AI_BOTS.some(bot => ua.includes(bot))) {
+    res.writeHead(403, { "Content-Type": "text/plain" });
+    res.end("Forbidden");
+    return;
+  }
 
   // ── Geo-blocking via Cloudflare CF-IPCountry header ──────────
   const country = req.headers["cf-ipcountry"];
@@ -1483,27 +1496,101 @@ async function requestHandler(req, res) {
     return json(res, { sitemap, navigation_event: "shre:switch-view", note: "Dispatch CustomEvent with view id as detail to navigate" });
   }
 
-  // ── Investor KPI API — versioned, auto-updated ──
+  // ── Investor KPI API — versioned, auto-updated with live platform data ──
   if (url.pathname === "/api/investor/kpis" && req.method === "GET") {
     try {
+      // Serve from cache if fresh (30s TTL)
+      if (_investorCache && Date.now() - _investorCacheAt < 30_000) return json(res, _investorCache);
+
+      // Load persisted business KPIs (manual/investor-controlled)
       const kpiPath = join(import.meta.dirname, ".investor-kpis.json");
-      if (existsSync(kpiPath)) {
-        const data = JSON.parse(readFileSync(kpiPath, "utf-8"));
-        return json(res, data);
+      let business = {};
+      if (existsSync(kpiPath)) business = JSON.parse(readFileSync(kpiPath, "utf-8"));
+
+      // Fetch live platform metrics in parallel (all with 2s timeout)
+      const to = (ms) => AbortSignal.timeout(ms);
+      const [heartbeatRes, fleetRes, tasksInProgress, tasksCompleted, tasksFailed, trainingRes] = await Promise.allSettled([
+        fetch(`${serviceUrl("shre-health")}/v1/heartbeat`, { signal: to(2000) }).then(r => r.json()),
+        fetch(`${serviceUrl("shre-fleet")}/v1/fleet/status`, { signal: to(2000) }).then(r => r.json()),
+        fetch(`${serviceUrl("shre-tasks")}/v1/tasks?status=in_progress&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
+        fetch(`${serviceUrl("shre-tasks")}/v1/tasks?status=completed&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
+        fetch(`${serviceUrl("shre-tasks")}/v1/tasks?status=failed&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
+        fetch(`${serviceUrl("shre-scorer")}/v1/training/stats`, { signal: to(2000) }).then(r => r.json()),
+      ]);
+
+      // Count services from ports.json
+      let serviceCount = 30, agentCount = 17;
+      try {
+        const ports = JSON.parse(readFileSync(join(import.meta.dirname, "..", "ports.json"), "utf-8"));
+        const svcs = Object.entries(ports).filter(([k]) => !k.startsWith("_"));
+        serviceCount = svcs.length;
+        agentCount = svcs.filter(([, v]) => v?.category === "agent-mgmt" || v?.tags?.includes("agent")).length || 17;
+      } catch { /* fallback to defaults */ }
+
+      // Extract heartbeat service health
+      let servicesHealthy = 0, servicesDegraded = 0, servicesDown = 0;
+      if (heartbeatRes.status === "fulfilled") {
+        const hb = heartbeatRes.value;
+        const svcs = hb.services || hb.signals || [];
+        for (const s of Array.isArray(svcs) ? svcs : Object.values(svcs)) {
+          const st = s.status || s.state;
+          if (st === "healthy" || st === "up") servicesHealthy++;
+          else if (st === "degraded") servicesDegraded++;
+          else servicesDown++;
+        }
       }
-      // Default state
-      return json(res, {
-        version: "1.0.0",
+
+      // Extract fleet data
+      let activeAgents = 0, completedToday = 0;
+      if (fleetRes.status === "fulfilled") {
+        const f = fleetRes.value;
+        activeAgents = f.active_count ?? f.activeAssignments?.length ?? f.active ?? 0;
+        completedToday = f.completed_today ?? 0;
+      }
+
+      // Extract task counts
+      const taskCount = (r) => r.status === "fulfilled" ? (r.value?.total ?? (Array.isArray(r.value) ? r.value.length : 0)) : 0;
+      const inProgress = taskCount(tasksInProgress);
+      const completed = taskCount(tasksCompleted);
+      const failed = taskCount(tasksFailed);
+
+      // Extract training stats
+      let trainingData = { dataPoints: 0, lastRun: null, modelVersion: "shre-ft:latest" };
+      if (trainingRes.status === "fulfilled") {
+        const t = trainingRes.value;
+        trainingData = {
+          dataPoints: t.data_points ?? t.totalSamples ?? t.count ?? 0,
+          lastRun: t.last_run ?? t.lastRun ?? null,
+          modelVersion: t.model_version ?? t.modelVersion ?? "shre-ft:latest",
+        };
+      }
+
+      // Merge: business KPIs (manual) + platform KPIs (live)
+      const result = {
+        ...business,
+        version: business.version || "1.0.0",
         updatedAt: new Date().toISOString(),
-        stage: "Pre-Launch / Beta",
-        customers: 0,
-        revenue: { mrr: 0, arr: 0 },
-        pipeline: { leads: 0, pilots: 0, converted: 0 },
-        dataAdvantage: { locations: 200, partner: "RapidRMS", views: 22 },
-        techStack: { services: 30, agents: 17, sdkModules: 15, e2eTests: 110 },
-        costStructure: { infra: 45, compute: 30, total: 75 },
-      });
-    } catch { return json(res, { error: "Failed to load KPIs" }, 500); }
+        stage: business.stage || "Pre-Launch / Beta",
+        customers: business.customers ?? 0,
+        revenue: business.revenue || { mrr: 0, arr: 0 },
+        pipeline: business.pipeline || { leads: 0, pilots: 0, converted: 0 },
+        dataAdvantage: business.dataAdvantage || { locations: 200, partner: "RapidRMS", views: 22 },
+        costStructure: business.costStructure || { infra: 45, compute: 30, total: 75 },
+        // Live platform data
+        platform: {
+          services: { total: serviceCount, healthy: servicesHealthy, degraded: servicesDegraded, down: servicesDown },
+          agents: { total: agentCount, active: activeAgents, completedToday },
+          tasks: { inProgress, completed, failed, total: inProgress + completed + failed },
+          training: trainingData,
+          uptime: { since: _serverStartedAt },
+        },
+        techStack: { services: serviceCount, agents: agentCount, sdkModules: 15, e2eTests: 110, ...(business.techStack || {}) },
+      };
+
+      _investorCache = result;
+      _investorCacheAt = Date.now();
+      return json(res, result);
+    } catch (err) { log.error("[investor] KPI fetch failed", { error: err.message }); return json(res, { error: "Failed to load KPIs" }, 500); }
   }
   if (url.pathname === "/api/investor/kpis" && req.method === "POST") {
     let body = "";
