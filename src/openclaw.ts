@@ -8,45 +8,56 @@
  * to get optimal model, then calls that model's API.
  */
 
-import { SYSTEM_PROMPT_VERSION } from "./hooks/useMessageHandlers";
+import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
 
-const OPENCLAW_URL = "/v1/responses";
+const OPENCLAW_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
 const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
 
 // Gateway auth — token fetched from server at runtime (never bundled in JS)
 
 // Active agent ID — defaults to shre, switchable
-let currentAgentId = "shre";
-let currentAgentModel = "claude-sonnet-4-6";
+let currentAgentId = 'shre';
+let currentAgentModel = 'claude-sonnet-4-6';
 
 /** Get the active tenant/workspace ID from the stored auth workspace (set at login/workspace switch).
  *  Falls back to "default" when no workspace is selected. */
 export function getTenantId(): string {
   try {
-    const ws = localStorage.getItem("shre-auth-workspace");
+    const ws = localStorage.getItem('shre-auth-workspace');
     if (ws) {
       const parsed = JSON.parse(ws);
       if (parsed?.id) return parsed.id;
     }
-  } catch { /* fallback */ }
-  return "default";
+  } catch {
+    /* fallback */
+  }
+  return 'default';
 }
 
 /** Get user's preferred language from localStorage (set via profile or chat settings) */
 export function getUserLanguage(): string {
-  try { return localStorage.getItem("shre-user-language") || ""; } catch { return ""; }
+  try {
+    return localStorage.getItem('shre-user-language') || '';
+  } catch {
+    return '';
+  }
 }
 
 /** Set user's preferred language */
 export function setUserLanguage(lang: string): void {
-  try { if (lang) localStorage.setItem("shre-user-language", lang); else localStorage.removeItem("shre-user-language"); } catch (_) { void _; }
+  try {
+    if (lang) localStorage.setItem('shre-user-language', lang);
+    else localStorage.removeItem('shre-user-language');
+  } catch (_) {
+    void _;
+  }
 }
 
 /** Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6").
  *  OpenClaw gateway expects bare model IDs without provider prefix. */
 export function stripProviderPrefix(modelId: string): string {
-  return modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  return modelId.includes('/') ? modelId.split('/').pop()! : modelId;
 }
 
 // Cached agent model assignments from shre-router config API
@@ -63,7 +74,7 @@ async function refreshAgentModelCache(): Promise<void> {
 }
 
 function resolveAgentModel(agentId: string): string {
-  return agentModelCache[agentId] ?? agentModelCache._default ?? "claude-sonnet-4-6";
+  return agentModelCache[agentId] ?? agentModelCache._default ?? 'claude-sonnet-4-6';
 }
 
 export function setAgent(agentId: string) {
@@ -78,13 +89,17 @@ refreshAgentModelCache().then(() => {
 
 // ── Cost Reporting — record actual token usage to shre-router ────────
 
-function reportUsage(model: string, usage: { input_tokens?: number; output_tokens?: number; total_tokens?: number }, latencyMs?: number): void {
+function reportUsage(
+  model: string,
+  usage: { input_tokens?: number; output_tokens?: number; total_tokens?: number },
+  latencyMs?: number,
+): void {
   if (!usage.input_tokens && !usage.output_tokens) return;
   fetch(`${SHRE_ROUTER_URL}/v1/record-usage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: model.includes("/") ? model : `anthropic/${model}`,
+      model: model.includes('/') ? model : `anthropic/${model}`,
       usage: {
         input_tokens: usage.input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
@@ -92,7 +107,7 @@ function reportUsage(model: string, usage: { input_tokens?: number; output_token
       },
       agentId: currentAgentId,
       sessionId: activeSessionKey,
-      source: "shre-chat",
+      source: 'shre-chat',
       latencyMs,
     }),
   }).catch(() => {}); // fire-and-forget
@@ -100,17 +115,17 @@ function reportUsage(model: string, usage: { input_tokens?: number; output_token
 
 // Session key — shares session with OpenClaw's native chat
 // Format matches OpenClaw: agent:<agentId>:main
-let activeSessionKey = "main";
+let activeSessionKey = 'main';
 
 export interface ChatMessage {
   id?: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   timestamp?: number;
   model?: string;
   provider?: string;
   fromOpenClaw?: boolean;
-  feedback?: "like" | "dislike" | null;
+  feedback?: 'like' | 'dislike' | null;
   reactions?: Record<string, number>;
   annotation?: string;
   replyTo?: number;
@@ -154,13 +169,13 @@ export async function listSessions(agentId: string): Promise<OpenClawSession[]> 
  */
 export async function fetchSessionMessages(
   agentId: string,
-  sessionKey: string = "main",
+  sessionKey: string = 'main',
   sinceTs: number = 0,
 ): Promise<SyncResult> {
   try {
-    const url = `/api/sessions/${encodeURIComponent(agentId)}/${encodeURIComponent(sessionKey)}${sinceTs ? `?since=${sinceTs}` : ""}`;
+    const url = `/api/sessions/${encodeURIComponent(agentId)}/${encodeURIComponent(sessionKey)}${sinceTs ? `?since=${sinceTs}` : ''}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return { messages: [], updatedAt: "", totalEvents: 0 };
+    if (!res.ok) return { messages: [], updatedAt: '', totalEvents: 0 };
     const data = await res.json();
     return {
       messages: data.messages.map((m: any) => ({
@@ -171,11 +186,11 @@ export async function fetchSessionMessages(
         provider: m.provider,
         fromOpenClaw: true,
       })),
-      updatedAt: data.updatedAt || "",
+      updatedAt: data.updatedAt || '',
       totalEvents: data.totalEvents || 0,
     };
   } catch {
-    return { messages: [], updatedAt: "", totalEvents: 0 };
+    return { messages: [], updatedAt: '', totalEvents: 0 };
   }
 }
 
@@ -185,14 +200,15 @@ export async function fetchSessionMessages(
  */
 export async function fetchSessionMessagesPage(
   agentId: string,
-  sessionKey: string = "main",
+  sessionKey: string = 'main',
   limit: number = 50,
   offset: number = 0,
 ): Promise<SyncResult> {
   try {
     const url = `/api/sessions/${encodeURIComponent(agentId)}/${encodeURIComponent(sessionKey)}?limit=${limit}&offset=${offset}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return { messages: [], updatedAt: "", totalEvents: 0, totalMessages: 0, hasMore: false };
+    if (!res.ok)
+      return { messages: [], updatedAt: '', totalEvents: 0, totalMessages: 0, hasMore: false };
     const data = await res.json();
     return {
       messages: data.messages.map((m: any) => ({
@@ -203,13 +219,13 @@ export async function fetchSessionMessagesPage(
         provider: m.provider,
         fromOpenClaw: true,
       })),
-      updatedAt: data.updatedAt || "",
+      updatedAt: data.updatedAt || '',
       totalEvents: data.totalEvents || 0,
       totalMessages: data.totalMessages || 0,
       hasMore: data.hasMore || false,
     };
   } catch {
-    return { messages: [], updatedAt: "", totalEvents: 0, totalMessages: 0, hasMore: false };
+    return { messages: [], updatedAt: '', totalEvents: 0, totalMessages: 0, hasMore: false };
   }
 }
 
@@ -225,8 +241,8 @@ export async function compactSession(
   try {
     const url = `/api/sessions/${encodeURIComponent(agentId)}/${encodeURIComponent(sessionKey)}/compact`;
     const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keepDays }),
       signal: AbortSignal.timeout(10000),
     });
@@ -250,21 +266,26 @@ export async function fetchAllAgentMessages(
     const sessionsRes = await fetch(`/api/sessions/${encodeURIComponent(agentId)}`, {
       signal: AbortSignal.timeout(3000),
     });
-    if (!sessionsRes.ok) return { messages: [], updatedAt: "", totalEvents: 0 };
+    if (!sessionsRes.ok) return { messages: [], updatedAt: '', totalEvents: 0 };
     const sessions: OpenClawSession[] = await sessionsRes.json();
 
     // Fetch messages from each session in parallel
     const allMessages: ChatMessage[] = [];
-    let latestUpdate = "";
+    let latestUpdate = '';
     let totalEvts = 0;
 
     const fetches = sessions.map(async (s) => {
       // Extract the session key part after agent:agentId:
-      const keyParts = s.key.split(":");
-      const sessionKey = keyParts.slice(2).join(":");
+      const keyParts = s.key.split(':');
+      const sessionKey = keyParts.slice(2).join(':');
       if (!sessionKey) return;
       // Skip internal sessions (subagents, cron, suggestion generation)
-      if (sessionKey.startsWith("subagent:") || sessionKey.startsWith("cron:") || sessionKey === "_suggestions") return;
+      if (
+        sessionKey.startsWith('subagent:') ||
+        sessionKey.startsWith('cron:') ||
+        sessionKey === '_suggestions'
+      )
+        return;
 
       const result = await fetchSessionMessages(agentId, sessionKey, sinceTs);
       allMessages.push(...result.messages);
@@ -279,14 +300,16 @@ export async function fetchAllAgentMessages(
 
     return { messages: allMessages, updatedAt: latestUpdate, totalEvents: totalEvts };
   } catch {
-    return { messages: [], updatedAt: "", totalEvents: 0 };
+    return { messages: [], updatedAt: '', totalEvents: 0 };
   }
 }
 
 /**
  * Fetch global feed — recent messages across ALL agents.
  */
-export async function fetchFeed(sinceTs: number = 0): Promise<Array<ChatMessage & { agentId: string; sessionKey: string }>> {
+export async function fetchFeed(
+  sinceTs: number = 0,
+): Promise<Array<ChatMessage & { agentId: string; sessionKey: string }>> {
   try {
     const res = await fetch(`/api/feed?since=${sinceTs}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return [];
@@ -316,10 +339,7 @@ const RETRY_BACKOFF_MS = 1000;
  * Wrapper around fetch() that retries on network errors and 502/503/504.
  * Does NOT retry on 4xx client errors, 429 rate-limit, or aborted requests.
  */
-async function fetchWithRetry(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
+async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -368,7 +388,9 @@ export async function fetchAvailableModels(): Promise<RouterModel[]> {
       fetch(`${SHRE_ROUTER_URL}/v1/config/models`, { signal: AbortSignal.timeout(4000) }),
     ]);
     if (!modelsRes.ok) return [];
-    const { models } = await modelsRes.json() as { models: Array<{ id: string; name: string; provider: string; connected: boolean }> };
+    const { models } = (await modelsRes.json()) as {
+      models: Array<{ id: string; name: string; provider: string; connected: boolean }>;
+    };
     let catalog: Record<string, { contextWindow?: number }> = {};
     if (configRes.ok) {
       const cfg = await configRes.json();
@@ -384,23 +406,23 @@ export async function fetchAvailableModels(): Promise<RouterModel[]> {
 }
 
 export type ActivityStatus =
-  | "connecting"
-  | "thinking"
-  | "planning"
-  | "writing"
-  | "researching"
-  | "executing"
-  | "tool_call"
-  | "done"
-  | "attention"
-  | "warning"
-  | "error";
+  | 'connecting'
+  | 'thinking'
+  | 'planning'
+  | 'writing'
+  | 'researching'
+  | 'executing'
+  | 'tool_call'
+  | 'done'
+  | 'attention'
+  | 'warning'
+  | 'error';
 
 export interface ToolResult {
   tool: string;
   input: any;
   output: any;
-  status: "success" | "error";
+  status: 'success' | 'error';
   duration_ms?: number;
 }
 
@@ -429,7 +451,12 @@ export interface StreamCallbacks {
   onDone: (fullText: string) => void;
   onError: (error: string) => void;
   onStatus?: (status: ActivityStatus, detail?: string) => void;
-  onApprovalRequired?: (approval: { approvalId: string; tool: string; input: any; reason: string }) => void;
+  onApprovalRequired?: (approval: {
+    approvalId: string;
+    tool: string;
+    input: any;
+    reason: string;
+  }) => void;
   onToolResult?: (result: ToolResult) => void;
   /** Fired when a tool call begins execution */
   onToolStart?: (event: ToolStartEvent) => void;
@@ -448,7 +475,11 @@ export interface StreamCallbacks {
   /** Fired when Claude CLI session starts */
   onClaudeSessionStart?: (sessionId: string) => void;
   /** Fired when Claude CLI session ends */
-  onClaudeSessionEnd?: (data: { costUsd?: number; durationMs?: number; sessionId?: string }) => void;
+  onClaudeSessionEnd?: (data: {
+    costUsd?: number;
+    durationMs?: number;
+    sessionId?: string;
+  }) => void;
   /** Fired with Claude CLI final result metadata */
   onClaudeResult?: (data: { costUsd?: number; durationMs?: number; model?: string }) => void;
   /** Fired when Claude CLI produces a file diff */
@@ -478,34 +509,58 @@ export async function sendMessage(
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
   openclawMode?: boolean,
   threadContext?: ThreadContext,
-  contextHealth?: Record<string, "ok" | "missing" | "error">,
+  contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
-  activeSessionKey = sessionId ?? activeSessionKey ?? "main";
+  activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
 
   // Track whether onDone was already called — prevents spurious onError after completion
   let done = false;
   const safeCallbacks: StreamCallbacks = {
     ...callbacks,
-    onDone: (text) => { done = true; callbacks.onDone(text); },
-    onError: (err) => { if (!done) callbacks.onError(err); },
+    onDone: (text) => {
+      done = true;
+      callbacks.onDone(text);
+    },
+    onError: (err) => {
+      if (!done) callbacks.onError(err);
+    },
   };
 
   // Two routing modes — both go through shre-router /v1/chat (trust gate + training):
   // - Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
   // - OpenClaw: shre-router → OpenClaw gateway → agent workspace (SOUL.md, tools, session memory)
   try {
-    await streamViaFallback(message, history, systemPrompt, safeCallbacks, signal, modelOverride, attachments, openclawMode, threadContext, contextHealth, claudeCliMode);
+    await streamViaFallback(
+      message,
+      history,
+      systemPrompt,
+      safeCallbacks,
+      signal,
+      modelOverride,
+      attachments,
+      openclawMode,
+      threadContext,
+      contextHealth,
+      claudeCliMode,
+    );
   } catch (err) {
     if (done) return;
     if (signal?.aborted) {
-      safeCallbacks.onError("Cancelled");
+      safeCallbacks.onError('Cancelled');
       return;
     }
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[shre] shre-router failed:", msg);
-    safeCallbacks.onError(`Gateway unavailable — ${msg}. Please try again.`);
+    console.error('[shre] shre-router failed:', msg);
+    // Classify error for better UX
+    if (msg.includes('iterations') || msg.includes('tool loop') || msg.includes('maximum')) {
+      safeCallbacks.onError('The agent ran out of tool iterations. Your message has been escalated for review. Please try again.');
+    } else if (msg.includes('fetch') || msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
+      safeCallbacks.onError('Cannot reach the gateway — check if shre-router is running. Please try again.');
+    } else {
+      safeCallbacks.onError(`Gateway unavailable — ${msg}. Please try again.`);
+    }
   }
 }
 
@@ -530,24 +585,24 @@ async function streamViaGateway(
     metadata: {
       agentId: currentAgentId,
       sessionKey: activeSessionKey,
-      user: "nirlab@nirlab.com",
+      user: 'nirlab@nirlab.com',
     },
   };
 
   const res = await fetchWithRetry(OPENCLAW_URL, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       // Auth injected server-side by serve.js proxy
-      "x-openclaw-agent-id": currentAgentId,
-      "x-openclaw-session-key": `agent:${currentAgentId}:${activeSessionKey}`,
+      'x-openclaw-agent-id': currentAgentId,
+      'x-openclaw-session-key': `agent:${currentAgentId}:${activeSessionKey}`,
     },
     body: JSON.stringify(payload),
     signal,
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch(() => '');
     throw new Error(`Gateway ${res.status}: ${text.slice(0, 200)}`);
   }
 
@@ -567,23 +622,23 @@ async function streamViaFallback(
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
   openclawMode?: boolean,
   threadContext?: ThreadContext,
-  contextHealth?: Record<string, "ok" | "missing" | "error">,
+  contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
 ): Promise<void> {
-  callbacks.onStatus?.("connecting");
+  callbacks.onStatus?.('connecting');
 
   const messages = [
     ...history.filter((m) => !m.meta?.system).map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: message },
+    { role: 'user', content: message },
   ];
 
   const res = await fetchWithRetry(`${SHRE_ROUTER_URL}/v1/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messages,
       systemPrompt,
-      model: modelOverride || "auto",
+      model: modelOverride || 'auto',
       stream: true,
       agentId: currentAgentId,
       sessionId: activeSessionKey,
@@ -600,15 +655,18 @@ async function streamViaFallback(
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch(() => '');
     // Handle billing kill switch — 402 Payment Required
     if (res.status === 402) {
       try {
         const billing = JSON.parse(text);
-        callbacks.onBillingWarning?.(billing.message || "Payment required", billing.balanceCents ?? 0);
-        throw new Error(billing.message || "Payment required — please add tokens to continue");
+        callbacks.onBillingWarning?.(
+          billing.message || 'Payment required',
+          billing.balanceCents ?? 0,
+        );
+        throw new Error(billing.message || 'Payment required — please add tokens to continue');
       } catch (e) {
-        if (e instanceof Error && e.message.includes("Payment required")) throw e;
+        if (e instanceof Error && e.message.includes('Payment required')) throw e;
       }
     }
     throw new Error(`Smart gateway ${res.status}: ${text.slice(0, 200)}`);
@@ -616,12 +674,12 @@ async function streamViaFallback(
 
   // Read SSE stream from smart gateway
   const reader = res.body?.getReader();
-  if (!reader) throw new Error("No stream");
+  if (!reader) throw new Error('No stream');
 
   const decoder = new TextDecoder();
-  let fullText = "";
-  let buffer = "";
-  let routedModel = "";
+  let fullText = '';
+  let buffer = '';
+  let routedModel = '';
   const fallbackStart = Date.now();
 
   try {
@@ -630,128 +688,149 @@ async function streamViaFallback(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
+        if (!line.startsWith('data: ')) continue;
         const raw = line.slice(6).trim();
-        if (!raw || raw === "[DONE]") continue;
+        if (!raw || raw === '[DONE]') continue;
 
         try {
           const evt = JSON.parse(raw);
 
-          if (evt.type === "route") {
-            routedModel = evt.model || "";
+          if (evt.type === 'route') {
+            routedModel = evt.model || '';
             // Detect Claude CLI auto-routing
-            if (evt.mode === "claude-cli-auto" || evt.route === "claude-cli") {
+            if (evt.mode === 'claude-cli-auto' || evt.route === 'claude-cli') {
               callbacks.onClaudeCliRoute?.(evt.mode || evt.route);
             }
-            callbacks.onStatus?.("thinking", `Routed → ${routedModel}`);
-          } else if (evt.type === "session_start") {
-            callbacks.onClaudeSessionStart?.(evt.sessionId || "");
-            callbacks.onStatus?.("executing", "Claude CLI starting...");
-          } else if (evt.type === "session_end") {
+            callbacks.onStatus?.('thinking', `Routed → ${routedModel}`);
+          } else if (evt.type === 'session_start') {
+            callbacks.onClaudeSessionStart?.(evt.sessionId || '');
+            callbacks.onStatus?.('executing', 'Claude CLI starting...');
+          } else if (evt.type === 'session_end') {
             callbacks.onClaudeSessionEnd?.({
               costUsd: evt.costUsd ?? evt.cost_usd,
               durationMs: evt.durationMs ?? evt.duration_ms,
               sessionId: evt.sessionId,
             });
-          } else if (evt.type === "claude_result") {
+          } else if (evt.type === 'claude_result') {
             callbacks.onClaudeResult?.({
               costUsd: evt.costUsd ?? evt.cost_usd,
               durationMs: evt.durationMs ?? evt.duration_ms,
               model: evt.model,
             });
-          } else if (evt.type === "file_diff") {
+          } else if (evt.type === 'file_diff') {
             callbacks.onFileDiff?.({
-              file: evt.file || evt.path || "",
+              file: evt.file || evt.path || '',
               diff: evt.diff || evt.content,
               action: evt.action,
             });
-          } else if (evt.type === "claude_system") {
-            callbacks.onClaudeSystem?.(evt.message || evt.text || "");
-          } else if (evt.type === "status") {
-            callbacks.onStatus?.("thinking", `${evt.model || routedModel} via ${evt.provider || "..."}`);
-          } else if (evt.type === "delta" && evt.text) {
+          } else if (evt.type === 'claude_system') {
+            callbacks.onClaudeSystem?.(evt.message || evt.text || '');
+          } else if (evt.type === 'status') {
+            callbacks.onStatus?.(
+              'thinking',
+              `${evt.model || routedModel} via ${evt.provider || '...'}`,
+            );
+          } else if (evt.type === 'delta' && evt.text) {
             fullText += evt.text;
             callbacks.onToken(evt.text);
-            callbacks.onStatus?.("writing");
-          } else if (evt.type === "response.output_text.delta" && evt.delta) {
+            callbacks.onStatus?.('writing');
+          } else if (evt.type === 'response.output_text.delta' && evt.delta) {
             // OpenClaw mode — text deltas in OpenAI Responses API format
             fullText += evt.delta;
             callbacks.onToken(evt.delta);
-            callbacks.onStatus?.("writing");
-          } else if (evt.type === "response.in_progress" || evt.type === "response.created") {
-            callbacks.onStatus?.("thinking");
-          } else if (evt.type === "response.completed") {
+            callbacks.onStatus?.('writing');
+          } else if (evt.type === 'response.in_progress' || evt.type === 'response.created') {
+            callbacks.onStatus?.('thinking');
+          } else if (evt.type === 'response.completed') {
             const usage = evt.response?.usage;
             if (usage && routedModel) {
               reportUsage(routedModel, usage, Date.now() - fallbackStart);
             }
-            callbacks.onStatus?.("done");
-          } else if (evt.type === "done") {
-            callbacks.onStatus?.("done");
+            callbacks.onStatus?.('done');
+          } else if (evt.type === 'done') {
+            callbacks.onStatus?.('done');
             // Report usage — estimate tokens from text if no usage in event
             if (evt.usage) {
-              reportUsage(routedModel || modelOverride || "auto", evt.usage, Date.now() - fallbackStart);
+              reportUsage(
+                routedModel || modelOverride || 'auto',
+                evt.usage,
+                Date.now() - fallbackStart,
+              );
             } else if (fullText && routedModel) {
               const estInput = Math.ceil(message.length / 4);
               const estOutput = Math.ceil(fullText.length / 4);
-              reportUsage(routedModel, { input_tokens: estInput, output_tokens: estOutput }, Date.now() - fallbackStart);
+              reportUsage(
+                routedModel,
+                { input_tokens: estInput, output_tokens: estOutput },
+                Date.now() - fallbackStart,
+              );
             }
-          } else if (evt.type === "tool_status") {
-            const toolName = evt.tool || (evt.tools || []).join(", ");
-            if (evt.status === "executing" || evt.status === "running") {
-              callbacks.onStatus?.("tool_call", toolName);
-            } else if (evt.status === "completed") {
-              callbacks.onStatus?.("tool_call", `${toolName} done`);
-            } else if (evt.status === "continuing") {
-              callbacks.onStatus?.("thinking", `Continuing (step ${evt.iteration}/${evt.max})...`);
+          } else if (evt.type === 'tool_status') {
+            const toolName = evt.tool || (evt.tools || []).join(', ');
+            if (evt.status === 'executing' || evt.status === 'running') {
+              callbacks.onStatus?.('tool_call', toolName);
+            } else if (evt.status === 'completed') {
+              callbacks.onStatus?.('tool_call', `${toolName} done`);
+            } else if (evt.status === 'continuing') {
+              callbacks.onStatus?.('thinking', `Continuing (step ${evt.iteration}/${evt.max})...`);
             }
-          } else if (evt.type === "tool_start") {
+          } else if (evt.type === 'tool_start') {
             callbacks.onToolStart?.({
-              tool: evt.tool || "unknown",
+              tool: evt.tool || 'unknown',
               input: evt.input,
               iteration: evt.iteration || 1,
             });
-            callbacks.onStatus?.("tool_call", evt.tool);
-          } else if (evt.type === "tool_error") {
+            callbacks.onStatus?.('tool_call', evt.tool);
+          } else if (evt.type === 'tool_error') {
             callbacks.onToolError?.({
-              tool: evt.tool || "unknown",
-              error: evt.error || "Unknown error",
+              tool: evt.tool || 'unknown',
+              error: evt.error || 'Unknown error',
               iteration: evt.iteration || 1,
             });
-          } else if (evt.type === "tool_result") {
+          } else if (evt.type === 'tool_result') {
             callbacks.onToolResult?.({
-              tool: evt.tool || "unknown",
+              tool: evt.tool || 'unknown',
               input: evt.input,
               output: evt.output || evt.outputPreview,
-              status: evt.error ? "error" : "success",
+              status: evt.error ? 'error' : 'success',
               duration_ms: evt.duration_ms || evt.latencyMs,
             });
-          } else if (evt.type === "approval_required") {
+          } else if (evt.type === 'approval_required') {
             callbacks.onApprovalRequired?.({
               approvalId: evt.approvalId,
               tool: evt.tool,
               input: evt.input,
               reason: evt.reason,
             });
-          } else if (evt.type === "model_failed") {
-            callbacks.onModelFailed?.(evt.model || routedModel, evt.reason || "Quality check failed");
-          } else if (evt.type === "clear_response") {
+          } else if (evt.type === 'model_failed') {
+            callbacks.onModelFailed?.(
+              evt.model || routedModel,
+              evt.reason || 'Quality check failed',
+            );
+          } else if (evt.type === 'clear_response') {
             // Server says: discard streamed text, retry coming with better model
-            fullText = "";
+            fullText = '';
             callbacks.onClearResponse?.();
-          } else if (evt.type === "model_switch") {
-            routedModel = evt.to || "";
-            callbacks.onModelSwitch?.(evt.from || "", evt.to || "", evt.reason || "");
-            callbacks.onStatus?.("thinking", `Retrying → ${routedModel}`);
-          } else if (evt.type === "billing_warning") {
-            callbacks.onStatus?.("warning", evt.message || "Low balance");
+          } else if (evt.type === 'model_switch') {
+            routedModel = evt.to || '';
+            callbacks.onModelSwitch?.(evt.from || '', evt.to || '', evt.reason || '');
+            callbacks.onStatus?.('thinking', `Retrying → ${routedModel}`);
+          } else if (evt.type === 'billing_warning') {
+            callbacks.onStatus?.('warning', evt.message || 'Low balance');
             callbacks.onBillingWarning?.(evt.message, evt.balanceCents);
-          } else if (evt.type === "error") {
-            throw new Error(evt.error || "Gateway error");
+          } else if (evt.type === 'error') {
+            const errMsg = evt.error || 'Gateway error';
+            // Tool loop exhaustion is not a gateway failure — surface it accurately
+            // and skip the outer catch (which would prepend "Gateway unavailable")
+            if (errMsg.includes('iterations') || errMsg.includes('tool loop') || errMsg.includes('maximum')) {
+              callbacks.onError(`tool_loop_exhausted: ${errMsg}`);
+              return;
+            }
+            throw new Error(errMsg);
           }
         } catch (e) {
           if (e instanceof Error && e.message !== raw) throw e;
@@ -767,17 +846,14 @@ async function streamViaFallback(
 
 // ── SSE Stream Reader (OpenClaw format) ──────────────────────────────
 
-async function readSSEStream(
-  res: Response,
-  callbacks: StreamCallbacks,
-): Promise<void> {
+async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise<void> {
   const reader = res.body?.getReader();
-  if (!reader) throw new Error("No stream");
+  if (!reader) throw new Error('No stream');
 
   const decoder = new TextDecoder();
-  let fullText = "";
-  let buffer = "";
-  let currentEvent = "";
+  let fullText = '';
+  let buffer = '';
+  let currentEvent = '';
   const streamStart = Date.now();
 
   try {
@@ -786,24 +862,24 @@ async function readSSEStream(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
       for (const line of lines) {
         // Track named events (OpenClaw sends `event: <type>\ndata: {...}`)
-        if (line.startsWith("event: ")) {
+        if (line.startsWith('event: ')) {
           currentEvent = line.slice(7).trim();
           continue;
         }
 
-        if (!line.startsWith("data: ")) {
+        if (!line.startsWith('data: ')) {
           // Empty line resets event name per SSE spec
-          if (line.trim() === "") currentEvent = "";
+          if (line.trim() === '') currentEvent = '';
           continue;
         }
 
         const raw = line.slice(6).trim();
-        if (raw === "[DONE]") continue;
+        if (raw === '[DONE]') continue;
 
         try {
           const evt = JSON.parse(raw);
@@ -811,46 +887,57 @@ async function readSSEStream(
 
           // Emit activity status based on event type
           if (callbacks.onStatus) {
-            if (evtType === "response.created") {
-              callbacks.onStatus("connecting");
-            } else if (evtType === "response.in_progress") {
-              callbacks.onStatus("thinking");
-            } else if (evtType === "response.output_text.delta") {
-              callbacks.onStatus("writing");
-            } else if (evtType === "response.function_call_arguments.delta" ||
-                       evtType === "response.output_item.added") {
-              const toolName = evt.item?.call?.name || evt.name || "";
-              if (toolName.includes("search") || toolName.includes("web")) {
-                callbacks.onStatus("researching", toolName);
-              } else if (toolName.includes("database") || toolName.includes("cortex") || toolName.includes("write")) {
-                callbacks.onStatus("executing", toolName);
+            if (evtType === 'response.created') {
+              callbacks.onStatus('connecting');
+            } else if (evtType === 'response.in_progress') {
+              callbacks.onStatus('thinking');
+            } else if (evtType === 'response.output_text.delta') {
+              callbacks.onStatus('writing');
+            } else if (
+              evtType === 'response.function_call_arguments.delta' ||
+              evtType === 'response.output_item.added'
+            ) {
+              const toolName = evt.item?.call?.name || evt.name || '';
+              if (toolName.includes('search') || toolName.includes('web')) {
+                callbacks.onStatus('researching', toolName);
+              } else if (
+                toolName.includes('database') ||
+                toolName.includes('cortex') ||
+                toolName.includes('write')
+              ) {
+                callbacks.onStatus('executing', toolName);
               } else if (toolName) {
-                callbacks.onStatus("tool_call", toolName);
+                callbacks.onStatus('tool_call', toolName);
               }
-            } else if (evtType === "response.completed" || evtType === "response.output_text.done") {
-              callbacks.onStatus("done");
+            } else if (
+              evtType === 'response.completed' ||
+              evtType === 'response.output_text.done'
+            ) {
+              callbacks.onStatus('done');
             }
           }
 
           // ── Report usage on response.completed ──
-          if (evtType === "response.completed" && evt.response?.usage) {
+          if (evtType === 'response.completed' && evt.response?.usage) {
             const r = evt.response;
             reportUsage(r.model || currentAgentModel, r.usage, Date.now() - streamStart);
           }
 
           // Extract text content — OpenClaw response format
-          if (evtType === "response.output_text.delta" && evt.delta) {
+          if (evtType === 'response.output_text.delta' && evt.delta) {
             fullText += evt.delta;
             callbacks.onToken(evt.delta);
           }
           // Alternative format (Anthropic native)
-          if (evtType === "content_block_delta" && evt.delta?.text) {
+          if (evtType === 'content_block_delta' && evt.delta?.text) {
             fullText += evt.delta.text;
             callbacks.onToken(evt.delta.text);
           }
-        } catch { /* skip malformed JSON */ }
+        } catch {
+          /* skip malformed JSON */
+        }
 
-        currentEvent = "";
+        currentEvent = '';
       }
     }
   } finally {
@@ -866,10 +953,10 @@ async function readSSEStream(
 export async function checkGateway(): Promise<boolean> {
   try {
     // Use proxy path (same origin) — avoids CORS issues
-    const res = await fetch("/v1/responses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "ping", input: "health", stream: false }),
+    const res = await fetch('/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'ping', input: 'health', stream: false }),
       signal: AbortSignal.timeout(3000),
     });
     // Any response (even 4xx) means the gateway is reachable
@@ -885,11 +972,11 @@ export async function checkGateway(): Promise<boolean> {
  */
 export async function generateAITitle(userMessage: string): Promise<string | null> {
   try {
-    const res = await fetch("/v1/responses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "anthropic/claude-haiku",
+        model: 'anthropic/claude-haiku',
         input: `Generate a 3-5 word title for this conversation. First message: ${userMessage.slice(0, 300)}. Reply with ONLY the title, no quotes.`,
         stream: false,
       }),
@@ -898,13 +985,16 @@ export async function generateAITitle(userMessage: string): Promise<string | nul
     if (!res.ok) return null;
     const data = await res.json();
     // Responses API returns output array with message items
-    const text = data?.output
-      ?.filter((o: { type: string }) => o.type === "message")
-      ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content)
-      ?.filter((c: { type: string }) => c.type === "output_text")
-      ?.map((c: { text: string }) => c.text)
-      ?.join("") || data?.output_text || "";
-    const title = text.replace(/^["']|["']$/g, "").trim();
+    const text =
+      data?.output
+        ?.filter((o: { type: string }) => o.type === 'message')
+        ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content)
+        ?.filter((c: { type: string }) => c.type === 'output_text')
+        ?.map((c: { text: string }) => c.text)
+        ?.join('') ||
+      data?.output_text ||
+      '';
+    const title = text.replace(/^["']|["']$/g, '').trim();
     if (title && title.length > 0 && title.length < 80) return title;
     return null;
   } catch {
