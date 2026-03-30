@@ -2199,86 +2199,201 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Email threads (Gmail thread API) ──
+  // ── Email proxy (all routes via MIB007 email API) ──
+  // Helper: parse "Name <email>" into { name, email }
+  function parseEmailParticipant(raw) {
+    if (!raw) return { name: "Unknown", email: "" };
+    const match = raw.match(/^"?([^"<]+)"?\s*<([^>]+)>/);
+    if (match) return { name: match[1].trim(), email: match[2].trim() };
+    if (raw.includes("@")) return { name: raw.split("@")[0], email: raw };
+    return { name: raw, email: raw };
+  }
+
+  // Helper: transform MIB007 message list → shre-chat ThreadSummary[]
+  function toThreadSummaries(messages, myEmail) {
+    const threadMap = new Map();
+    for (const msg of messages) {
+      const tid = msg.threadId || msg.id;
+      if (!threadMap.has(tid)) threadMap.set(tid, []);
+      threadMap.get(tid).push(msg);
+    }
+    const threads = [];
+    for (const [tid, msgs] of threadMap) {
+      msgs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const first = msgs[0];
+      const last = msgs[msgs.length - 1];
+      const fromP = parseEmailParticipant(first.from);
+      const lastFromP = parseEmailParticipant(last.from);
+      const participantSet = new Map();
+      for (const m of msgs) {
+        const p = parseEmailParticipant(m.from);
+        if (p.email) participantSet.set(p.email, p);
+      }
+      threads.push({
+        id: tid,
+        subject: first.subject || "(no subject)",
+        snippet: last.snippet || "",
+        messageCount: msgs.length,
+        from: fromP,
+        lastFrom: lastFromP,
+        participants: [...participantSet.values()],
+        date: last.date,
+        timestamp: new Date(last.date).getTime(),
+        unread: msgs.some((m) => m.labelIds?.includes?.("UNREAD")),
+        hasAttachments: msgs.some((m) => m.hasAttachments),
+      });
+    }
+    threads.sort((a, b) => b.timestamp - a.timestamp);
+    return { threads, myEmail: myEmail || "" };
+  }
+
+  // Helper: transform MIB007 message detail → shre-chat EmailThread
+  function toEmailThread(detail, threadMessages, myEmail) {
+    const messages = (threadMessages || [detail]).map((m) => {
+      const fromP = parseEmailParticipant(m.from);
+      const toList = (m.to || "").split(",").filter(Boolean).map((t) => parseEmailParticipant(t.trim()));
+      const ccList = (m.cc || "").split(",").filter(Boolean).map((t) => parseEmailParticipant(t.trim()));
+      return {
+        id: m.id || m.messageId,
+        threadId: m.threadId || detail.threadId,
+        from: fromP,
+        to: toList,
+        cc: ccList,
+        subject: m.subject || detail.subject || "",
+        date: m.date || "",
+        timestamp: new Date(m.date || "").getTime(),
+        body: m.body || m.htmlBody || m.textBody || "",
+        attachments: (m.attachments || []).map((a) => ({
+          id: a.attachmentId,
+          messageId: m.id || m.messageId,
+          filename: a.filename,
+          mimeType: a.mimeType,
+          size: a.size || 0,
+        })),
+        isMe: myEmail ? fromP.email.toLowerCase() === myEmail.toLowerCase() : false,
+        unread: m.labelIds?.includes?.("UNREAD") || false,
+        snippet: m.snippet || "",
+      };
+    });
+    const participantSet = new Map();
+    for (const m of messages) {
+      if (m.from.email) participantSet.set(m.from.email, m.from);
+      for (const t of m.to) if (t.email) participantSet.set(t.email, t);
+      for (const c of m.cc) if (c.email) participantSet.set(c.email, c);
+    }
+    return {
+      id: detail.threadId || detail.id,
+      subject: detail.subject || messages[0]?.subject || "",
+      messages,
+      participants: [...participantSet.values()],
+      myEmail: myEmail || "",
+    };
+  }
+
+  // GET /api/email/threads → MIB007 list messages, grouped into threads
   if (url.pathname === "/api/email/threads" && req.method === "GET") {
     try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { threads: [], myEmail: "" });
       const max = url.searchParams.get("max") || "30";
       const query = url.searchParams.get("q") || "";
       const label = url.searchParams.get("label") || "INBOX";
-      const args = [join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), "threads", `--max=${max}`, `--label=${label}`];
-      if (query) args.push(`--query=${query}`);
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const { stdout } = await execFileAsync("node", args, { timeout: 20000, env: { ...process.env, HOME: homedir() } });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(stdout);
+      const params = new URLSearchParams({ maxResults: max, folder: label });
+      if (query) params.set("q", query);
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/messages?${params}`, { signal: AbortSignal.timeout(15000) });
+      if (!upstream.ok) throw new Error(`MIB007 email list failed: ${upstream.status}`);
+      const data = await upstream.json();
+      const messages = data.messages || data || [];
+      // Get myEmail from accounts endpoint
+      let myEmail = "";
+      try {
+        const acctRes = await mib007Fetch(`/api/companies/${companyId}/email/accounts`, { signal: AbortSignal.timeout(5000) });
+        if (acctRes.ok) {
+          const accts = await acctRes.json();
+          myEmail = accts?.accounts?.[0]?.email || accts?.[0]?.email || "";
+        }
+      } catch {}
+      json(res, toThreadSummaries(messages, myEmail));
     } catch (err) {
       log.warn("Email threads failed:", err.message);
-      json(res, { error: err.stderr || err.message || "Failed to fetch threads" }, 502);
+      json(res, { error: err.message || "Failed to fetch threads" }, 502);
     }
     return;
   }
 
-  // ── Email single thread ──
+  // GET /api/email/thread/:threadId → MIB007 get message (returns thread context)
   const threadMatch = url.pathname.match(/^\/api\/email\/thread\/([a-zA-Z0-9]+)$/);
   if (threadMatch && req.method === "GET") {
     try {
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const { stdout } = await execFileAsync("node", [
-        join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), "thread", threadMatch[1]
-      ], { timeout: 15000, env: { ...process.env, HOME: homedir() } });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(stdout);
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/messages/${threadMatch[1]}`, { signal: AbortSignal.timeout(15000) });
+      if (!upstream.ok) throw new Error(`MIB007 email get failed: ${upstream.status}`);
+      const detail = await upstream.json();
+      // Get myEmail
+      let myEmail = "";
+      try {
+        const acctRes = await mib007Fetch(`/api/companies/${companyId}/email/accounts`, { signal: AbortSignal.timeout(5000) });
+        if (acctRes.ok) {
+          const accts = await acctRes.json();
+          myEmail = accts?.accounts?.[0]?.email || accts?.[0]?.email || "";
+        }
+      } catch {}
+      json(res, toEmailThread(detail, detail.threadMessages || detail.thread || [detail], myEmail));
     } catch (err) {
       log.warn("Email thread fetch failed:", err.message);
-      json(res, { error: err.stderr || err.message }, 502);
+      json(res, { error: err.message }, 502);
     }
     return;
   }
 
-  // ── Email reply / reply-all ──
+  // POST /api/email/reply → MIB007 send with threading
   if (url.pathname === "/api/email/reply" && req.method === "POST") {
     try {
       const body = await collectBody(req);
       if (!body.threadId || !body.body) return json(res, { error: "threadId and body required" }, 400);
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const cmd = body.replyAll !== false ? "reply-all" : "reply";
-      const args = [join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), cmd, body.threadId];
-      if (cmd === "reply") {
-        args.push(body.to || "", body.subject || "", body.body);
-      } else {
-        args.push(body.body);
-      }
-      if (body.cc) args.push(`--cc=${body.cc}`);
-      if (body.add) args.push(`--add=${body.add}`);
-      const { stdout } = await execFileAsync("node", args, { timeout: 15000, env: { ...process.env, HOME: homedir() } });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(stdout);
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const sendBody = {
+        to: body.to || "",
+        subject: body.subject || "",
+        body: body.body,
+        threadId: body.threadId,
+        inReplyTo: body.inReplyTo || undefined,
+      };
+      if (body.cc) sendBody.cc = body.cc;
+      if (body.add) sendBody.cc = [body.cc, body.add].filter(Boolean).join(",");
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sendBody),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!upstream.ok) throw new Error(`MIB007 send failed: ${upstream.status}`);
+      const result = await upstream.json();
+      json(res, result);
     } catch (err) {
       log.warn("Email reply failed:", err.message);
-      json(res, { error: err.stderr || err.message }, 500);
+      json(res, { error: err.message }, 500);
     }
     return;
   }
 
-  // ── Email attachment download ──
+  // GET /api/email/attachment/:messageId/:attachmentId → MIB007 attachment proxy
   const attachMatch = url.pathname.match(/^\/api\/email\/attachment\/([a-zA-Z0-9]+)\/(.+)$/);
   if (attachMatch && req.method === "GET") {
     try {
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const { stdout } = await execFileAsync("node", [
-        join(homedir(), "Documents/Projects/shreai/shre-gmail/thread-api.mjs"), "attachment", attachMatch[1], attachMatch[2]
-      ], { timeout: 15000, env: { ...process.env, HOME: homedir() } });
-      const data = JSON.parse(stdout);
-      const buf = Buffer.from(data.data, "base64url");
-      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": buf.length });
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const upstream = await mib007Fetch(
+        `/api/companies/${companyId}/email/messages/${attachMatch[1]}/attachments/${attachMatch[2]}`,
+        { signal: AbortSignal.timeout(15000) },
+      );
+      if (!upstream.ok) throw new Error(`Attachment download failed: ${upstream.status}`);
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      const ct = upstream.headers.get("content-type") || "application/octet-stream";
+      const cd = upstream.headers.get("content-disposition") || "";
+      res.writeHead(200, { "Content-Type": ct, "Content-Length": buf.length, ...(cd ? { "Content-Disposition": cd } : {}) });
       res.end(buf);
     } catch (err) {
       log.warn("Attachment download failed:", err.message);
@@ -2287,40 +2402,37 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Email draft (AI-composed body via shre-router) ──
+  // POST /api/email/draft → MIB007 AI draft
   if (url.pathname === "/api/email/draft" && req.method === "POST") {
     try {
       const body = await collectBody(req);
       if (!body.to || !body.subject) return json(res, { error: "to and subject required" }, 400);
-
-      const context = body.context || "";
-      const systemPrompt = `You are a professional email composer. Write a concise, well-structured email body based on the subject and context provided. Do NOT include the subject line, greeting salutation, or signature — just the email body content. Keep it professional but natural. If context from a chat conversation is provided, use it to inform the email content.`;
-
-      const userPrompt = [
-        `To: ${body.to}`,
-        `Subject: ${body.subject}`,
-        context ? `\nConversation context:\n${context}` : "",
-        `\nWrite the email body:`,
-      ].filter(Boolean).join("\n");
-
-      const apiRes = await fetch(`${serviceUrl("shre-router")}/v1/chat/completions`, {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/ai-compose`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "anthropic/claude-haiku-4-5",
-          max_tokens: 1000,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
+          prompt: `Write an email to ${body.to} about: ${body.subject}${body.context ? `\n\nContext: ${body.context}` : ""}`,
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(20000),
       });
-
-      if (!apiRes.ok) return json(res, { error: "AI drafting failed" }, 502);
-      const apiData = await apiRes.json();
-      const draft = (apiData.choices?.[0]?.message?.content || "").trim();
-      return json(res, { to: body.to, subject: body.subject, body: draft });
+      if (!upstream.ok) {
+        // Fallback to shre-router for AI drafting
+        const systemPrompt = `You are a professional email composer. Write a concise, well-structured email body. Do NOT include subject, greeting, or signature — just the body. Keep it professional but natural.`;
+        const userPrompt = `To: ${body.to}\nSubject: ${body.subject}${body.context ? `\n\nContext:\n${body.context}` : ""}\n\nWrite the email body:`;
+        const apiRes = await fetch(`${serviceUrl("shre-router")}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "anthropic/claude-haiku-4-5", max_tokens: 1000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }] }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!apiRes.ok) return json(res, { error: "AI drafting failed" }, 502);
+        const apiData = await apiRes.json();
+        return json(res, { to: body.to, subject: body.subject, body: (apiData.choices?.[0]?.message?.content || "").trim() });
+      }
+      const result = await upstream.json();
+      json(res, { to: body.to, subject: body.subject, body: result.body || result.draft || "" });
     } catch (err) {
       log.warn("Email draft failed:", err.message);
       json(res, { error: "Draft failed" }, 500);
@@ -2328,17 +2440,22 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Email send proxy (shre-gmail) ──
+  // POST /api/email/send → MIB007 send
   if (url.pathname === "/api/email/send" && req.method === "POST") {
     try {
       const body = await collectBody(req);
       if (!body.to) return json(res, { error: "Missing 'to' field" }, 400);
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const scriptPath = join(homedir(), "Documents/Projects/shreai/shre-gmail/send-email.mjs");
-      await execFileAsync("node", [scriptPath, "--to", body.to, "--subject", body.subject || "(no subject)", "--body", body.body || ""], { timeout: 15000 });
-      json(res, { ok: true });
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: body.to, subject: body.subject || "(no subject)", body: body.body || "", attachments: body.attachments }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!upstream.ok) throw new Error(`MIB007 send failed: ${upstream.status}`);
+      const result = await upstream.json();
+      json(res, { ok: true, ...result });
     } catch (err) {
       log.warn("Email send failed:", err.message);
       json(res, { error: "Email send failed" }, 500);
