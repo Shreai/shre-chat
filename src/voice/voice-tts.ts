@@ -8,6 +8,7 @@ import { stripMd } from './voice-utils';
 
 export interface TTSDeps {
   ttsVoice: string;
+  ttsProvider?: string;
   activeRef: MutableRefObject<boolean>;
   ttsAbortRef: MutableRefObject<AbortController | null>;
   ttsAudioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -21,7 +22,7 @@ export interface TTSDeps {
 
 /** Create a speak function bound to the given refs/deps. */
 export function createSpeak(deps: TTSDeps) {
-  const { ttsVoice, activeRef, ttsAbortRef, ttsAudioRef, mediaStreamRef, phaseRef, dispatch, vad, stopListeningHardware } =
+  const { ttsVoice, ttsProvider, activeRef, ttsAbortRef, ttsAudioRef, mediaStreamRef, phaseRef, dispatch, vad, stopListeningHardware } =
     deps;
 
   return function speak(text: string): Promise<void> {
@@ -64,7 +65,7 @@ export function createSpeak(deps: TTSDeps) {
       fetch('/api/tts/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: plain, voice: ttsVoice }),
+        body: JSON.stringify({ input: plain, voice: ttsVoice, provider: ttsProvider || 'auto' }),
         signal: ctrl.signal,
       })
         .then(async (r) => {
@@ -202,7 +203,7 @@ export function createSpeak(deps: TTSDeps) {
           fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input: plain, voice: ttsVoice }),
+            body: JSON.stringify({ input: plain, voice: ttsVoice, provider: ttsProvider || 'auto' }),
             signal: ctrl.signal,
           })
             .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`TTS ${r.status}`))))

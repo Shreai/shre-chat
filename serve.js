@@ -2709,6 +2709,7 @@ async function requestHandler(req, res) {
             voice: body.voice || "nova",
             model: body.model || "tts-1-hd",
             speed: body.speed || 1.05,
+            provider: body.provider || "auto",
           }),
           signal: AbortSignal.timeout(30000),
         });
@@ -2749,6 +2750,7 @@ async function requestHandler(req, res) {
           voice: parsed.voice || "nova",
           model: parsed.model || "tts-1-hd",
           speed: parsed.speed || 1.05,
+          provider: parsed.provider || "auto",
         }),
         signal: AbortSignal.timeout(30000),
       });

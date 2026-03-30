@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
+import type { TTSProvider } from '../preferences-store';
 
 const EmojiPicker = lazy(() =>
   import('@emoji-mart/react').then((mod) => ({
@@ -51,6 +52,7 @@ interface ChatComposerProps {
   isHandsFree: boolean;
   voiceMode: boolean;
   ttsVoice: string;
+  ttsProvider: TTSProvider;
   speechSupported: boolean;
   hasSpeechRecognition: boolean;
   onStartRecording: () => void;
@@ -58,6 +60,7 @@ interface ChatComposerProps {
   setIsHandsFree: (val: boolean) => void;
   setVoiceMode: (val: boolean) => void;
   setTtsVoice: (val: string) => void;
+  setTtsProvider: (val: TTSProvider) => void;
   onStopTTS: () => void;
 
   // Terminal
@@ -149,6 +152,7 @@ export function ChatComposer(props: ChatComposerProps) {
     isHandsFree,
     voiceMode,
     ttsVoice,
+    ttsProvider,
     speechSupported,
     hasSpeechRecognition,
     onStartRecording,
@@ -156,6 +160,7 @@ export function ChatComposer(props: ChatComposerProps) {
     setIsHandsFree,
     setVoiceMode,
     setTtsVoice,
+    setTtsProvider,
     onStopTTS,
     showTerminal,
     termViewMode,
@@ -568,7 +573,7 @@ export function ChatComposer(props: ChatComposerProps) {
             rows={1}
             autoCapitalize="off"
             aria-label="Message input"
-            className="w-full px-4 pt-3 pb-1 text-sm resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
+            className="w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
             style={{ color: 'var(--c-text-1)', minHeight: '44px' }}
             onInput={(e) => {
               const el = e.currentTarget;
@@ -661,110 +666,142 @@ export function ChatComposer(props: ChatComposerProps) {
                 )}
               </div>
 
-              {/* Mic button — tap = push-to-talk, long-press = hands-free mode */}
+              {/* Voice controls group: provider selector + mic button */}
               {speechSupported && (
-                <button
-                  tabIndex={-1}
-                  onClick={() => {
-                    if (isRecording) onStopRecording();
-                    else if (!isHandsFree) onStartRecording();
-                    // If hands-free is on, tap disables it
-                    else setIsHandsFree(false);
-                  }}
-                  onPointerDown={(e) => {
-                    if (isRecording) return;
-                    const timer = setTimeout(() => {
-                      // Long-press: toggle hands-free
-                      setIsHandsFree(!isHandsFree);
-                      (e.currentTarget as HTMLElement).dataset.longPress = '1';
-                    }, 500);
-                    (e.currentTarget as HTMLElement).dataset.longPress = '0';
-                    (e.currentTarget as HTMLElement).dataset.lpTimer = String(timer);
-                  }}
-                  onPointerUp={(e) => {
-                    clearTimeout(Number((e.currentTarget as HTMLElement).dataset.lpTimer));
-                    if ((e.currentTarget as HTMLElement).dataset.longPress === '1') {
-                      e.preventDefault(); // suppress click — long-press already handled
+                <div className="flex items-center gap-0.5">
+                  {/* TTS provider selector — always visible next to mic */}
+                  <select
+                    tabIndex={-1}
+                    value={ttsProvider}
+                    onChange={(e) => setTtsProvider(e.target.value as TTSProvider)}
+                    className="h-8 sm:h-7 rounded-l-lg rounded-r-none text-[10px] px-1.5 border-none outline-none cursor-pointer"
+                    style={{
+                      background: ttsProvider === 'personaplex'
+                        ? 'rgba(118, 185, 0, 0.15)'
+                        : ttsProvider === 'elevenlabs'
+                          ? 'rgba(99, 102, 241, 0.15)'
+                          : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
+                      color: ttsProvider === 'personaplex'
+                        ? '#76b900'
+                        : ttsProvider === 'elevenlabs'
+                          ? '#818cf8'
+                          : 'var(--c-text-2)',
+                      minWidth: 0,
+                      fontWeight: ttsProvider !== 'auto' ? 500 : 400,
+                      borderRight: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                    title={`Voice engine: ${ttsProvider === 'personaplex' ? 'NVIDIA PersonaPlex (local)' : ttsProvider === 'elevenlabs' ? 'ElevenLabs (cloud)' : 'Auto (best available)'}`}
+                    aria-label="Select voice engine"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="elevenlabs">ElevenLabs</option>
+                    <option value="personaplex">PersonaPlex</option>
+                  </select>
+
+                  {/* Mic button — tap = push-to-talk, long-press = hands-free mode */}
+                  <button
+                    tabIndex={-1}
+                    onClick={() => {
+                      if (isRecording) onStopRecording();
+                      else if (!isHandsFree) onStartRecording();
+                      // If hands-free is on, tap disables it
+                      else setIsHandsFree(false);
+                    }}
+                    onPointerDown={(e) => {
+                      if (isRecording) return;
+                      const timer = setTimeout(() => {
+                        // Long-press: toggle hands-free
+                        setIsHandsFree(!isHandsFree);
+                        (e.currentTarget as HTMLElement).dataset.longPress = '1';
+                      }, 500);
                       (e.currentTarget as HTMLElement).dataset.longPress = '0';
+                      (e.currentTarget as HTMLElement).dataset.lpTimer = String(timer);
+                    }}
+                    onPointerUp={(e) => {
+                      clearTimeout(Number((e.currentTarget as HTMLElement).dataset.lpTimer));
+                      if ((e.currentTarget as HTMLElement).dataset.longPress === '1') {
+                        e.preventDefault(); // suppress click — long-press already handled
+                        (e.currentTarget as HTMLElement).dataset.longPress = '0';
+                      }
+                    }}
+                    onPointerLeave={(e) => {
+                      clearTimeout(Number((e.currentTarget as HTMLElement).dataset.lpTimer));
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-r-lg rounded-l-none flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : isHandsFree ? 'bg-green-500/20 text-green-400' : ''}`}
+                    style={isRecording || isHandsFree ? {} : { color: 'var(--c-text-2)' }}
+                    title={
+                      isRecording
+                        ? 'Tap to stop'
+                        : isHandsFree
+                          ? 'Hands-free ON — tap to disable, say "shre shre" to start'
+                          : 'Tap for voice input, hold for hands-free'
                     }
-                  }}
-                  onPointerLeave={(e) => {
-                    clearTimeout(Number((e.currentTarget as HTMLElement).dataset.lpTimer));
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : isHandsFree ? 'bg-green-500/20 text-green-400' : ''}`}
-                  style={isRecording || isHandsFree ? {} : { color: 'var(--c-text-2)' }}
-                  title={
-                    isRecording
-                      ? 'Tap to stop'
-                      : isHandsFree
-                        ? 'Hands-free ON — tap to disable, say "shre shre" to start'
-                        : 'Tap for voice input, hold for hands-free'
-                  }
-                  aria-label={
-                    isRecording
-                      ? 'Stop recording'
-                      : isHandsFree
-                        ? 'Disable hands-free mode'
-                        : 'Voice input (hold for hands-free)'
-                  }
-                >
-                  {voicePhase === 'transcribing' ? (
-                    <svg
-                      className="h-4 w-4 animate-spin"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <circle cx="12" cy="12" r="10" opacity="0.3" />
-                      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-                    </svg>
-                  ) : isRecording ? (
-                    <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor">
-                      <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                  ) : isHandsFree ? (
-                    <svg
-                      className="h-4 w-4 sm:h-4 sm:w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                      <line x1="12" y1="18" x2="12" y2="22" />
-                      <path d="M2 12a10 10 0 0 0 4 4" opacity="0.5" />
-                      <path d="M22 12a10 10 0 0 1-4 4" opacity="0.5" />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-4 w-4 sm:h-4 sm:w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                      <line x1="12" y1="18" x2="12" y2="22" />
-                    </svg>
-                  )}
-                  {isRecording && voicePhase === 'recording' && (
-                    <span
-                      className="absolute inset-0 rounded-lg pointer-events-none"
-                      style={{
-                        boxShadow: `0 0 ${4 + audioLevel * 16}px ${1 + audioLevel * 4}px rgba(239, 68, 68, ${0.2 + audioLevel * 0.5})`,
-                        transition: 'box-shadow 100ms ease-out',
-                      }}
-                    />
-                  )}
-                </button>
+                    aria-label={
+                      isRecording
+                        ? 'Stop recording'
+                        : isHandsFree
+                          ? 'Disable hands-free mode'
+                          : 'Voice input (hold for hands-free)'
+                    }
+                  >
+                    {voicePhase === 'transcribing' ? (
+                      <svg
+                        className="h-4 w-4 animate-spin"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <circle cx="12" cy="12" r="10" opacity="0.3" />
+                        <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                      </svg>
+                    ) : isRecording ? (
+                      <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="6" width="12" height="12" rx="2" />
+                      </svg>
+                    ) : isHandsFree ? (
+                      <svg
+                        className="h-4 w-4 sm:h-4 sm:w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                        <line x1="12" y1="18" x2="12" y2="22" />
+                        <path d="M2 12a10 10 0 0 0 4 4" opacity="0.5" />
+                        <path d="M22 12a10 10 0 0 1-4 4" opacity="0.5" />
+                      </svg>
+                    ) : (
+                      <svg
+                        className="h-4 w-4 sm:h-4 sm:w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                        <line x1="12" y1="18" x2="12" y2="22" />
+                      </svg>
+                    )}
+                    {isRecording && voicePhase === 'recording' && (
+                      <span
+                        className="absolute inset-0 rounded-r-lg pointer-events-none"
+                        style={{
+                          boxShadow: `0 0 ${4 + audioLevel * 16}px ${1 + audioLevel * 4}px rgba(239, 68, 68, ${0.2 + audioLevel * 0.5})`,
+                          transition: 'box-shadow 100ms ease-out',
+                        }}
+                      />
+                    )}
+                  </button>
+                </div>
               )}
 
               {/* Voice mode */}
@@ -799,7 +836,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 </button>
               )}
 
-              {/* TTS voice selector */}
+              {/* TTS voice selector — only when voice mode is on */}
               {voiceMode && (
                 <select
                   tabIndex={-1}

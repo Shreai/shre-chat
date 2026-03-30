@@ -152,6 +152,8 @@ export function ChatView() {
     setVoiceMode,
     ttsVoice,
     setTtsVoice,
+    ttsProvider,
+    setTtsProvider,
     speechSupported,
     analyserRef,
     audioCtxRef,
@@ -627,6 +629,7 @@ export function ChatView() {
     voiceMode,
     setVoiceMode,
     ttsVoice,
+    ttsProvider,
     streaming,
     messages,
     handleSendRef,
@@ -696,9 +699,45 @@ export function ChatView() {
   });
 
   // Force tab mode on mobile — split mode is unusable on small screens
-  const isMobileLayout = typeof window !== 'undefined' && window.innerWidth <= 768;
+  // Reactive: updates on viewport resize (fold/unfold, orientation change, reconnect)
+  const [isMobileLayout, setIsMobileLayout] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 768,
+  );
+  useEffect(() => {
+    const onResize = () => {
+      const nowMobile = window.innerWidth <= 768;
+      setIsMobileLayout((wasMobile) => {
+        // Transitioning to mobile while terminal is open: switch activeView to terminal
+        // so the tab-mode display shows the terminal panel (not chat)
+        if (nowMobile && !wasMobile && showTerminal) {
+          setActiveView('terminal');
+        }
+        return nowMobile;
+      });
+    };
+    window.addEventListener('resize', onResize);
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (vv) vv.removeEventListener('resize', onResize);
+    };
+  }, [showTerminal]);
   const isTabMode =
     (isMobileLayout || termViewMode === 'tabs') && (showTerminal || activeView === 'preview');
+
+  // When entering tab mode with terminal open, force activeView to 'terminal'.
+  // This catches the race between setShowTerminal(true) and setActiveView('terminal')
+  // that occurs on mobile toggle, fold/unfold, and orientation changes.
+  // Only fires on isTabMode transitions (not when user switches tabs).
+  const prevIsTabMode = useRef(false);
+  useEffect(() => {
+    if (isTabMode && !prevIsTabMode.current && showTerminal) {
+      setActiveView('terminal');
+    }
+    prevIsTabMode.current = isTabMode;
+  }, [isTabMode, showTerminal]);
+
   const showChat = !isTabMode || activeView === 'chat';
   const showTermPanel = showTerminal && (!isTabMode || activeView === 'terminal');
   const showPreviewPanel = isTabMode && activeView === 'preview' && previewContent;
@@ -792,12 +831,14 @@ export function ChatView() {
         style={{
           ...(isTabMode
             ? {}
-            : { height: '40%', minHeight: window.innerWidth <= 768 ? 140 : 200, borderBottom: '2px solid rgba(255,255,255,0.1)' }),
+            : { height: '40%', minHeight: isMobileLayout ? 140 : 200, borderBottom: '2px solid rgba(255,255,255,0.1)' }),
           display: (isTabMode ? showTermPanel : showTerminal)
             ? isTabMode
               ? 'flex'
               : 'block'
             : 'none',
+          // In tab mode, flex column so TerminalView fills full width
+          ...(isTabMode ? { flexDirection: 'column' as const } : {}),
         }}
       >
         <ViewErrorBoundary viewName="Terminal">
@@ -836,7 +877,7 @@ export function ChatView() {
 
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && (
-        <>
+        <div className="flex-1 flex flex-col min-h-0">
           {/* Trial status banner */}
           <TrialBanner />
           <ChatPanels
@@ -1113,6 +1154,7 @@ export function ChatView() {
             isHandsFree={isHandsFree}
             voiceMode={voiceMode}
             ttsVoice={ttsVoice}
+            ttsProvider={ttsProvider}
             speechSupported={speechSupported}
             hasSpeechRecognition={hasSpeechRecognition}
             onStartRecording={startRecording}
@@ -1120,6 +1162,7 @@ export function ChatView() {
             setIsHandsFree={setIsHandsFree}
             setVoiceMode={setVoiceMode}
             setTtsVoice={setTtsVoice}
+            setTtsProvider={setTtsProvider}
             onStopTTS={() => {
               if (ttsAudioRef.current) {
                 ttsAudioRef.current.pause();
@@ -1133,6 +1176,10 @@ export function ChatView() {
             onToggleTerminal={() => {
               if (!showTerminal) {
                 setShowTerminal(true);
+                // On mobile/tab mode, switch to terminal view so the panel is visible
+                if (isMobileLayout || termViewMode === 'tabs') {
+                  setActiveView('terminal');
+                }
               } else {
                 setShowTerminal(false);
                 setActiveView('chat');
@@ -1199,7 +1246,7 @@ export function ChatView() {
             }}
             filteredMessages={filteredMessages}
           />
-        </>
+        </div>
       )}
 
       {/* ── Voice Assistant Overlay ──────────────────────────── */}
@@ -1216,6 +1263,7 @@ export function ChatView() {
             agentEmoji={currentAgent.emoji}
             agentId={activeAgentId}
             ttsVoice={ttsVoice}
+            ttsProvider={ttsProvider}
             agents={AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji }))}
             onSwitchAgent={(id) => actions.setActiveAgent(id)}
             onVoiceTurn={(turn) => {
