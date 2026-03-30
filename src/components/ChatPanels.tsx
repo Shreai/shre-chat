@@ -2,21 +2,22 @@
  * ChatPanels — Header toolbar, status bars, modals, and drawers
  * Extracted from ChatView to reduce its LOC.
  */
-import React, { useRef } from "react";
-import { retryConnection } from "../gateway-ws";
-import { setModelOverride, ECOSYSTEM_APPS } from "../chat-utils";
-import { importSessions, type Session, type View } from "../store";
-import type { ChatMessage, RouterModel } from "../openclaw";
+import React, { useRef } from 'react';
+import { retryConnection } from '../gateway-ws';
+import { setModelOverride, ECOSYSTEM_APPS } from '../chat-utils';
+import { importSessions, type Session, type View } from '../store';
+import type { ChatMessage, RouterModel } from '../openclaw';
 
-import { ModelPicker } from "./ModelPicker";
-import { HeaderMoreMenu } from "./HeaderMoreMenu";
-import { ShareBar } from "./ShareBar";
-import { ContextBar } from "./ContextBar";
-import { ChatSearchBar } from "./ChatSearchBar";
-import { AppsDrawer } from "./AppsDrawer";
-import { SystemPromptEditor } from "./SystemPromptEditor";
-import { SummaryModal } from "./SummaryModal";
-import { SessionAnalyticsModal } from "./SessionAnalyticsModal";
+import { ModelPicker } from './ModelPicker';
+import type { TTSProvider } from '../preferences-store';
+import { HeaderMoreMenu } from './HeaderMoreMenu';
+import { ShareBar } from './ShareBar';
+import { ContextBar } from './ContextBar';
+import { ChatSearchBar } from './ChatSearchBar';
+import { AppsDrawer } from './AppsDrawer';
+import { SystemPromptEditor } from './SystemPromptEditor';
+import { SummaryModal } from './SummaryModal';
+import { SessionAnalyticsModal } from './SessionAnalyticsModal';
 
 interface ChatPanelsProps {
   // Session
@@ -35,12 +36,21 @@ interface ChatPanelsProps {
   setShowModelPicker: (v: boolean) => void;
   selectedModel: string | null;
   setSelectedModel: (v: string | null) => void;
-  AVAILABLE_MODELS: { id: string; name: string; provider: string; icon: string; connected?: boolean }[];
+  AVAILABLE_MODELS: {
+    id: string;
+    name: string;
+    provider: string;
+    icon: string;
+    connected?: boolean;
+  }[];
   MODEL_CONTEXT_LIMITS: Record<string, number>;
   dynamicModelsCount: number;
   currentAgent: { name: string; id: string; emoji: string };
   modelPickerRef: React.RefObject<HTMLDivElement | null>;
   ensureSession: () => string;
+  // Voice provider
+  ttsProvider: TTSProvider;
+  setTtsProvider: (v: TTSProvider) => void;
   // Header more menu
   showHeaderMore: boolean;
   setShowHeaderMore: (v: boolean) => void;
@@ -107,36 +117,95 @@ interface ChatPanelsProps {
 
 export function ChatPanels(props: ChatPanelsProps) {
   const {
-    sessions, activeSessionId, activeSession, activeAgentId,
-    editingTabId, editingTabText, setEditingTabId, setEditingTabText,
-    cliMode, actions,
-    showModelPicker, setShowModelPicker, selectedModel, setSelectedModel,
-    AVAILABLE_MODELS, MODEL_CONTEXT_LIMITS, dynamicModelsCount,
-    currentAgent, modelPickerRef, ensureSession,
-    showHeaderMore, setShowHeaderMore, headerMoreRef,
-    openclawMode, handleToggleOpenclawMode,
-    compareMode, compareModels, handleToggleCompare, setCompareStreams, setCompareWinner,
-    comparePickerRef, handleOpenSystemPrompt, compact,
-    notifSound, handleToggleNotifSound,
-    messages, userName, summarizing, handleSummarize,
-    showAnalytics, setShowAnalytics,
-    handleShare, handleCopyMarkdown, handleDownloadMd, handleDownloadJson,
-    showApps, setShowApps, view, importInputRef,
-    wsFailed, setWsFailed, setWsConnected,
-    shareUrl, shareCopied, setShareCopied, setShareUrl,
+    sessions,
+    activeSessionId,
+    activeSession,
+    activeAgentId,
+    editingTabId,
+    editingTabText,
+    setEditingTabId,
+    setEditingTabText,
+    cliMode,
+    actions,
+    showModelPicker,
+    setShowModelPicker,
+    selectedModel,
+    setSelectedModel,
+    AVAILABLE_MODELS,
+    MODEL_CONTEXT_LIMITS,
+    dynamicModelsCount,
+    currentAgent,
+    modelPickerRef,
+    ttsProvider,
+    setTtsProvider,
+    ensureSession,
+    showHeaderMore,
+    setShowHeaderMore,
+    headerMoreRef,
+    openclawMode,
+    handleToggleOpenclawMode,
+    compareMode,
+    compareModels,
+    handleToggleCompare,
+    setCompareStreams,
+    setCompareWinner,
+    comparePickerRef,
+    handleOpenSystemPrompt,
+    compact,
+    notifSound,
+    handleToggleNotifSound,
+    messages,
+    userName,
+    summarizing,
+    handleSummarize,
+    showAnalytics,
+    setShowAnalytics,
+    handleShare,
+    handleCopyMarkdown,
+    handleDownloadMd,
+    handleDownloadJson,
+    showApps,
+    setShowApps,
+    view,
+    importInputRef,
+    wsFailed,
+    setWsFailed,
+    setWsConnected,
+    shareUrl,
+    shareCopied,
+    setShareCopied,
+    setShareUrl,
     offlineQueue,
-    chatSearchOpen, chatSearchRef, chatSearch, setChatSearch,
-    closeChatSearch, chatSearchNavigate, chatSearchResults, chatSearchIndex,
-    showSystemPrompt, setShowSystemPrompt, systemPromptDraft, setSystemPromptDraft,
+    chatSearchOpen,
+    chatSearchRef,
+    chatSearch,
+    setChatSearch,
+    closeChatSearch,
+    chatSearchNavigate,
+    chatSearchResults,
+    chatSearchIndex,
+    showSystemPrompt,
+    setShowSystemPrompt,
+    systemPromptDraft,
+    setSystemPromptDraft,
     handleSaveSystemPrompt,
-    showSummary, setShowSummary, summaryText,
+    showSummary,
+    setShowSummary,
+    summaryText,
   } = props;
 
   return (
     <>
       {/* Compact toolbar -- model picker + options */}
-      <header className="flex items-center justify-between px-3 py-1.5 shrink-0"
-        style={{ background: "var(--c-bg-2)", borderBottom: "1px solid var(--c-border-2)", zIndex: 30, position: "relative" }}>
+      <header
+        className="flex items-center justify-between px-3 py-1.5 shrink-0"
+        style={{
+          background: 'var(--c-bg-2)',
+          borderBottom: '1px solid var(--c-border-2)',
+          zIndex: 30,
+          position: 'relative',
+        }}
+      >
         <div className="flex items-center gap-2 min-w-0 flex-1 shre-no-drag">
           {(() => {
             const s = sessions.find((x) => x.id === activeSessionId);
@@ -146,17 +215,31 @@ export function ChatPanels(props: ChatPanelsProps) {
                 autoFocus
                 value={editingTabText}
                 onChange={(e) => setEditingTabText(e.target.value)}
-                onBlur={() => { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); }}
-                onKeyDown={(e) => { if (e.key === "Enter") { if (editingTabText.trim()) actions.updateSessionTitle(s.id, editingTabText.trim()); setEditingTabId(null); } if (e.key === "Escape") setEditingTabId(null); }}
+                onBlur={() => {
+                  if (editingTabText.trim())
+                    actions.updateSessionTitle(s.id, editingTabText.trim());
+                  setEditingTabId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (editingTabText.trim())
+                      actions.updateSessionTitle(s.id, editingTabText.trim());
+                    setEditingTabId(null);
+                  }
+                  if (e.key === 'Escape') setEditingTabId(null);
+                }}
                 onClick={(e) => e.stopPropagation()}
                 className="max-w-[180px] sm:max-w-[260px] bg-transparent outline-none text-[12px] tracking-tight rounded px-1"
-                style={{ color: "var(--c-text-2)", border: "1px solid var(--c-accent)" }}
+                style={{ color: 'var(--c-text-2)', border: '1px solid var(--c-accent)' }}
               />
             ) : (
               <span
                 className="text-[12px] tracking-tight truncate max-w-[180px] sm:max-w-[260px] cursor-default"
-                style={{ color: "var(--c-text-3)" }}
-                onDoubleClick={() => { setEditingTabId(s.id); setEditingTabText(s.title); }}
+                style={{ color: 'var(--c-text-3)' }}
+                onDoubleClick={() => {
+                  setEditingTabId(s.id);
+                  setEditingTabText(s.title);
+                }}
                 title="Double-click to rename"
               >
                 {s.title}
@@ -165,7 +248,12 @@ export function ChatPanels(props: ChatPanelsProps) {
           })()}
 
           {cliMode && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium" style={{ background: "rgba(168,85,247,0.12)", color: "var(--c-purple)" }}>CLI</span>
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium"
+              style={{ background: 'rgba(168,85,247,0.12)', color: 'var(--c-purple)' }}
+            >
+              CLI
+            </span>
           )}
         </div>
 
@@ -176,17 +264,30 @@ export function ChatPanels(props: ChatPanelsProps) {
             onClose={() => setShowModelPicker(false)}
             selectedModel={selectedModel}
             onSelectModel={(modelId) => {
-              const providerLabels: Record<string, string> = { "provider:openai": "ChatGPT", "provider:anthropic": "Claude", "provider:ollama": "Local", "provider:google": "Google" };
-              const prevName = providerLabels[selectedModel ?? ""] ?? AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name ?? selectedModel ?? "Auto";
+              const providerLabels: Record<string, string> = {
+                'provider:openai': 'ChatGPT',
+                'provider:anthropic': 'Claude',
+                'provider:ollama': 'Local',
+                'provider:google': 'Google',
+              };
+              const prevName =
+                providerLabels[selectedModel ?? ''] ??
+                AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name ??
+                selectedModel ??
+                'Auto';
               setSelectedModel(modelId);
               setModelOverride(activeAgentId, modelId);
               const sid = ensureSession();
-              const newName = providerLabels[modelId ?? ""] ?? AVAILABLE_MODELS.find(m => m.id === modelId)?.name ?? modelId ?? "Auto";
+              const newName =
+                providerLabels[modelId ?? ''] ??
+                AVAILABLE_MODELS.find((m) => m.id === modelId)?.name ??
+                modelId ??
+                'Auto';
               actions.addMessage(sid, {
-                role: "assistant",
+                role: 'assistant',
                 content: `[system] Model switched from ${prevName} to ${newName}. Connected.`,
                 timestamp: Date.now(),
-                meta: { system: "true" },
+                meta: { system: 'true' },
               });
             }}
             models={AVAILABLE_MODELS}
@@ -194,14 +295,44 @@ export function ChatPanels(props: ChatPanelsProps) {
             pickerRef={modelPickerRef}
           />
 
+          {/* Voice engine selector */}
+          <select
+            value={ttsProvider}
+            onChange={(e) => setTtsProvider(e.target.value as TTSProvider)}
+            className="h-8 rounded-lg text-[11px] px-2 border-none outline-none cursor-pointer transition-colors hover:brightness-125"
+            style={{
+              background: ttsProvider === 'personaplex'
+                ? 'rgba(118, 185, 0, 0.15)'
+                : ttsProvider === 'elevenlabs'
+                  ? 'rgba(99, 102, 241, 0.15)'
+                  : 'rgba(255,255,255,0.05)',
+              color: ttsProvider === 'personaplex'
+                ? '#76b900'
+                : ttsProvider === 'elevenlabs'
+                  ? '#818cf8'
+                  : 'var(--c-text-3)',
+              fontWeight: ttsProvider !== 'auto' ? 500 : 400,
+            }}
+            title={`Voice engine: ${ttsProvider === 'personaplex' ? 'NVIDIA PersonaPlex (local)' : ttsProvider === 'elevenlabs' ? 'ElevenLabs (cloud)' : 'Auto (best available)'}`}
+            aria-label="Select voice engine"
+          >
+            <option value="auto">Voice: Auto</option>
+            <option value="elevenlabs">Voice: ElevenLabs</option>
+            <option value="personaplex">Voice: PersonaPlex</option>
+          </select>
+
           <div className="relative" ref={headerMoreRef}>
             <button
               onClick={() => setShowHeaderMore(!showHeaderMore)}
               className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-              style={{ color: showHeaderMore ? "var(--c-text-1)" : "var(--c-text-3)" }}
+              style={{ color: showHeaderMore ? 'var(--c-text-1)' : 'var(--c-text-3)' }}
               aria-label="More options"
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="1.5" />
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="12" cy="19" r="1.5" />
+              </svg>
             </button>
 
             <HeaderMoreMenu
@@ -212,7 +343,10 @@ export function ChatPanels(props: ChatPanelsProps) {
               compareMode={compareMode}
               onToggleCompare={() => {
                 handleToggleCompare(compareModels.length);
-                if (compareMode) { setCompareStreams({}); setCompareWinner(null); }
+                if (compareMode) {
+                  setCompareStreams({});
+                  setCompareWinner(null);
+                }
               }}
               comparePickerRef={comparePickerRef}
               activeSession={activeSession}
@@ -241,17 +375,38 @@ export function ChatPanels(props: ChatPanelsProps) {
             />
           </div>
 
-          <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) { importSessions(file, sessions, () => window.location.reload(), (msg: string) => { actions.setStatusLine(msg); setTimeout(() => actions.setStatusLine(null), 3000); }); }
-            e.target.value = "";
-          }} />
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                importSessions(
+                  file,
+                  sessions,
+                  () => window.location.reload(),
+                  (msg: string) => {
+                    actions.setStatusLine(msg);
+                    setTimeout(() => actions.setStatusLine(null), 3000);
+                  },
+                );
+              }
+              e.target.value = '';
+            }}
+          />
 
           {wsFailed && (
             <button
-              onClick={() => { setWsFailed(false); retryConnection().then(() => setWsConnected(true)).catch(() => {}); }}
+              onClick={() => {
+                setWsFailed(false);
+                retryConnection()
+                  .then(() => setWsConnected(true))
+                  .catch(() => {});
+              }}
               className="text-[11px] px-2.5 py-1 rounded-lg transition-colors font-medium"
-              style={{ color: "var(--c-danger)", background: "var(--c-danger-bg)" }}
+              style={{ color: 'var(--c-danger)', background: 'var(--c-danger-bg)' }}
               aria-label="Reconnect to gateway"
             >
               Reconnect
@@ -279,14 +434,14 @@ export function ChatPanels(props: ChatPanelsProps) {
         <div
           className="shrink-0 flex items-center justify-center gap-2 px-3 py-1 text-[10px]"
           style={{
-            background: "rgba(234, 179, 8, 0.08)",
-            borderBottom: "1px solid rgba(234, 179, 8, 0.15)",
-            color: "var(--c-yellow)",
+            background: 'rgba(234, 179, 8, 0.08)',
+            borderBottom: '1px solid rgba(234, 179, 8, 0.15)',
+            color: 'var(--c-yellow)',
           }}
         >
           <span className="ws-reconnect-pulse inline-block h-1 w-1 rounded-full bg-yellow-400" />
           {offlineQueue.length === 1
-            ? "1 message queued \u2014 sending when reconnected..."
+            ? '1 message queued \u2014 sending when reconnected...'
             : `${offlineQueue.length} messages queued \u2014 sending when reconnected...`}
         </div>
       )}
@@ -322,7 +477,7 @@ export function ChatPanels(props: ChatPanelsProps) {
         draft={systemPromptDraft}
         onDraftChange={setSystemPromptDraft}
         onSave={handleSaveSystemPrompt}
-        onClear={() => setSystemPromptDraft("")}
+        onClear={() => setSystemPromptDraft('')}
       />
 
       {/* Summary modal */}
@@ -332,7 +487,7 @@ export function ChatPanels(props: ChatPanelsProps) {
         summaryText={summaryText}
         onCopy={() => {
           navigator.clipboard?.writeText(summaryText).then(() => {
-            actions.setStatusLine("Summary copied to clipboard");
+            actions.setStatusLine('Summary copied to clipboard');
             setTimeout(() => actions.setStatusLine(null), 2000);
           });
         }}
