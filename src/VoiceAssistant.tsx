@@ -16,6 +16,7 @@ import {
 } from './voice/voice-utils';
 import { VoiceTurnContent } from './voice/VoiceTurnContent';
 import { createSpeak } from './voice/voice-tts';
+import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
 
 interface Props {
   open: boolean;
@@ -168,23 +169,29 @@ export default function VoiceAssistant({
     }, []),
   });
 
-  // ── Mic stream ──
+  // ── Mic stream (uses shared cached stream to avoid repeated permission prompts) ──
+  const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const acquireMic = useCallback(async (): Promise<MediaStream | null> => {
     if (mediaStreamRef.current?.active) return mediaStreamRef.current;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      const stream = await getOrRequestStream();
       mediaStreamRef.current = stream;
+      setMicPermissionDenied(false);
       return stream;
-    } catch (err) {
+    } catch (err: any) {
       console.debug('mic acquire failed', err);
+      if (err?.name === 'NotAllowedError') {
+        setMicPermissionDenied(true);
+        dispatch({ type: 'ERROR', message: 'Microphone access denied' });
+      } else if (err?.name === 'NotFoundError') {
+        dispatch({ type: 'ERROR', message: 'No microphone found' });
+      }
       return null;
     }
   }, []);
 
   const releaseMic = useCallback(() => {
-    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    // Don't stop tracks — they're in the shared cache for reuse
     mediaStreamRef.current = null;
   }, []);
 
@@ -1029,6 +1036,48 @@ export default function VoiceAssistant({
                 <span className="text-sm">{a.name}</span>
               </button>
             ))}
+        </div>
+      )}
+
+      {/* Microphone permission denied banner */}
+      {micPermissionDenied && (
+        <div
+          className="mx-5 mb-2 rounded-xl p-4 flex items-start gap-3"
+          style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+          }}
+        >
+          <svg className="h-5 w-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </svg>
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
+              Microphone access blocked
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              {/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+                ? 'Open Settings \u2192 Safari \u2192 Microphone and allow for this site.'
+                : /Android/i.test(navigator.userAgent)
+                  ? 'Tap the lock icon in the address bar \u2192 Permissions \u2192 Microphone \u2192 Allow.'
+                  : 'Click the lock icon in the address bar \u2192 Site settings \u2192 Microphone \u2192 Allow.'}
+            </p>
+            <button
+              className="mt-2 text-xs px-3 py-1 rounded-full active:scale-95 transition-transform"
+              style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
+              onClick={async () => {
+                setMicPermissionDenied(false);
+                const stream = await acquireMic();
+                if (stream) {
+                  dispatch({ type: 'GREETING_DONE' });
+                }
+              }}
+            >
+              Try again
+            </button>
+          </div>
         </div>
       )}
 
