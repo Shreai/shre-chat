@@ -901,6 +901,8 @@ export function ChatView() {
             currentAgent={currentAgent}
             modelPickerRef={modelPickerRef}
             ensureSession={ensureSession}
+            ttsProvider={ttsProvider}
+            setTtsProvider={setTtsProvider}
             showHeaderMore={showHeaderMore}
             setShowHeaderMore={setShowHeaderMore}
             headerMoreRef={headerMoreRef}
