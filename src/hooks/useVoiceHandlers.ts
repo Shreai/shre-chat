@@ -1,11 +1,14 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { playVoiceCue, MAX_RECORDING_SECONDS } from "../chat-utils";
-import { getOrRequestStream } from "./useVoiceRecording";
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { playVoiceCue, MAX_RECORDING_SECONDS } from '../chat-utils';
+import { getOrRequestStream } from './useVoiceRecording';
+import type { TTSProvider } from '../preferences-store';
 
 export interface UseVoiceHandlersParams {
   setInput: (v: string) => void;
   setIsRecording: (v: boolean) => void;
-  setVoicePhase: React.Dispatch<React.SetStateAction<"idle" | "waiting" | "recording" | "transcribing">>;
+  setVoicePhase: React.Dispatch<
+    React.SetStateAction<'idle' | 'waiting' | 'recording' | 'transcribing'>
+  >;
   setInterimTranscript: (v: string) => void;
   setAudioLevel: (v: number) => void;
   setRecordingDuration: (v: number) => void;
@@ -31,6 +34,7 @@ export interface UseVoiceHandlersParams {
   voiceMode: boolean;
   setVoiceMode: (v: boolean) => void;
   ttsVoice: string;
+  ttsProvider: TTSProvider;
   streaming: boolean;
   messages: { role: string; content: string; timestamp?: number }[];
   handleSendRef: React.MutableRefObject<() => void>;
@@ -53,19 +57,41 @@ export interface UseVoiceHandlersReturn {
 
 export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandlersReturn {
   const {
-    setInput, setIsRecording, setVoicePhase, setInterimTranscript,
-    setAudioLevel, setRecordingDuration, setIsSpeaking,
-    voiceSessionIdRef, voiceFinalTranscriptRef,
-    audioCtxRef, analyserRef, levelRafRef, recordingTimerRef,
-    interimTranscriptRef, audioLevelRawRef, levelThrottleRef, silenceStartRef,
-    lastSpokenMsgRef, isHandsFreeRef,
-    SILENCE_THRESHOLD, SILENCE_TIMEOUT_MS,
-    clearInterimAfter, cleanupAudioLevel,
-    isHandsFree, isRecording, voiceMode, setVoiceMode, ttsVoice,
-    streaming, messages, handleSendRef,
+    setInput,
+    setIsRecording,
+    setVoicePhase,
+    setInterimTranscript,
+    setAudioLevel,
+    setRecordingDuration,
+    setIsSpeaking,
+    voiceSessionIdRef,
+    voiceFinalTranscriptRef,
+    audioCtxRef,
+    analyserRef,
+    levelRafRef,
+    recordingTimerRef,
+    interimTranscriptRef,
+    audioLevelRawRef,
+    levelThrottleRef,
+    silenceStartRef,
+    lastSpokenMsgRef,
+    isHandsFreeRef,
+    SILENCE_THRESHOLD,
+    SILENCE_TIMEOUT_MS,
+    clearInterimAfter,
+    cleanupAudioLevel,
+    isHandsFree,
+    isRecording,
+    voiceMode,
+    setVoiceMode,
+    ttsVoice,
+    ttsProvider,
+    streaming,
+    messages,
+    handleSendRef,
   } = params;
 
-  const [voicePendingSend, setVoicePendingSend] = useState("");
+  const [voicePendingSend, setVoicePendingSend] = useState('');
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeListenerRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -77,22 +103,43 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Microphone access is not available in this browser.");
+      alert('Microphone access is not available in this browser.');
       return;
     }
 
     // Clean up previous sessions
-    if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch (_) { void _; } recognitionRef.current = null; }
-    if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch (_) { void _; } wakeListenerRef.current = null; }
-    if (mediaRecorderRef.current) { try { mediaRecorderRef.current.stop(); } catch (_) { void _; } mediaRecorderRef.current = null; }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (_) {
+        void _;
+      }
+      recognitionRef.current = null;
+    }
+    if (wakeListenerRef.current) {
+      try {
+        wakeListenerRef.current.abort();
+      } catch (_) {
+        void _;
+      }
+      wakeListenerRef.current = null;
+    }
+    if (mediaRecorderRef.current) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) {
+        void _;
+      }
+      mediaRecorderRef.current = null;
+    }
     audioChunksRef.current = [];
 
     // Clear ALL voice state for a completely fresh recording
     voiceSessionIdRef.current += 1;
-    voiceFinalTranscriptRef.current = "";
-    setInput("");
-    setInterimTranscript("");
-    setVoicePendingSend("");
+    voiceFinalTranscriptRef.current = '';
+    setInput('');
+    setInterimTranscript('');
+    setVoicePendingSend('');
     setIsRecording(true);
 
     const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -105,30 +152,39 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
     // Always skip wake word on manual mic press — wake word is only for hands-free mode
     if (wakeAlreadyDetected || !SpeechRec || !isHandsFreeRef.current) {
-      setVoicePhase("recording");
-      setInterimTranscript("Recording...");
+      setVoicePhase('recording');
+      setInterimTranscript('Recording...');
       beginCapture();
       return;
     }
 
-    setVoicePhase("waiting");
+    setVoicePhase('waiting');
     setInterimTranscript('Say "shre shre" to start...');
 
     const wakeRec = new SpeechRec();
     wakeRec.continuous = true;
     wakeRec.interimResults = true;
-    wakeRec.lang = "en-US";
+    wakeRec.lang = 'en-US';
     let wakeDetected = false;
 
     wakeRec.onresult = (e: SpeechRecognitionEvent) => {
       if (wakeDetected) return;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const text = e.results[i][0].transcript.toLowerCase().trim();
-        if (text.includes("shre shre") || text.includes("shrey shrey") || text.includes("shray shray")
-          || text.includes("shree shree") || text.includes("shri shri")) {
+        if (
+          text.includes('shre shre') ||
+          text.includes('shrey shrey') ||
+          text.includes('shray shray') ||
+          text.includes('shree shree') ||
+          text.includes('shri shri')
+        ) {
           wakeDetected = true;
-          playVoiceCue("wake");
-          try { wakeRec.stop(); } catch (_) { void _; }
+          playVoiceCue('wake');
+          try {
+            wakeRec.stop();
+          } catch (_) {
+            void _;
+          }
           recognitionRef.current = null;
           beginCapture();
           return;
@@ -137,36 +193,52 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     };
     wakeRec.onend = () => {
       if (!wakeDetected && recognitionRef.current === wakeRec) {
-        try { wakeRec.start(); } catch { recognitionRef.current = null; }
+        try {
+          wakeRec.start();
+        } catch {
+          recognitionRef.current = null;
+        }
       }
     };
     wakeRec.onerror = () => {
       if (!wakeDetected && recognitionRef.current === wakeRec) {
-        setTimeout(() => { try { wakeRec.start(); } catch { recognitionRef.current = null; } }, 500);
+        setTimeout(() => {
+          try {
+            wakeRec.start();
+          } catch {
+            recognitionRef.current = null;
+          }
+        }, 500);
       }
     };
-    try { wakeRec.start(); recognitionRef.current = wakeRec; } catch { beginCapture(); }
+    try {
+      wakeRec.start();
+      recognitionRef.current = wakeRec;
+    } catch {
+      beginCapture();
+    }
 
     async function beginCapture() {
-      playVoiceCue("start");
+      playVoiceCue('start');
       if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
-      setVoicePhase("recording");
-      setInterimTranscript("");
+      setVoicePhase('recording');
+      setInterimTranscript('');
       setRecordingDuration(0);
 
       let stream: MediaStream;
       try {
         stream = await getOrRequestStream();
       } catch (err: any) {
-        const msg = err?.name === "NotAllowedError"
-          ? "Microphone blocked — tap the lock icon in your browser's address bar to allow mic access, then try again."
-          : err?.name === "NotFoundError"
-            ? "No microphone found. Please connect a microphone and try again."
-            : "Microphone error: " + (err?.message || "unknown");
+        const msg =
+          err?.name === 'NotAllowedError'
+            ? "Microphone blocked — tap the lock icon in your browser's address bar to allow mic access, then try again."
+            : err?.name === 'NotFoundError'
+              ? 'No microphone found. Please connect a microphone and try again.'
+              : 'Microphone error: ' + (err?.message || 'unknown');
         setInterimTranscript(msg);
         clearInterimAfter(4000);
         setIsRecording(false);
-        setVoicePhase("idle");
+        setVoicePhase('idle');
         return;
       }
 
@@ -195,7 +267,10 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           }
           if (audioLevelRawRef.current < SILENCE_THRESHOLD) {
             if (!silenceStartRef.current) silenceStartRef.current = now;
-            else if (now - silenceStartRef.current > SILENCE_TIMEOUT_MS && (Date.now() - startTime) > 2000) {
+            else if (
+              now - silenceStartRef.current > SILENCE_TIMEOUT_MS &&
+              Date.now() - startTime > 2000
+            ) {
               stopRecordingRef.current?.();
               return;
             }
@@ -205,7 +280,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           levelRafRef.current = requestAnimationFrame(tick);
         }
         levelRafRef.current = requestAnimationFrame(tick);
-      } catch { /* audio level is best-effort */ }
+      } catch {
+        /* audio level is best-effort */
+      }
 
       const startTime = Date.now();
       recordingTimerRef.current = setInterval(() => {
@@ -217,12 +294,18 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       }, 1000);
 
       const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4"
-        : isSafari ? "audio/mp4" : "audio/webm";
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4')
+          ? 'audio/mp4'
+          : isSafari
+            ? 'audio/mp4'
+            : 'audio/webm';
       const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
 
@@ -230,22 +313,31 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         const rec = new SpeechRec();
         rec.continuous = true;
         rec.interimResults = true;
-        rec.lang = "en-US";
-        voiceFinalTranscriptRef.current = "";
+        rec.lang = 'en-US';
+        voiceFinalTranscriptRef.current = '';
         let hasStarted = false;
         let stopped = false;
 
-        rec.onstart = () => { hasStarted = true; };
+        rec.onstart = () => {
+          hasStarted = true;
+        };
         rec.onresult = (e: SpeechRecognitionEvent) => {
           if (stopped) return;
-          let interim = "";
+          let interim = '';
           for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) voiceFinalTranscriptRef.current += e.results[i][0].transcript + " ";
+            if (e.results[i].isFinal)
+              voiceFinalTranscriptRef.current += e.results[i][0].transcript + ' ';
             else interim += e.results[i][0].transcript;
           }
           const combined = (voiceFinalTranscriptRef.current + interim).toLowerCase();
-          if (combined.includes("shre send") || combined.includes("shrey send") || combined.includes("shray send")) {
-            voiceFinalTranscriptRef.current = voiceFinalTranscriptRef.current.replace(/\b(shre|shrey|shray)\s+send\b/gi, "").trim();
+          if (
+            combined.includes('shre send') ||
+            combined.includes('shrey send') ||
+            combined.includes('shray send')
+          ) {
+            voiceFinalTranscriptRef.current = voiceFinalTranscriptRef.current
+              .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
+              .trim();
             stopped = true;
             setInput(voiceFinalTranscriptRef.current);
             stopRecordingRef.current?.();
@@ -256,27 +348,47 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         };
         rec.onerror = (e: any) => {
           // Show user that browser speech failed but Whisper is still capturing
-          const errType = e?.error || "unknown";
-          if (errType === "no-speech" || errType === "network" || errType === "audio-capture") {
+          const errType = e?.error || 'unknown';
+          if (errType === 'no-speech' || errType === 'network' || errType === 'audio-capture') {
             if (!voiceFinalTranscriptRef.current) {
-              setInterimTranscript("Recording audio for transcription...");
+              setInterimTranscript('Recording audio for transcription...');
             }
           }
         };
         rec.onend = () => {
-          if (!hasStarted || stopped) { recognitionRef.current = null; return; }
+          if (!hasStarted || stopped) {
+            recognitionRef.current = null;
+            return;
+          }
           if (recognitionRef.current === rec) {
-            try { rec.start(); return; } catch (_) { void _; }
+            try {
+              rec.start();
+              return;
+            } catch (_) {
+              void _;
+            }
           }
           recognitionRef.current = null;
         };
         const origStop = rec.stop.bind(rec);
-        rec.stop = () => { stopped = true; origStop(); };
-        try { rec.start(); recognitionRef.current = rec; } catch { /* Whisper handles it */ }
+        rec.stop = () => {
+          stopped = true;
+          origStop();
+        };
+        try {
+          rec.start();
+          recognitionRef.current = rec;
+        } catch {
+          /* Whisper handles it */
+        }
         // If SpeechRecognition produces nothing after 3s, show feedback so user knows audio is still capturing
         setTimeout(() => {
-          if (recognitionRef.current === rec && !voiceFinalTranscriptRef.current && !interimTranscriptRef.current) {
-            setInterimTranscript("Capturing audio...");
+          if (
+            recognitionRef.current === rec &&
+            !voiceFinalTranscriptRef.current &&
+            !interimTranscriptRef.current
+          ) {
+            setInterimTranscript('Capturing audio...');
           }
         }, 3000);
       }
@@ -284,19 +396,23 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   }, []);
 
   const stopRecording = useCallback(async () => {
-    playVoiceCue("stop");
+    playVoiceCue('stop');
     if (navigator.vibrate) navigator.vibrate(30);
     cleanupAudioLevel();
 
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (_) { void _; }
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {
+        void _;
+      }
       recognitionRef.current = null;
     }
 
     const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      setVoicePhase("transcribing");
-      setInterimTranscript("Transcribing your voice...");
+    if (recorder && recorder.state !== 'inactive') {
+      setVoicePhase('transcribing');
+      setInterimTranscript('Transcribing your voice...');
 
       await new Promise<void>((resolve) => {
         recorder.onstop = async () => {
@@ -305,55 +421,71 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           // Don't stop shared stream tracks — they're cached for reuse (avoids re-prompting permissions)
 
           if (audioBlob.size < 5000) {
-            setInterimTranscript("Recording too short — try again");
+            setInterimTranscript('Recording too short — try again');
             clearInterimAfter(2000);
             setIsRecording(false);
-            setVoicePhase("idle");
-            setInput("");
+            setVoicePhase('idle');
+            setInput('');
             resolve();
             return;
           }
 
-          let transcribedText = "";
+          let transcribedText = '';
           try {
-            const ext = recorder.mimeType.includes("mp4") ? "mp4" : "webm";
+            const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
             const form = new FormData();
-            form.append("file", audioBlob, `recording.${ext}`);
-            form.append("model", "whisper-1");
-            form.append("language", "en");
-            const res = await fetch("/api/transcribe", { method: "POST", body: form, signal: AbortSignal.timeout(30_000) });
+            form.append('file', audioBlob, `recording.${ext}`);
+            form.append('model', 'whisper-1');
+            form.append('language', 'en');
+            const res = await fetch('/api/transcribe', {
+              method: 'POST',
+              body: form,
+              signal: AbortSignal.timeout(30_000),
+            });
             const data = await res.json();
             if (data.text && data.text.trim()) {
               transcribedText = data.text.trim();
             }
           } catch (err: any) {
-            console.warn("[voice] Whisper transcription failed, keeping browser transcript:", err);
-            const msg = err?.name === "TimeoutError" ? "Transcription timed out — try a shorter recording" : "Transcription failed — check connection";
+            console.warn('[voice] Whisper transcription failed, keeping browser transcript:', err);
+            const msg =
+              err?.name === 'TimeoutError'
+                ? 'Transcription timed out — try a shorter recording'
+                : 'Transcription failed — check connection';
             setInterimTranscript(msg);
             clearInterimAfter(3000);
           }
 
           setIsRecording(false);
-          setVoicePhase("idle");
+          setVoicePhase('idle');
 
           // Use Whisper result first, then accumulated SpeechRecognition transcript from ref
-          let finalText = transcribedText || voiceFinalTranscriptRef.current.trim() || "";
-          finalText = finalText.replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, "").replace(/\b(shre|shrey|shray)\s+send\b/gi, "").trim();
+          let finalText = transcribedText || voiceFinalTranscriptRef.current.trim() || '';
+          finalText = finalText
+            .replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, '')
+            .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
+            .trim();
           if (finalText) {
-            setInterimTranscript("");
+            setInterimTranscript('');
             setInput(finalText);
             // Also sync to textarea DOM for any listeners (autogrow, etc.)
             requestAnimationFrame(() => {
-              const ta = document.getElementById("shre-chat-textarea") as HTMLTextAreaElement;
-              if (ta && ta.value !== finalText) { ta.value = finalText; ta.dispatchEvent(new Event("input", { bubbles: true })); }
+              const ta = document.getElementById('shre-chat-textarea') as HTMLTextAreaElement;
+              if (ta && ta.value !== finalText) {
+                ta.value = finalText;
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+              }
             });
             setVoicePendingSend(finalText);
           } else {
-            if (!interimTranscriptRef.current.includes("failed") && !interimTranscriptRef.current.includes("timed out")) {
-              setInterimTranscript("No speech detected — try again");
+            if (
+              !interimTranscriptRef.current.includes('failed') &&
+              !interimTranscriptRef.current.includes('timed out')
+            ) {
+              setInterimTranscript('No speech detected — try again');
             }
             clearInterimAfter(3000);
-            setInput("");
+            setInput('');
           }
           resolve();
         };
@@ -364,9 +496,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     }
 
     setIsRecording(false);
-    setVoicePhase("idle");
-    setInterimTranscript("");
-    setInput("");
+    setVoicePhase('idle');
+    setInterimTranscript('');
+    setInput('');
   }, [cleanupAudioLevel]);
 
   // Keep ref in sync
@@ -376,10 +508,10 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   useEffect(() => {
     if (!voicePendingSend) return;
     const sessionAtSend = voiceSessionIdRef.current;
-    setVoicePendingSend("");
+    setVoicePendingSend('');
     const timer = setTimeout(() => {
       if (voiceSessionIdRef.current !== sessionAtSend) return;
-      const textarea = document.getElementById("shre-chat-textarea") as HTMLTextAreaElement;
+      const textarea = document.getElementById('shre-chat-textarea') as HTMLTextAreaElement;
       if (textarea && textarea.value.trim()) {
         handleSendRef.current();
       }
@@ -391,11 +523,19 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (_) { void _; }
+        try {
+          recognitionRef.current.abort();
+        } catch (_) {
+          void _;
+        }
         recognitionRef.current = null;
       }
       if (wakeListenerRef.current) {
-        try { wakeListenerRef.current.abort(); } catch (_) { void _; }
+        try {
+          wakeListenerRef.current.abort();
+        } catch (_) {
+          void _;
+        }
         wakeListenerRef.current = null;
       }
       if (levelRafRef.current) cancelAnimationFrame(levelRafRef.current);
@@ -409,7 +549,14 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   // Hands-free wake word listener — "shre shre"
   useEffect(() => {
     if (!isHandsFree) {
-      if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch (_) { void _; } wakeListenerRef.current = null; }
+      if (wakeListenerRef.current) {
+        try {
+          wakeListenerRef.current.abort();
+        } catch (_) {
+          void _;
+        }
+        wakeListenerRef.current = null;
+      }
       return;
     }
     const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -422,12 +569,20 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       const w = new SpeechRec() as SpeechRecognition;
       w.continuous = false;
       w.interimResults = true;
-      w.lang = "en-US";
+      w.lang = 'en-US';
       w.onresult = (e: SpeechRecognitionEvent) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const text = e.results[i][0].transcript.toLowerCase().trim();
-          if (text.includes("shre shre") || text.includes("shrey shrey") || text.includes("shray shray")) {
-            try { w.stop(); } catch (_) { void _; }
+          if (
+            text.includes('shre shre') ||
+            text.includes('shrey shrey') ||
+            text.includes('shray shray')
+          ) {
+            try {
+              w.stop();
+            } catch (_) {
+              void _;
+            }
             wakeListenerRef.current = null;
             skipWakeRef.current = true;
             startRecording();
@@ -457,7 +612,14 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     setTimeout(startWakeListener, 200);
     return () => {
       active = false;
-      if (wakeListenerRef.current) { try { wakeListenerRef.current.abort(); } catch (_) { void _; } wakeListenerRef.current = null; }
+      if (wakeListenerRef.current) {
+        try {
+          wakeListenerRef.current.abort();
+        } catch (_) {
+          void _;
+        }
+        wakeListenerRef.current = null;
+      }
     };
   }, [isHandsFree, isRecording, startRecording]);
 
@@ -466,20 +628,20 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     if (!voiceMode || streaming) return;
     if (messages.length === 0) return;
     const lastMsg = messages[messages.length - 1];
-    if (lastMsg.role !== "assistant" || !lastMsg.content) return;
+    if (lastMsg.role !== 'assistant' || !lastMsg.content) return;
     const msgKey = `${lastMsg.timestamp}-${lastMsg.content.length}`;
     if (lastSpokenMsgRef.current === msgKey) return;
     lastSpokenMsgRef.current = msgKey;
 
     const plainText = lastMsg.content
-      .replace(/```[\s\S]*?```/g, " code block omitted ")
+      .replace(/```[\s\S]*?```/g, ' code block omitted ')
       .replace(/`[^`]+`/g, (m: string) => m.slice(1, -1))
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-      .replace(/#{1,6}\s+/g, "")
-      .replace(/[*_~]{1,3}/g, "")
-      .replace(/\n{2,}/g, ". ")
-      .replace(/\n/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/[*_~]{1,3}/g, '')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
       .trim()
       .slice(0, 4096);
     if (!plainText) return;
@@ -489,23 +651,34 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     ttsAbortRef.current = controller;
     setIsSpeaking(true);
 
-    fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: plainText, voice: ttsVoice }),
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: plainText, voice: ttsVoice, provider: ttsProvider || 'auto' }),
       signal: controller.signal,
     })
-      .then((res) => res.ok ? res.blob() : Promise.reject(new Error("TTS failed")))
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('TTS failed'))))
       .then((blob) => {
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         ttsAudioRef.current = audio;
-        audio.onended = () => { URL.revokeObjectURL(url); setIsSpeaking(false); ttsAudioRef.current = null; };
-        audio.onerror = () => { URL.revokeObjectURL(url); setIsSpeaking(false); ttsAudioRef.current = null; };
-        audio.play().catch(() => { URL.revokeObjectURL(url); setIsSpeaking(false); });
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          setIsSpeaking(false);
+          ttsAudioRef.current = null;
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          setIsSpeaking(false);
+          ttsAudioRef.current = null;
+        };
+        audio.play().catch(() => {
+          URL.revokeObjectURL(url);
+          setIsSpeaking(false);
+        });
       })
       .catch((err) => {
-        if (err.name === "AbortError") return;
+        if (err.name === 'AbortError') return;
         setIsSpeaking(false);
         if (window.speechSynthesis) {
           const utter = new SpeechSynthesisUtterance(plainText.slice(0, 1000));
@@ -517,8 +690,10 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         }
       });
 
-    return () => { controller.abort(); };
-  }, [voiceMode, streaming, messages, ttsVoice]);
+    return () => {
+      controller.abort();
+    };
+  }, [voiceMode, streaming, messages, ttsVoice, ttsProvider]);
 
   // Auto-enable voice mode when user uses voice input
   useEffect(() => {

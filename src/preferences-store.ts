@@ -1,23 +1,27 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 // Legacy localStorage keys — inlined here to avoid circular dependency with chat-utils
-const LEGACY_NOTIF_KEY = "shre-notification-sound";
-const LEGACY_VOICE_KEY = "shre-voice-mode";
-const LEGACY_MODEL_KEY = "shre-model-overrides";
+const LEGACY_NOTIF_KEY = 'shre-notification-sound';
+const LEGACY_VOICE_KEY = 'shre-voice-mode';
+const LEGACY_MODEL_KEY = 'shre-model-overrides';
 
 // ── Preferences slice — persisted via Zustand persist middleware ─────
+
+export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
 
 export interface PreferencesState {
   notifSound: boolean;
   voiceMode: boolean;
   ttsVoice: string;
+  ttsProvider: TTSProvider;
   modelOverrides: Record<string, string>; // agentId → modelId
 
   // Actions
   setNotifSound: (v: boolean) => void;
   setVoiceMode: (v: boolean) => void;
   setTtsVoice: (v: string) => void;
+  setTtsProvider: (v: TTSProvider) => void;
   setModelOverride: (agentId: string, modelId: string | null) => void;
   getModelOverride: (agentId: string) => string | null;
 }
@@ -33,17 +37,17 @@ function migrateFromLegacyKeys(): Partial<PreferencesState> {
     // notifSound: legacy key stores "true"/"false", default is true (enabled)
     const notifRaw = localStorage.getItem(LEGACY_NOTIF_KEY);
     if (notifRaw !== null) {
-      migrated.notifSound = notifRaw !== "false";
+      migrated.notifSound = notifRaw !== 'false';
     }
 
     // voiceMode: legacy key stores "true"/"false", default is false
     const voiceRaw = localStorage.getItem(LEGACY_VOICE_KEY);
     if (voiceRaw !== null) {
-      migrated.voiceMode = voiceRaw === "true";
+      migrated.voiceMode = voiceRaw === 'true';
     }
 
     // ttsVoice: legacy key stores voice name string
-    const ttsRaw = localStorage.getItem("shre-tts-voice");
+    const ttsRaw = localStorage.getItem('shre-tts-voice');
     if (ttsRaw !== null) {
       migrated.ttsVoice = ttsRaw;
     }
@@ -52,7 +56,7 @@ function migrateFromLegacyKeys(): Partial<PreferencesState> {
     const modelRaw = localStorage.getItem(LEGACY_MODEL_KEY);
     if (modelRaw !== null) {
       const parsed = JSON.parse(modelRaw);
-      if (parsed && typeof parsed === "object") {
+      if (parsed && typeof parsed === 'object') {
         migrated.modelOverrides = parsed;
       }
     }
@@ -72,12 +76,14 @@ export const usePreferences = create<PreferencesState>()(
       return {
         notifSound: legacy.notifSound ?? true,
         voiceMode: legacy.voiceMode ?? false,
-        ttsVoice: legacy.ttsVoice ?? "nova",
+        ttsVoice: legacy.ttsVoice ?? 'nova',
+        ttsProvider: (legacy as any).ttsProvider ?? 'auto',
         modelOverrides: legacy.modelOverrides ?? {},
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
         setTtsVoice: (v) => set({ ttsVoice: v }),
+        setTtsProvider: (v) => set({ ttsProvider: v }),
 
         setModelOverride: (agentId, modelId) =>
           set((state) => {
@@ -93,12 +99,13 @@ export const usePreferences = create<PreferencesState>()(
       };
     },
     {
-      name: "shre-chat-preferences",
+      name: 'shre-chat-preferences',
       // Only persist data fields, not action functions
       partialize: (state) => ({
         notifSound: state.notifSound,
         voiceMode: state.voiceMode,
         ttsVoice: state.ttsVoice,
+        ttsProvider: state.ttsProvider,
         modelOverrides: state.modelOverrides,
       }),
       // After rehydration, clean up legacy keys (one-time)
@@ -109,9 +116,11 @@ export const usePreferences = create<PreferencesState>()(
             try {
               localStorage.removeItem(LEGACY_NOTIF_KEY);
               localStorage.removeItem(LEGACY_VOICE_KEY);
-              localStorage.removeItem("shre-tts-voice");
+              localStorage.removeItem('shre-tts-voice');
               localStorage.removeItem(LEGACY_MODEL_KEY);
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }
         };
       },

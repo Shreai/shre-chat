@@ -25,6 +25,7 @@ interface Props {
   agentEmoji: string;
   agentId: string;
   ttsVoice: string;
+  ttsProvider?: string;
   agents?: AgentOption[];
   onSwitchAgent?: (agentId: string) => void;
   onVoiceTurn?: (turn: { role: 'user' | 'assistant'; content: string }) => void;
@@ -39,6 +40,7 @@ export default function VoiceAssistant({
   agentEmoji,
   agentId,
   ttsVoice,
+  ttsProvider,
   agents,
   onSwitchAgent,
   onVoiceTurn,
@@ -241,6 +243,7 @@ export default function VoiceAssistant({
   const speak = useCallback(
     createSpeak({
       ttsVoice,
+      ttsProvider,
       activeRef,
       ttsAbortRef,
       ttsAudioRef,
@@ -250,7 +253,7 @@ export default function VoiceAssistant({
       vad,
       stopListeningHardware,
     }),
-    [ttsVoice, vad, stopListeningHardware], // eslint-disable-line react-hooks/exhaustive-deps
+    [ttsVoice, ttsProvider, vad, stopListeningHardware], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // ── AI request ──
