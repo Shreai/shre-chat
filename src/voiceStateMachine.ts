@@ -6,125 +6,160 @@
  * Replaces scattered setPhase() calls + processingRef/stoppedRef/activeRef booleans.
  */
 
-export type VoicePhase = "idle" | "greeting" | "ready" | "listening" | "transcribing" | "thinking" | "speaking" | "error";
+export type VoicePhase =
+  | 'idle'
+  | 'greeting'
+  | 'ready'
+  | 'listening'
+  | 'transcribing'
+  | 'thinking'
+  | 'speaking'
+  | 'error';
 
 export interface VoiceState {
   phase: VoicePhase;
-  transcript: string;       // live transcript preview (interim from SR)
-  finalTranscript: string;  // accumulated final text
+  transcript: string; // live transcript preview (interim from SR)
+  finalTranscript: string; // accumulated final text
   statusText: string;
   errorMsg: string;
-  speechActive: boolean;    // true when VAD/SR detects voice energy
+  speechActive: boolean; // true when VAD/SR detects voice energy
 }
 
 export type VoiceAction =
-  | { type: "OPEN" }
-  | { type: "GREETING_DONE" }
-  | { type: "START_LISTENING" }
-  | { type: "SPEECH_DETECTED" }
-  | { type: "SPEECH_ENDED" }
-  | { type: "TRANSCRIPT_UPDATE"; interim: string; final: string }
-  | { type: "FINISH_LISTENING" }
-  | { type: "TRANSCRIPTION_DONE" }
-  | { type: "AI_RESPONSE" }
-  | { type: "START_SPEAKING" }
-  | { type: "SPEAK_DONE" }
-  | { type: "INTERRUPT" }
-  | { type: "BARGE_IN" }
-  | { type: "CLOSE" }
-  | { type: "ERROR"; message: string }
-  | { type: "RETRY" }
-  | { type: "SET_STATUS"; text: string }
-  | { type: "CLEAR_TRANSCRIPT" };
+  | { type: 'OPEN' }
+  | { type: 'GREETING_DONE' }
+  | { type: 'START_LISTENING' }
+  | { type: 'SPEECH_DETECTED' }
+  | { type: 'SPEECH_ENDED' }
+  | { type: 'TRANSCRIPT_UPDATE'; interim: string; final: string }
+  | { type: 'FINISH_LISTENING' }
+  | { type: 'TRANSCRIPTION_DONE' }
+  | { type: 'AI_RESPONSE' }
+  | { type: 'START_SPEAKING' }
+  | { type: 'SPEAK_DONE' }
+  | { type: 'INTERRUPT' }
+  | { type: 'BARGE_IN' }
+  | { type: 'CLOSE' }
+  | { type: 'ERROR'; message: string }
+  | { type: 'RETRY' }
+  | { type: 'SET_STATUS'; text: string }
+  | { type: 'CLEAR_TRANSCRIPT' };
 
 export const initialVoiceState: VoiceState = {
-  phase: "idle",
-  transcript: "",
-  finalTranscript: "",
-  statusText: "",
-  errorMsg: "",
+  phase: 'idle',
+  transcript: '',
+  finalTranscript: '',
+  statusText: '',
+  errorMsg: '',
   speechActive: false,
 };
 
 export function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState {
   switch (action.type) {
-    case "OPEN":
-      if (state.phase !== "idle") return state;
-      return { ...initialVoiceState, phase: "greeting" };
+    case 'OPEN':
+      if (state.phase !== 'idle') return state;
+      return { ...initialVoiceState, phase: 'greeting' };
 
-    case "GREETING_DONE":
-      if (state.phase !== "greeting") return state;
-      return { ...state, phase: "ready", statusText: "" };
+    case 'GREETING_DONE':
+      if (state.phase !== 'greeting') return state;
+      return { ...state, phase: 'ready', statusText: '' };
 
-    case "START_LISTENING":
-      if (state.phase !== "ready" && state.phase !== "listening" && state.phase !== "greeting") return state;
+    case 'START_LISTENING':
+      if (state.phase !== 'ready' && state.phase !== 'listening' && state.phase !== 'greeting')
+        return state;
       return {
         ...state,
-        phase: "listening",
-        transcript: "",
-        finalTranscript: "",
-        statusText: "",
+        phase: 'listening',
+        transcript: '',
+        finalTranscript: '',
+        statusText: '',
         speechActive: false,
       };
 
-    case "SPEECH_DETECTED":
-      if (state.phase !== "listening") return state;
+    case 'SPEECH_DETECTED':
+      if (state.phase !== 'listening') return state;
       return { ...state, speechActive: true };
 
-    case "SPEECH_ENDED":
+    case 'SPEECH_ENDED':
       return { ...state, speechActive: false };
 
-    case "TRANSCRIPT_UPDATE":
-      if (state.phase !== "listening") return state;
+    case 'TRANSCRIPT_UPDATE':
+      if (state.phase !== 'listening') return state;
       return {
         ...state,
         finalTranscript: action.final,
-        transcript: (action.final + " " + action.interim).trim(),
+        transcript: (action.final + ' ' + action.interim).trim(),
       };
 
-    case "FINISH_LISTENING":
-      if (state.phase !== "listening") return state;
-      return { ...state, phase: "transcribing", statusText: "Transcribing...", speechActive: false };
+    case 'FINISH_LISTENING':
+      if (state.phase !== 'listening') return state;
+      return {
+        ...state,
+        phase: 'transcribing',
+        statusText: 'Transcribing...',
+        speechActive: false,
+      };
 
-    case "TRANSCRIPTION_DONE":
-      if (state.phase !== "transcribing") return state;
-      return { ...state, phase: "thinking", statusText: "Processing..." };
+    case 'TRANSCRIPTION_DONE':
+      if (state.phase !== 'transcribing') return state;
+      return { ...state, phase: 'thinking', statusText: 'Processing...' };
 
-    case "AI_RESPONSE":
-      if (state.phase !== "thinking") return state;
-      return { ...state, phase: "speaking", statusText: "" };
+    case 'AI_RESPONSE':
+      if (state.phase !== 'thinking') return state;
+      return { ...state, phase: 'speaking', statusText: '' };
 
-    case "START_SPEAKING":
-      if (state.phase !== "thinking" && state.phase !== "ready") return state;
-      return { ...state, phase: "speaking", statusText: "" };
+    case 'START_SPEAKING':
+      if (state.phase !== 'thinking' && state.phase !== 'ready' && state.phase !== 'listening')
+        return state;
+      return { ...state, phase: 'speaking', statusText: '', speechActive: false };
 
-    case "SPEAK_DONE":
-      if (state.phase !== "speaking") return state;
-      return { ...state, phase: "ready", transcript: "", finalTranscript: "", statusText: "" };
+    case 'SPEAK_DONE':
+      if (state.phase !== 'speaking') return state;
+      return { ...state, phase: 'ready', transcript: '', finalTranscript: '', statusText: '' };
 
-    case "INTERRUPT":
-      if (state.phase !== "speaking" && state.phase !== "thinking" && state.phase !== "transcribing" && state.phase !== "listening") return state;
-      return { ...state, phase: "ready", transcript: "", finalTranscript: "", statusText: "" };
+    case 'INTERRUPT':
+      if (
+        state.phase !== 'speaking' &&
+        state.phase !== 'thinking' &&
+        state.phase !== 'transcribing' &&
+        state.phase !== 'listening'
+      )
+        return state;
+      return { ...state, phase: 'ready', transcript: '', finalTranscript: '', statusText: '' };
 
-    case "BARGE_IN":
-      if (state.phase !== "speaking") return state;
-      return { ...state, phase: "ready", transcript: "", finalTranscript: "", statusText: "", speechActive: false };
+    case 'BARGE_IN':
+      if (state.phase !== 'speaking') return state;
+      return {
+        ...state,
+        phase: 'ready',
+        transcript: '',
+        finalTranscript: '',
+        statusText: '',
+        speechActive: false,
+      };
 
-    case "CLOSE":
+    case 'CLOSE':
       return { ...initialVoiceState };
 
-    case "ERROR":
-      return { ...state, phase: "error", errorMsg: action.message, statusText: "" };
+    case 'ERROR':
+      return { ...state, phase: 'error', errorMsg: action.message, statusText: '' };
 
-    case "RETRY":
-      if (state.phase !== "error") return state;
-      return { ...state, phase: "ready", errorMsg: "", transcript: "", finalTranscript: "", statusText: "" };
+    case 'RETRY':
+      if (state.phase !== 'error') return state;
+      return {
+        ...state,
+        phase: 'ready',
+        errorMsg: '',
+        transcript: '',
+        finalTranscript: '',
+        statusText: '',
+      };
 
-    case "SET_STATUS":
+    case 'SET_STATUS':
       return { ...state, statusText: action.text };
 
-    case "CLEAR_TRANSCRIPT":
-      return { ...state, transcript: "", finalTranscript: "" };
+    case 'CLEAR_TRANSCRIPT':
+      return { ...state, transcript: '', finalTranscript: '' };
 
     default:
       return state;
