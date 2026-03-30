@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, getAgent } from './store';
+import { usePreferences } from './preferences-store';
 
 // ── Notification types ──────────────────────────────────────────────
 
@@ -226,6 +227,8 @@ function RoutingModeIndicator() {
 export function StatusBar() {
   const { state, actions } = useApp();
   const [data, setData] = useState<StatusBarData>(EMPTY_DATA);
+  const micEnabled = usePreferences((s) => s.micEnabled);
+  const setMicEnabled = usePreferences((s) => s.setMicEnabled);
   const [recording, setRecording] = useState(false);
   const [now, setNow] = useState(Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -662,22 +665,74 @@ export function StatusBar() {
     return () => clearInterval(id);
   }, []);
 
-  // Mic toggle
-  const toggleMic = useCallback(() => {
-    setRecording((prev) => {
-      const next = !prev;
-      if (next) window.dispatchEvent(new CustomEvent('shre-voice-start'));
-      else window.dispatchEvent(new CustomEvent('shre-voice-stop'));
-      return next;
-    });
-  }, []);
+  // Mic toggle — check permission, then start/stop voice assistant
+  const toggleMic = useCallback(async () => {
+    if (recording || micEnabled) {
+      // Turn off — stop recording AND persist the off state
+      setRecording(false);
+      setMicEnabled(false);
+      window.dispatchEvent(new CustomEvent('shre-voice-stop'));
+      return;
+    }
 
-  // Listen for external voice-stop events
+    // Check microphone permission before starting
+    try {
+      const permResult = await navigator.permissions?.query({ name: 'microphone' as any }).catch(() => null);
+      const currentPerm = permResult?.state;
+
+      if (currentPerm === 'denied') {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
+        const msg = isIOS
+          ? 'Microphone is blocked. Open Settings \u2192 Safari \u2192 Microphone and allow for this site.'
+          : 'Microphone is blocked. Click the lock icon in the address bar \u2192 Site settings \u2192 Microphone \u2192 Allow.';
+        alert(msg);
+        return;
+      }
+
+      // Request mic access (triggers browser prompt if needed)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      // Release the permission-check stream — VoiceAssistant will create its own
+      stream.getTracks().forEach((t) => t.stop());
+
+      // Persist on state + open voice assistant
+      setRecording(true);
+      setMicEnabled(true);
+      window.dispatchEvent(new CustomEvent('shre-voice-start'));
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
+        const msg = isIOS
+          ? 'Microphone access denied. Go to Settings \u2192 Safari \u2192 Microphone to enable.'
+          : 'Microphone access denied. Click the lock/info icon in the address bar to allow microphone.';
+        alert(msg);
+      } else if (err?.name === 'NotFoundError') {
+        alert('No microphone found on this device.');
+      } else {
+        console.warn('[StatusBar] Mic error:', err);
+        alert('Could not access microphone: ' + (err?.message || 'Unknown error'));
+      }
+    }
+  }, [recording, micEnabled, setMicEnabled]);
+
+  // Listen for external voice-stop AND voice-start events (sync with ChatComposer/VoiceAssistant)
   useEffect(() => {
-    const handler = () => setRecording(false);
-    window.addEventListener('shre-voice-stop', handler);
-    return () => window.removeEventListener('shre-voice-stop', handler);
-  }, []);
+    const handleStop = () => {
+      setRecording(false);
+      setMicEnabled(false);
+    };
+    const handleStart = () => {
+      setRecording(true);
+      setMicEnabled(true);
+    };
+    window.addEventListener('shre-voice-stop', handleStop);
+    window.addEventListener('shre-voice-start', handleStart);
+    return () => {
+      window.removeEventListener('shre-voice-stop', handleStop);
+      window.removeEventListener('shre-voice-start', handleStart);
+    };
+  }, [setMicEnabled]);
 
   // Countdown for next event
   const countdown = data.nextEvent ? formatCountdown(data.nextEvent.startsAt - now) : null;
@@ -986,33 +1041,57 @@ export function StatusBar() {
         </button>
       </div>
 
-      {/* Mic button */}
+      {/* Mic button — persistent on/off with permission check */}
       <button
         onClick={toggleMic}
         style={{
           ...styles.micBtn,
-          background: recording
+          background: recording || micEnabled
             ? 'var(--c-accent, #6366f1)'
             : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
           animation: recording ? 'mic-pulse 1.5s ease-in-out infinite' : 'none',
         }}
-        title={recording ? 'Stop recording' : 'Start voice input'}
-        aria-label={recording ? 'Stop recording' : 'Start voice input'}
+        title={
+          recording
+            ? 'Tap to stop voice input'
+            : micEnabled
+              ? 'Voice input ON \u2014 tap to turn off'
+              : 'Tap to start voice input'
+        }
+        aria-label={
+          recording
+            ? 'Stop recording'
+            : micEnabled
+              ? 'Disable voice input'
+              : 'Start voice input'
+        }
       >
         <svg
           width="16"
           height="16"
           viewBox="0 0 24 24"
           fill="none"
-          stroke={recording ? '#fff' : 'currentColor'}
+          stroke={recording || micEnabled ? '#fff' : 'currentColor'}
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-          <line x1="12" y1="19" x2="12" y2="23" />
-          <line x1="8" y1="23" x2="16" y2="23" />
+          {micEnabled && !recording ? (
+            <>
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+              <circle cx="18" cy="18" r="4" fill="#22c55e" stroke="#22c55e" />
+            </>
+          ) : (
+            <>
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </>
+          )}
         </svg>
       </button>
 

@@ -13,6 +13,7 @@ export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
 export interface PreferencesState {
   notifSound: boolean;
   voiceMode: boolean;
+  micEnabled: boolean; // Persistent mic/voice input toggle (survives page reload)
   ttsVoice: string;
   ttsProvider: TTSProvider;
   modelOverrides: Record<string, string>; // agentId → modelId
@@ -20,6 +21,7 @@ export interface PreferencesState {
   // Actions
   setNotifSound: (v: boolean) => void;
   setVoiceMode: (v: boolean) => void;
+  setMicEnabled: (v: boolean) => void;
   setTtsVoice: (v: string) => void;
   setTtsProvider: (v: TTSProvider) => void;
   setModelOverride: (agentId: string, modelId: string | null) => void;
@@ -76,12 +78,14 @@ export const usePreferences = create<PreferencesState>()(
       return {
         notifSound: legacy.notifSound ?? true,
         voiceMode: legacy.voiceMode ?? false,
+        micEnabled: false,
         ttsVoice: legacy.ttsVoice ?? 'nova',
         ttsProvider: (legacy as any).ttsProvider ?? 'auto',
         modelOverrides: legacy.modelOverrides ?? {},
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
+        setMicEnabled: (v) => set({ micEnabled: v }),
         setTtsVoice: (v) => set({ ttsVoice: v }),
         setTtsProvider: (v) => set({ ttsProvider: v }),
 
@@ -104,6 +108,7 @@ export const usePreferences = create<PreferencesState>()(
       partialize: (state) => ({
         notifSound: state.notifSound,
         voiceMode: state.voiceMode,
+        micEnabled: state.micEnabled,
         ttsVoice: state.ttsVoice,
         ttsProvider: state.ttsProvider,
         modelOverrides: state.modelOverrides,
