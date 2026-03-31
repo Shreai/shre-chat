@@ -548,7 +548,7 @@ export function ChatComposer(props: ChatComposerProps) {
           )}
 
           {/* Voice status mini toolbar */}
-          {(isRecording || voicePhase === 'transcribing' || isSpeaking || (isHandsFree && !isRecording) ||
+          {(isRecording || voicePhase === 'transcribing' || (isHandsFree && !isRecording) ||
             (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
             <div
               className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
@@ -591,21 +591,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   <span style={{ color: '#60a5fa' }}>Transcribing...</span>
                 </>
               )}
-              {isSpeaking && !isRecording && (
-                <>
-                  <svg className="h-3 w-3 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                  </svg>
-                  <span style={{ color: '#60a5fa' }}>Speaking...</span>
-                  <button
-                    onClick={onStopTTS}
-                    className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
-                    style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}
-                  >
-                    Stop
-                  </button>
-                </>
-              )}
+              {/* Speaking indicator only shown when mic was used (hands-free or recording) */}
               {!isRecording && !voicePhase.startsWith('trans') && !isSpeaking && interimTranscript && (
                 <span
                   className="truncate"

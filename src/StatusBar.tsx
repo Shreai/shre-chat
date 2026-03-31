@@ -665,13 +665,13 @@ export function StatusBar() {
     return () => clearInterval(id);
   }, []);
 
-  // Mic toggle — check permission, then start/stop voice assistant
+  // Mic toggle — triggers ChatComposer's push-to-talk (text goes to input box)
   const toggleMic = useCallback(async () => {
     if (recording || micEnabled) {
-      // Turn off — stop recording AND persist the off state
+      // Turn off — stop recording, text stays in textarea for user to send
       setRecording(false);
       setMicEnabled(false);
-      window.dispatchEvent(new CustomEvent('shre-voice-stop'));
+      window.dispatchEvent(new CustomEvent('shre-mic-stop'));
       return;
     }
 
@@ -693,13 +693,13 @@ export function StatusBar() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
-      // Release the permission-check stream — VoiceAssistant will create its own
+      // Release the permission-check stream — ChatComposer will create its own
       stream.getTracks().forEach((t) => t.stop());
 
-      // Persist on state + open voice assistant
+      // Persist on state + trigger ChatComposer mic recording (push-to-talk → textarea)
       setRecording(true);
       setMicEnabled(true);
-      window.dispatchEvent(new CustomEvent('shre-voice-start'));
+      window.dispatchEvent(new CustomEvent('shre-mic-start'));
     } catch (err: any) {
       if (err?.name === 'NotAllowedError') {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
@@ -716,7 +716,7 @@ export function StatusBar() {
     }
   }, [recording, micEnabled, setMicEnabled]);
 
-  // Listen for external voice-stop AND voice-start events (sync with ChatComposer/VoiceAssistant)
+  // Listen for mic stop/start events (sync with ChatComposer recording state)
   useEffect(() => {
     const handleStop = () => {
       setRecording(false);
@@ -726,9 +726,14 @@ export function StatusBar() {
       setRecording(true);
       setMicEnabled(true);
     };
+    window.addEventListener('shre-mic-stop', handleStop);
+    window.addEventListener('shre-mic-start', handleStart);
+    // Also listen for legacy voice events from ChatComposer
     window.addEventListener('shre-voice-stop', handleStop);
     window.addEventListener('shre-voice-start', handleStart);
     return () => {
+      window.removeEventListener('shre-mic-stop', handleStop);
+      window.removeEventListener('shre-mic-start', handleStart);
       window.removeEventListener('shre-voice-stop', handleStop);
       window.removeEventListener('shre-voice-start', handleStart);
     };
