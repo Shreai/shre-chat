@@ -18,6 +18,14 @@ import { VoiceTurnContent } from './voice/VoiceTurnContent';
 import { createSpeak } from './voice/voice-tts';
 import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
 
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: string;
+  icon: string;
+  connected?: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -31,6 +39,10 @@ interface Props {
   onSwitchAgent?: (agentId: string) => void;
   onVoiceTurn?: (turn: { role: 'user' | 'assistant'; content: string }) => void;
   openclawMode?: boolean;
+  models?: ModelOption[];
+  selectedModel?: string | null;
+  onSelectModel?: (id: string | null) => void;
+  onSetTtsProvider?: (v: string) => void;
 }
 
 export default function VoiceAssistant({
@@ -46,10 +58,15 @@ export default function VoiceAssistant({
   onSwitchAgent,
   onVoiceTurn,
   openclawMode,
+  models,
+  selectedModel,
+  onSelectModel,
+  onSetTtsProvider,
 }: Props) {
   const [state, dispatch] = useReducer(voiceReducer, initialVoiceState);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcuts, setShortcuts] = useState<VoiceShortcut[]>([]);
   const [briefingPlaying, setBriefingPlaying] = useState(false);
   const [proactiveMode, setProactiveMode] = useState(false);
@@ -954,6 +971,22 @@ export default function VoiceAssistant({
           )}
         </button>
         <div className="flex items-center gap-2">
+          {/* Settings toggle */}
+          <button
+            onClick={() => setSettingsOpen((v) => !v)}
+            className="h-10 w-10 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+            style={{
+              background: settingsOpen ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.08)',
+              color: settingsOpen ? 'rgba(96, 165, 250, 0.9)' : 'rgba(255,255,255,0.4)',
+            }}
+            aria-label="Voice settings"
+            title="Model, agent & voice settings"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
           <button
             onClick={() => setProactiveMode((v) => !v)}
             className="h-10 px-3 rounded-full flex items-center gap-1.5 active:scale-95 transition-transform text-[11px] font-medium"
@@ -1036,6 +1069,105 @@ export default function VoiceAssistant({
                 <span className="text-sm">{a.name}</span>
               </button>
             ))}
+        </div>
+      )}
+
+      {/* Settings panel — model, agent, voice */}
+      {settingsOpen && (
+        <div
+          className="mx-5 mb-2 rounded-xl p-4 space-y-3 animate-fadeIn"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Model selector */}
+          {models && models.length > 0 && (
+            <div>
+              <label className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Model
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => onSelectModel?.(null)}
+                  className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
+                  style={{
+                    background: !selectedModel ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
+                    color: !selectedModel ? 'rgba(96,165,250,0.95)' : 'rgba(255,255,255,0.5)',
+                    border: `1px solid ${!selectedModel ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                  }}
+                >
+                  Auto
+                </button>
+                {models.slice(0, 8).map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => onSelectModel?.(m.id)}
+                    className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
+                    style={{
+                      background: selectedModel === m.id ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
+                      color: selectedModel === m.id ? 'rgba(96,165,250,0.95)' : 'rgba(255,255,255,0.5)',
+                      border: `1px solid ${selectedModel === m.id ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                    }}
+                  >
+                    {m.icon} {m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Agent selector */}
+          {agents && agents.length > 1 && (
+            <div>
+              <label className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Agent
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {agents.slice(0, 8).map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => { onSwitchAgent?.(a.id); }}
+                    className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
+                    style={{
+                      background: a.id === agentId ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.06)',
+                      color: a.id === agentId ? 'rgba(192,132,252,0.95)' : 'rgba(255,255,255,0.5)',
+                      border: `1px solid ${a.id === agentId ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                    }}
+                  >
+                    {a.emoji} {a.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Voice engine selector */}
+          <div>
+            <label className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              Voice Engine
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { id: 'auto', label: 'Auto', color: '255,255,255' },
+                { id: 'elevenlabs', label: 'ElevenLabs', color: '99,102,241' },
+                { id: 'personaplex', label: 'PersonaPlex', color: '118,185,0' },
+              ] as const).map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => onSetTtsProvider?.(v.id)}
+                  className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
+                  style={{
+                    background: ttsProvider === v.id ? `rgba(${v.color},0.2)` : 'rgba(255,255,255,0.06)',
+                    color: ttsProvider === v.id ? `rgba(${v.color},0.95)` : 'rgba(255,255,255,0.5)',
+                    border: `1px solid ${ttsProvider === v.id ? `rgba(${v.color},0.3)` : 'rgba(255,255,255,0.06)'}`,
+                  }}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

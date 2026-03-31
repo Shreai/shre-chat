@@ -911,6 +911,7 @@ export function ChatView() {
             ensureSession={ensureSession}
             ttsProvider={ttsProvider}
             setTtsProvider={setTtsProvider}
+            onOpenVoiceChat={() => setVoiceAssistantOpen(true)}
             showHeaderMore={showHeaderMore}
             setShowHeaderMore={setShowHeaderMore}
             headerMoreRef={headerMoreRef}
@@ -1291,6 +1292,10 @@ export function ChatView() {
               }
             }}
             openclawMode={openclawMode}
+            models={AVAILABLE_MODELS}
+            selectedModel={selectedModel}
+            onSelectModel={setSelectedModel}
+            onSetTtsProvider={(v: string) => setTtsProvider(v as any)}
           />
         </Suspense>
       </ViewErrorBoundary>
