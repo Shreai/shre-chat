@@ -649,6 +649,12 @@ export function ChatComposer(props: ChatComposerProps) {
             aria-label="Message input"
             className="w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
             style={{ color: 'var(--c-text-1)', minHeight: '44px' }}
+            onFocus={() => {
+              // On mobile, scroll textarea into view when keyboard opens
+              setTimeout(() => {
+                inputRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+              }, 300);
+            }}
             onInput={(e) => {
               const el = e.currentTarget;
               el.style.height = '36px';

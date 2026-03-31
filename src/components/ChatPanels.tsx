@@ -2,7 +2,7 @@
  * ChatPanels — Header toolbar, status bars, modals, and drawers
  * Extracted from ChatView to reduce its LOC.
  */
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { retryConnection } from '../gateway-ws';
 import { setModelOverride, ECOSYSTEM_APPS } from '../chat-utils';
 import { importSessions, type Session, type View } from '../store';
@@ -201,6 +201,21 @@ export function ChatPanels(props: ChatPanelsProps) {
     summaryText,
   } = props;
 
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
+  const voicePickerRef = useRef<HTMLDivElement>(null);
+
+  // Close voice picker on outside click
+  useEffect(() => {
+    if (!voicePickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (voicePickerRef.current && !voicePickerRef.current.contains(e.target as Node)) {
+        setVoicePickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [voicePickerOpen]);
+
   return (
     <>
       {/* Compact toolbar -- model picker + options */}
@@ -302,31 +317,79 @@ export function ChatPanels(props: ChatPanelsProps) {
             pickerRef={modelPickerRef}
           />
 
-          {/* Voice engine selector */}
-          <select
-            value={ttsProvider}
-            onChange={(e) => setTtsProvider(e.target.value as TTSProvider)}
-            className="h-8 rounded-lg text-[11px] px-2 border-none outline-none cursor-pointer transition-colors hover:brightness-125"
-            style={{
-              background: ttsProvider === 'personaplex'
-                ? 'rgba(118, 185, 0, 0.15)'
-                : ttsProvider === 'elevenlabs'
-                  ? 'rgba(99, 102, 241, 0.15)'
-                  : 'rgba(255,255,255,0.05)',
-              color: ttsProvider === 'personaplex'
-                ? '#76b900'
-                : ttsProvider === 'elevenlabs'
-                  ? '#818cf8'
-                  : 'var(--c-text-3)',
-              fontWeight: ttsProvider !== 'auto' ? 500 : 400,
-            }}
-            title={`Voice engine: ${ttsProvider === 'personaplex' ? 'NVIDIA PersonaPlex (local)' : ttsProvider === 'elevenlabs' ? 'ElevenLabs (cloud)' : 'Auto (best available)'}`}
-            aria-label="Select voice engine"
-          >
-            <option value="auto">Voice: Auto</option>
-            <option value="elevenlabs">Voice: ElevenLabs</option>
-            <option value="personaplex">Voice: PersonaPlex</option>
-          </select>
+          {/* Voice engine selector — icon + dropdown */}
+          <div className="relative" ref={voicePickerRef}>
+            <button
+              onClick={() => setVoicePickerOpen((v) => !v)}
+              className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+              style={{
+                color: ttsProvider === 'personaplex'
+                  ? '#76b900'
+                  : ttsProvider === 'elevenlabs'
+                    ? '#818cf8'
+                    : 'var(--c-text-3)',
+              }}
+              title={`Voice: ${ttsProvider === 'personaplex' ? 'PersonaPlex' : ttsProvider === 'elevenlabs' ? 'ElevenLabs' : 'Auto'}`}
+              aria-label="Select voice engine"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            </button>
+            {voicePickerOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setVoicePickerOpen(false)} />
+                <div
+                  className="absolute right-0 z-50 rounded-xl overflow-hidden shadow-2xl voice-picker-dropdown"
+                  style={{
+                    width: 220,
+                    top: '100%',
+                    marginTop: 4,
+                    background: 'var(--c-bg-2)',
+                    border: '1px solid var(--c-border-1)',
+                    animation: 'picker-fade-in 150ms ease-out forwards',
+                  }}
+                >
+                  <div className="px-3 pt-2.5 pb-1.5" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
+                    <span className="text-[12px] font-semibold" style={{ color: 'var(--c-text-1)' }}>Voice Engine</span>
+                  </div>
+                  {([
+                    { id: 'auto' as const, label: 'Auto', subtitle: 'Best available', icon: '\u26A1', color: 'var(--c-text-2)' },
+                    { id: 'elevenlabs' as const, label: 'ElevenLabs', subtitle: 'Cloud neural voice', icon: '\uD83C\uDF10', color: '#818cf8' },
+                    { id: 'personaplex' as const, label: 'PersonaPlex', subtitle: 'NVIDIA local TTS', icon: '\uD83D\uDDA5\uFE0F', color: '#76b900' },
+                  ]).map((v) => {
+                    const active = ttsProvider === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => { setTtsProvider(v.id); setVoicePickerOpen(false); }}
+                        className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
+                        style={{
+                          color: active ? v.color : 'var(--c-text-2)',
+                          background: active ? 'var(--c-accent-soft)' : 'transparent',
+                        }}
+                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-hover)'; }}
+                        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <span className="text-base w-6 text-center">{v.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] font-medium">{v.label}</div>
+                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>{v.subtitle}</div>
+                        </div>
+                        {active && (
+                          <svg className="h-4 w-4 shrink-0" style={{ color: v.color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Voice chat — opens dedicated voice screen */}
           <button
