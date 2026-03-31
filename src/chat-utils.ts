@@ -455,15 +455,6 @@ export const ECOSYSTEM_APPS = [
     description: 'Platform Score',
   },
   {
-    id: 'centrix',
-    name: 'Centrix',
-    icon: 'X',
-    url: 'https://nexusailab.io',
-    color: 'from-violet-500 to-indigo-500',
-    description: 'ERP System',
-    embed: true,
-  },
-  {
     id: 'pos-site',
     name: 'Nirtek',
     icon: 'N',
@@ -472,6 +463,26 @@ export const ECOSYSTEM_APPS = [
     description: 'Main Site',
   },
 ];
+
+/**
+ * Marketplace apps that can be embedded in shre-chat.
+ * Only shown when the user's workspace has activated the app.
+ * Key = marketplace appId (from platform-registry).
+ */
+export const MARKETPLACE_EMBED_APPS: Record<
+  string,
+  { id: string; name: string; icon: string; url: string; color: string; description: string; embed: boolean }
+> = {
+  erp: {
+    id: 'centrix',
+    name: 'Centrix',
+    icon: 'X',
+    url: 'https://nexusailab.io',
+    color: 'from-violet-500 to-indigo-500',
+    description: 'ERP System',
+    embed: true,
+  },
+};
 
 export function formatTime(ts?: number): string {
   if (!ts) return '';

@@ -5,7 +5,7 @@
  * Brief flash effect on each keystroke (600ms).
  */
 
-import { useState, useRef, useCallback, type ChangeEvent } from "react";
+import { useState, useRef, useCallback, type ChangeEvent } from 'react';
 
 interface SecureInputProps {
   value: string;
@@ -18,8 +18,8 @@ interface SecureInputProps {
 export default function SecureInput({
   value,
   onChange,
-  placeholder = "Enter password",
-  className = "",
+  placeholder = 'Enter password',
+  className = '',
   name,
 }: SecureInputProps) {
   const [peeking, setPeeking] = useState(false);
@@ -44,12 +44,12 @@ export default function SecureInput({
     <div className={`secure-input-wrapper ${className}`}>
       <span className="secure-input-lock">🔒</span>
       <input
-        type={peeking ? "text" : "password"}
+        type={peeking ? 'text' : 'password'}
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
         name={name}
-        className={`secure-input ${flash ? "flash" : ""}`}
+        className={`secure-input ${flash ? 'flash' : ''}`}
         autoComplete="off"
         spellCheck={false}
       />
@@ -64,7 +64,7 @@ export default function SecureInput({
         title="Hold to peek"
         aria-label="Hold to peek at password"
       >
-        {peeking ? "👁" : "👁‍🗨"}
+        {peeking ? '👁' : '👁‍🗨'}
       </button>
     </div>
   );

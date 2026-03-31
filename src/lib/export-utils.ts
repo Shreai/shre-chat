@@ -7,51 +7,65 @@
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
 function stripMarkdown(md: string): string {
   return md
-    .replace(/```[\s\S]*?```/g, "")       // code blocks
-    .replace(/`([^`]+)`/g, "$1")           // inline code
-    .replace(/\*\*([^*]+)\*\*/g, "$1")     // bold
-    .replace(/\*([^*]+)\*/g, "$1")         // italic
-    .replace(/#{1,6}\s+/g, "")             // headings
-    .replace(/!\[.*?\]\(.*?\)/g, "")       // images
-    .replace(/\[([^\]]+)\]\(.*?\)/g, "$1") // links
-    .replace(/^\s*[-*+]\s+/gm, "- ")      // list items
-    .replace(/^\s*\d+\.\s+/gm, "")        // numbered lists
-    .replace(/^>\s+/gm, "")               // blockquotes
-    .replace(/---+/g, "")                  // hr
+    .replace(/```[\s\S]*?```/g, '') // code blocks
+    .replace(/`([^`]+)`/g, '$1') // inline code
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
+    .replace(/\*([^*]+)\*/g, '$1') // italic
+    .replace(/#{1,6}\s+/g, '') // headings
+    .replace(/!\[.*?\]\(.*?\)/g, '') // images
+    .replace(/\[([^\]]+)\]\(.*?\)/g, '$1') // links
+    .replace(/^\s*[-*+]\s+/gm, '- ') // list items
+    .replace(/^\s*\d+\.\s+/gm, '') // numbered lists
+    .replace(/^>\s+/gm, '') // blockquotes
+    .replace(/---+/g, '') // hr
     .trim();
 }
 
 function sanitizeFilename(s: string): string {
-  return s.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().slice(0, 60) || "export";
+  return (
+    s
+      .replace(/[^a-zA-Z0-9_\- ]/g, '')
+      .trim()
+      .slice(0, 60) || 'export'
+  );
 }
 
 function generateTitle(content: string): string {
-  const first = content.split("\n").find((l) => l.trim().length > 3);
-  return sanitizeFilename(stripMarkdown(first || "Shre AI Export").slice(0, 50));
+  const first = content.split('\n').find((l) => l.trim().length > 3);
+  return sanitizeFilename(stripMarkdown(first || 'Shre AI Export').slice(0, 50));
 }
 
 // ── Parse markdown table to structured data ─────────────────────────
 
 export function parseMarkdownTable(md: string): { headers: string[]; rows: string[][] } | null {
-  const lines = md.split("\n").filter((l) => l.trim().startsWith("|"));
+  const lines = md.split('\n').filter((l) => l.trim().startsWith('|'));
   if (lines.length < 3) return null; // need header + separator + at least 1 row
 
   const parse = (line: string) =>
-    line.split("|").map((c) => c.trim()).filter(Boolean);
+    line
+      .split('|')
+      .map((c) => c.trim())
+      .filter(Boolean);
 
   const headers = parse(lines[0]);
   // Skip separator line (lines[1])
-  const rows = lines.slice(2).map(parse).filter((r) => r.length > 0);
+  const rows = lines
+    .slice(2)
+    .map(parse)
+    .filter((r) => r.length > 0);
 
   return { headers, rows };
 }
@@ -62,18 +76,20 @@ export function parseHtmlTable(table: HTMLTableElement): { headers: string[]; ro
   const headers: string[] = [];
   const rows: string[][] = [];
 
-  table.querySelectorAll("thead th").forEach((th) => headers.push(th.textContent?.trim() || ""));
+  table.querySelectorAll('thead th').forEach((th) => headers.push(th.textContent?.trim() || ''));
   if (headers.length === 0) {
     // Try first row as header
-    const firstRow = table.querySelector("tr");
-    firstRow?.querySelectorAll("th, td").forEach((cell) => headers.push(cell.textContent?.trim() || ""));
+    const firstRow = table.querySelector('tr');
+    firstRow
+      ?.querySelectorAll('th, td')
+      .forEach((cell) => headers.push(cell.textContent?.trim() || ''));
   }
 
-  const bodyRows = table.querySelectorAll("tbody tr");
-  (bodyRows.length > 0 ? bodyRows : table.querySelectorAll("tr")).forEach((tr, i) => {
+  const bodyRows = table.querySelectorAll('tbody tr');
+  (bodyRows.length > 0 ? bodyRows : table.querySelectorAll('tr')).forEach((tr, i) => {
     if (i === 0 && bodyRows.length === 0) return; // skip header row
     const cells: string[] = [];
-    tr.querySelectorAll("td").forEach((td) => cells.push(td.textContent?.trim() || ""));
+    tr.querySelectorAll('td').forEach((td) => cells.push(td.textContent?.trim() || ''));
     if (cells.length > 0) rows.push(cells);
   });
 
@@ -83,8 +99,8 @@ export function parseHtmlTable(table: HTMLTableElement): { headers: string[]; ro
 // ── PDF Export ───────────────────────────────────────────────────────
 
 export async function exportProseToPDF(content: string, title?: string) {
-  const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const name = title || generateTitle(content);
   const plain = stripMarkdown(content);
 
@@ -101,27 +117,30 @@ export async function exportProseToPDF(content: string, title?: string) {
   const pageHeight = 280;
 
   for (const line of lines) {
-    if (y > pageHeight) { doc.addPage(); y = 14; }
+    if (y > pageHeight) {
+      doc.addPage();
+      y = 14;
+    }
     doc.text(line, 14, y);
     y += 6;
   }
 
-  const blob = doc.output("blob");
+  const blob = doc.output('blob');
   const url = URL.createObjectURL(blob);
-  window.open(url, "_blank");
+  window.open(url, '_blank');
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export async function exportTableToPDF(
-  headers: string[],
-  rows: string[][],
-  title?: string,
-) {
-  const { jsPDF } = await import("jspdf");
-  const autoTable = (await import("jspdf-autotable")).default;
+export async function exportTableToPDF(headers: string[], rows: string[][], title?: string) {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
 
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: headers.length > 6 ? "landscape" : "portrait" });
-  const name = title || "Table Export";
+  const doc = new jsPDF({
+    unit: 'mm',
+    format: 'a4',
+    orientation: headers.length > 6 ? 'landscape' : 'portrait',
+  });
+  const name = title || 'Table Export';
 
   doc.setFontSize(14);
   doc.text(name, 14, 16);
@@ -135,7 +154,7 @@ export async function exportTableToPDF(
     head: [headers],
     body: rows,
     styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [102, 126, 234], textColor: 255, fontStyle: "bold" },
+    headStyles: { fillColor: [102, 126, 234], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 245, 250] },
     margin: { left: 14, right: 14 },
     didDrawPage: (data: any) => {
@@ -146,55 +165,59 @@ export async function exportTableToPDF(
         `Page ${doc.getCurrentPageInfo().pageNumber}`,
         doc.internal.pageSize.width / 2,
         doc.internal.pageSize.height - 8,
-        { align: "center" },
+        { align: 'center' },
       );
     },
   });
 
-  const blob = doc.output("blob");
+  const blob = doc.output('blob');
   const url = URL.createObjectURL(blob);
-  window.open(url, "_blank");
+  window.open(url, '_blank');
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ── Excel Export ─────────────────────────────────────────────────────
 
-export async function exportToExcel(
-  headers: string[],
-  rows: string[][],
-  filename?: string,
-) {
-  const XLSX = await import("xlsx");
+export async function exportToExcel(headers: string[], rows: string[][], filename?: string) {
+  const XLSX = await import('xlsx');
   const data = rows.map((row) => {
     const obj: Record<string, string> = {};
-    headers.forEach((h, i) => { obj[h] = row[i] || ""; });
+    headers.forEach((h, i) => {
+      obj[h] = row[i] || '';
+    });
     return obj;
   });
 
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Data");
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
 
   // Auto-size columns
   const colWidths = headers.map((h, i) => {
-    const maxLen = Math.max(h.length, ...rows.map((r) => (r[i] || "").length));
+    const maxLen = Math.max(h.length, ...rows.map((r) => (r[i] || '').length));
     return { wch: Math.min(maxLen + 2, 40) };
   });
-  ws["!cols"] = colWidths;
+  ws['!cols'] = colWidths;
 
-  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
   downloadBlob(
-    new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-    `${sanitizeFilename(filename || "export")}.xlsx`,
+    new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${sanitizeFilename(filename || 'export')}.xlsx`,
   );
 }
 
 // ── CSV Export ───────────────────────────────────────────────────────
 
 export function exportToCSV(headers: string[], rows: string[][], filename?: string) {
-  const escape = (s: string) => (s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s);
-  const csv = [headers.map(escape).join(","), ...rows.map((r) => r.map(escape).join(","))].join("\n");
-  downloadBlob(new Blob([csv], { type: "text/csv" }), `${sanitizeFilename(filename || "export")}.csv`);
+  const escape = (s: string) =>
+    s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+  const csv = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))].join(
+    '\n',
+  );
+  downloadBlob(
+    new Blob([csv], { type: 'text/csv' }),
+    `${sanitizeFilename(filename || 'export')}.csv`,
+  );
 }
 
 // ── Word Export ─────────────────────────────────────────────────────
@@ -210,9 +233,12 @@ p{margin:6px 0;} .meta{color:#888;font-size:9pt;}</style>
 </head><body>
 <h1>${name}</h1>
 <p class="meta">Generated by Shre AI &mdash; ${new Date().toLocaleString()}</p>
-${plain.split("\n").map((l) => `<p>${l || "&nbsp;"}</p>`).join("\n")}
+${plain
+  .split('\n')
+  .map((l) => `<p>${l || '&nbsp;'}</p>`)
+  .join('\n')}
 </body></html>`;
-  downloadBlob(new Blob([html], { type: "application/msword" }), `${sanitizeFilename(name)}.doc`);
+  downloadBlob(new Blob([html], { type: 'application/msword' }), `${sanitizeFilename(name)}.doc`);
 }
 
 // ── Text Export ─────────────────────────────────────────────────────
@@ -220,6 +246,6 @@ ${plain.split("\n").map((l) => `<p>${l || "&nbsp;"}</p>`).join("\n")}
 export function exportToText(content: string, title?: string) {
   const name = title || generateTitle(content);
   const plain = stripMarkdown(content);
-  const text = `${name}\nGenerated by Shre AI — ${new Date().toLocaleString()}\n${"=".repeat(60)}\n\n${plain}`;
-  downloadBlob(new Blob([text], { type: "text/plain" }), `${sanitizeFilename(name)}.txt`);
+  const text = `${name}\nGenerated by Shre AI — ${new Date().toLocaleString()}\n${'='.repeat(60)}\n\n${plain}`;
+  downloadBlob(new Blob([text], { type: 'text/plain' }), `${sanitizeFilename(name)}.txt`);
 }

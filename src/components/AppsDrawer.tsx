@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
-import { ECOSYSTEM_APPS } from '../chat-utils';
+import React, { useState, useEffect } from 'react';
+import { ECOSYSTEM_APPS, MARKETPLACE_EMBED_APPS } from '../chat-utils';
 
 interface AppsDrawerProps {
   onClose: () => void;
+}
+
+interface AppEntry {
+  id: string;
+  name: string;
+  icon: string;
+  url: string;
+  color: string;
+  description: string;
+  embed?: boolean;
 }
 
 export function AppsDrawer({ onClose }: AppsDrawerProps) {
@@ -11,6 +21,25 @@ export function AppsDrawer({ onClose }: AppsDrawerProps) {
     name: string;
     url: string;
   } | null>(null);
+
+  // Fetch activated marketplace apps
+  const [marketplaceApps, setMarketplaceApps] = useState<AppEntry[]>([]);
+  useEffect(() => {
+    fetch('/api/marketplace/activated-apps')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: { appIds?: string[] }) => {
+        const appIds = data.appIds || [];
+        const embedded: AppEntry[] = [];
+        for (const appId of appIds) {
+          const entry = MARKETPLACE_EMBED_APPS[appId];
+          if (entry) embedded.push(entry);
+        }
+        setMarketplaceApps(embedded);
+      })
+      .catch(() => {});
+  }, []);
+
+  const allApps: AppEntry[] = [...ECOSYSTEM_APPS, ...marketplaceApps];
 
   // ── Fullscreen iframe for embeddable apps ──
   if (embedApp) {
@@ -51,18 +80,13 @@ export function AppsDrawer({ onClose }: AppsDrawerProps) {
               </svg>
               Apps
             </button>
-            <span
-              className="text-xs font-semibold"
-              style={{ color: 'var(--c-text-1)' }}
-            >
+            <span className="text-xs font-semibold" style={{ color: 'var(--c-text-1)' }}>
               {embedApp.name}
             </span>
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={() =>
-                window.open(embedApp.url, embedApp.id, 'noopener,noreferrer')
-              }
+              onClick={() => window.open(embedApp.url, embedApp.id, 'noopener,noreferrer')}
               className="h-7 px-2 rounded-md text-xs transition-colors hover:bg-white/10"
               style={{ color: 'var(--c-text-3)' }}
               title="Open in new window"
@@ -151,11 +175,11 @@ export function AppsDrawer({ onClose }: AppsDrawerProps) {
           gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
         }}
       >
-        {ECOSYSTEM_APPS.map((app) => (
+        {allApps.map((app) => (
           <button
             key={app.id}
             onClick={() => {
-              if ((app as any).embed) {
+              if (app.embed) {
                 setEmbedApp({ id: app.id, name: app.name, url: app.url });
               } else {
                 window.open(app.url, app.id, 'noopener,noreferrer');

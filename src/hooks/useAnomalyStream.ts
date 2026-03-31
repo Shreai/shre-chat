@@ -11,11 +11,11 @@
  * - Exposes { anomalies, criticalCount, dismiss } for UI consumption
  */
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from 'react';
 
 export interface Anomaly {
-  type: "low_stock" | "labor_overrun" | "sales_drop" | "high_voids" | "clear";
-  severity: "warning" | "critical" | "info";
+  type: 'low_stock' | 'labor_overrun' | 'sales_drop' | 'high_voids' | 'clear';
+  severity: 'warning' | 'critical' | 'info';
   message: string;
   data?: Record<string, unknown>;
   detectedAt?: string;
@@ -42,11 +42,11 @@ interface UseAnomalyStreamResult {
 }
 
 const RAPIDRMS_SSE_BASE =
-  typeof window !== "undefined"
+  typeof window !== 'undefined'
     ? (window as Window & { __RAPIDRMS_URL__?: string }).__RAPIDRMS_URL__ ||
       (import.meta as { env?: { VITE_RAPIDRMS_URL?: string } }).env?.VITE_RAPIDRMS_URL ||
-      "http://localhost:8899"
-    : "http://localhost:8899";
+      'http://localhost:8899'
+    : 'http://localhost:8899';
 
 /**
  * Try to discover the active workspace from the RapidRMS session endpoint.
@@ -54,9 +54,9 @@ const RAPIDRMS_SSE_BASE =
  */
 async function discoverWorkspaceId(baseUrl: string): Promise<string | null> {
   try {
-    const res = await fetch(`${baseUrl}/api/auth/session`, { credentials: "include" });
+    const res = await fetch(`${baseUrl}/api/auth/session`, { credentials: 'include' });
     if (!res.ok) return null;
-    const data = await res.json() as { companyId?: string; ok?: boolean };
+    const data = (await res.json()) as { companyId?: string; ok?: boolean };
     return data.companyId ?? null;
   } catch {
     return null;
@@ -76,7 +76,7 @@ export function useAnomalyStream({
   const [dismissed, setDismissed] = useState(false);
   // Resolved workspace: prop > localStorage > discovered from session endpoint
   const [workspaceId, setWorkspaceId] = useState<string | null>(
-    workspaceIdProp ?? localStorage.getItem("rapidrms-workspace")
+    workspaceIdProp ?? localStorage.getItem('rapidrms-workspace'),
   );
 
   const esRef = useRef<EventSource | null>(null);
@@ -92,7 +92,7 @@ export function useAnomalyStream({
     discoverWorkspaceId(baseUrl).then((id) => {
       if (id && mountedRef.current) {
         setWorkspaceId(id);
-        localStorage.setItem("rapidrms-workspace", id);
+        localStorage.setItem('rapidrms-workspace', id);
       }
     });
   }, [baseUrl, workspaceId]);
@@ -133,7 +133,7 @@ export function useAnomalyStream({
         return;
       }
 
-      if (anomaly.type === "clear") {
+      if (anomaly.type === 'clear') {
         setAnomalies([]);
         setDismissed(false);
         return;
@@ -147,7 +147,7 @@ export function useAnomalyStream({
         return [...filtered, anomaly];
       });
 
-      if (anomaly.severity === "critical" && onCriticalRef.current) {
+      if (anomaly.severity === 'critical' && onCriticalRef.current) {
         onCriticalRef.current(anomaly);
       }
     };
@@ -189,7 +189,7 @@ export function useAnomalyStream({
   }, []);
 
   const visibleAnomalies = dismissed ? [] : anomalies;
-  const criticalCount = visibleAnomalies.filter((a) => a.severity === "critical").length;
+  const criticalCount = visibleAnomalies.filter((a) => a.severity === 'critical').length;
 
   return { anomalies: visibleAnomalies, criticalCount, connected, dismiss };
 }

@@ -1,0 +1,999 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - button "Close sidebar" [ref=e5] [cursor=pointer]:
+        - img [ref=e6]
+      - generic [ref=e7]:
+        - generic "Connected" [ref=e8]
+        - generic [ref=e9]: Shre
+        - img [ref=e10]
+      - generic "shre-router — auto-routes to best model" [ref=e12]:
+        - generic [ref=e14]: Router
+      - generic "14 pending tasks" [ref=e15]:
+        - img [ref=e16]
+        - generic [ref=e19]: "14"
+      - generic "Agent idle" [ref=e20]:
+        - generic [ref=e22]: idle
+      - button "R" [ref=e23] [cursor=pointer]: R
+      - combobox "Chat language preference" [ref=e25] [cursor=pointer]:
+        - option "EN" [selected]
+        - option "ES"
+        - option "HI"
+        - option "GU"
+        - option "ZH"
+        - option "FR"
+        - option "PT"
+        - option "DE"
+        - option "AR"
+        - option "JA"
+      - button "Notifications" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+        - generic [ref=e31]: 99+
+      - button "Start voice input" [ref=e32] [cursor=pointer]:
+        - img [ref=e33]
+    - generic [ref=e36]:
+      - generic [ref=e38]:
+        - button "🤖 Shre shre" [ref=e40] [cursor=pointer]:
+          - generic [ref=e41]: 🤖
+          - generic [ref=e42]:
+            - generic [ref=e43]: Shre
+            - generic [ref=e44]: shre
+          - img [ref=e45]
+        - button "New chat" [ref=e48] [cursor=pointer]:
+          - img [ref=e49]
+          - text: New chat
+        - generic [ref=e50]:
+          - button "voice" [ref=e52] [cursor=pointer]
+          - textbox "Search sessions..." [ref=e54]
+          - generic [ref=e55]:
+            - generic [ref=e56]: Today
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - button "Pin" [ref=e59] [cursor=pointer]
+                - button "Delete" [ref=e60] [cursor=pointer]
+              - generic [ref=e63] [cursor=pointer]:
+                - generic [ref=e64]: 🤖
+                - generic [ref=e65]:
+                  - generic [ref=e66]:
+                    - generic [ref=e67]: Shre
+                    - generic [ref=e68]: 10:22 PM
+                  - generic [ref=e69]: Voice session
+                  - generic [ref=e70]: Hello.
+                  - generic [ref=e72]: voice
+          - generic [ref=e73]:
+            - generic [ref=e74]: Last 7 days
+            - generic [ref=e75]:
+              - generic [ref=e76]:
+                - button "Pin" [ref=e77] [cursor=pointer]
+                - button "Delete" [ref=e78] [cursor=pointer]
+              - generic [ref=e81] [cursor=pointer]:
+                - generic [ref=e82]: 🤖
+                - generic [ref=e83]:
+                  - generic [ref=e84]:
+                    - generic [ref=e85]: Shre
+                    - generic [ref=e86]: 11:50 AM
+                  - generic [ref=e87]: "Voice: Can you tell me my yesterday's busi…"
+                  - generic [ref=e88]: "[system] Gateway disconnected"
+                  - generic [ref=e90]: voice
+            - generic [ref=e91]:
+              - generic [ref=e92]:
+                - button "Pin" [ref=e93] [cursor=pointer]
+                - button "Delete" [ref=e94] [cursor=pointer]
+              - generic [ref=e97] [cursor=pointer]:
+                - generic [ref=e98]: 🤖
+                - generic [ref=e99]:
+                  - generic [ref=e100]:
+                    - generic [ref=e101]: Shre
+                    - generic [ref=e102]: 11:47 AM
+                  - generic [ref=e103]: "[system] Gateway disconnected"
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - button "Pin" [ref=e106] [cursor=pointer]
+                - button "Delete" [ref=e107] [cursor=pointer]
+              - generic [ref=e110] [cursor=pointer]:
+                - generic [ref=e111]: 🤖
+                - generic [ref=e112]:
+                  - generic [ref=e113]:
+                    - generic [ref=e114]: Shre
+                    - generic [ref=e115]: 4:54 PM
+                  - generic [ref=e116]: "[system] Gateway disconnected"
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - button "Pin" [ref=e119] [cursor=pointer]
+                - button "Delete" [ref=e120] [cursor=pointer]
+              - generic [ref=e123] [cursor=pointer]:
+                - generic [ref=e124]: 🤖
+                - generic [ref=e125]:
+                  - generic [ref=e126]:
+                    - generic [ref=e127]: Shre
+                    - generic [ref=e128]: 4:46 PM
+                  - generic [ref=e129]: "[system] Gateway disconnected"
+            - generic [ref=e130]:
+              - generic [ref=e131]:
+                - button "Pin" [ref=e132] [cursor=pointer]
+                - button "Delete" [ref=e133] [cursor=pointer]
+              - generic [ref=e136] [cursor=pointer]:
+                - generic [ref=e137]: 🤖
+                - generic [ref=e138]:
+                  - generic [ref=e139]:
+                    - generic [ref=e140]: Shre
+                    - generic [ref=e141]: 4:45 PM
+                  - generic [ref=e142]: "[system] Gateway disconnected"
+            - generic [ref=e143]:
+              - generic [ref=e144]:
+                - button "Pin" [ref=e145] [cursor=pointer]
+                - button "Delete" [ref=e146] [cursor=pointer]
+              - generic [ref=e149] [cursor=pointer]:
+                - generic [ref=e150]: 🤖
+                - generic [ref=e151]:
+                  - generic [ref=e152]:
+                    - generic [ref=e153]: Shre
+                    - generic [ref=e154]: 4:44 PM
+                  - generic [ref=e155]: "[system] Gateway disconnected"
+            - generic [ref=e156]:
+              - generic [ref=e157]:
+                - button "Pin" [ref=e158] [cursor=pointer]
+                - button "Delete" [ref=e159] [cursor=pointer]
+              - generic [ref=e162] [cursor=pointer]:
+                - generic [ref=e163]: 🤖
+                - generic [ref=e164]:
+                  - generic [ref=e165]:
+                    - generic [ref=e166]: Shre
+                    - generic [ref=e167]: 4:42 PM
+                  - generic [ref=e168]: "[system] Gateway disconnected"
+            - generic [ref=e169]:
+              - generic [ref=e170]:
+                - button "Pin" [ref=e171] [cursor=pointer]
+                - button "Delete" [ref=e172] [cursor=pointer]
+              - generic [ref=e175] [cursor=pointer]:
+                - generic [ref=e176]: 🤖
+                - generic [ref=e177]:
+                  - generic [ref=e178]:
+                    - generic [ref=e179]: Shre
+                    - generic [ref=e180]: 4:38 PM
+                  - generic [ref=e181]: "[system] Gateway disconnected"
+            - generic [ref=e182]:
+              - generic [ref=e183]:
+                - button "Pin" [ref=e184] [cursor=pointer]
+                - button "Delete" [ref=e185] [cursor=pointer]
+              - generic [ref=e188] [cursor=pointer]:
+                - generic [ref=e189]: 🤖
+                - generic [ref=e190]:
+                  - generic [ref=e191]:
+                    - generic [ref=e192]: Shre
+                    - generic [ref=e193]: 4:36 PM
+                  - generic [ref=e194]: "[system] Gateway disconnected"
+            - generic [ref=e195]:
+              - generic [ref=e196]:
+                - button "Pin" [ref=e197] [cursor=pointer]
+                - button "Delete" [ref=e198] [cursor=pointer]
+              - generic [ref=e201] [cursor=pointer]:
+                - generic [ref=e202]: 🤖
+                - generic [ref=e203]:
+                  - generic [ref=e204]:
+                    - generic [ref=e205]: Shre
+                    - generic [ref=e206]: 4:26 PM
+                  - generic [ref=e207]: "[system] Gateway disconnected"
+            - generic [ref=e208]:
+              - generic [ref=e209]:
+                - button "Pin" [ref=e210] [cursor=pointer]
+                - button "Delete" [ref=e211] [cursor=pointer]
+              - generic [ref=e214] [cursor=pointer]:
+                - generic [ref=e215]: 🤖
+                - generic [ref=e216]:
+                  - generic [ref=e217]:
+                    - generic [ref=e218]: Shre
+                    - generic [ref=e219]: 4:26 PM
+                  - generic [ref=e220]: "[system] Gateway disconnected"
+            - generic [ref=e221]:
+              - generic [ref=e222]:
+                - button "Pin" [ref=e223] [cursor=pointer]
+                - button "Delete" [ref=e224] [cursor=pointer]
+              - generic [ref=e227] [cursor=pointer]:
+                - generic [ref=e228]: 🤖
+                - generic [ref=e229]:
+                  - generic [ref=e230]:
+                    - generic [ref=e231]: Shre
+                    - generic [ref=e232]: 4:20 PM
+                  - generic [ref=e233]: "[system] Gateway disconnected"
+            - generic [ref=e234]:
+              - generic [ref=e235]:
+                - button "Pin" [ref=e236] [cursor=pointer]
+                - button "Delete" [ref=e237] [cursor=pointer]
+              - generic [ref=e240] [cursor=pointer]:
+                - generic [ref=e241]: 🤖
+                - generic [ref=e242]:
+                  - generic [ref=e243]:
+                    - generic [ref=e244]: Shre
+                    - generic [ref=e245]: 4:19 PM
+                  - generic [ref=e246]: "[system] Gateway disconnected"
+            - generic [ref=e247]:
+              - generic [ref=e248]:
+                - button "Pin" [ref=e249] [cursor=pointer]
+                - button "Delete" [ref=e250] [cursor=pointer]
+              - generic [ref=e253] [cursor=pointer]:
+                - generic [ref=e254]: 🤖
+                - generic [ref=e255]:
+                  - generic [ref=e256]:
+                    - generic [ref=e257]: Shre
+                    - generic [ref=e258]: 4:14 PM
+                  - generic [ref=e259]: "[system] Gateway disconnected"
+            - generic [ref=e260]:
+              - generic [ref=e261]:
+                - button "Pin" [ref=e262] [cursor=pointer]
+                - button "Delete" [ref=e263] [cursor=pointer]
+              - generic [ref=e266] [cursor=pointer]:
+                - generic [ref=e267]: 🤖
+                - generic [ref=e268]:
+                  - generic [ref=e269]:
+                    - generic [ref=e270]: Shre
+                    - generic [ref=e271]: 4:13 PM
+                  - generic [ref=e272]: "[system] Gateway disconnected"
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - button "Pin" [ref=e275] [cursor=pointer]
+                - button "Delete" [ref=e276] [cursor=pointer]
+              - generic [ref=e279] [cursor=pointer]:
+                - generic [ref=e280]: 🤖
+                - generic [ref=e281]:
+                  - generic [ref=e282]:
+                    - generic [ref=e283]: Shre
+                    - generic [ref=e284]: 4:12 PM
+                  - generic [ref=e285]: "[system] Gateway disconnected"
+            - generic [ref=e286]:
+              - generic [ref=e287]:
+                - button "Pin" [ref=e288] [cursor=pointer]
+                - button "Delete" [ref=e289] [cursor=pointer]
+              - generic [ref=e292] [cursor=pointer]:
+                - generic [ref=e293]: 🤖
+                - generic [ref=e294]:
+                  - generic [ref=e295]:
+                    - generic [ref=e296]: Shre
+                    - generic [ref=e297]: 3:45 PM
+                  - generic [ref=e298]: "[system] Gateway disconnected"
+            - generic [ref=e299]:
+              - generic [ref=e300]:
+                - button "Pin" [ref=e301] [cursor=pointer]
+                - button "Delete" [ref=e302] [cursor=pointer]
+              - generic [ref=e305] [cursor=pointer]:
+                - generic [ref=e306]: 🤖
+                - generic [ref=e307]:
+                  - generic [ref=e308]:
+                    - generic [ref=e309]: Shre
+                    - generic [ref=e310]: 3:45 PM
+                  - generic [ref=e311]: "[system] Gateway disconnected"
+            - generic [ref=e312]:
+              - generic [ref=e313]:
+                - button "Pin" [ref=e314] [cursor=pointer]
+                - button "Delete" [ref=e315] [cursor=pointer]
+              - generic [ref=e318] [cursor=pointer]:
+                - generic [ref=e319]: 🤖
+                - generic [ref=e320]:
+                  - generic [ref=e321]:
+                    - generic [ref=e322]: Shre
+                    - generic [ref=e323]: 3:43 PM
+                  - generic [ref=e324]: "Voice: Hey, what is the weather like in At…"
+                  - generic [ref=e325]: "[system] Gateway disconnected"
+                  - generic [ref=e327]: voice
+            - generic [ref=e328]:
+              - generic [ref=e329]:
+                - button "Pin" [ref=e330] [cursor=pointer]
+                - button "Delete" [ref=e331] [cursor=pointer]
+              - generic [ref=e334] [cursor=pointer]:
+                - generic [ref=e335]: 🤖
+                - generic [ref=e336]:
+                  - generic [ref=e337]:
+                    - generic [ref=e338]: Shre
+                    - generic [ref=e339]: 1:31 PM
+                  - generic [ref=e340]: Voice session
+                  - generic [ref=e341]: "[system] Gateway disconnected"
+                  - generic [ref=e343]: voice
+            - generic [ref=e344]:
+              - generic [ref=e345]:
+                - button "Pin" [ref=e346] [cursor=pointer]
+                - button "Delete" [ref=e347] [cursor=pointer]
+              - generic [ref=e350] [cursor=pointer]:
+                - generic [ref=e351]: 🤖
+                - generic [ref=e352]:
+                  - generic [ref=e353]:
+                    - generic [ref=e354]: Shre
+                    - generic [ref=e355]: 9:35 AM
+                  - generic [ref=e356]: Voice session
+                  - generic [ref=e357]: "[system] Gateway disconnected"
+                  - generic [ref=e359]: voice
+            - generic [ref=e360]:
+              - generic [ref=e361]:
+                - button "Pin" [ref=e362] [cursor=pointer]
+                - button "Delete" [ref=e363] [cursor=pointer]
+              - generic [ref=e366] [cursor=pointer]:
+                - generic [ref=e367]: 🤖
+                - generic [ref=e368]:
+                  - generic [ref=e369]:
+                    - generic [ref=e370]: Shre
+                    - generic [ref=e371]: 8:13 AM
+                  - generic [ref=e372]: "# Task: CLI: Let's run full benchmark sc…"
+                  - generic [ref=e373]: "[system] Gateway disconnected"
+        - generic [ref=e374]:
+          - button "Chat" [ref=e375] [cursor=pointer]:
+            - img [ref=e376]
+          - button "Activity" [ref=e378] [cursor=pointer]:
+            - img [ref=e379]
+          - button "Bookmarks" [ref=e382] [cursor=pointer]:
+            - img [ref=e383]
+          - button "Employee Activity" [ref=e385] [cursor=pointer]:
+            - img [ref=e386]
+          - button "Briefing" [ref=e391] [cursor=pointer]:
+            - img [ref=e392]
+          - button "Marketplace" [ref=e395] [cursor=pointer]:
+            - img [ref=e396]
+          - button "Billing" [ref=e398] [cursor=pointer]:
+            - img [ref=e399]
+        - generic [ref=e401]:
+          - generic [ref=e402]:
+            - button "Write mode ON (click to go read-only)" [ref=e403] [cursor=pointer]:
+              - img [ref=e404]
+            - button "Verify identity" [ref=e407] [cursor=pointer]:
+              - img [ref=e408]
+            - button "Customize theme" [ref=e411] [cursor=pointer]:
+              - img [ref=e412]
+            - button "Light mode" [ref=e418] [cursor=pointer]:
+              - img [ref=e419]
+          - generic [ref=e425]:
+            - generic [ref=e427]: Nirlab
+            - button "Sign out" [ref=e428] [cursor=pointer]:
+              - img [ref=e429]
+      - main [ref=e433]:
+        - generic [ref=e434]:
+          - generic [ref=e435]:
+            - generic "Double-click to rename" [ref=e437]: Voice session
+            - generic [ref=e438]:
+              - button "Switch AI provider" [ref=e440] [cursor=pointer]:
+                - img [ref=e441]
+                - generic [ref=e445]: Auto
+                - img [ref=e446]
+              - combobox "Select voice engine" [ref=e448] [cursor=pointer]:
+                - 'option "Voice: Auto" [selected]'
+                - 'option "Voice: ElevenLabs"'
+                - 'option "Voice: PersonaPlex"'
+              - button "More options" [ref=e450] [cursor=pointer]:
+                - img [ref=e451]
+          - 'generic "Context usage: ~~6.2k tokens / 200k limit (3.1%)" [ref=e455]'
+          - log "Message history" [ref=e457]:
+            - generic [ref=e458]:
+              - button "❌ list reminders failed ▼" [ref=e463] [cursor=pointer]:
+                - generic [ref=e464]: ❌
+                - generic [ref=e465]: list reminders failed
+                - generic [ref=e466]: ▼
+              - 'button "🔧 Running list reminders companyId: nirlab ● ▼" [ref=e472] [cursor=pointer]':
+                - generic [ref=e473]: 🔧
+                - generic [ref=e474]: Running list reminders
+                - generic [ref=e475]: "companyId: nirlab"
+                - generic [ref=e476]: ●
+                - generic [ref=e477]: ▼
+              - button "❌ list reminders failed ▼" [ref=e483] [cursor=pointer]:
+                - generic [ref=e484]: ❌
+                - generic [ref=e485]: list reminders failed
+                - generic [ref=e486]: ▼
+              - generic [ref=e490]:
+                - generic [ref=e491]:
+                  - generic [ref=e492]: 🤖
+                  - generic [ref=e493]: Shre
+                  - generic [ref=e494]: auto
+                  - generic [ref=e495]: ~126 tokens
+                - generic [ref=e497]:
+                  - paragraph [ref=e498]:
+                    - text: "Plan:"
+                    - code [ref=e499]: mib_list_reminders
+                    - text: with the company ID to fetch your reminders.Let me try with a different company ID format:The reminder API is returning a 403 (superadmin access required) — looks like a permissions issue on the MIB007 side for this endpoint.
+                  - paragraph [ref=e500]:
+                    - text: "From the system context, your active reminders list shows:"
+                    - strong [ref=e501]: No active reminders
+                    - text: (injected at session start).
+                  - paragraph [ref=e502]: So you're clear — nothing pending right now. If you want to create a reminder, just tell me what and when and I'll set it up for you.
+                - button "auto" [ref=e504] [cursor=pointer]:
+                  - generic [ref=e505]: auto
+                  - img [ref=e506]
+                - generic [ref=e509]:
+                  - generic [ref=e510]:
+                    - button "Copy message" [ref=e511] [cursor=pointer]:
+                      - img [ref=e512]
+                    - button "Read aloud" [ref=e515] [cursor=pointer]:
+                      - img [ref=e516]
+                    - button "Helpful" [ref=e520] [cursor=pointer]:
+                      - img [ref=e521]
+                    - button "Not helpful" [ref=e523] [cursor=pointer]:
+                      - img [ref=e524]
+                    - button "Add reaction" [ref=e527] [cursor=pointer]:
+                      - img [ref=e528]
+                    - button "Branch" [ref=e531] [cursor=pointer]:
+                      - img [ref=e532]
+                      - generic [ref=e537]: Branch
+                    - button "Export" [ref=e539] [cursor=pointer]:
+                      - img [ref=e540]
+                  - button "Reply to this message" [ref=e543] [cursor=pointer]:
+                    - img [ref=e544]
+                  - button "Add annotation" [ref=e547] [cursor=pointer]:
+                    - img [ref=e548]
+              - generic [ref=e552]:
+                - generic [ref=e553]:
+                  - generic [ref=e554]: Nir
+                  - generic [ref=e555]: 09:10 PM
+                  - generic [ref=e556]: ~9 tokens
+                - generic [ref=e558]: What are my sales at party liquor
+                - generic [ref=e559]:
+                  - button "Copy message" [ref=e561] [cursor=pointer]:
+                    - img [ref=e562]
+                  - button "Add annotation" [ref=e565] [cursor=pointer]:
+                    - img [ref=e566]
+                  - button "Edit message" [ref=e568] [cursor=pointer]:
+                    - img [ref=e569]
+                  - button "Branch conversation here" [ref=e571] [cursor=pointer]:
+                    - img [ref=e572]
+                  - button "Add reaction" [ref=e578] [cursor=pointer]:
+                    - img [ref=e579]
+                  - button "Reply to this message" [ref=e582] [cursor=pointer]:
+                    - img [ref=e583]
+                  - button "Copy message" [ref=e586] [cursor=pointer]:
+                    - img [ref=e587]
+              - generic [ref=e592]:
+                - button "⚙ System" [ref=e594] [cursor=pointer]:
+                  - generic [ref=e595]: ⚙
+                  - generic [ref=e596]: System
+                - generic [ref=e597]: 09:10 PM
+              - generic [ref=e601]:
+                - generic [ref=e602]:
+                  - generic [ref=e603]: 🤖
+                  - generic [ref=e604]: Shre
+                  - generic [ref=e605]: auto
+                  - generic [ref=e606]: ~783 tokens
+                - generic [ref=e608]:
+                  - generic [ref=e609]:
+                    - button "Collapse data cards" [expanded] [ref=e611] [cursor=pointer]:
+                      - text: Show raw
+                      - img [ref=e612]
+                    - generic [ref=e615]:
+                      - generic [ref=e616]: Revenue
+                      - generic [ref=e618]: $8,574.62
+                    - generic "Trend up 750" [ref=e620]:
+                      - img [ref=e621]
+                      - text: Up 750
+                      - generic [ref=e623]: R SUMMER IN A BOTTLE
+                  - paragraph [ref=e624]:
+                    - text: Here's your Party Liquor sales breakdown for the
+                    - strong [ref=e625]: last 7 days (Mar 24–30, 2026)
+                    - text: "— Liquor & Beer department data:"
+                  - separator [ref=e626]
+                  - heading "🏪 Party Liquor — Top 50 Items (Last 7 Days)" [level=2] [ref=e627]
+                  - paragraph [ref=e628]:
+                    - strong [ref=e629]: "Total Units Sold: 7,834"
+                    - text: "|"
+                    - strong [ref=e630]: "Total Revenue: $8,574.62"
+                  - generic [ref=e631]:
+                    - table [ref=e633]:
+                      - rowgroup [ref=e634]:
+                        - row "Item Qty Sold Revenue" [ref=e635]:
+                          - columnheader "Item" [ref=e636]
+                          - columnheader "Qty Sold" [ref=e637]
+                          - columnheader "Revenue" [ref=e638]
+                      - rowgroup [ref=e639]:
+                        - row "PAPPY VAN WINKLES 10 yr 1 $755.99" [ref=e640]:
+                          - cell "PAPPY VAN WINKLES 10 yr" [ref=e641]
+                          - cell "1" [ref=e642]
+                          - cell "$755.99" [ref=e643]
+                        - row "TITOS HANDMADE VODKA 1.75ml 18 $641.34" [ref=e644]:
+                          - cell "TITOS HANDMADE VODKA 1.75ml" [ref=e645]
+                          - cell "18" [ref=e646]
+                          - cell "$641.34" [ref=e647]
+                        - row "MICHELOB ULTRA 30PK CAN 14 $468.58" [ref=e648]:
+                          - cell "MICHELOB ULTRA 30PK CAN" [ref=e649]
+                          - cell "14" [ref=e650]
+                          - cell "$468.58" [ref=e651]
+                        - row "MICHELOB ULATRA 12PKCN 12oz 19 $348.65" [ref=e652]:
+                          - cell "MICHELOB ULATRA 12PKCN 12oz" [ref=e653]
+                          - cell "19" [ref=e654]
+                          - cell "$348.65" [ref=e655]
+                        - row "FIRE BALL CINNEMON WISKY 50ML 101 $381.24" [ref=e656]:
+                          - cell "FIRE BALL CINNEMON WISKY 50ML" [ref=e657]
+                          - cell "101" [ref=e658]
+                          - cell "$381.24" [ref=e659]
+                        - row "STAGG JR BOURBON 750 2 $259.18" [ref=e660]:
+                          - cell "STAGG JR BOURBON 750" [ref=e661]
+                          - cell "2" [ref=e662]
+                          - cell "$259.18" [ref=e663]
+                        - row "MARLBORO FF KING BOX 5 $230.41" [ref=e664]:
+                          - cell "MARLBORO FF KING BOX" [ref=e665]
+                          - cell "5" [ref=e666]
+                          - cell "$230.41" [ref=e667]
+                        - row "JAGERMEISTER 1.75 5 $215.95" [ref=e668]:
+                          - cell "JAGERMEISTER 1.75" [ref=e669]
+                          - cell "5" [ref=e670]
+                          - cell "$215.95" [ref=e671]
+                        - row "1800 ANEJO CRISTALINO 750 4 $207.32" [ref=e672]:
+                          - cell "1800 ANEJO CRISTALINO 750" [ref=e673]
+                          - cell "4" [ref=e674]
+                          - cell "$207.32" [ref=e675]
+                        - row "CLASE AZUL REPOSADO 750 1 $194.39" [ref=e676]:
+                          - cell "CLASE AZUL REPOSADO 750" [ref=e677]
+                          - cell "1" [ref=e678]
+                          - cell "$194.39" [ref=e679]
+                        - row "LAMARCA PROSECCO 750 10 $194.30" [ref=e680]:
+                          - cell "LAMARCA PROSECCO 750" [ref=e681]
+                          - cell "10" [ref=e682]
+                          - cell "$194.30" [ref=e683]
+                        - row "HENNESSY VS 750 3 $168.45" [ref=e684]:
+                          - cell "HENNESSY VS 750" [ref=e685]
+                          - cell "3" [ref=e686]
+                          - cell "$168.45" [ref=e687]
+                        - row "COORS LITE 30PK CAN 11 $165.13" [ref=e688]:
+                          - cell "COORS LITE 30PK CAN" [ref=e689]
+                          - cell "11" [ref=e690]
+                          - cell "$165.13" [ref=e691]
+                        - row "OLD FORESTER 1924 10YR OLD BBN 750 1 $161.99" [ref=e692]:
+                          - cell "OLD FORESTER 1924 10YR OLD BBN 750" [ref=e693]
+                          - cell "1" [ref=e694]
+                          - cell "$161.99" [ref=e695]
+                        - row "AUSTIN HOPE PASO ROB CAB 750 2 $151.18" [ref=e696]:
+                          - cell "AUSTIN HOPE PASO ROB CAB 750" [ref=e697]
+                          - cell "2" [ref=e698]
+                          - cell "$151.18" [ref=e699]
+                        - row "E H TYLOR SMALL BATCH 750 2 $151.18" [ref=e700]:
+                          - cell "E H TYLOR SMALL BATCH 750" [ref=e701]
+                          - cell "2" [ref=e702]
+                          - cell "$151.18" [ref=e703]
+                        - row "1800 SILVER TEQUILA 1.75 3 $149.01" [ref=e704]:
+                          - cell "1800 SILVER TEQUILA 1.75" [ref=e705]
+                          - cell "3" [ref=e706]
+                          - cell "$149.01" [ref=e707]
+                        - row "WHEATLEY VODAKA 1.75 6 $148.98" [ref=e708]:
+                          - cell "WHEATLEY VODAKA 1.75" [ref=e709]
+                          - cell "6" [ref=e710]
+                          - cell "$148.98" [ref=e711]
+                        - row "TITOS HANDMADE VODKA LT 5 $145.75" [ref=e712]:
+                          - cell "TITOS HANDMADE VODKA LT" [ref=e713]
+                          - cell "5" [ref=e714]
+                          - cell "$145.75" [ref=e715]
+                        - row "CROWN ROYAL BLACK 90 PROF 1.75 2 $144.70" [ref=e716]:
+                          - cell "CROWN ROYAL BLACK 90 PROF 1.75" [ref=e717]
+                          - cell "2" [ref=e718]
+                          - cell "$144.70" [ref=e719]
+                        - row "SMIRNOFF VODKA PET 1.75 6 $136.02" [ref=e720]:
+                          - cell "SMIRNOFF VODKA PET 1.75" [ref=e721]
+                          - cell "6" [ref=e722]
+                          - cell "$136.02" [ref=e723]
+                        - row "DON JULIO SILVER TEQ 375 5 $134.95" [ref=e724]:
+                          - cell "DON JULIO SILVER TEQ 375" [ref=e725]
+                          - cell "5" [ref=e726]
+                          - cell "$134.95" [ref=e727]
+                        - row "LITE 30/12 OZ CAN 7 $134.93" [ref=e728]:
+                          - cell "LITE 30/12 OZ CAN" [ref=e729]
+                          - cell "7" [ref=e730]
+                          - cell "$134.93" [ref=e731]
+                        - row "PATRON SILVER TEQUILA 750ML 2 $125.26" [ref=e732]:
+                          - cell "PATRON SILVER TEQUILA 750ML" [ref=e733]
+                          - cell "2" [ref=e734]
+                          - cell "$125.26" [ref=e735]
+                        - row "GREY GOOSE 750 4 $125.24" [ref=e736]:
+                          - cell "GREY GOOSE 750" [ref=e737]
+                          - cell "4" [ref=e738]
+                          - cell "$125.24" [ref=e739]
+                        - row "CORONA EXTRA 12 pk LN 6 $121.14" [ref=e740]:
+                          - cell "CORONA EXTRA 12 pk LN" [ref=e741]
+                          - cell "6" [ref=e742]
+                          - cell "$121.14" [ref=e743]
+                        - row "CAKEBREAD CELLARS CHARDONNAY 750 2 $118.78" [ref=e744]:
+                          - cell "CAKEBREAD CELLARS CHARDONNAY 750" [ref=e745]
+                          - cell "2" [ref=e746]
+                          - cell "$118.78" [ref=e747]
+                        - row "MAKERS MARK 750 90 PROOF 4 $116.60" [ref=e748]:
+                          - cell "MAKERS MARK 750 90 PROOF" [ref=e749]
+                          - cell "4" [ref=e750]
+                          - cell "$116.60" [ref=e751]
+                        - row "MICHLOB ULTRA 12/16 oz ALUM 14 $114.53" [ref=e752]:
+                          - cell "MICHLOB ULTRA 12/16 oz ALUM" [ref=e753]
+                          - cell "14" [ref=e754]
+                          - cell "$114.53" [ref=e755]
+                        - row "JACK DENIES APPLE 750 4 $112.28" [ref=e756]:
+                          - cell "JACK DENIES APPLE 750" [ref=e757]
+                          - cell "4" [ref=e758]
+                          - cell "$112.28" [ref=e759]
+                        - row "HENNESSY HENNY WHITE 750 1 $107.99" [ref=e760]:
+                          - cell "HENNESSY HENNY WHITE 750" [ref=e761]
+                          - cell "1" [ref=e762]
+                          - cell "$107.99" [ref=e763]
+                        - row "JACK DANIELS 1.75 2 $107.98" [ref=e764]:
+                          - cell "JACK DANIELS 1.75" [ref=e765]
+                          - cell "2" [ref=e766]
+                          - cell "$107.98" [ref=e767]
+                        - row "EAGLE RARE BOURBON 750 2 $107.98" [ref=e768]:
+                          - cell "EAGLE RARE BOURBON 750" [ref=e769]
+                          - cell "2" [ref=e770]
+                          - cell "$107.98" [ref=e771]
+                        - row "WOLFFER SUMMER IN A BOTTLE ROSE 750 4 $107.96" [ref=e772]:
+                          - cell "WOLFFER SUMMER IN A BOTTLE ROSE 750" [ref=e773]
+                          - cell "4" [ref=e774]
+                          - cell "$107.96" [ref=e775]
+                        - row "JAGERMEISTER 750 5 $107.95" [ref=e776]:
+                          - cell "JAGERMEISTER 750" [ref=e777]
+                          - cell "5" [ref=e778]
+                          - cell "$107.95" [ref=e779]
+                        - row "COPENHAGEN STRIGHT L CUT5CN 3 $106.89" [ref=e780]:
+                          - cell "COPENHAGEN STRIGHT L CUT5CN" [ref=e781]
+                          - cell "3" [ref=e782]
+                          - cell "$106.89" [ref=e783]
+                        - row "LALO TAQUILA 750 2 $103.66" [ref=e784]:
+                          - cell "LALO TAQUILA 750" [ref=e785]
+                          - cell "2" [ref=e786]
+                          - cell "$103.66" [ref=e787]
+                        - row "JIM BEAM 4YR 1.75 3 $103.65" [ref=e788]:
+                          - cell "JIM BEAM 4YR 1.75" [ref=e789]
+                          - cell "3" [ref=e790]
+                          - cell "$103.65" [ref=e791]
+                        - row "MICHELOB ULATRA 18PKCN 4 $103.64" [ref=e792]:
+                          - cell "MICHELOB ULATRA 18PKCN" [ref=e793]
+                          - cell "4" [ref=e794]
+                          - cell "$103.64" [ref=e795]
+                        - row "CAPTIN MORGEN 100 PROF 50 ML 19 $117.46" [ref=e796]:
+                          - cell "CAPTIN MORGEN 100 PROF 50 ML" [ref=e797]
+                          - cell "19" [ref=e798]
+                          - cell "$117.46" [ref=e799]
+                        - row "WILD TURKEY 101 1.75 2 $99.34" [ref=e800]:
+                          - cell "WILD TURKEY 101 1.75" [ref=e801]
+                          - cell "2" [ref=e802]
+                          - cell "$99.34" [ref=e803]
+                        - row "MEIOMI PINOT NOIR 750 4 $99.32" [ref=e804]:
+                          - cell "MEIOMI PINOT NOIR 750" [ref=e805]
+                          - cell "4" [ref=e806]
+                          - cell "$99.32" [ref=e807]
+                        - row "NATURAL LIGHT 30PKCAN 4 $99.32" [ref=e808]:
+                          - cell "NATURAL LIGHT 30PKCAN" [ref=e809]
+                          - cell "4" [ref=e810]
+                          - cell "$99.32" [ref=e811]
+                        - 'row "GEORGE DICKLE # 12 1.75L 2 $97.18" [ref=e812]':
+                          - 'cell "GEORGE DICKLE # 12 1.75L" [ref=e813]'
+                          - cell "2" [ref=e814]
+                          - cell "$97.18" [ref=e815]
+                        - row "BUFFALO TRACE 750 3 $97.17" [ref=e816]:
+                          - cell "BUFFALO TRACE 750" [ref=e817]
+                          - cell "3" [ref=e818]
+                          - cell "$97.17" [ref=e819]
+                        - row "JC TEQUILA SILVER 1.75 3 $97.17" [ref=e820]:
+                          - cell "JC TEQUILA SILVER 1.75" [ref=e821]
+                          - cell "3" [ref=e822]
+                          - cell "$97.17" [ref=e823]
+                        - row "DON JULIO REPOSADO TEQ 375 3 $97.17" [ref=e824]:
+                          - cell "DON JULIO REPOSADO TEQ 375" [ref=e825]
+                          - cell "3" [ref=e826]
+                          - cell "$97.17" [ref=e827]
+                        - row "CROWN ROYAL 750ML 3 $97.17" [ref=e828]:
+                          - cell "CROWN ROYAL 750ML" [ref=e829]
+                          - cell "3" [ref=e830]
+                          - cell "$97.17" [ref=e831]
+                        - row "FIRE BALL CINNEMON 750 PET 6 $97.14" [ref=e832]:
+                          - cell "FIRE BALL CINNEMON 750 PET" [ref=e833]
+                          - cell "6" [ref=e834]
+                          - cell "$97.14" [ref=e835]
+                        - row "MACALLAN SCOTCH DOUBLE CASK 12YR 750 1 $95.03" [ref=e836]:
+                          - cell "MACALLAN SCOTCH DOUBLE CASK 12YR 750" [ref=e837]
+                          - cell "1" [ref=e838]
+                          - cell "$95.03" [ref=e839]
+                    - generic [ref=e840]:
+                      - button "Excel" [ref=e841]
+                      - button "CSV" [ref=e842]
+                      - button "PDF" [ref=e843]
+                  - separator [ref=e844]
+                  - generic [ref=e845]:
+                    - generic [ref=e846]:
+                      - generic [ref=e847]: 📊
+                      - generic [ref=e848]: Chart
+                      - button "Expand content" [ref=e849] [cursor=pointer]: ⤢
+                    - img [ref=e852]:
+                      - generic [ref=e853]: Top 10 Revenue Items — Party Liquor (Mar 24–30)
+                      - generic [ref=e854]:
+                        - generic [ref=e856]: $0
+                        - generic [ref=e858]: $200
+                        - generic [ref=e860]: $400
+                        - generic [ref=e862]: $600
+                        - generic [ref=e864]: $800
+                        - generic [ref=e865]:
+                          - generic [ref=e866]:
+                            - generic "$641" [ref=e867] [cursor=pointer]
+                            - generic [ref=e868]: $641
+                          - generic [ref=e869]: Tito's 1.75
+                        - generic [ref=e870]:
+                          - generic [ref=e871]:
+                            - generic "$381" [ref=e872] [cursor=pointer]
+                            - generic [ref=e873]: $381
+                          - generic [ref=e874]: Fireball 50ML
+                        - generic [ref=e875]:
+                          - generic [ref=e876]:
+                            - generic "$469" [ref=e877] [cursor=pointer]
+                            - generic [ref=e878]: $469
+                          - generic [ref=e879]: Michelob Ultra 30PK
+                        - generic [ref=e880]:
+                          - generic [ref=e881]:
+                            - generic "$349" [ref=e882] [cursor=pointer]
+                            - generic [ref=e883]: $349
+                          - generic [ref=e884]: Michelob Ultra 12PK
+                        - generic [ref=e885]:
+                          - generic [ref=e886]:
+                            - generic "$165" [ref=e887] [cursor=pointer]
+                            - generic [ref=e888]: $165
+                          - generic [ref=e889]: Coors Lite 30PK
+                        - generic [ref=e890]:
+                          - generic [ref=e891]:
+                            - generic "$149" [ref=e892] [cursor=pointer]
+                            - generic [ref=e893]: $149
+                          - generic [ref=e894]: Wheatley Vodka
+                        - generic [ref=e895]:
+                          - generic [ref=e896]:
+                            - generic "$136" [ref=e897] [cursor=pointer]
+                            - generic [ref=e898]: $136
+                          - generic [ref=e899]: Smirnoff 1.75
+                        - generic [ref=e900]:
+                          - generic [ref=e901]:
+                            - generic "$117" [ref=e902] [cursor=pointer]
+                            - generic [ref=e903]: $117
+                          - generic [ref=e904]: Captain Morgan 50ML
+                        - generic [ref=e905]:
+                          - generic [ref=e906]:
+                            - generic "$121" [ref=e907] [cursor=pointer]
+                            - generic [ref=e908]: $121
+                          - generic [ref=e909]: Corona 12PK
+                        - generic [ref=e910]:
+                          - generic [ref=e911]:
+                            - generic "$125" [ref=e912] [cursor=pointer]
+                            - generic [ref=e913]: $125
+                          - generic [ref=e914]: Grey Goose 750
+                    - generic [ref=e915]:
+                      - button "Copy" [ref=e916] [cursor=pointer]
+                      - button "Expand ⤢" [ref=e917] [cursor=pointer]
+                  - separator [ref=e918]
+                  - heading "🔍 Quick Insights" [level=3] [ref=e919]
+                  - list [ref=e920]:
+                    - listitem [ref=e921]:
+                      - text: 🥇
+                      - strong [ref=e922]: Top Revenue
+                      - text: ": Pappy Van Winkle 10yr — $755.99 from just"
+                      - strong [ref=e923]: 1 bottle
+                    - listitem [ref=e924]:
+                      - text: 🔥
+                      - strong [ref=e925]: Top Volume
+                      - text: ": Fireball 50ML —"
+                      - strong [ref=e926]: 101 units
+                      - text: sold
+                    - listitem [ref=e927]:
+                      - text: 🍺
+                      - strong [ref=e928]: Beer Leader
+                      - text: ": Michelob Ultra 30PK — $468.58"
+                    - listitem [ref=e929]:
+                      - text: 🥃
+                      - strong [ref=e930]: Vodka
+                      - text: ": Tito's 1.75 dominating at $641.34"
+                    - listitem [ref=e931]:
+                      - text: 💰
+                      - strong [ref=e932]: Avg Revenue/Item
+                      - text: ": ~$171.49"
+                  - paragraph [ref=e933]: Want a breakdown by department, day-by-day trend, or comparison to the prior week?
+                - button "auto" [ref=e935] [cursor=pointer]:
+                  - generic [ref=e936]: auto
+                  - img [ref=e937]
+                - generic [ref=e940]:
+                  - generic [ref=e941]:
+                    - button "Copy message" [ref=e942] [cursor=pointer]:
+                      - img [ref=e943]
+                    - button "Read aloud" [ref=e946] [cursor=pointer]:
+                      - img [ref=e947]
+                    - button "Helpful" [ref=e951] [cursor=pointer]:
+                      - img [ref=e952]
+                    - button "Not helpful" [ref=e954] [cursor=pointer]:
+                      - img [ref=e955]
+                    - button "Add reaction" [ref=e958] [cursor=pointer]:
+                      - img [ref=e959]
+                    - button "Branch" [ref=e962] [cursor=pointer]:
+                      - img [ref=e963]
+                      - generic [ref=e968]: Branch
+                    - button "Export" [ref=e970] [cursor=pointer]:
+                      - img [ref=e971]
+                  - button "Reply to this message" [ref=e974] [cursor=pointer]:
+                    - img [ref=e975]
+                  - button "Add annotation" [ref=e978] [cursor=pointer]:
+                    - img [ref=e979]
+              - generic [ref=e983]:
+                - generic [ref=e984]:
+                  - generic [ref=e985]: Nir
+                  - generic [ref=e986]: 09:12 PM
+                  - generic [ref=e987]: ~19 tokens
+                - generic [ref=e989]: i’ve noticed issues with chart as it uses white fonts which are hard tonread
+                - generic [ref=e990]:
+                  - button "Copy message" [ref=e992] [cursor=pointer]:
+                    - img [ref=e993]
+                  - button "Add annotation" [ref=e996] [cursor=pointer]:
+                    - img [ref=e997]
+                  - button "Edit message" [ref=e999] [cursor=pointer]:
+                    - img [ref=e1000]
+                  - button "Branch conversation here" [ref=e1002] [cursor=pointer]:
+                    - img [ref=e1003]
+                  - button "Add reaction" [ref=e1009] [cursor=pointer]:
+                    - img [ref=e1010]
+                  - button "Reply to this message" [ref=e1013] [cursor=pointer]:
+                    - img [ref=e1014]
+                  - button "Copy message" [ref=e1017] [cursor=pointer]:
+                    - img [ref=e1018]
+              - generic [ref=e1023]:
+                - button "⚙ System" [ref=e1025] [cursor=pointer]:
+                  - generic [ref=e1026]: ⚙
+                  - generic [ref=e1027]: System
+                - generic [ref=e1028]: 09:12 PM
+              - 'button "🔧 Running list issues companyId: chart_company_id ● ▼" [ref=e1034] [cursor=pointer]':
+                - generic [ref=e1035]: 🔧
+                - generic [ref=e1036]: Running list issues
+                - generic [ref=e1037]: "companyId: chart_company_id"
+                - generic [ref=e1038]: ●
+                - generic [ref=e1039]: ▼
+              - button "❌ list issues failed ▼" [ref=e1045] [cursor=pointer]:
+                - generic [ref=e1046]: ❌
+                - generic [ref=e1047]: list issues failed
+                - generic [ref=e1048]: ▼
+              - generic [ref=e1052]:
+                - generic [ref=e1053]:
+                  - generic [ref=e1054]: Nir
+                  - generic [ref=e1055]: 09:19 PM
+                  - generic [ref=e1056]: ~5 tokens
+                - generic [ref=e1058]: execute this flow
+                - generic [ref=e1059]:
+                  - button "Copy message" [ref=e1061] [cursor=pointer]:
+                    - img [ref=e1062]
+                  - button "Add annotation" [ref=e1065] [cursor=pointer]:
+                    - img [ref=e1066]
+                  - button "Edit message" [ref=e1068] [cursor=pointer]:
+                    - img [ref=e1069]
+                  - button "Branch conversation here" [ref=e1071] [cursor=pointer]:
+                    - img [ref=e1072]
+                  - button "Add reaction" [ref=e1078] [cursor=pointer]:
+                    - img [ref=e1079]
+                  - button "Reply to this message" [ref=e1082] [cursor=pointer]:
+                    - img [ref=e1083]
+                  - button "Copy message" [ref=e1086] [cursor=pointer]:
+                    - img [ref=e1087]
+              - generic [ref=e1092]:
+                - button "⚙ System" [ref=e1094] [cursor=pointer]:
+                  - generic [ref=e1095]: ⚙
+                  - generic [ref=e1096]: System
+                - generic [ref=e1097]: 09:19 PM
+              - generic [ref=e1101]:
+                - button "⏳ Escalation" [ref=e1103] [cursor=pointer]:
+                  - generic [ref=e1104]: ⏳
+                  - generic [ref=e1105]: Escalation
+                - generic [ref=e1106]: 10:09 PM
+              - generic [ref=e1110]:
+                - button "⏳ Escalation" [ref=e1112] [cursor=pointer]:
+                  - generic [ref=e1113]: ⏳
+                  - generic [ref=e1114]: Escalation
+                - generic [ref=e1115]: 10:09 PM
+              - generic [ref=e1119]:
+                - button "⏳ Escalation" [ref=e1121] [cursor=pointer]:
+                  - generic [ref=e1122]: ⏳
+                  - generic [ref=e1123]: Escalation
+                - generic [ref=e1124]: 10:09 PM
+              - generic [ref=e1128]:
+                - button "⏳ Escalation" [ref=e1130] [cursor=pointer]:
+                  - generic [ref=e1131]: ⏳
+                  - generic [ref=e1132]: Escalation
+                - generic [ref=e1133]: 10:11 PM
+              - generic [ref=e1137]:
+                - button "⏳ Escalation" [ref=e1139] [cursor=pointer]:
+                  - generic [ref=e1140]: ⏳
+                  - generic [ref=e1141]: Escalation
+                - generic [ref=e1142]: 10:11 PM
+              - generic [ref=e1146]:
+                - button "⏳ Escalation" [ref=e1148] [cursor=pointer]:
+                  - generic [ref=e1149]: ⏳
+                  - generic [ref=e1150]: Escalation
+                - generic [ref=e1151]: 10:11 PM
+              - generic [ref=e1155]:
+                - button "⏳ Escalation" [ref=e1157] [cursor=pointer]:
+                  - generic [ref=e1158]: ⏳
+                  - generic [ref=e1159]: Escalation
+                - generic [ref=e1160]: 10:11 PM
+              - generic [ref=e1164]:
+                - generic [ref=e1165]:
+                  - generic [ref=e1166]: Nir
+                  - generic [ref=e1167]: 10:22 PM
+                  - generic [ref=e1168]: ~6 tokens
+                - generic [ref=e1170]: Say hello in one word
+                - generic [ref=e1171]:
+                  - button "Copy message" [ref=e1173] [cursor=pointer]:
+                    - img [ref=e1174]
+                  - button "Add annotation" [ref=e1177] [cursor=pointer]:
+                    - img [ref=e1178]
+                  - button "Edit message" [ref=e1180] [cursor=pointer]:
+                    - img [ref=e1181]
+                  - button "Branch conversation here" [ref=e1183] [cursor=pointer]:
+                    - img [ref=e1184]
+                  - button "Add reaction" [ref=e1190] [cursor=pointer]:
+                    - img [ref=e1191]
+                  - button "Reply to this message" [ref=e1194] [cursor=pointer]:
+                    - img [ref=e1195]
+                  - button "Copy message" [ref=e1198] [cursor=pointer]:
+                    - img [ref=e1199]
+              - generic [ref=e1204]:
+                - button "⚙ System" [ref=e1206] [cursor=pointer]:
+                  - generic [ref=e1207]: ⚙
+                  - generic [ref=e1208]: System
+                - generic [ref=e1209]: 10:22 PM
+              - generic [ref=e1213]:
+                - generic [ref=e1214]:
+                  - generic [ref=e1215]: 🤖
+                  - generic [ref=e1216]: Shre
+                  - generic [ref=e1217]: auto
+                  - generic [ref=e1218]: ~2 tokens
+                - generic [ref=e1220]:
+                  - paragraph [ref=e1221]: Hello.
+                  - link "Task open" [ref=e1222]:
+                    - /url: https://localhost:5520/SHR/tasks?id=98448169-c64b-45bc-b124-e4ff4d8e033e
+                    - img [ref=e1223]
+                    - generic [ref=e1225]: Task open
+                - button "auto" [ref=e1227] [cursor=pointer]:
+                  - generic [ref=e1228]: auto
+                  - img [ref=e1229]
+                - generic [ref=e1232]:
+                  - generic [ref=e1233]:
+                    - button "Copy message" [ref=e1234] [cursor=pointer]:
+                      - img [ref=e1235]
+                    - button "Read aloud" [ref=e1238] [cursor=pointer]:
+                      - img [ref=e1239]
+                    - button "Helpful" [ref=e1243] [cursor=pointer]:
+                      - img [ref=e1244]
+                    - button "Not helpful" [ref=e1246] [cursor=pointer]:
+                      - img [ref=e1247]
+                    - button "Add reaction" [ref=e1250] [cursor=pointer]:
+                      - img [ref=e1251]
+                    - button "Regenerate" [ref=e1254] [cursor=pointer]:
+                      - img [ref=e1255]
+                      - generic [ref=e1258]: Regenerate
+                    - button "Branch" [ref=e1259] [cursor=pointer]:
+                      - img [ref=e1260]
+                      - generic [ref=e1265]: Branch
+                  - button "Reply to this message" [ref=e1266] [cursor=pointer]:
+                    - img [ref=e1267]
+                  - button "Add annotation" [ref=e1270] [cursor=pointer]:
+                    - img [ref=e1271]
+          - generic [ref=e1275]:
+            - textbox "Message input" [active] [ref=e1276]:
+              - /placeholder: Message Shre...
+            - generic [ref=e1277]:
+              - generic [ref=e1278]:
+                - button "Attach file" [ref=e1279] [cursor=pointer]:
+                  - img [ref=e1280]
+                - button "Insert emoji" [ref=e1283] [cursor=pointer]:
+                  - img [ref=e1284]
+                - button "Voice input (hold for hands-free)" [ref=e1287] [cursor=pointer]:
+                  - img [ref=e1288]
+                - button "Enable Claude CLI mode" [ref=e1291] [cursor=pointer]:
+                  - img [ref=e1292]
+                - button "Open terminal" [ref=e1295] [cursor=pointer]:
+                  - img [ref=e1296]
+              - button "Send message" [disabled] [ref=e1300] [cursor=pointer]:
+                - img [ref=e1301]
+  - generic [ref=e1304]:
+    - generic [ref=e1305]:
+      - generic [ref=e1306]:
+        - generic [ref=e1307]: Notifications
+        - button "Close notifications" [ref=e1309] [cursor=pointer]:
+          - img [ref=e1310]
+      - generic [ref=e1313]:
+        - button "All" [ref=e1314] [cursor=pointer]
+        - button "Tasks" [ref=e1315] [cursor=pointer]
+        - button "Agents" [ref=e1316] [cursor=pointer]
+        - button "Services" [ref=e1317] [cursor=pointer]
+    - generic [ref=e1318]:
+      - generic [ref=e1320]:
+        - img [ref=e1321]
+        - textbox "Search notifications..." [ref=e1324]
+      - generic [ref=e1325]:
+        - img [ref=e1326]
+        - generic [ref=e1329]: No notifications yet
+```

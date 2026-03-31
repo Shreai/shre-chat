@@ -22,12 +22,14 @@ const TASK_PATTERNS: Array<{ regex: RegExp; extractor: (match: RegExpMatchArray)
   },
   // "create a task: ..." / "create a task called ..."
   {
-    regex: /^(?:please\s+)?(?:create|add|make)\s+(?:a\s+)?(?:task|to-?do|reminder)\s*(?::|called|named|titled|for)\s+(.+)/i,
+    regex:
+      /^(?:please\s+)?(?:create|add|make)\s+(?:a\s+)?(?:task|to-?do|reminder)\s*(?::|called|named|titled|for)\s+(.+)/i,
     extractor: (m) => m[1],
   },
   // "create X as a task" / "add X as a to-do" (natural speech order)
   {
-    regex: /^(?:please\s+)?(?:create|add|make)\s+(.+?)\s+as\s+(?:a\s+)?(?:task|to-?do|reminder)\s*$/i,
+    regex:
+      /^(?:please\s+)?(?:create|add|make)\s+(.+?)\s+as\s+(?:a\s+)?(?:task|to-?do|reminder)\s*$/i,
     extractor: (m) => m[1],
   },
   // "set a reminder to/for ..."
@@ -88,10 +90,10 @@ export function detectTaskIntent(message: string): DetectedTask | null {
       // Must have at least one word of actual content
       if (!rawTitle || rawTitle.split(/\s+/).length < 1) continue;
       // Remove trailing punctuation
-      const cleanTitle = rawTitle.replace(/[.!?]+$/, "").trim();
+      const cleanTitle = rawTitle.replace(/[.!?]+$/, '').trim();
       if (!cleanTitle) continue;
       // Truncate to 500 chars (matching shre-tasks schema limit)
-      const title = cleanTitle.length > 500 ? cleanTitle.slice(0, 497) + "..." : cleanTitle;
+      const title = cleanTitle.length > 500 ? cleanTitle.slice(0, 497) + '...' : cleanTitle;
       return {
         title,
         originalMessage: trimmed,
@@ -106,10 +108,14 @@ export function detectTaskIntent(message: string): DetectedTask | null {
 // ── Issue Detection ─────────────────────────────────────────────────
 
 /** Patterns that indicate issue creation intent */
-const ISSUE_PATTERNS: Array<{ regex: RegExp; extractor: (match: RegExpMatchArray) => { title: string; priority?: string } }> = [
+const ISSUE_PATTERNS: Array<{
+  regex: RegExp;
+  extractor: (match: RegExpMatchArray) => { title: string; priority?: string };
+}> = [
   // "create an issue: ..." / "create an issue called ..." / "create issue for ..."
   {
-    regex: /^(?:please\s+)?(?:create|add|open|file|log|submit)\s+(?:an?\s+)?(?:issue|bug|ticket|defect|feature request|enhancement)\s*(?::|called|named|titled|for|about)\s+(.+)/i,
+    regex:
+      /^(?:please\s+)?(?:create|add|open|file|log|submit)\s+(?:an?\s+)?(?:issue|bug|ticket|defect|feature request|enhancement)\s*(?::|called|named|titled|for|about)\s+(.+)/i,
     extractor: (m) => ({ title: m[1] }),
   },
   // "issue: ..." / "bug: ..." / "ticket: ..."
@@ -119,12 +125,14 @@ const ISSUE_PATTERNS: Array<{ regex: RegExp; extractor: (match: RegExpMatchArray
   },
   // "file a bug for ..." / "report a bug: ..."
   {
-    regex: /^(?:please\s+)?(?:file|report|log|submit)\s+(?:a\s+)?(?:bug|defect|issue)\s+(?:for|about|regarding|on)\s+(.+)/i,
+    regex:
+      /^(?:please\s+)?(?:file|report|log|submit)\s+(?:a\s+)?(?:bug|defect|issue)\s+(?:for|about|regarding|on)\s+(.+)/i,
     extractor: (m) => ({ title: m[1] }),
   },
   // "there's a bug with ..." / "there is an issue with ..."
   {
-    regex: /^there(?:'s|\s+is)\s+(?:a|an)\s+(?:bug|issue|problem|defect)\s+(?:with|in|on|regarding)\s+(.+)/i,
+    regex:
+      /^there(?:'s|\s+is)\s+(?:a|an)\s+(?:bug|issue|problem|defect)\s+(?:with|in|on|regarding)\s+(.+)/i,
     extractor: (m) => ({ title: m[1] }),
   },
   // "feature request: ..." / "enhancement: ..."
@@ -135,7 +143,7 @@ const ISSUE_PATTERNS: Array<{ regex: RegExp; extractor: (match: RegExpMatchArray
   // "we need to fix ..."  (urgent phrasing)
   {
     regex: /^(?:we\s+)?need\s+to\s+fix\s+(.+)/i,
-    extractor: (m) => ({ title: `Fix ${m[1]}`, priority: "high" }),
+    extractor: (m) => ({ title: `Fix ${m[1]}`, priority: 'high' }),
   },
 ];
 
@@ -157,9 +165,9 @@ export function detectIssueIntent(message: string): DetectedIssue | null {
     const match = trimmed.match(pattern.regex);
     if (match) {
       const { title: rawTitle, priority } = pattern.extractor(match);
-      const cleanTitle = rawTitle.replace(/[.!?]+$/, "").trim();
+      const cleanTitle = rawTitle.replace(/[.!?]+$/, '').trim();
       if (!cleanTitle) continue;
-      const title = cleanTitle.length > 500 ? cleanTitle.slice(0, 497) + "..." : cleanTitle;
+      const title = cleanTitle.length > 500 ? cleanTitle.slice(0, 497) + '...' : cleanTitle;
       return { title, priority, originalMessage: trimmed, pattern: pattern.regex.source };
     }
   }
@@ -190,24 +198,24 @@ export async function createIssueFromChat(
 ): Promise<IssueCreateResult> {
   const now = Date.now();
   if (now - lastIssueCreatedAt < ISSUE_COOLDOWN_MS) {
-    return { ok: false, error: "Please wait before creating another issue" };
+    return { ok: false, error: 'Please wait before creating another issue' };
   }
 
   try {
-    const res = await fetch("/api/issues/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/api/issues/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title,
         description,
-        priority: priority || "medium",
-        source: "shre-chat",
+        priority: priority || 'medium',
+        source: 'shre-chat',
       }),
       signal: AbortSignal.timeout(5000),
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: "Unknown error" }));
+      const data = await res.json().catch(() => ({ error: 'Unknown error' }));
       return { ok: false, error: data.error || `HTTP ${res.status}` };
     }
 
@@ -222,7 +230,7 @@ export async function createIssueFromChat(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Failed to create issue",
+      error: err instanceof Error ? err.message : 'Failed to create issue',
     };
   }
 }
@@ -251,24 +259,24 @@ export async function createTaskFromChat(
   // Cooldown check
   const now = Date.now();
   if (now - lastTaskCreatedAt < TASK_COOLDOWN_MS) {
-    return { ok: false, error: "Please wait before creating another task" };
+    return { ok: false, error: 'Please wait before creating another task' };
   }
 
   try {
-    const res = await fetch("/api/tasks/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/api/tasks/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title,
         description,
-        priority: "medium",
-        source: "shre-chat",
+        priority: 'medium',
+        source: 'shre-chat',
       }),
       signal: AbortSignal.timeout(5000),
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: "Unknown error" }));
+      const data = await res.json().catch(() => ({ error: 'Unknown error' }));
       return { ok: false, error: data.error || `HTTP ${res.status}` };
     }
 
@@ -282,7 +290,7 @@ export async function createTaskFromChat(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Failed to create task",
+      error: err instanceof Error ? err.message : 'Failed to create task',
     };
   }
 }

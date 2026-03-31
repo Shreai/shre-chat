@@ -3,7 +3,7 @@
 // Each conversation shows realistic agent responses with structured data.
 
 export interface DemoMessage {
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   timestamp: number;
 }
@@ -22,19 +22,19 @@ const min = 60_000;
 
 export const DEMO_CONVERSATIONS: DemoConversation[] = [
   {
-    id: "demo-sales-summary",
+    id: 'demo-sales-summary',
     title: "Today's Sales Summary",
-    agentId: "storepulse",
-    agentName: "StorePulse",
-    agentEmoji: "\uD83D\uDECD\uFE0F",
+    agentId: 'storepulse',
+    agentName: 'StorePulse',
+    agentEmoji: '\uD83D\uDECD\uFE0F',
     messages: [
       {
-        role: "user",
+        role: 'user',
         content: "Show me today's sales summary",
         timestamp: now - 10 * min,
       },
       {
-        role: "assistant",
+        role: 'assistant',
         content: `Here's your sales summary for today:
 
 | Metric | Value |
@@ -60,19 +60,19 @@ Revenue is **+8.3%** vs same day last week. Beverage sales jumped 15% — likely
     ],
   },
   {
-    id: "demo-inventory-alerts",
-    title: "Low Inventory Alerts",
-    agentId: "storepulse",
-    agentName: "StorePulse",
-    agentEmoji: "\uD83D\uDECD\uFE0F",
+    id: 'demo-inventory-alerts',
+    title: 'Low Inventory Alerts',
+    agentId: 'storepulse',
+    agentName: 'StorePulse',
+    agentEmoji: '\uD83D\uDECD\uFE0F',
     messages: [
       {
-        role: "user",
-        content: "Which items are low on inventory?",
+        role: 'user',
+        content: 'Which items are low on inventory?',
         timestamp: now - 8 * min,
       },
       {
-        role: "assistant",
+        role: 'assistant',
         content: `Found **7 items** below reorder threshold:
 
 | Item | On Hand | Reorder Point | Status |
@@ -96,19 +96,19 @@ Want me to draft the purchase orders?`,
     ],
   },
   {
-    id: "demo-weekly-comparison",
-    title: "This Week vs Last Week",
-    agentId: "storepulse",
-    agentName: "StorePulse",
-    agentEmoji: "\uD83D\uDECD\uFE0F",
+    id: 'demo-weekly-comparison',
+    title: 'This Week vs Last Week',
+    agentId: 'storepulse',
+    agentName: 'StorePulse',
+    agentEmoji: '\uD83D\uDECD\uFE0F',
     messages: [
       {
-        role: "user",
-        content: "Compare this week vs last week",
+        role: 'user',
+        content: 'Compare this week vs last week',
         timestamp: now - 6 * min,
       },
       {
-        role: "assistant",
+        role: 'assistant',
         content: `**Weekly Performance Comparison** (Mon-Thu so far)
 
 | Metric | This Week | Last Week | Change |
@@ -132,19 +132,19 @@ Want me to draft the purchase orders?`,
     ],
   },
   {
-    id: "demo-promotions",
-    title: "Expiring Promotions",
-    agentId: "storepulse",
-    agentName: "StorePulse",
-    agentEmoji: "\uD83D\uDECD\uFE0F",
+    id: 'demo-promotions',
+    title: 'Expiring Promotions',
+    agentId: 'storepulse',
+    agentName: 'StorePulse',
+    agentEmoji: '\uD83D\uDECD\uFE0F',
     messages: [
       {
-        role: "user",
-        content: "What promotions are expiring?",
+        role: 'user',
+        content: 'What promotions are expiring?',
         timestamp: now - 4 * min,
       },
       {
-        role: "assistant",
+        role: 'assistant',
         content: `Found **5 active promotions** — 3 expiring within 7 days:
 
 **\u26A0\uFE0F Expiring This Week:**
@@ -176,13 +176,13 @@ Want me to draft the extension request to your Monster rep?`,
 
 export const DEMO_SUGGESTIONS: string[] = [
   "Show me today's sales summary",
-  "Which items are low on inventory?",
-  "Compare this week vs last week",
-  "What promotions are expiring?",
-  "Who are my top 10 customers?",
-  "Show me hourly traffic patterns",
+  'Which items are low on inventory?',
+  'Compare this week vs last week',
+  'What promotions are expiring?',
+  'Who are my top 10 customers?',
+  'Show me hourly traffic patterns',
   "What's my best margin category?",
-  "Any employee schedule conflicts?",
+  'Any employee schedule conflicts?',
 ];
 
 export const DEMO_MAX_MESSAGES = 5;

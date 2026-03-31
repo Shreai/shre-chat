@@ -3,7 +3,7 @@
  * and exposes task info for badge rendering in message bubbles.
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface ConversationTask {
   id: string;
@@ -31,15 +31,19 @@ export function useConversationTasks(sessionId: string | null) {
       if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data)) {
-        setTasks(data.map((t: any) => ({
-          id: t.id,
-          status: t.status,
-          title: t.title,
-          agent: t.agent,
-          session_id: t.session_id,
-        })));
+        setTasks(
+          data.map((t: any) => ({
+            id: t.id,
+            status: t.status,
+            title: t.title,
+            agent: t.agent,
+            session_id: t.session_id,
+          })),
+        );
       }
-    } catch (err) { console.debug("fetch conversation tasks", err); }
+    } catch (err) {
+      console.debug('fetch conversation tasks', err);
+    }
   }, [sessionId]);
 
   useEffect(() => {

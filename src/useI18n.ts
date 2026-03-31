@@ -1,6 +1,14 @@
 // React hook for i18n — triggers re-render on locale change
-import { useState, useEffect, useCallback } from "react";
-import { t, getLocale, setLocale, subscribe, getAvailableLocales, type Locale, LOCALE_LABELS } from "./i18n";
+import { useState, useEffect, useCallback } from 'react';
+import {
+  t,
+  getLocale,
+  setLocale,
+  subscribe,
+  getAvailableLocales,
+  type Locale,
+  LOCALE_LABELS,
+} from './i18n';
 
 export function useI18n() {
   const [, forceUpdate] = useState(0);

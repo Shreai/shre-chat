@@ -2,7 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
-import type { TTSProvider } from '../preferences-store';
+import { usePreferences, type TTSProvider, type FeatureKey } from '../preferences-store';
 import emojiData from '@emoji-mart/data';
 
 const EmojiPicker = lazy(() =>
@@ -195,6 +195,8 @@ export function ChatComposer(props: ChatComposerProps) {
     claudeCliMode,
     setClaudeCliMode,
   } = props;
+
+  const featEnabled = usePreferences((s) => (key: FeatureKey) => s.features[key] ?? false);
 
   return (
     <>
@@ -856,6 +858,7 @@ export function ChatComposer(props: ChatComposerProps) {
               {/* Voice mode + TTS voice selector — hidden pending proper implementation */}
 
               {/* Claude CLI mode toggle — auto-routes coding tasks to Claude Code CLI */}
+              {featEnabled('claudeCli') && (
               <button
                 tabIndex={-1}
                 onClick={() => setClaudeCliMode(!claudeCliMode)}
@@ -882,8 +885,10 @@ export function ChatComposer(props: ChatComposerProps) {
                   <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
                 )}
               </button>
+              )}
 
               {/* Terminal toggle */}
+              {featEnabled('terminal') && (
               <button
                 tabIndex={-1}
                 onClick={onToggleTerminal}
@@ -903,6 +908,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   <line x1="12" y1="19" x2="20" y2="19" />
                 </svg>
               </button>
+              )}
 
               {/* View mode toggle */}
               {showTerminal && (

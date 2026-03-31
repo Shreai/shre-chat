@@ -5,13 +5,13 @@
  */
 
 // Setup file must run first to stub browser globals before module evaluation
-import "./gateway-ws-setup";
+import './gateway-ws-setup';
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Mock fetch (used for gateway token + health polling) ─────────────
 const fetchMock = vi.fn<(...args: any[]) => Promise<Response>>();
-vi.stubGlobal("fetch", fetchMock);
+vi.stubGlobal('fetch', fetchMock);
 
 // ── Track created WebSocket instances ────────────────────────────────
 
@@ -36,38 +36,41 @@ let lastCreatedWS: TestableWebSocket | null = null;
 
 // Replace the WebSocket constructor to track instances and add test helpers
 const OrigWS = (globalThis as any).WebSocket;
-vi.stubGlobal("WebSocket", class extends OrigWS {
-  constructor(url: string) {
-    super(url);
-    lastCreatedWS = this as any;
-  }
+vi.stubGlobal(
+  'WebSocket',
+  class extends OrigWS {
+    constructor(url: string) {
+      super(url);
+      lastCreatedWS = this as any;
+    }
 
-  simulateOpen() {
-    this.readyState = 1; // OPEN
-    const evt = { type: "open" };
-    this.onopen?.(evt);
-    this.dispatchEvent(evt);
-  }
+    simulateOpen() {
+      this.readyState = 1; // OPEN
+      const evt = { type: 'open' };
+      this.onopen?.(evt);
+      this.dispatchEvent(evt);
+    }
 
-  simulateMessage(data: any) {
-    const evt = { type: "message", data: JSON.stringify(data) };
-    this.onmessage?.(evt);
-    this.dispatchEvent(evt);
-  }
+    simulateMessage(data: any) {
+      const evt = { type: 'message', data: JSON.stringify(data) };
+      this.onmessage?.(evt);
+      this.dispatchEvent(evt);
+    }
 
-  simulateError() {
-    const evt = { type: "error" };
-    this.onerror?.(evt);
-    this.dispatchEvent(evt);
-  }
+    simulateError() {
+      const evt = { type: 'error' };
+      this.onerror?.(evt);
+      this.dispatchEvent(evt);
+    }
 
-  simulateClose() {
-    this.readyState = 3; // CLOSED
-    const evt = { type: "close", code: 1000, reason: "", wasClean: true };
-    this.onclose?.(evt);
-    this.dispatchEvent(evt);
-  }
-});
+    simulateClose() {
+      this.readyState = 3; // CLOSED
+      const evt = { type: 'close', code: 1000, reason: '', wasClean: true };
+      this.onclose?.(evt);
+      this.dispatchEvent(evt);
+    }
+  },
+);
 (globalThis.WebSocket as any).OPEN = 1;
 (globalThis.WebSocket as any).CONNECTING = 0;
 (globalThis.WebSocket as any).CLOSING = 2;
@@ -88,7 +91,7 @@ import {
   startHealthPoll,
   stopHealthPoll,
   retryConnection,
-} from "../gateway-ws";
+} from '../gateway-ws';
 
 // ── Setup / Teardown ─────────────────────────────────────────────────
 
@@ -99,7 +102,7 @@ beforeEach(() => {
 
   // Default: gateway token fetch succeeds
   fetchMock.mockResolvedValue(
-    new Response(JSON.stringify({ token: "test-token" }), { status: 200 }),
+    new Response(JSON.stringify({ token: 'test-token' }), { status: 200 }),
   );
 });
 
@@ -112,12 +115,12 @@ afterEach(() => {
 
 // ── Connection state management ──────────────────────────────────────
 
-describe("connection state", () => {
-  it("starts disconnected", () => {
+describe('connection state', () => {
+  it('starts disconnected', () => {
     expect(isWSConnected()).toBe(false);
   });
 
-  it("reports connected after successful handshake", async () => {
+  it('reports connected after successful handshake', async () => {
     const stateChanges: string[] = [];
     const unsub = onStateChange((state) => stateChanges.push(state));
 
@@ -132,50 +135,50 @@ describe("connection state", () => {
     // Simulate open + challenge
     lastCreatedWS!.simulateOpen();
     lastCreatedWS!.simulateMessage({
-      type: "event",
-      event: "connect.challenge",
+      type: 'event',
+      event: 'connect.challenge',
       payload: {},
     });
 
     // Should have sent connect request
     expect(lastCreatedWS!.sent.length).toBeGreaterThanOrEqual(1);
     const connectReq = JSON.parse(lastCreatedWS!.sent[0]);
-    expect(connectReq.method).toBe("connect");
-    expect(connectReq.params.client.id).toBe("webchat");
+    expect(connectReq.method).toBe('connect');
+    expect(connectReq.params.client.id).toBe('webchat');
 
     // Simulate successful connect response
     lastCreatedWS!.simulateMessage({
-      type: "res",
+      type: 'res',
       id: connectReq.id,
       ok: true,
-      payload: { type: "hello-ok" },
+      payload: { type: 'hello-ok' },
     });
 
     await connectPromise;
 
     expect(isWSConnected()).toBe(true);
-    expect(stateChanges).toContain("connecting");
-    expect(stateChanges).toContain("connected");
+    expect(stateChanges).toContain('connecting');
+    expect(stateChanges).toContain('connected');
 
     unsub();
   });
 
-  it("reports disconnected after close", async () => {
+  it('reports disconnected after close', async () => {
     // Connect first
     const connectPromise = connectGateway();
     await vi.advanceTimersByTimeAsync(0);
     lastCreatedWS!.simulateOpen();
     lastCreatedWS!.simulateMessage({
-      type: "event",
-      event: "connect.challenge",
+      type: 'event',
+      event: 'connect.challenge',
       payload: {},
     });
     const connectReq = JSON.parse(lastCreatedWS!.sent[0]);
     lastCreatedWS!.simulateMessage({
-      type: "res",
+      type: 'res',
       id: connectReq.id,
       ok: true,
-      payload: { type: "hello-ok" },
+      payload: { type: 'hello-ok' },
     });
     await connectPromise;
     expect(isWSConnected()).toBe(true);
@@ -188,15 +191,15 @@ describe("connection state", () => {
 
 // ── State change listener ────────────────────────────────────────────
 
-describe("onStateChange", () => {
-  it("returns an unsubscribe function", () => {
+describe('onStateChange', () => {
+  it('returns an unsubscribe function', () => {
     const states: string[] = [];
     const unsub = onStateChange((s) => states.push(s));
-    expect(typeof unsub).toBe("function");
+    expect(typeof unsub).toBe('function');
     unsub();
   });
 
-  it("stops receiving events after unsubscribe", async () => {
+  it('stops receiving events after unsubscribe', async () => {
     const states: string[] = [];
     const unsub = onStateChange((s) => states.push(s));
     unsub();
@@ -215,37 +218,37 @@ describe("onStateChange", () => {
 
 // ── Stream tracking ──────────────────────────────────────────────────
 
-describe("stream tracking", () => {
-  it("starts with no active streams", () => {
+describe('stream tracking', () => {
+  it('starts with no active streams', () => {
     expect(getActiveStreams()).toEqual([]);
   });
 
-  it("isAgentStreaming returns false when no streams", () => {
-    expect(isAgentStreaming("main")).toBe(false);
+  it('isAgentStreaming returns false when no streams', () => {
+    expect(isAgentStreaming('main')).toBe(false);
   });
 
-  it("onStreamChange returns an unsubscribe function", () => {
+  it('onStreamChange returns an unsubscribe function', () => {
     const unsub = onStreamChange(() => {});
-    expect(typeof unsub).toBe("function");
+    expect(typeof unsub).toBe('function');
     unsub();
   });
 });
 
 // ── Health polling ───────────────────────────────────────────────────
 
-describe("health polling", () => {
-  it("getLastHealth returns null or boolean", () => {
+describe('health polling', () => {
+  it('getLastHealth returns null or boolean', () => {
     const health = getLastHealth();
-    expect(health === null || typeof health === "boolean").toBe(true);
+    expect(health === null || typeof health === 'boolean').toBe(true);
   });
 
-  it("onHealthChange returns an unsubscribe function", () => {
+  it('onHealthChange returns an unsubscribe function', () => {
     const unsub = onHealthChange(() => {});
-    expect(typeof unsub).toBe("function");
+    expect(typeof unsub).toBe('function');
     unsub();
   });
 
-  it("startHealthPoll triggers immediate health check", async () => {
+  it('startHealthPoll triggers immediate health check', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ gatewayToken: true }), { status: 200 }),
     );
@@ -261,7 +264,7 @@ describe("health polling", () => {
     expect(fetchMock).toHaveBeenCalled();
     // Check that at least one call was to /api/health
     const healthCalls = fetchMock.mock.calls.filter(
-      (c) => typeof c[0] === "string" && c[0].includes("/api/health"),
+      (c) => typeof c[0] === 'string' && c[0].includes('/api/health'),
     );
     expect(healthCalls.length).toBeGreaterThanOrEqual(1);
 
@@ -269,7 +272,7 @@ describe("health polling", () => {
     stopHealthPoll();
   });
 
-  it("stopHealthPoll stops polling and is idempotent", () => {
+  it('stopHealthPoll stops polling and is idempotent', () => {
     startHealthPoll();
     stopHealthPoll();
     stopHealthPoll(); // Should not throw
@@ -278,8 +281,8 @@ describe("health polling", () => {
 
 // ── retryConnection ──────────────────────────────────────────────────
 
-describe("retryConnection", () => {
-  it("resets attempt counter and returns a promise", async () => {
+describe('retryConnection', () => {
+  it('resets attempt counter and returns a promise', async () => {
     const retryPromise = retryConnection();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -300,12 +303,12 @@ describe("retryConnection", () => {
 
 // ── disconnectGateway ────────────────────────────────────────────────
 
-describe("disconnectGateway", () => {
-  it("is safe to call when already disconnected", () => {
+describe('disconnectGateway', () => {
+  it('is safe to call when already disconnected', () => {
     expect(() => disconnectGateway()).not.toThrow();
   });
 
-  it("disables auto-reconnect", async () => {
+  it('disables auto-reconnect', async () => {
     // Start connection — catch to prevent unhandled rejection
     const connectPromise = connectGateway().catch(() => {});
     await vi.advanceTimersByTimeAsync(0);

@@ -109,10 +109,50 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
+    // ── Terminal — mobile, persistence, foldable ──
+    {
+      name: 'terminal',
+      testMatch: /terminal\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    // ── Agent 9: Data Integration (POS ↔ RapidRMS ↔ Agent) ──
+    {
+      name: 'data-integration',
+      testMatch: /data-integration\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    // ── Agent 10: Write Operations (POS item create, price update, stock adjust) ──
+    {
+      name: 'write-operations',
+      testMatch: /write-operations\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    // ── Agent 11: Voice Features ──
+    {
+      name: 'voice',
+      testMatch: /voice\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
     // ── Smoke (existing, quick sanity) ──
     {
       name: 'smoke',
       testMatch: /smoke\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    // ── OpenClaw Connection ──
+    {
+      name: 'openclaw-connect',
+      testMatch: /openclaw-connect\.spec\.ts/,
       use: { browserName: 'chromium', storageState: AUTH_FILE },
       dependencies: ['setup'],
     },

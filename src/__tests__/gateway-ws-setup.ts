@@ -6,20 +6,20 @@
 
 // Stub location — used at module top-level in gateway-ws.ts
 (globalThis as any).location = {
-  protocol: "https:",
-  host: "localhost:5510",
+  protocol: 'https:',
+  host: 'localhost:5510',
 };
 
 // Stub crypto.randomUUID — crypto is a read-only getter in Node,
 // so we need to override just randomUUID on the existing object.
 let uuidCounter = 0;
-if (typeof globalThis.crypto !== "undefined") {
+if (typeof globalThis.crypto !== 'undefined') {
   (globalThis.crypto as any).randomUUID = () => {
     uuidCounter++;
     return `test-uuid-${uuidCounter}`;
   };
 } else {
-  Object.defineProperty(globalThis, "crypto", {
+  Object.defineProperty(globalThis, 'crypto', {
     value: {
       randomUUID: () => {
         uuidCounter++;
@@ -48,10 +48,12 @@ class MockWebSocketBase {
 
   private _listeners: Map<string, Set<Function>> = new Map();
 
-  send(data: string) { this.sent.push(data); }
+  send(data: string) {
+    this.sent.push(data);
+  }
   close() {
     this.readyState = 3;
-    this.onclose?.({ code: 1000, reason: "", wasClean: true });
+    this.onclose?.({ code: 1000, reason: '', wasClean: true });
   }
 
   addEventListener(type: string, listener: Function) {
