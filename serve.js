@@ -906,37 +906,93 @@ let _briefingCache = null;
 let _briefingCacheTs = 0;
 let _feedToken = undefined; // Lazy-loaded feed service token
 
-// ── Reminders persistence ─────────────────────────────────────────
-const REMINDERS_PATH = join(homedir(), ".shre", "reminders.json");
+// ── Reminders persistence (SQLite — durable, never auto-purged) ───
+// User data is NEVER automatically deleted. Only agents' ephemeral data gets cleaned up.
+chatDb.exec(`
+  CREATE TABLE IF NOT EXISTS reminders (
+    id          TEXT PRIMARY KEY,
+    text        TEXT NOT NULL,
+    due         TEXT,
+    recurring   TEXT,
+    completed   INTEGER NOT NULL DEFAULT 0,
+    snoozed     TEXT,
+    notified    INTEGER NOT NULL DEFAULT 0,
+    source      TEXT DEFAULT 'manual',
+    contact_email TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due);
+  CREATE INDEX IF NOT EXISTS idx_reminders_completed ON reminders(completed);
+`);
+
+// Migrate from legacy JSON file if it exists and has data
+const REMINDERS_LEGACY_PATH = join(homedir(), ".shre", "reminders.json");
+try {
+  if (existsSync(REMINDERS_LEGACY_PATH)) {
+    const legacy = JSON.parse(readFileSync(REMINDERS_LEGACY_PATH, "utf8"));
+    if (Array.isArray(legacy) && legacy.length > 0) {
+      const insert = chatDb.prepare(`INSERT OR IGNORE INTO reminders (id, text, due, recurring, completed, snoozed, notified, source, contact_email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const migrate = chatDb.transaction((items) => {
+        for (const r of items) {
+          insert.run(r.id, r.text, r.due || null, r.recurring || null, r.completed ? 1 : 0, r.snoozed || null, r.notified ? 1 : 0, r.source || "manual", r.contact_email || null, r.createdAt || new Date().toISOString(), r.updatedAt || r.createdAt || new Date().toISOString());
+        }
+      });
+      migrate(legacy);
+      log.info(`[reminders] Migrated ${legacy.length} reminders from JSON to SQLite`);
+      // Rename legacy file so it's not re-imported
+      renameSync(REMINDERS_LEGACY_PATH, REMINDERS_LEGACY_PATH + ".migrated");
+    }
+  }
+} catch (err) {
+  log.warn("[reminders] Legacy migration failed (non-fatal)", {}, err);
+}
+
+// Prepared statements for reminders
+const stmtLoadReminders = chatDb.prepare(`SELECT * FROM reminders ORDER BY created_at DESC`);
+const stmtInsertReminder = chatDb.prepare(`INSERT OR REPLACE INTO reminders (id, text, due, recurring, completed, snoozed, notified, source, contact_email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+const stmtUpdateReminder = chatDb.prepare(`UPDATE reminders SET text = ?, due = ?, recurring = ?, completed = ?, snoozed = ?, notified = ?, source = ?, contact_email = ?, updated_at = ? WHERE id = ?`);
+const stmtDeleteReminder = chatDb.prepare(`DELETE FROM reminders WHERE id = ?`);
 
 function loadReminders() {
   try {
-    if (!existsSync(REMINDERS_PATH)) return [];
-    return JSON.parse(readFileSync(REMINDERS_PATH, "utf8"));
-  } catch { return []; }
+    const rows = stmtLoadReminders.all();
+    return rows.map(r => ({
+      id: r.id,
+      text: r.text,
+      due: r.due,
+      recurring: r.recurring || undefined,
+      completed: !!r.completed,
+      snoozed: r.snoozed || undefined,
+      notified: !!r.notified,
+      source: r.source || "manual",
+      contact_email: r.contact_email || undefined,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  } catch (err) {
+    log.error("[reminders] loadReminders failed", {}, err);
+    return [];
+  }
 }
 
 function saveReminders(reminders) {
-  const dir = join(homedir(), ".shre");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  // Atomic write: write to tmp file then rename (prevents corruption on concurrent access)
-  const tmpPath = REMINDERS_PATH + ".tmp";
-  writeFileSync(tmpPath, JSON.stringify(reminders, null, 2));
-  renameSync(tmpPath, REMINDERS_PATH);
+  // Bulk save — used by operations that replace the full list
+  try {
+    const tx = chatDb.transaction((items) => {
+      chatDb.exec(`DELETE FROM reminders`);
+      for (const r of items) {
+        stmtInsertReminder.run(r.id, r.text, r.due || null, r.recurring || null, r.completed ? 1 : 0, r.snoozed || null, r.notified ? 1 : 0, r.source || "manual", r.contact_email || null, r.createdAt || new Date().toISOString(), r.updatedAt || r.createdAt || new Date().toISOString());
+      }
+    });
+    tx(reminders);
+  } catch (err) {
+    log.error("[reminders] saveReminders failed", {}, err);
+  }
 }
 
-// Auto-cleanup: purge completed reminders older than 30 days (runs daily)
-setInterval(() => {
-  try {
-    const reminders = loadReminders();
-    const cutoff = Date.now() - 30 * 86400_000;
-    const cleaned = reminders.filter(r => !(r.completed && new Date(r.createdAt).getTime() < cutoff));
-    if (cleaned.length < reminders.length) {
-      saveReminders(cleaned);
-      log.info(`[reminders] Cleaned ${reminders.length - cleaned.length} old completed reminders`);
-    }
-  } catch { /* best effort */ }
-}, 86400_000).unref(); // every 24h
+// No auto-cleanup — user data is never automatically deleted.
+// Only agent ephemeral data (training batches, stale executions) gets purged.
 
 // ── Briefing config persistence ──────────────────────────────────
 const BRIEFING_CONFIG_PATH = join(homedir(), ".shre", "chat", "briefing-config.json");
