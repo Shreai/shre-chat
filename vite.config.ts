@@ -1,7 +1,30 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
 
 const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:18789';
+
+/**
+ * Stamps __BUILD_TS__ in public/sw.js at build time so each deploy
+ * produces a new service worker, triggering the browser to purge
+ * stale caches and fetch fresh assets automatically.
+ */
+function swVersionPlugin(): Plugin {
+  return {
+    name: 'sw-version-stamp',
+    writeBundle() {
+      const swPath = resolve(__dirname, 'dist/sw.js');
+      try {
+        const src = readFileSync(swPath, 'utf-8');
+        const stamped = src.replace(/__BUILD_TS__/g, Date.now().toString(36));
+        writeFileSync(swPath, stamped);
+      } catch {
+        // sw.js may not exist in dev — ignore
+      }
+    },
+  };
+}
 
 const proxyConfig = {
   target: apiTarget,
@@ -13,7 +36,7 @@ const proxyConfig = {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), swVersionPlugin()],
   server: {
     host: '0.0.0.0',
     port: 5000,
