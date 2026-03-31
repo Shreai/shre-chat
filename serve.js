@@ -2057,6 +2057,64 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Memory commands proxy (shre-router) ──
+  if (url.pathname === "/api/memory/capture" && req.method === "POST") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const body = await collectBody(req);
+      const upstream = await fetch(`${routerUrl}/v1/memory/capture`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, tenantId: body.tenantId || "default", agentId: body.agentId || "shre" }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Memory capture proxy failed:", err.message);
+      json(res, { error: "shre-router unreachable" }, 502);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/memory/forget" && req.method === "POST") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const body = await collectBody(req);
+      const upstream = await fetch(`${routerUrl}/v1/memory/forget`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, tenantId: body.tenantId || "default" }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Memory forget proxy failed:", err.message);
+      json(res, { error: "shre-router unreachable" }, 502);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/memory/list" && req.method === "GET") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const tenantId = url.searchParams.get("tenantId") || "default";
+      const upstream = await fetch(`${routerUrl}/v1/memory/facts/${tenantId}?pageSize=50`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Memory list proxy failed:", err.message);
+      json(res, { error: "shre-router unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Tasks CRUD proxy (shre-tasks) — forwards user context headers ──
   if (url.pathname === "/api/tasks" && (req.method === "GET" || req.method === "POST")) {
     try {
@@ -5016,12 +5074,38 @@ async function requestHandler(req, res) {
   }
 
   // ── POST /api/notifications — accept notifications from internal services (Ellie escalation, etc.) ──
+  // Source-level throttle: noisy notification types are rate-limited to prevent flooding.
+  // Max 5 per type per 30-minute window. Excess notifications are silently dropped (acknowledged to caller).
   if (url.pathname === "/api/notifications" && req.method === "POST") {
     try {
       let rawBody;
       try { rawBody = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
       const parsed = JSON.parse(rawBody);
       const { type = "ellie.escalation", title = "Notification", body: notifBody = "", source = "system", severity = "info", sessionId } = parsed;
+
+      // ── Throttle noisy notification types ──
+      const NOISY_TYPES = new Set(["ellie.escalation", "ellie.failed", "error.escalation", "agent.quality_alert"]);
+      const THROTTLE_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+      const THROTTLE_MAX = 5; // max per type per window
+
+      if (NOISY_TYPES.has(type)) {
+        if (!globalThis._notifThrottle) globalThis._notifThrottle = new Map();
+        const throttle = globalThis._notifThrottle;
+        const now = Date.now();
+        const key = type;
+        let entry = throttle.get(key);
+        if (!entry || now - entry.windowStart > THROTTLE_WINDOW_MS) {
+          entry = { windowStart: now, count: 0 };
+          throttle.set(key, entry);
+        }
+        entry.count++;
+        if (entry.count > THROTTLE_MAX) {
+          log.debug("[notifications] Throttled noisy notification", { type, count: entry.count, max: THROTTLE_MAX });
+          // Acknowledge to caller but don't persist or broadcast
+          return json(res, { ok: true, throttled: true });
+        }
+      }
+
       const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
       // Persist to DB

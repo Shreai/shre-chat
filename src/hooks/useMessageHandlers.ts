@@ -24,6 +24,12 @@ import {
   detectIssueIntent,
   createIssueFromChat,
 } from '../taskDetector';
+import {
+  detectMemoryIntent,
+  captureMemory,
+  forgetMemory,
+  listMemories,
+} from '../memoryDetector';
 
 // ── Extracted modules ──
 import {
@@ -724,6 +730,56 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         .catch(() => {
           void 0;
         });
+    }
+
+    // Memory commands: "remember that...", "forget that...", "what do you remember?"
+    const memoryIntent = detectMemoryIntent(text);
+    if (memoryIntent) {
+      const handleMemory = async () => {
+        try {
+          let result;
+          switch (memoryIntent.action) {
+            case 'capture':
+              result = await captureMemory(memoryIntent.text!);
+              break;
+            case 'forget':
+              result = await forgetMemory(memoryIntent.text!);
+              break;
+            case 'list':
+              result = await listMemories();
+              break;
+          }
+
+          if (result.ok) {
+            let content = result.message || 'Done.';
+            // For list action, format the facts nicely
+            if (memoryIntent.action === 'list' && result.facts && result.facts.length > 0) {
+              const lines = result.facts.map(
+                (f: { fact: string; category: string; confidence: number }) =>
+                  `- **${f.fact}** _(${f.category}, ${(f.confidence * 100).toFixed(0)}% confidence)_`,
+              );
+              content = `**What I remember (${result.facts.length} facts):**\n${lines.join('\n')}`;
+            }
+            actions.addMessage(sessionId, {
+              role: 'assistant',
+              content,
+              timestamp: Date.now(),
+              meta: { type: 'system' },
+            });
+          } else {
+            actions.addMessage(sessionId, {
+              role: 'assistant',
+              content: `Memory error: ${result.error}`,
+              timestamp: Date.now(),
+              meta: { type: 'system' },
+            });
+          }
+        } catch {
+          void 0;
+        }
+      };
+      handleMemory();
+      // Don't return — still send the message to the AI for conversational response
     }
 
     // Process bar
