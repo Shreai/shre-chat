@@ -2199,6 +2199,65 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Task retry proxy (shre-tasks + shre-fleet) ──
+  const retryMatch = url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9_-]+)\/retry$/);
+  if (retryMatch && req.method === "POST") {
+    const taskId = retryMatch[1];
+    try {
+      const tasksUrl = serviceUrl("shre-tasks");
+      // Reset status to todo
+      const resetRes = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "todo", result_summary: null }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resetRes.ok) {
+        const errText = await resetRes.text();
+        return json(res, { error: `Failed to reset task: ${errText}` }, resetRes.status);
+      }
+      // Dispatch to fleet
+      let dispatched = false;
+      try {
+        const fleetUrl = serviceUrl("shre-fleet");
+        const dispatchRes = await fetch(`${fleetUrl}/v1/dispatch/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: taskId }),
+          signal: AbortSignal.timeout(8000),
+        });
+        dispatched = dispatchRes.ok;
+      } catch { /* fleet unreachable — task is still reset to todo */ }
+      json(res, { ok: true, taskId, status: "todo", dispatched });
+    } catch (err) {
+      log.warn("Task retry proxy failed:", err.message);
+      json(res, { error: "shre-tasks unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Task dispatch proxy (shre-fleet) ──
+  const dispatchMatch = url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9_-]+)\/dispatch$/);
+  if (dispatchMatch && req.method === "POST") {
+    const taskId = dispatchMatch[1];
+    try {
+      const fleetUrl = serviceUrl("shre-fleet");
+      const upstream = await fetch(`${fleetUrl}/v1/dispatch/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: taskId }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Task dispatch proxy failed:", err.message);
+      json(res, { error: "shre-fleet unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Projects proxy (shre-tasks) ──
   if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
     try {
