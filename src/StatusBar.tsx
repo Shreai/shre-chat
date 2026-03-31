@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, getAgent } from './store';
 import { usePreferences } from './preferences-store';
+import { getOrRequestStream } from './hooks/useVoiceRecording';
 
 // ── Notification types ──────────────────────────────────────────────
 
@@ -689,12 +690,8 @@ export function StatusBar() {
         return;
       }
 
-      // Request mic access (triggers browser prompt if needed)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      // Release the permission-check stream — ChatComposer will create its own
-      stream.getTracks().forEach((t) => t.stop());
+      // Request mic access via shared cached stream (avoids repeated permission prompts)
+      await getOrRequestStream();
 
       // Persist on state + trigger ChatComposer mic recording (push-to-talk → textarea)
       setRecording(true);
