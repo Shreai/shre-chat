@@ -7,6 +7,8 @@ import { retryConnection } from '../gateway-ws';
 import { setModelOverride, ECOSYSTEM_APPS } from '../chat-utils';
 import { importSessions, type Session, type View } from '../store';
 import type { ChatMessage, RouterModel } from '../openclaw';
+import { useI18n } from '../useI18n';
+import { LOCALE_LABELS, type Locale } from '../i18n';
 
 import { ModelPicker } from './ModelPicker';
 import type { TTSProvider, GatewayMode } from '../preferences-store';
@@ -203,18 +205,24 @@ export function ChatPanels(props: ChatPanelsProps) {
 
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const voicePickerRef = useRef<HTMLDivElement>(null);
+  const [langPickerOpen, setLangPickerOpen] = useState(false);
+  const langPickerRef = useRef<HTMLDivElement>(null);
+  const { locale, setLocale } = useI18n();
 
-  // Close voice picker on outside click
+  // Close pickers on outside click
   useEffect(() => {
-    if (!voicePickerOpen) return;
+    if (!voicePickerOpen && !langPickerOpen) return;
     const handler = (e: MouseEvent) => {
-      if (voicePickerRef.current && !voicePickerRef.current.contains(e.target as Node)) {
+      if (voicePickerOpen && voicePickerRef.current && !voicePickerRef.current.contains(e.target as Node)) {
         setVoicePickerOpen(false);
+      }
+      if (langPickerOpen && langPickerRef.current && !langPickerRef.current.contains(e.target as Node)) {
+        setLangPickerOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [voicePickerOpen]);
+  }, [voicePickerOpen, langPickerOpen]);
 
   return (
     <>
@@ -386,6 +394,69 @@ export function ChatPanels(props: ChatPanelsProps) {
                       </button>
                     );
                   })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Language picker */}
+          <div className="relative" ref={langPickerRef}>
+            <button
+              onClick={() => setLangPickerOpen((v) => !v)}
+              className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+              style={{ color: langPickerOpen ? 'var(--c-text-1)' : 'var(--c-text-3)' }}
+              title={`Language: ${LOCALE_LABELS[locale]}`}
+              aria-label="Select language"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+            </button>
+            {langPickerOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setLangPickerOpen(false)} />
+                <div
+                  className="absolute right-0 z-50 rounded-xl overflow-hidden shadow-2xl lang-picker-dropdown"
+                  style={{
+                    width: 200,
+                    top: '100%',
+                    marginTop: 4,
+                    maxHeight: 'min(360px, calc(100vh - 100px))',
+                    background: 'var(--c-bg-2)',
+                    border: '1px solid var(--c-border-1)',
+                    animation: 'picker-fade-in 150ms ease-out forwards',
+                  }}
+                >
+                  <div className="px-3 pt-2.5 pb-1.5" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
+                    <span className="text-[12px] font-semibold" style={{ color: 'var(--c-text-1)' }}>Language</span>
+                  </div>
+                  <div className="overflow-y-auto" style={{ maxHeight: 300 }}>
+                    {(Object.entries(LOCALE_LABELS) as [Locale, string][]).map(([code, label]) => {
+                      const active = locale === code;
+                      return (
+                        <button
+                          key={code}
+                          onClick={() => { setLocale(code); setLangPickerOpen(false); }}
+                          className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
+                          style={{
+                            color: active ? 'var(--c-accent)' : 'var(--c-text-2)',
+                            background: active ? 'var(--c-accent-soft)' : 'transparent',
+                          }}
+                          onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-hover)'; }}
+                          onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <span className="flex-1 text-[12px]">{label}</span>
+                          {active && (
+                            <svg className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--c-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             )}
