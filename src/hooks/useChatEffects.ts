@@ -1,9 +1,23 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import type { Virtualizer } from "@tanstack/react-virtual";
-import { setAgent, fetchAllAgentMessages, fetchAvailableModels, type ChatMessage, type RouterModel } from "../openclaw";
-import { isWSConnected, startHealthPoll, stopHealthPoll, onHealthChange, abortChatWS, abortAllStreams, retryConnection } from "../gateway-ws";
-import { loadScrollPositions, saveScrollPositions, type Session, type AppActions } from "../store";
-import { showDesktopNotification, getModelOverride, setModelOverride } from "../chat-utils";
+import { useState, useRef, useEffect, useCallback } from 'react';
+import type { Virtualizer } from '@tanstack/react-virtual';
+import {
+  setAgent,
+  fetchAllAgentMessages,
+  fetchAvailableModels,
+  type ChatMessage,
+  type RouterModel,
+} from '../openclaw';
+import {
+  isWSConnected,
+  startHealthPoll,
+  stopHealthPoll,
+  onHealthChange,
+  abortChatWS,
+  abortAllStreams,
+  retryConnection,
+} from '../gateway-ws';
+import { loadScrollPositions, saveScrollPositions, type Session, type AppActions } from '../store';
+import { showDesktopNotification, getModelOverride, setModelOverride } from '../chat-utils';
 
 export interface UseChatEffectsParams {
   activeSessionId: string | null;
@@ -13,7 +27,22 @@ export interface UseChatEffectsParams {
   sessions: Session[];
   messages: ChatMessage[];
   filteredMessages: ChatMessage[];
-  actions: Pick<AppActions, "setSyncing" | "switchSession" | "replaceSessionMessages" | "addMessage" | "addFeed" | "newSession" | "updateSessionTitle" | "setStreaming" | "setStreamText" | "setGatewayUp" | "setDraft" | "getDraft" | "setStatusLine">;
+  actions: Pick<
+    AppActions,
+    | 'setSyncing'
+    | 'switchSession'
+    | 'replaceSessionMessages'
+    | 'addMessage'
+    | 'addFeed'
+    | 'newSession'
+    | 'updateSessionTitle'
+    | 'setStreaming'
+    | 'setStreamText'
+    | 'setGatewayUp'
+    | 'setDraft'
+    | 'getDraft'
+    | 'setStatusLine'
+  >;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   streamFlushRaf: React.MutableRefObject<number | null>;
@@ -67,16 +96,40 @@ export interface UseChatEffectsReturn {
 
 export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsReturn {
   const {
-    activeSessionId, activeAgentId, streaming, streamText,
-    sessions, messages, filteredMessages, actions,
-    scrollRef, inputRef, streamFlushRaf, streamBufferRef,
-    sendingRef, abortRef, setInput, setSelectedModel,
-    setDynamicModels, setRouterUp, setCompareModels,
-    showEmoji, setShowEmoji, emojiRef,
-    showModelPicker, setShowModelPicker, modelPickerRef,
-    comparePickerOpen, setComparePickerOpen, comparePickerRef,
-    setShareUrl, setSharedSnapshot, setSharedLoading, setSharedError,
-    generateTitle, virtualizer,
+    activeSessionId,
+    activeAgentId,
+    streaming,
+    streamText,
+    sessions,
+    messages,
+    filteredMessages,
+    actions,
+    scrollRef,
+    inputRef,
+    streamFlushRaf,
+    streamBufferRef,
+    sendingRef,
+    abortRef,
+    setInput,
+    setSelectedModel,
+    setDynamicModels,
+    setRouterUp,
+    setCompareModels,
+    showEmoji,
+    setShowEmoji,
+    emojiRef,
+    showModelPicker,
+    setShowModelPicker,
+    modelPickerRef,
+    comparePickerOpen,
+    setComparePickerOpen,
+    comparePickerRef,
+    setShareUrl,
+    setSharedSnapshot,
+    setSharedLoading,
+    setSharedError,
+    generateTitle,
+    virtualizer,
   } = params;
 
   const scrollPositionsRef = useRef<Record<string, number>>(loadScrollPositions());
@@ -99,9 +152,13 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   const syncedAgentRef = useRef<string | null>(null);
   const recentWSSendRef = useRef(false);
   const HISTORY_MAX = Infinity;
-  const HISTORY_KEY = "shre-sent-history";
+  const HISTORY_KEY = 'shre-sent-history';
   const [initHistory] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    } catch {
+      return [];
+    }
   });
   const sentHistoryRef = useRef<string[]>(initHistory);
   const sentHistoryIdxRef = useRef(initHistory.length);
@@ -112,28 +169,30 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     const handler = (e: MouseEvent) => {
       if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmoji(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [showEmoji]);
 
   // Close model picker on outside click
   useEffect(() => {
     if (!showModelPicker) return;
     const handler = (e: MouseEvent) => {
-      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node))
+        setShowModelPicker(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [showModelPicker]);
 
   // Close compare picker on outside click
   useEffect(() => {
     if (!comparePickerOpen) return;
     const handler = (e: MouseEvent) => {
-      if (comparePickerRef.current && !comparePickerRef.current.contains(e.target as Node)) setComparePickerOpen(false);
+      if (comparePickerRef.current && !comparePickerRef.current.contains(e.target as Node))
+        setComparePickerOpen(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [comparePickerOpen]);
 
   // Sync selected model when agent changes
@@ -169,7 +228,10 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     };
     load();
     const interval = setInterval(load, 5 * 60 * 1000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [activeAgentId]);
 
   // Detect /shared/:id URL and load snapshot
@@ -179,7 +241,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     setSharedLoading(true);
     fetch(`/api/share/${match[1]}`)
       .then((r) => {
-        if (!r.ok) throw new Error("Not found");
+        if (!r.ok) throw new Error('Not found');
         return r.json();
       })
       .then((data) => {
@@ -187,7 +249,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
         setSharedLoading(false);
       })
       .catch(() => {
-        setSharedError("Shared conversation not found or has expired.");
+        setSharedError('Shared conversation not found or has expired.');
         setSharedLoading(false);
       });
   }, []);
@@ -209,14 +271,18 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
           cookieEnabled: navigator.cookieEnabled,
           hardwareConcurrency: navigator.hardwareConcurrency,
           maxTouchPoints: navigator.maxTouchPoints,
-          colorScheme: window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+          colorScheme: window.matchMedia?.('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light',
         };
-        await fetch("/api/client-info", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        await fetch('/api/client-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(info),
         });
-      } catch { /* non-critical */ }
+      } catch {
+        /* non-critical */
+      }
     };
     sendClientInfo();
   }, []);
@@ -240,22 +306,30 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       try {
         const sinceTs = isInitialSync ? 0 : lastSyncRef.current;
         const syncTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("sync-timeout")), 8000)
+          setTimeout(() => reject(new Error('sync-timeout')), 8000),
         );
-        const result = await Promise.race([fetchAllAgentMessages(activeAgentId, sinceTs), syncTimeout]);
+        const result = await Promise.race([
+          fetchAllAgentMessages(activeAgentId, sinceTs),
+          syncTimeout,
+        ]);
         if (cancelled || result.messages.length === 0) return;
 
         const isInternal = (c: string) => {
           const t = c.trim();
           if (/^\s*\[\s*"/.test(t) && /"\s*\]\s*$/.test(t)) return true;
-          if (t.includes("suggest 3 brief follow-up questions")) return true;
-          if (t.includes("MEMORY CHECKPOINT") || t.includes("MEMORY_CHECKPOINT")) return true;
-          if (t.startsWith("System:") || t.startsWith("[System]") || t.startsWith("[subagent]")) return true;
-          if (t.includes("Post-compaction context refresh") || t.includes("Session Startup")) return true;
+          if (t.includes('suggest 3 brief follow-up questions')) return true;
+          if (t.includes('MEMORY CHECKPOINT') || t.includes('MEMORY_CHECKPOINT')) return true;
+          if (t.startsWith('System:') || t.startsWith('[System]') || t.startsWith('[subagent]'))
+            return true;
+          if (t.includes('Post-compaction context refresh') || t.includes('Session Startup'))
+            return true;
           return false;
         };
         const rawMsgs = result.messages.filter(
-          (m) => (m.role === "user" || m.role === "assistant") && m.content?.trim() && !isInternal(m.content)
+          (m) =>
+            (m.role === 'user' || m.role === 'assistant') &&
+            m.content?.trim() &&
+            !isInternal(m.content),
         );
         const seenOC = new Set<string>();
         const chatMessages = rawMsgs.filter((m) => {
@@ -268,23 +342,37 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
         let liveSessions = sessions;
         try {
-          const stored = localStorage.getItem("shre-sessions");
+          const stored = localStorage.getItem('shre-sessions');
           if (stored) liveSessions = JSON.parse(stored);
-        } catch (_) { void _; }
-        const existingSession = liveSessions.find((s: Session) => (s.agentId || "main") === activeAgentId);
+        } catch (_) {
+          void _;
+        }
+        const existingSession = liveSessions.find(
+          (s: Session) => (s.agentId || 'main') === activeAgentId,
+        );
 
         if (existingSession) {
           if (isInitialSync) {
             if (activeSessionId !== existingSession.id) {
               actions.switchSession(existingSession.id);
             }
-            const localTimestamps = new Set(existingSession.messages.map((m) => m.timestamp).filter(Boolean));
-            const localContentsInit = new Set(existingSession.messages.map((m) => m.content.trim().slice(0, 100)));
-            const localWithoutTs = existingSession.messages.filter((m) => !m.timestamp);
-            const openClawNew = chatMessages.filter((m) =>
-              m.timestamp && !localTimestamps.has(m.timestamp) && !localContentsInit.has(m.content.trim().slice(0, 100))
+            const localTimestamps = new Set(
+              existingSession.messages.map((m) => m.timestamp).filter(Boolean),
             );
-            const allTimestamped = [...existingSession.messages.filter((m) => m.timestamp), ...openClawNew];
+            const localContentsInit = new Set(
+              existingSession.messages.map((m) => m.content.trim().slice(0, 100)),
+            );
+            const localWithoutTs = existingSession.messages.filter((m) => !m.timestamp);
+            const openClawNew = chatMessages.filter(
+              (m) =>
+                m.timestamp &&
+                !localTimestamps.has(m.timestamp) &&
+                !localContentsInit.has(m.content.trim().slice(0, 100)),
+            );
+            const allTimestamped = [
+              ...existingSession.messages.filter((m) => m.timestamp),
+              ...openClawNew,
+            ];
             const seen = new Set<string>();
             const deduped = allTimestamped.filter((m) => {
               const key = `${m.timestamp || 0}:${m.role}:${m.content.trim().slice(0, 80)}`;
@@ -292,30 +380,38 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
               seen.add(key);
               return true;
             });
-            const merged = [...localWithoutTs, ...deduped].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-            const changed = merged.length !== existingSession.messages.length ||
+            const merged = [...localWithoutTs, ...deduped].sort(
+              (a, b) => (a.timestamp || 0) - (b.timestamp || 0),
+            );
+            const changed =
+              merged.length !== existingSession.messages.length ||
               merged.some((m, idx) => m.content !== existingSession.messages[idx]?.content);
             if (changed) {
               actions.replaceSessionMessages(existingSession.id, merged);
             }
           } else {
-            const localContents = new Set(existingSession.messages.map((m) => `${m.role}:${m.content.trim().slice(0, 120)}`));
-            const newMsgs = chatMessages.filter((m) =>
-              m.role === "assistant" &&
-              !localContents.has(`${m.role}:${m.content.trim().slice(0, 120)}`)
+            const localContents = new Set(
+              existingSession.messages.map((m) => `${m.role}:${m.content.trim().slice(0, 120)}`),
+            );
+            const newMsgs = chatMessages.filter(
+              (m) =>
+                m.role === 'assistant' &&
+                !localContents.has(`${m.role}:${m.content.trim().slice(0, 120)}`),
             );
             for (const msg of newMsgs) {
               actions.addMessage(existingSession.id, msg);
-              actions.addFeed(existingSession.id, "received",
-                `[OpenClaw] ${msg.content.slice(0, 80)}${msg.content.length > 80 ? "\u2026" : ""}`,
-                { source: "openclaw", agent: activeAgentId, model: msg.model || "" }
+              actions.addFeed(
+                existingSession.id,
+                'received',
+                `[OpenClaw] ${msg.content.slice(0, 80)}${msg.content.length > 80 ? '\u2026' : ''}`,
+                { source: 'openclaw', agent: activeAgentId, model: msg.model || '' },
               );
             }
           }
         } else {
           const id = actions.newSession();
-          const firstUserMsg = chatMessages.find((m) => m.role === "user");
-          actions.updateSessionTitle(id, generateTitle(firstUserMsg?.content || "OpenClaw chat"));
+          const firstUserMsg = chatMessages.find((m) => m.role === 'user');
+          actions.updateSessionTitle(id, generateTitle(firstUserMsg?.content || 'OpenClaw chat'));
           actions.replaceSessionMessages(id, chatMessages);
           actions.switchSession(id);
         }
@@ -333,7 +429,10 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       if (streaming || isWSConnected() || recentWSSendRef.current) return;
       await syncFromOpenClaw();
     }, 15000);
-    return () => { cancelled = true; clearInterval(iv); };
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
   }, [activeAgentId]);
 
   // Smart scroll
@@ -346,7 +445,9 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
     if (newMessage && initialLoadDone.current) {
       newMsgStartIndex.current = prevCount;
-      setTimeout(() => { newMsgStartIndex.current = null; }, 220);
+      setTimeout(() => {
+        newMsgStartIndex.current = null;
+      }, 220);
     }
     if (!initialLoadDone.current && filteredMessages.length > 0) {
       initialLoadDone.current = true;
@@ -365,6 +466,22 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       el.scrollTop = el.scrollHeight;
     }
   }, [filteredMessages.length, streamText]);
+
+  // Keep messages scrolled to bottom when virtual keyboard opens/closes
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handler = () => {
+      if (userNearBottomRef.current) {
+        requestAnimationFrame(() => {
+          const el = scrollRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      }
+    };
+    vv.addEventListener('resize', handler);
+    return () => vv.removeEventListener('resize', handler);
+  }, []);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -394,9 +511,9 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
   const jumpToLatest = useCallback(() => {
     if (filteredMessages.length > 30 && virtualizer) {
-      virtualizer.scrollToIndex(filteredMessages.length - 1, { align: "end", behavior: "smooth" });
+      virtualizer.scrollToIndex(filteredMessages.length - 1, { align: 'end', behavior: 'smooth' });
     } else {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
     setShowJumpToLatest(false);
     userNearBottomRef.current = true;
@@ -409,22 +526,31 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     pullStartRef.current = { y: e.touches[0].clientY, scrollTop: el.scrollTop };
   }, []);
 
-  const handlePullMove = useCallback((e: React.TouchEvent) => {
-    if (!pullStartRef.current || pullRefreshing) return;
-    const el = scrollRef.current;
-    if (!el || el.scrollTop > 5) { setPullDistance(0); return; }
-    const dy = e.touches[0].clientY - pullStartRef.current.y;
-    if (dy > 0 && pullStartRef.current.scrollTop <= 0) {
-      setPullDistance(Math.min(dy * 0.5, 120));
-    }
-  }, [pullRefreshing]);
+  const handlePullMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!pullStartRef.current || pullRefreshing) return;
+      const el = scrollRef.current;
+      if (!el || el.scrollTop > 5) {
+        setPullDistance(0);
+        return;
+      }
+      const dy = e.touches[0].clientY - pullStartRef.current.y;
+      if (dy > 0 && pullStartRef.current.scrollTop <= 0) {
+        setPullDistance(Math.min(dy * 0.5, 120));
+      }
+    },
+    [pullRefreshing],
+  );
 
   const handlePullEnd = useCallback(() => {
     if (pullDistance >= PULL_THRESHOLD && !pullRefreshing) {
       setPullRefreshing(true);
       setPullDistance(PULL_THRESHOLD);
       retryConnection().finally(() => {
-        setTimeout(() => { setPullRefreshing(false); setPullDistance(0); }, 800);
+        setTimeout(() => {
+          setPullRefreshing(false);
+          setPullDistance(0);
+        }, 800);
       });
       if (navigator.vibrate) navigator.vibrate(30);
     } else {
@@ -436,9 +562,9 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   // Flush scroll positions on page unload + cleanup timer
   useEffect(() => {
     const handleUnload = () => saveScrollPositions(scrollPositionsRef.current);
-    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener('beforeunload', handleUnload);
     return () => {
-      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener('beforeunload', handleUnload);
       if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
     };
   }, []);
@@ -447,7 +573,10 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   useEffect(() => {
     startHealthPoll();
     const unsub = onHealthChange((up) => actions.setGatewayUp(up));
-    return () => { unsub(); stopHealthPoll(); };
+    return () => {
+      unsub();
+      stopHealthPoll();
+    };
   }, []);
 
   // Focus input + restore scroll position on session switch
@@ -458,7 +587,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     if (prevId && !isSameSession) {
       const el = scrollRef.current;
       if (el) scrollPositionsRef.current[prevId] = el.scrollTop;
-      const currentInput = inputRef.current?.value ?? "";
+      const currentInput = inputRef.current?.value ?? '';
       actions.setDraft(prevId, currentInput);
     }
     prevSessionIdRef.current = activeSessionId ?? null;
@@ -468,7 +597,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
         const draft = actions.getDraft(activeSessionId);
         setInput(draft);
       } else {
-        setInput("");
+        setInput('');
       }
     }
 
@@ -497,7 +626,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
         } else {
           // Scroll to bottom — use virtualizer for large message lists
           if (filteredMessages.length > 30 && virtualizer) {
-            virtualizer.scrollToIndex(filteredMessages.length - 1, { align: "end" });
+            virtualizer.scrollToIndex(filteredMessages.length - 1, { align: 'end' });
           } else if (el) {
             el.scrollTop = el.scrollHeight;
           }
@@ -506,7 +635,9 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
         }
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeSessionId]);
 
   // Abort active stream on session change or unmount
@@ -517,20 +648,24 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       // Flush any in-flight streaming response as a partial message before clearing
       const pending = streamBufferRef.current;
       if (pending.trim() && sessionAtMount) {
-        actions.addMessage(sessionAtMount, { role: "assistant", content: pending, meta: { partial: "true" } });
+        actions.addMessage(sessionAtMount, {
+          role: 'assistant',
+          content: pending,
+          meta: { partial: 'true' },
+        });
       }
       abortRef.current?.abort();
       abortRef.current = null;
       if (isWSConnected()) {
-        abortChatWS(activeAgentId, "main");
+        abortChatWS(activeAgentId, 'main');
       }
       if (streamFlushRaf.current) {
         clearTimeout(streamFlushRaf.current);
         streamFlushRaf.current = null;
       }
-      streamBufferRef.current = "";
+      streamBufferRef.current = '';
       actions.setStreaming(false);
-      actions.setStreamText("");
+      actions.setStreamText('');
     };
   }, [activeSessionId]);
 
@@ -540,11 +675,15 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       // Flush any in-flight streaming response as a partial message before clearing
       const pending = streamBufferRef.current;
       if (pending.trim() && activeSessionId) {
-        actions.addMessage(activeSessionId, { role: "assistant", content: pending, meta: { partial: "true" } });
+        actions.addMessage(activeSessionId, {
+          role: 'assistant',
+          content: pending,
+          meta: { partial: 'true' },
+        });
       }
       actions.setStreaming(false);
-      actions.setStreamText("");
-      streamBufferRef.current = "";
+      actions.setStreamText('');
+      streamBufferRef.current = '';
       if (streamFlushRaf.current) {
         clearTimeout(streamFlushRaf.current);
         streamFlushRaf.current = null;
@@ -555,19 +694,23 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
   // Abort all agent streams on page close/refresh
   useEffect(() => {
-    const handleBeforeUnload = () => { abortAllStreams(); };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    const handleBeforeUnload = () => {
+      abortAllStreams();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
   // Clear share popover when session changes
-  useEffect(() => { setShareUrl(null); }, [activeSessionId]);
+  useEffect(() => {
+    setShareUrl(null);
+  }, [activeSessionId]);
 
   // Desktop notification when streaming completes while tab is hidden
   useEffect(() => {
     if (prevStreamingRef.current && !streaming) {
       const last = messages[messages.length - 1];
-      if (last?.role === "assistant") {
+      if (last?.role === 'assistant') {
         showDesktopNotification(last.content);
       }
     }
@@ -577,7 +720,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   // Seed sent history from session messages if localStorage is empty
   useEffect(() => {
     if (sentHistoryRef.current.length > 0) return;
-    const userMsgs = messages.filter((m) => m.role === "user").map((m) => m.content.trim());
+    const userMsgs = messages.filter((m) => m.role === 'user').map((m) => m.content.trim());
     if (userMsgs.length > 0) {
       const unique = [...new Set(userMsgs)];
       sentHistoryRef.current = unique;
