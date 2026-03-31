@@ -356,11 +356,13 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           }
         };
         rec.onend = () => {
-          if (!hasStarted || stopped) {
-            recognitionRef.current = null;
+          // Never restart if recording was stopped or recognition was cleared
+          if (!hasStarted || stopped || recognitionRef.current !== rec) {
+            if (recognitionRef.current === rec) recognitionRef.current = null;
             return;
           }
-          if (recognitionRef.current === rec) {
+          // Only restart if we're still actively recording (MediaRecorder is active)
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             try {
               rec.start();
               return;
