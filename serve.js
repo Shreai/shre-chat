@@ -2463,6 +2463,110 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── CRM proxy (MIB007) ──
+  if (url.pathname.startsWith("/api/crm/") || url.pathname === "/api/crm") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const subpath = url.pathname.replace("/api/crm", "");
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/crm${subpath}${url.search || ""}`, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        ...(["POST", "PUT", "PATCH"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.json().catch(() => ({}));
+      json(res, data, upstream.status);
+    } catch (err) {
+      log.warn("CRM proxy failed:", err.message);
+      json(res, { error: "CRM proxy failed" }, 502);
+    }
+    return;
+  }
+
+  // ── Calendar proxy (MIB007) ──
+  if (url.pathname.startsWith("/api/calendar/") || url.pathname === "/api/calendar") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const subpath = url.pathname.replace("/api/calendar", "");
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/calendar${subpath}${url.search || ""}`, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        ...(["POST", "PUT", "PATCH"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.json().catch(() => ({}));
+      json(res, data, upstream.status);
+    } catch (err) {
+      log.warn("Calendar proxy failed:", err.message);
+      json(res, { error: "Calendar proxy failed" }, 502);
+    }
+    return;
+  }
+
+  // ── Dashboard proxy (MIB007) ──
+  if (url.pathname.startsWith("/api/dashboards/") || url.pathname === "/api/dashboards") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const subpath = url.pathname.replace("/api/dashboards", "");
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/dashboards${subpath}${url.search || ""}`, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        ...(["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.json().catch(() => ({}));
+      json(res, data, upstream.status);
+    } catch (err) {
+      log.warn("Dashboard proxy failed:", err.message);
+      json(res, { error: "Dashboard proxy failed" }, 502);
+    }
+    return;
+  }
+
+  // ── Support proxy (MIB007) ──
+  if (url.pathname.startsWith("/api/support/") || url.pathname === "/api/support") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const subpath = url.pathname.replace("/api/support", "");
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/support${subpath}${url.search || ""}`, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        ...(["POST", "PUT", "PATCH"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.json().catch(() => ({}));
+      json(res, data, upstream.status);
+    } catch (err) {
+      log.warn("Support proxy failed:", err.message);
+      json(res, { error: "Support proxy failed" }, 502);
+    }
+    return;
+  }
+
+  // ── Network monitor proxy (MIB007) ──
+  if (url.pathname.startsWith("/api/network/") || url.pathname === "/api/network") {
+    try {
+      const companyId = await mib007CompanyId();
+      if (!companyId) return json(res, { error: "No company" }, 400);
+      const subpath = url.pathname.replace("/api/network", "");
+      const upstream = await mib007Fetch(`/api/companies/${companyId}/network${subpath}${url.search || ""}`, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await upstream.json().catch(() => ({}));
+      json(res, data, upstream.status);
+    } catch (err) {
+      log.warn("Network proxy failed:", err.message);
+      json(res, { error: "Network proxy failed" }, 502);
+    }
+    return;
+  }
+
   // ── Nodes proxy (MIB007) ──
   if (url.pathname === "/api/nodes" && req.method === "GET") {
     try {
