@@ -7,7 +7,7 @@ import { IdentityVerifyButton } from './IdentityVerifyButton';
 import { PoweredByNirlab } from '@shre/ui-kit';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { getBookmarks } from './store';
-import { usePreferences, type FeatureKey } from './preferences-store';
+import { usePreferences } from './preferences-store';
 
 // Pre-defined tag color mapping
 const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -52,7 +52,7 @@ export function Sidebar() {
   const touchStartRef = useRef(0);
   const [bookmarkPanelOpen, setBookmarkPanelOpen] = useState(false);
   const bookmarkCount = useMemo(() => getBookmarks().length, [sessions]); // re-check when sessions change
-  const featEnabled = usePreferences((s) => (key: FeatureKey) => s.features[key] ?? false);
+  const features = usePreferences((s) => s.features);
 
   // Track which agents are actively streaming (background work indicator)
   const [streamingAgents, setStreamingAgents] = useState<Map<string, string>>(new Map());
@@ -851,7 +851,7 @@ export function Sidebar() {
                 </svg>
               }
             />
-            {featEnabled('bookmarks') && (
+            {features['bookmarks'] && (
             <div style={{ position: 'relative' }}>
               <NavIconBtn
                 active={false}
@@ -931,7 +931,7 @@ export function Sidebar() {
                 </svg>
               }
             />
-            {featEnabled('marketplace') && (
+            {features['marketplace'] && (
             <NavIconBtn
               active={view === 'marketplace'}
               onClick={() => actions.setView('marketplace')}
@@ -950,7 +950,7 @@ export function Sidebar() {
               }
             />
             )}
-            {featEnabled('billing') && (
+            {features['billing'] && (
             <NavIconBtn
               active={view === 'billing'}
               onClick={() => actions.setView('billing')}
