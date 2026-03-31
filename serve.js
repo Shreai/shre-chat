@@ -1436,7 +1436,7 @@ const server = httpsServer || httpServer;
 
 // ── Content Security Policy ──────────────────────────────────────
 const IS_DEV = process.env.NODE_ENV !== "production";
-const CSP_CONNECT_SRC = `connect-src 'self' wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`;
+const CSP_CONNECT_SRC = `connect-src 'self' https://localhost:* https://127.0.0.1:* http://localhost:* http://127.0.0.1:* wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`;
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -2850,7 +2850,7 @@ async function requestHandler(req, res) {
   if (url.pathname.startsWith("/api/centrix/") || url.pathname === "/api/centrix") {
     try {
       const subpath = url.pathname.replace("/api/centrix", "") || "/";
-      const centrixBase = serviceUrl("centrix");
+      const centrixBase = process.env.CENTRIX_URL || serviceUrl("centrix");
       const centrixOpts = {
         method: req.method,
         headers: {
