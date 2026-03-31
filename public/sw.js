@@ -1,6 +1,6 @@
 // Shre Chat — PWA service worker with auto-update on deploy
-// BUILD_TS is replaced by build script; change triggers SW update
-const CACHE_VERSION = "shre-chat-v5";
+// __BUILD_TS__ is replaced at build time by vite — any change triggers SW update
+const CACHE_VERSION = "shre-chat-__BUILD_TS__";
 const APP_SHELL = ["/", "/index.html", "/assets/icon.svg", "/assets/icon.png"];
 
 // Install: pre-cache app shell, activate immediately
