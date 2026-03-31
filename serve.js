@@ -901,6 +901,36 @@ function checkAuth(req) {
   return null;
 }
 
+/**
+ * Extract user context from request auth claims.
+ * Returns { userId, tenantId, companyId } — all default to safe fallbacks.
+ * Every data operation should scope to these values.
+ */
+function getUserContext(req) {
+  const claims = checkAuth(req);
+  return {
+    userId: claims?.sub || "system",
+    tenantId: claims?.activeWorkspaceId || "default",
+    companyId: claims?.companyId || claims?.company_id || null,
+    claims,
+  };
+}
+
+/**
+ * Build standard user-context headers for proxying to downstream services.
+ * Services should use these to scope data to the right user/workspace.
+ */
+function userContextHeaders(req) {
+  const ctx = getUserContext(req);
+  const headers = {};
+  if (ctx.userId !== "system") headers["X-User-Id"] = ctx.userId;
+  if (ctx.tenantId !== "default") headers["X-Workspace-Id"] = ctx.tenantId;
+  if (ctx.companyId) headers["X-Company-Id"] = ctx.companyId;
+  // Forward original auth token so downstream can verify if needed
+  if (req.headers["authorization"]) headers["Authorization"] = req.headers["authorization"];
+  return headers;
+}
+
 // ── Briefing cache (5 min TTL) ────────────────────────────────────
 let _briefingCache = null;
 let _briefingCacheTs = 0;
@@ -908,6 +938,7 @@ let _feedToken = undefined; // Lazy-loaded feed service token
 
 // ── Reminders persistence (SQLite — durable, never auto-purged) ───
 // User data is NEVER automatically deleted. Only agents' ephemeral data gets cleaned up.
+// Create reminders table (new installs get user_id/tenant_id from the start)
 chatDb.exec(`
   CREATE TABLE IF NOT EXISTS reminders (
     id          TEXT PRIMARY KEY,
@@ -919,12 +950,19 @@ chatDb.exec(`
     notified    INTEGER NOT NULL DEFAULT 0,
     source      TEXT DEFAULT 'manual',
     contact_email TEXT,
+    user_id     TEXT NOT NULL DEFAULT 'system',
+    tenant_id   TEXT NOT NULL DEFAULT 'default',
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due);
   CREATE INDEX IF NOT EXISTS idx_reminders_completed ON reminders(completed);
 `);
+// Add user_id/tenant_id columns if upgrading from previous schema (existing table without these cols)
+try { chatDb.exec(`ALTER TABLE reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT 'system'`); } catch { /* already exists */ }
+try { chatDb.exec(`ALTER TABLE reminders ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
+// Now safe to create the index (columns guaranteed to exist)
+chatDb.exec(`CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, tenant_id)`);
 
 // Migrate from legacy JSON file if it exists and has data
 const REMINDERS_LEGACY_PATH = join(homedir(), ".shre", "reminders.json");
@@ -948,41 +986,67 @@ try {
   log.warn("[reminders] Legacy migration failed (non-fatal)", {}, err);
 }
 
-// Prepared statements for reminders
-const stmtLoadReminders = chatDb.prepare(`SELECT * FROM reminders ORDER BY created_at DESC`);
-const stmtInsertReminder = chatDb.prepare(`INSERT OR REPLACE INTO reminders (id, text, due, recurring, completed, snoozed, notified, source, contact_email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-const stmtUpdateReminder = chatDb.prepare(`UPDATE reminders SET text = ?, due = ?, recurring = ?, completed = ?, snoozed = ?, notified = ?, source = ?, contact_email = ?, updated_at = ? WHERE id = ?`);
-const stmtDeleteReminder = chatDb.prepare(`DELETE FROM reminders WHERE id = ?`);
+// Prepared statements for reminders (user-scoped)
+const stmtLoadReminders = chatDb.prepare(`SELECT * FROM reminders WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC`);
+const stmtLoadAllReminders = chatDb.prepare(`SELECT * FROM reminders ORDER BY created_at DESC`);
+const stmtInsertReminder = chatDb.prepare(`INSERT OR REPLACE INTO reminders (id, text, due, recurring, completed, snoozed, notified, source, contact_email, user_id, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+const stmtUpdateReminderById = chatDb.prepare(`UPDATE reminders SET text = ?, due = ?, recurring = ?, completed = ?, snoozed = ?, notified = ?, source = ?, contact_email = ?, updated_at = ? WHERE id = ? AND user_id = ? AND tenant_id = ?`);
+const stmtDeleteReminderScoped = chatDb.prepare(`DELETE FROM reminders WHERE id = ? AND user_id = ? AND tenant_id = ?`);
 
-function loadReminders() {
+function reminderRow(r) {
+  return {
+    id: r.id,
+    text: r.text,
+    due: r.due,
+    recurring: r.recurring || undefined,
+    completed: !!r.completed,
+    snoozed: r.snoozed || undefined,
+    notified: !!r.notified,
+    source: r.source || "manual",
+    contact_email: r.contact_email || undefined,
+    user_id: r.user_id || "system",
+    tenant_id: r.tenant_id || "default",
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** Load reminders scoped to a user+workspace. */
+function loadReminders(userId = "system", tenantId = "default") {
   try {
-    const rows = stmtLoadReminders.all();
-    return rows.map(r => ({
-      id: r.id,
-      text: r.text,
-      due: r.due,
-      recurring: r.recurring || undefined,
-      completed: !!r.completed,
-      snoozed: r.snoozed || undefined,
-      notified: !!r.notified,
-      source: r.source || "manual",
-      contact_email: r.contact_email || undefined,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
+    return stmtLoadReminders.all(userId, tenantId).map(reminderRow);
   } catch (err) {
     log.error("[reminders] loadReminders failed", {}, err);
     return [];
   }
 }
 
-function saveReminders(reminders) {
-  // Bulk save — used by operations that replace the full list
+/** Load ALL reminders (for background jobs like due-check). */
+function loadAllReminders() {
+  try {
+    return stmtLoadAllReminders.all().map(reminderRow);
+  } catch (err) {
+    log.error("[reminders] loadAllReminders failed", {}, err);
+    return [];
+  }
+}
+
+/** Save a single reminder (insert or replace). */
+function saveReminder(r) {
+  try {
+    stmtInsertReminder.run(r.id, r.text, r.due || null, r.recurring || null, r.completed ? 1 : 0, r.snoozed || null, r.notified ? 1 : 0, r.source || "manual", r.contact_email || null, r.user_id || "system", r.tenant_id || "default", r.createdAt || new Date().toISOString(), r.updatedAt || r.createdAt || new Date().toISOString());
+  } catch (err) {
+    log.error("[reminders] saveReminder failed", {}, err);
+  }
+}
+
+/** Bulk save — replaces all reminders for a given user+workspace. */
+function saveReminders(reminders, userId = "system", tenantId = "default") {
   try {
     const tx = chatDb.transaction((items) => {
-      chatDb.exec(`DELETE FROM reminders`);
+      chatDb.prepare(`DELETE FROM reminders WHERE user_id = ? AND tenant_id = ?`).run(userId, tenantId);
       for (const r of items) {
-        stmtInsertReminder.run(r.id, r.text, r.due || null, r.recurring || null, r.completed ? 1 : 0, r.snoozed || null, r.notified ? 1 : 0, r.source || "manual", r.contact_email || null, r.createdAt || new Date().toISOString(), r.updatedAt || r.createdAt || new Date().toISOString());
+        stmtInsertReminder.run(r.id, r.text, r.due || null, r.recurring || null, r.completed ? 1 : 0, r.snoozed || null, r.notified ? 1 : 0, r.source || "manual", r.contact_email || null, userId, tenantId, r.createdAt || new Date().toISOString(), r.updatedAt || r.createdAt || new Date().toISOString());
       }
     });
     tx(reminders);
@@ -1012,10 +1076,10 @@ function saveBriefingConfig(config) {
   renameSync(tmpPath, BRIEFING_CONFIG_PATH);
 }
 
-// ── Background reminder checker — every 60s, log due reminders ────
+// ── Background reminder checker — every 60s, check ALL users' reminders ────
 setInterval(() => {
   try {
-    const reminders = loadReminders();
+    const reminders = loadAllReminders();
     const now = new Date();
     const fiveMinAgo = new Date(now.getTime() - 5 * 60_000);
     const due = reminders.filter(r => {
@@ -1025,13 +1089,11 @@ setInterval(() => {
     });
     if (due.length > 0) {
       for (const d of due) {
-        log.info(`[reminders] Due reminder: "${d.text}" (id=${d.id})`);
-        const idx = reminders.findIndex(r => r.id === d.id);
-        if (idx >= 0) reminders[idx].notified = true;
+        log.info(`[reminders] Due reminder: "${d.text}" (id=${d.id}, user=${d.user_id})`);
+        d.notified = true;
+        saveReminder(d);
       }
-      saveReminders(reminders);
-      // Emit via event bus so WebSocket clients can be notified
-      eventBus.emit("reminder.due", { reminders: due.map(r => ({ id: r.id, text: r.text, due: r.due })) });
+      eventBus.emit("reminder.due", { reminders: due.map(r => ({ id: r.id, text: r.text, due: r.due, user_id: r.user_id, tenant_id: r.tenant_id })) });
     }
   } catch (e) {
     log.error("[reminders] Background checker error", {}, e);
@@ -1160,7 +1222,26 @@ async function mib007Fetch(path, opts = {}) {
   return fetch(`http://127.0.0.1:${MIB007_PORT}${path}`, { ...opts, headers });
 }
 
-async function mib007CompanyId() {
+/**
+ * Get the company ID for a request. Uses user context from JWT if available,
+ * falls back to querying MIB007 for the user's companies.
+ */
+async function mib007CompanyId(req) {
+  // 1. Check JWT claims for company context
+  if (req) {
+    const ctx = getUserContext(req);
+    if (ctx.companyId) return ctx.companyId;
+    // 2. Query MIB007 with user context headers to get their companies
+    try {
+      const r = await mib007Fetch("/api/companies", {
+        signal: AbortSignal.timeout(5000),
+        headers: req ? userContextHeaders(req) : {},
+      });
+      const companies = r.ok ? await r.json() : [];
+      return companies?.[0]?.id || null;
+    } catch { return null; }
+  }
+  // 3. Fallback: service-level query
   const r = await mib007Fetch("/api/companies", { signal: AbortSignal.timeout(5000) });
   const companies = r.ok ? await r.json() : [];
   return companies?.[0]?.id || null;
@@ -1338,7 +1419,7 @@ const handleVoice = registerVoiceRoutes({
 });
 const handleTasks = registerTaskRoutes({ log });
 const handleSessions = registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stmtDelete, stmtSoftDelete, stmtRestoreDeleted, stmtRemoveFromTrash, stmtListDeleted, stmtPurgeTrash, upsertSession, dbSessionToClient, checkAuth });
-const handleSuggestions = registerSuggestionsRoutes({ log, loadReminders, getBriefingCache: () => _briefingCache });
+const handleSuggestions = registerSuggestionsRoutes({ log, loadReminders, getUserContext, getBriefingCache: () => _briefingCache });
 const handleHealth = registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, getActiveCLICount: () => activeCLICount, getActivePty: () => activePty });
 const handleReports = registerReportRoutes({ log, chatDb });
 const handleHandoff = registerHandoffRoutes({ log, chatDb });
@@ -1973,12 +2054,13 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Tasks CRUD proxy (shre-tasks) ──
+  // ── Tasks CRUD proxy (shre-tasks) — forwards user context headers ──
   if (url.pathname === "/api/tasks" && (req.method === "GET" || req.method === "POST")) {
     try {
       const tasksUrl = serviceUrl("shre-tasks");
+      const ctxHeaders = userContextHeaders(req);
       if (req.method === "GET") {
-        const upstream = await fetch(`${tasksUrl}/v1/tasks${url.search || "?limit=100"}`, { signal: AbortSignal.timeout(8000) });
+        const upstream = await fetch(`${tasksUrl}/v1/tasks${url.search || "?limit=100"}`, { headers: ctxHeaders, signal: AbortSignal.timeout(8000) });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
@@ -1986,7 +2068,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/tasks`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -2006,9 +2088,10 @@ async function requestHandler(req, res) {
   if (taskIdMatch && (req.method === "PATCH" || req.method === "GET")) {
     try {
       const tasksUrl = serviceUrl("shre-tasks");
+      const ctxHeaders = userContextHeaders(req);
       const taskId = taskIdMatch[1];
       if (req.method === "GET") {
-        const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, { signal: AbortSignal.timeout(5000) });
+        const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, { headers: ctxHeaders, signal: AbortSignal.timeout(5000) });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
@@ -2016,7 +2099,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(8000),
         });
@@ -2036,11 +2119,12 @@ async function requestHandler(req, res) {
   if (assignMatch && req.method === "PATCH") {
     try {
       const tasksUrl = serviceUrl("shre-tasks");
+      const ctxHeaders = userContextHeaders(req);
       const taskId = assignMatch[1];
       const body = await collectBody(req);
       const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}/assignment`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...ctxHeaders },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(8000),
       });
@@ -2058,8 +2142,9 @@ async function requestHandler(req, res) {
   if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
     try {
       const tasksUrl = serviceUrl("shre-tasks");
+      const ctxHeaders = userContextHeaders(req);
       if (req.method === "GET") {
-        const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { headers: ctxHeaders, signal: AbortSignal.timeout(8000) });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
@@ -2067,7 +2152,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/projects`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -2195,14 +2280,15 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Issues proxy (MIB007) ──
+  // ── Issues proxy (MIB007) — forwards user context ──
   if (url.pathname === "/api/issues" && (req.method === "GET" || req.method === "POST")) {
     try {
-      const companyId = await mib007CompanyId();
+      const companyId = await mib007CompanyId(req);
       if (!companyId) return json(res, { error: "No company found" }, 404);
+      const ctxHeaders = userContextHeaders(req);
 
       if (req.method === "GET") {
-        const upstream = await mib007Fetch(`/api/companies/${companyId}/issues${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const upstream = await mib007Fetch(`/api/companies/${companyId}/issues${url.search || ""}`, { signal: AbortSignal.timeout(8000), headers: ctxHeaders });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
@@ -2210,7 +2296,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await mib007Fetch(`/api/companies/${companyId}/issues`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -2225,14 +2311,15 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Goals proxy (MIB007) ──
+  // ── Goals proxy (MIB007) — forwards user context ──
   if (url.pathname === "/api/goals" && (req.method === "GET" || req.method === "POST")) {
     try {
-      const companyId = await mib007CompanyId();
+      const companyId = await mib007CompanyId(req);
       if (!companyId) return json(res, { error: "No company found" }, 404);
+      const ctxHeaders = userContextHeaders(req);
 
       if (req.method === "GET") {
-        const upstream = await mib007Fetch(`/api/companies/${companyId}/goals${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const upstream = await mib007Fetch(`/api/companies/${companyId}/goals${url.search || ""}`, { signal: AbortSignal.timeout(8000), headers: ctxHeaders });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
@@ -2240,7 +2327,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await mib007Fetch(`/api/companies/${companyId}/goals`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -2755,6 +2842,34 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Agents proxy failed:", err.message);
       json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Centrix ERP proxy ──
+  if (url.pathname.startsWith("/api/centrix/") || url.pathname === "/api/centrix") {
+    try {
+      const subpath = url.pathname.replace("/api/centrix", "") || "/";
+      const centrixBase = serviceUrl("centrix");
+      const centrixOpts = {
+        method: req.method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Service-Source": "shre-chat",
+          ...(req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {}),
+        },
+        signal: AbortSignal.timeout(15000),
+      };
+      if (["POST", "PUT", "PATCH"].includes(req.method)) {
+        centrixOpts.body = JSON.stringify(await collectBody(req));
+      }
+      const upstream = await fetch(`${centrixBase}/api${subpath}${url.search || ""}`, centrixOpts);
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": upstream.headers.get("content-type") || "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Centrix proxy failed:", err.message);
+      json(res, { error: "Centrix unavailable" }, 502);
     }
     return;
   }
@@ -5019,9 +5134,10 @@ async function requestHandler(req, res) {
       sections.calendar = calendarResult.value;
     }
 
-    // 4. Reminders
+    // 4. Reminders (user-scoped)
     try {
-      const reminders = loadReminders();
+      const { userId: rUserId, tenantId: rTenantId } = getUserContext(req);
+      const reminders = loadReminders(rUserId, rTenantId);
       const now = new Date();
       const upcoming = reminders.filter(r => !r.completed && new Date(r.snoozed || r.due) >= now);
       const overdueReminders = reminders.filter(r => !r.completed && new Date(r.snoozed || r.due) < now);
@@ -5067,7 +5183,8 @@ async function requestHandler(req, res) {
   }
 
   if (url.pathname === "/api/status-bar" && req.method === "GET") {
-    const reminders = loadReminders();
+    const { userId: sbUserId, tenantId: sbTenantId } = getUserContext(req);
+    const reminders = loadReminders(sbUserId, sbTenantId);
     const now = new Date();
     const active = reminders.filter(r => !r.completed);
     const overdue = active.filter(r => new Date(r.snoozed || r.due) < now);
@@ -5140,23 +5257,24 @@ async function requestHandler(req, res) {
 
   // ── Reminders — personal assistant reminders system ──────────────
 
-  // GET /api/reminders — list all reminders
+  // GET /api/reminders — list reminders for the logged-in user
   if (url.pathname === "/api/reminders" && req.method === "GET") {
-    return json(res, { reminders: loadReminders() });
+    const { userId, tenantId } = getUserContext(req);
+    return json(res, { reminders: loadReminders(userId, tenantId) });
   }
 
-  // POST /api/reminders — create a reminder
+  // POST /api/reminders — create a reminder scoped to the logged-in user
   if (url.pathname === "/api/reminders" && req.method === "POST") {
     let body;
     try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
       const { text, due, recurring, contact_email } = JSON.parse(body);
       if (!text || !due) return json(res, { error: "text and due required" }, 400);
-      // Sanitize: strip HTML, enforce max length, validate due date
       const cleanText = String(text).replace(/<[^>]*>/g, "").slice(0, 500).trim();
       if (!cleanText) return json(res, { error: "text cannot be empty after sanitization" }, 400);
       if (isNaN(new Date(due).getTime())) return json(res, { error: "invalid due date" }, 400);
       if (recurring && !["daily", "weekly", "monthly"].includes(recurring)) return json(res, { error: "recurring must be daily, weekly, or monthly" }, 400);
+      const { userId, tenantId } = getUserContext(req);
       const reminder = {
         id: randomUUID().slice(0, 12),
         text: cleanText,
@@ -5167,19 +5285,20 @@ async function requestHandler(req, res) {
         createdAt: new Date().toISOString(),
         source: "manual",
         contact_email: contact_email || null,
+        user_id: userId,
+        tenant_id: tenantId,
       };
-      const reminders = loadReminders();
-      reminders.push(reminder);
-      saveReminders(reminders);
+      saveReminder(reminder);
       return json(res, { ok: true, reminder });
     } catch (e) {
       return json(res, { error: e.message }, 400);
     }
   }
 
-  // GET /api/reminders/due — check for due reminders (for notifications)
+  // GET /api/reminders/due — check for due reminders for the logged-in user
   if (url.pathname === "/api/reminders/due" && req.method === "GET") {
-    const reminders = loadReminders();
+    const { userId, tenantId } = getUserContext(req);
+    const reminders = loadReminders(userId, tenantId);
     const now = new Date();
     const fiveMinAgo = new Date(now.getTime() - 5 * 60_000);
     const due = reminders.filter(r => {
@@ -5188,13 +5307,11 @@ async function requestHandler(req, res) {
       const dueTime = new Date(r.snoozed || r.due);
       return dueTime <= now && dueTime >= fiveMinAgo;
     });
-    // Mark as notified
     if (due.length > 0) {
       for (const d of due) {
-        const idx = reminders.findIndex(r => r.id === d.id);
-        if (idx >= 0) reminders[idx].notified = true;
+        d.notified = true;
+        saveReminder(d);
       }
-      saveReminders(reminders);
     }
     return json(res, { due });
   }
@@ -5251,7 +5368,7 @@ Examples:
     }
   }
 
-  // PUT /api/reminders/:id — update a reminder
+  // PUT /api/reminders/:id — update a reminder (user-scoped)
   const reminderUpdateMatch = url.pathname.match(/^\/api\/reminders\/([^/]+)$/);
   if (reminderUpdateMatch && req.method === "PUT") {
     const id = reminderUpdateMatch[1];
@@ -5259,7 +5376,8 @@ Examples:
     try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
       const updates = JSON.parse(body);
-      const reminders = loadReminders();
+      const { userId, tenantId } = getUserContext(req);
+      const reminders = loadReminders(userId, tenantId);
       const idx = reminders.findIndex(r => r.id === id);
       if (idx < 0) return json(res, { error: "Not found" }, 404);
 
@@ -5267,37 +5385,36 @@ Examples:
         reminders[idx].completed = updates.completed;
         // If completing a recurring reminder, create the next one
         if (updates.completed && reminders[idx].recurring) {
-          const next = { ...reminders[idx], id: randomUUID().slice(0, 12), completed: false, notified: false, snoozed: null, createdAt: new Date().toISOString() };
+          const next = { ...reminders[idx], id: randomUUID().slice(0, 12), completed: false, notified: false, snoozed: null, createdAt: new Date().toISOString(), user_id: userId, tenant_id: tenantId };
           const due = new Date(next.due);
           if (next.recurring === "daily") due.setDate(due.getDate() + 1);
           else if (next.recurring === "weekly") due.setDate(due.getDate() + 7);
           else if (next.recurring === "monthly") due.setMonth(due.getMonth() + 1);
           next.due = due.toISOString();
-          reminders.push(next);
+          saveReminder(next);
         }
       }
       if (updates.snoozed !== undefined) {
         reminders[idx].snoozed = updates.snoozed;
-        reminders[idx].notified = false; // reset notification flag on snooze
+        reminders[idx].notified = false;
       }
       if (updates.text !== undefined) reminders[idx].text = updates.text;
       if (updates.due !== undefined) reminders[idx].due = updates.due;
       if (updates.contact_email !== undefined) reminders[idx].contact_email = updates.contact_email;
 
-      saveReminders(reminders);
+      saveReminder(reminders[idx]);
       return json(res, { ok: true, reminder: reminders[idx] });
     } catch (e) {
       return json(res, { error: e.message }, 400);
     }
   }
 
-  // DELETE /api/reminders/:id — delete a reminder
+  // DELETE /api/reminders/:id — delete a reminder (user-scoped)
   if (reminderUpdateMatch && req.method === "DELETE") {
     const id = reminderUpdateMatch[1];
-    const reminders = loadReminders();
-    const filtered = reminders.filter(r => r.id !== id);
-    if (filtered.length === reminders.length) return json(res, { error: "Not found" }, 404);
-    saveReminders(filtered);
+    const { userId, tenantId } = getUserContext(req);
+    const result = stmtDeleteReminderScoped.run(id, userId, tenantId);
+    if (result.changes === 0) return json(res, { error: "Not found" }, 404);
     return json(res, { ok: true });
   }
 
@@ -5403,8 +5520,9 @@ Examples:
       warnings.push("Budget status unavailable");
     }
 
-    // Include active reminders summary
-    const reminders = loadReminders();
+    // Include active reminders summary (briefing is user-scoped)
+    const { userId: bUserId, tenantId: bTenantId } = getUserContext(req);
+    const reminders = loadReminders(bUserId, bTenantId);
     const now = new Date();
     const activeReminders = reminders.filter(r => !r.completed);
     const overdueReminders = activeReminders.filter(r => new Date(r.snoozed || r.due) < now);
@@ -5454,9 +5572,10 @@ Examples:
     return json(res, loadBriefingConfig());
   }
 
-  // GET /v1/reminders — list active reminders
+  // GET /v1/reminders — list active reminders (user-scoped)
   if (url.pathname === "/v1/reminders" && req.method === "GET") {
-    return json(res, { reminders: loadReminders() });
+    const { userId: v1UserId, tenantId: v1TenantId } = getUserContext(req);
+    return json(res, { reminders: loadReminders(v1UserId, v1TenantId) });
   }
 
   // POST /v1/reminders — create a reminder
@@ -5476,8 +5595,9 @@ Examples:
       // Cap at 2 years in the future
       if (dueDate.getTime() > Date.now() + 2 * 365 * 86400_000) return json(res, { error: "remind_at too far in the future (max 2 years)" }, 400);
       if (recurring && !["daily", "weekly", "monthly"].includes(recurring)) return json(res, { error: "recurring must be daily, weekly, or monthly" }, 400);
-      // Cap total active reminders at 200
-      const existing = loadReminders().filter(r => !r.completed);
+      // Cap total active reminders at 200 per user
+      const { userId: v1cUserId, tenantId: v1cTenantId } = getUserContext(req);
+      const existing = loadReminders(v1cUserId, v1cTenantId).filter(r => !r.completed);
       if (existing.length >= 200) return json(res, { error: "Maximum 200 active reminders reached" }, 400);
       const reminder = {
         id: randomUUID().slice(0, 12),
@@ -5488,10 +5608,10 @@ Examples:
         snoozed: null,
         createdAt: new Date().toISOString(),
         source: "v1-api",
+        user_id: v1cUserId,
+        tenant_id: v1cTenantId,
       };
-      const reminders = loadReminders();
-      reminders.push(reminder);
-      saveReminders(reminders);
+      saveReminder(reminder);
       return json(res, { ok: true, reminder });
     } catch (e) {
       return json(res, { error: e.message }, 400);
@@ -5502,10 +5622,9 @@ Examples:
   const v1ReminderMatch = url.pathname.match(/^\/v1\/reminders\/([^/]+)$/);
   if (v1ReminderMatch && req.method === "DELETE") {
     const id = v1ReminderMatch[1];
-    const reminders = loadReminders();
-    const filtered = reminders.filter(r => r.id !== id);
-    if (filtered.length === reminders.length) return json(res, { error: "Not found" }, 404);
-    saveReminders(filtered);
+    const { userId: v1dUserId, tenantId: v1dTenantId } = getUserContext(req);
+    const result = stmtDeleteReminderScoped.run(id, v1dUserId, v1dTenantId);
+    if (result.changes === 0) return json(res, { error: "Not found" }, 404);
     return json(res, { ok: true });
   }
 
@@ -5750,11 +5869,11 @@ for (const evt of ["service.unhealthy", "service.started"]) {
 // ── Voice Quality Monitor — auto-escalates voice hickups to Ellie ──
 initVoiceQualityMonitor({ chatDb, log, broadcastNotification, eventBus });
 
-// Check for due reminders every 30s and push via WebSocket
+// Check for due reminders every 30s and push via WebSocket (all users)
 setInterval(() => {
   try {
-    if (notifyClients.size === 0) return; // no connected clients
-    const reminders = loadReminders();
+    if (notifyClients.size === 0) return;
+    const reminders = loadAllReminders();
     const now = new Date();
     const fiveMinAgo = new Date(now.getTime() - 5 * 60_000);
     const due = reminders.filter(r => {
@@ -5764,10 +5883,9 @@ setInterval(() => {
     });
     if (due.length > 0) {
       for (const d of due) {
-        const idx = reminders.findIndex(r => r.id === d.id);
-        if (idx >= 0) reminders[idx].notified = true;
+        d.notified = true;
+        saveReminder(d);
       }
-      saveReminders(reminders);
       broadcastNotification("reminders_due", { reminders: due });
     }
   } catch { /* best effort */ }
@@ -5777,7 +5895,7 @@ setInterval(() => {
 setInterval(() => {
   if (notifyClients.size === 0) return;
   try {
-    const reminders = loadReminders();
+    const reminders = loadAllReminders();
     const active = reminders.filter(r => !r.completed);
     const overdue = active.filter(r => new Date(r.snoozed || r.due) < new Date());
     broadcastNotification("status_update", {

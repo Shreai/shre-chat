@@ -60,11 +60,18 @@ export function registerTaskRoutes({ log }) {
           skip_decompose: true, // simple chat tasks don't need decomposition
         };
 
+        // Forward user context headers for workspace scoping
+        const userHeaders = {};
+        if (req.headers["authorization"]) userHeaders["Authorization"] = req.headers["authorization"];
+        if (req.headers["x-user-id"]) userHeaders["X-User-Id"] = req.headers["x-user-id"];
+        if (req.headers["x-workspace-id"]) userHeaders["X-Workspace-Id"] = req.headers["x-workspace-id"];
+
         const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/intake`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(svcToken ? { Authorization: `Bearer ${svcToken}` } : {}),
+            ...userHeaders,
           },
           body: JSON.stringify(intakePayload),
           signal: AbortSignal.timeout(5000),

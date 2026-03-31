@@ -16,7 +16,8 @@ import { serviceUrl } from "shre-sdk";
 /**
  * @typedef {object} SuggestionsDeps
  * @property {import('shre-sdk').Logger} log
- * @property {() => Reminder[]} loadReminders
+ * @property {(userId?: string, tenantId?: string) => Reminder[]} loadReminders
+ * @property {(req: IncomingMessage) => { userId: string, tenantId: string }} getUserContext
  * @property {() => { sections?: { tasks?: { overdue?: number } } } | null} getBriefingCache
  */
 
@@ -25,7 +26,7 @@ import { serviceUrl } from "shre-sdk";
  * @param {SuggestionsDeps} deps
  * @returns {(req: IncomingMessage, res: ServerResponse, url: URL, helpers: { json: Function }) => boolean}
  */
-export function registerSuggestionsRoutes({ log, loadReminders, getBriefingCache }) {
+export function registerSuggestionsRoutes({ log, loadReminders, getUserContext, getBriefingCache }) {
 
   return function handleSuggestionsRoute(req, res, url, { json }) {
 
@@ -38,7 +39,8 @@ export function registerSuggestionsRoutes({ log, loadReminders, getBriefingCache
           const truncated = (context || "").slice(0, 500);
           let contextHints = "";
           try {
-            const reminders = loadReminders();
+            const { userId, tenantId } = getUserContext(req);
+            const reminders = loadReminders(userId, tenantId);
             const overdueReminders = reminders.filter(r => !r.completed && new Date(r.snoozed || r.due) < new Date());
             if (overdueReminders.length > 0) contextHints += `\nUser has ${overdueReminders.length} overdue reminders: ${overdueReminders.slice(0, 3).map(r => r.text).join(", ")}.`;
             const hour = new Date().getHours();
