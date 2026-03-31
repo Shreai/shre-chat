@@ -311,6 +311,8 @@ export function ChatView() {
   const {
     openclawMode,
     setOpenclawMode,
+    gatewayMode,
+    handleSetGatewayMode,
     compareMode,
     setCompareMode,
     comparePickerOpen,
@@ -352,14 +354,7 @@ export function ChatView() {
     actions,
   });
 
-  // Sync openclawMode when StatusBar toggle changes localStorage
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'shre-openclaw-mode') setOpenclawMode(e.newValue === 'true');
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  // gatewayMode is now synced via Zustand preferences store — no localStorage listener needed
 
   // ── Filtered messages + virtualizer (extracted hook) ──
   const { filteredMessages, lastAssistantMessage, getRunForMessage, useVirtual, virtualizer } =
@@ -554,6 +549,7 @@ export function ChatView() {
     setCompareWinner,
     cliMode,
     openclawMode,
+    directMode: gatewayMode === 'direct',
     claudeCliMode,
     identityVerified,
     setIdentityVerified,
@@ -920,6 +916,8 @@ export function ChatView() {
             headerMoreRef={headerMoreRef}
             openclawMode={openclawMode}
             handleToggleOpenclawMode={handleToggleOpenclawMode}
+            gatewayMode={gatewayMode}
+            handleSetGatewayMode={handleSetGatewayMode}
             compareMode={compareMode}
             compareModels={compareModels}
             handleToggleCompare={handleToggleCompare}

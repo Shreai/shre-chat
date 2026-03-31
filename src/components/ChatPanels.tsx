@@ -9,7 +9,7 @@ import { importSessions, type Session, type View } from '../store';
 import type { ChatMessage, RouterModel } from '../openclaw';
 
 import { ModelPicker } from './ModelPicker';
-import type { TTSProvider } from '../preferences-store';
+import type { TTSProvider, GatewayMode } from '../preferences-store';
 import { HeaderMoreMenu } from './HeaderMoreMenu';
 import { ShareBar } from './ShareBar';
 import { ContextBar } from './ContextBar';
@@ -57,6 +57,8 @@ interface ChatPanelsProps {
   headerMoreRef: React.RefObject<HTMLDivElement | null>;
   openclawMode: boolean;
   handleToggleOpenclawMode: () => void;
+  gatewayMode: GatewayMode;
+  handleSetGatewayMode: (mode: GatewayMode) => void;
   compareMode: boolean;
   compareModels: string[];
   handleToggleCompare: (len: number) => void;
@@ -144,6 +146,8 @@ export function ChatPanels(props: ChatPanelsProps) {
     headerMoreRef,
     openclawMode,
     handleToggleOpenclawMode,
+    gatewayMode,
+    handleSetGatewayMode,
     compareMode,
     compareModels,
     handleToggleCompare,
@@ -340,6 +344,8 @@ export function ChatPanels(props: ChatPanelsProps) {
               onClose={() => setShowHeaderMore(false)}
               openclawMode={openclawMode}
               onToggleOpenclawMode={handleToggleOpenclawMode}
+              gatewayMode={gatewayMode}
+              onSetGatewayMode={handleSetGatewayMode}
               compareMode={compareMode}
               onToggleCompare={() => {
                 handleToggleCompare(compareModels.length);

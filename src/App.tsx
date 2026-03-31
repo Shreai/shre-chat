@@ -546,39 +546,15 @@ function MainApp({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
+          {/* PWA safe-area spacer — accounts for notch/status bar without a redundant header */}
           {isPWA && (
             <div
-              className="flex items-center justify-between px-3 shrink-0"
+              className="shrink-0"
               style={{
-                height: `calc(44px + env(safe-area-inset-top, 0px))`,
-                paddingTop: 'env(safe-area-inset-top, 0px)',
+                height: 'env(safe-area-inset-top, 0px)',
                 background: 'var(--c-bg-2)',
-                borderBottom: '1px solid var(--c-border)',
               }}
-            >
-              <span className="text-sm font-semibold" style={{ color: 'var(--c-text-1)' }}>
-                Shre
-              </span>
-              <button
-                onClick={() => {
-                  actions.switchView('chat');
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-                style={{ color: 'var(--c-text-2)' }}
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                </svg>
-                Chat
-              </button>
-            </div>
+            />
           )}
           <StatusBar />
           <InstallBanner />

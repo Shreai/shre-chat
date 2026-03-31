@@ -75,6 +75,7 @@ export interface UseMessageHandlersParams {
   setCompareWinner: (v: string | null) => void;
   cliMode: boolean;
   openclawMode: boolean;
+  directMode: boolean;
   claudeCliMode: boolean;
   identityVerified: boolean;
   setIdentityVerified: (v: boolean) => void;
@@ -170,6 +171,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     setCompareWinner,
     cliMode,
     openclawMode,
+    directMode,
     claudeCliMode,
     identityVerified,
     setIdentityVerified,
@@ -1461,6 +1463,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         : undefined,
       contextHealth,
       claudeCliMode,
+      directMode,
     );
   }, [
     input,
@@ -1477,6 +1480,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     currentAgent.name,
     cliMode,
     openclawMode,
+    directMode,
     claudeCliMode,
     sendViaCLI,
     selectedModel,

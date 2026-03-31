@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
-import type { ChatMessage } from "../openclaw";
-import { shareSession } from "../store";
-import { playNotifSound, formatTime } from "../chat-utils";
-import { usePreferences } from "../preferences-store";
+import { useState, useCallback } from 'react';
+import type { ChatMessage } from '../openclaw';
+import { shareSession } from '../store';
+import { playNotifSound, formatTime } from '../chat-utils';
+import { usePreferences, type GatewayMode } from '../preferences-store';
 
 interface UseHeaderActionsOptions {
   activeSessionId: string | null;
@@ -27,14 +27,21 @@ export function useHeaderActions({
   currentAgentId,
   actions,
 }: UseHeaderActionsOptions) {
-  const [openclawMode, setOpenclawMode] = useState(() => localStorage.getItem("shre-openclaw-mode") === "true");
+  const gatewayMode = usePreferences((s) => s.gatewayMode);
+  const setGatewayMode = usePreferences((s) => s.setGatewayMode);
+  // Derived boolean for backward compat
+  const openclawMode = gatewayMode === 'openclaw';
+  const setOpenclawMode = useCallback(
+    (v: boolean) => setGatewayMode(v ? 'openclaw' : 'router'),
+    [setGatewayMode],
+  );
   const [compareMode, setCompareMode] = useState(false);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
-  const [systemPromptDraft, setSystemPromptDraft] = useState("");
+  const [systemPromptDraft, setSystemPromptDraft] = useState('');
   const [summarizing, setSummarizing] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
-  const [summaryText, setSummaryText] = useState("");
+  const [summaryText, setSummaryText] = useState('');
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -44,23 +51,30 @@ export function useHeaderActions({
   const setNotifSound = usePreferences((s) => s.setNotifSound);
 
   const handleToggleOpenclawMode = useCallback(() => {
-    const next = !openclawMode;
-    setOpenclawMode(next);
-    localStorage.setItem("shre-openclaw-mode", String(next));
-  }, [openclawMode]);
+    // Legacy toggle — cycles router ↔ openclaw
+    setGatewayMode(openclawMode ? 'router' : 'openclaw');
+  }, [openclawMode, setGatewayMode]);
 
-  const handleToggleCompare = useCallback((compareModelsLength: number) => {
-    if (!compareMode) {
-      setCompareMode(true);
-      if (compareModelsLength < 2) setComparePickerOpen(true);
-    } else {
-      setCompareMode(false);
-      setComparePickerOpen(false);
-    }
-  }, [compareMode]);
+  const handleSetGatewayMode = useCallback(
+    (mode: GatewayMode) => setGatewayMode(mode),
+    [setGatewayMode],
+  );
+
+  const handleToggleCompare = useCallback(
+    (compareModelsLength: number) => {
+      if (!compareMode) {
+        setCompareMode(true);
+        if (compareModelsLength < 2) setComparePickerOpen(true);
+      } else {
+        setCompareMode(false);
+        setComparePickerOpen(false);
+      }
+    },
+    [compareMode],
+  );
 
   const handleOpenSystemPrompt = useCallback(() => {
-    setSystemPromptDraft(activeSession?.systemPrompt || "");
+    setSystemPromptDraft(activeSession?.systemPrompt || '');
     setShowSystemPrompt(true);
   }, [activeSession?.systemPrompt]);
 
@@ -75,14 +89,14 @@ export function useHeaderActions({
     setSummarizing(true);
     try {
       const convoText = messages
-        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-        .join("\n\n")
+        .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+        .join('\n\n')
         .slice(0, 4000);
-      const res = await fetch("/v1/responses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/v1/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
+          model: 'openai/gpt-4o-mini',
           input: `Summarize this conversation concisely in bullet points. Include key decisions, questions asked, and conclusions reached.\n\nConversation:\n${convoText}`,
           stream: false,
         }),
@@ -90,15 +104,23 @@ export function useHeaderActions({
       });
       if (!res.ok) throw new Error(`Gateway error: ${res.status}`);
       const data = await res.json();
-      const text = data?.output
-        ?.filter((o: { type: string }) => o.type === "message")
-        ?.flatMap((o: { content: { type: string; text: string }[] }) => o.content?.filter((c: { type: string }) => c.type === "output_text")?.map((c: { text: string }) => c.text) ?? [])
-        ?.join("") || "";
-      if (!text) throw new Error("Empty summary returned");
+      const text =
+        data?.output
+          ?.filter((o: { type: string }) => o.type === 'message')
+          ?.flatMap(
+            (o: { content: { type: string; text: string }[] }) =>
+              o.content
+                ?.filter((c: { type: string }) => c.type === 'output_text')
+                ?.map((c: { text: string }) => c.text) ?? [],
+          )
+          ?.join('') || '';
+      if (!text) throw new Error('Empty summary returned');
       setSummaryText(text);
       setShowSummary(true);
     } catch (err: unknown) {
-      actions.setStatusLine(`Summary failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      actions.setStatusLine(
+        `Summary failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
       setTimeout(() => actions.setStatusLine(null), 4000);
     } finally {
       setSummarizing(false);
@@ -113,41 +135,49 @@ export function useHeaderActions({
       const url = await shareSession(activeSessionId);
       setShareUrl(url);
     } catch (err) {
-      console.warn("share session", err);
-      actions.setStatusLine("Failed to create share link");
+      console.warn('share session', err);
+      actions.setStatusLine('Failed to create share link');
       setTimeout(() => actions.setStatusLine(null), 3000);
     }
     setShareLoading(false);
   }, [activeSessionId, actions]);
 
   const handleCopyMarkdown = useCallback(() => {
-    const md = messages.map((m) =>
-      `**${m.role === "user" ? userName : currentAgentName}** (${formatTime(m.timestamp)}):\n${m.content}`
-    ).join("\n\n---\n\n");
+    const md = messages
+      .map(
+        (m) =>
+          `**${m.role === 'user' ? userName : currentAgentName}** (${formatTime(m.timestamp)}):\n${m.content}`,
+      )
+      .join('\n\n---\n\n');
     navigator.clipboard?.writeText(md).then(() => {
-      actions.setStatusLine("Copied to clipboard");
+      actions.setStatusLine('Copied to clipboard');
       setTimeout(() => actions.setStatusLine(null), 2000);
     });
   }, [messages, userName, currentAgentName, actions]);
 
   const handleDownloadMd = useCallback(() => {
-    const md = `# ${activeSession?.title || "Chat"}\n\n` + messages.map((m) =>
-      `## ${m.role === "user" ? userName : currentAgentName} (${formatTime(m.timestamp)})\n\n${m.content}`
-    ).join("\n\n---\n\n");
-    const blob = new Blob([md], { type: "text/markdown" });
+    const md =
+      `# ${activeSession?.title || 'Chat'}\n\n` +
+      messages
+        .map(
+          (m) =>
+            `## ${m.role === 'user' ? userName : currentAgentName} (${formatTime(m.timestamp)})\n\n${m.content}`,
+        )
+        .join('\n\n---\n\n');
+    const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
+    a.download = `${(activeSession?.title || 'chat').replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
     a.click();
     URL.revokeObjectURL(url);
-    actions.setStatusLine("Downloaded as Markdown");
+    actions.setStatusLine('Downloaded as Markdown');
     setTimeout(() => actions.setStatusLine(null), 2000);
   }, [messages, userName, currentAgentName, activeSession?.title, actions]);
 
   const handleDownloadJson = useCallback(() => {
     const data = {
-      title: activeSession?.title || "Chat",
+      title: activeSession?.title || 'Chat',
       agent: currentAgentId,
       exportedAt: new Date().toISOString(),
       messages: messages.map((m) => ({
@@ -157,14 +187,14 @@ export function useHeaderActions({
         model: m.meta?.model,
       })),
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `${(activeSession?.title || "chat").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+    a.download = `${(activeSession?.title || 'chat').replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    actions.setStatusLine("Downloaded as JSON");
+    actions.setStatusLine('Downloaded as JSON');
     setTimeout(() => actions.setStatusLine(null), 2000);
   }, [messages, currentAgentId, activeSession?.title, actions]);
 
@@ -176,19 +206,31 @@ export function useHeaderActions({
   }, [activeSessionId, systemPromptDraft, actions]);
 
   return {
-    openclawMode, setOpenclawMode,
-    compareMode, setCompareMode,
-    comparePickerOpen, setComparePickerOpen,
-    showSystemPrompt, setShowSystemPrompt,
-    systemPromptDraft, setSystemPromptDraft,
+    openclawMode,
+    setOpenclawMode,
+    gatewayMode,
+    handleSetGatewayMode,
+    compareMode,
+    setCompareMode,
+    comparePickerOpen,
+    setComparePickerOpen,
+    showSystemPrompt,
+    setShowSystemPrompt,
+    systemPromptDraft,
+    setSystemPromptDraft,
     summarizing,
-    showSummary, setShowSummary,
+    showSummary,
+    setShowSummary,
     summaryText,
-    showAnalytics, setShowAnalytics,
-    shareUrl, setShareUrl,
+    showAnalytics,
+    setShowAnalytics,
+    shareUrl,
+    setShareUrl,
     shareLoading,
-    shareCopied, setShareCopied,
-    notifSound, setNotifSound,
+    shareCopied,
+    setShareCopied,
+    notifSound,
+    setNotifSound,
     handleToggleOpenclawMode,
     handleToggleCompare,
     handleOpenSystemPrompt,

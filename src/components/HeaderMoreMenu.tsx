@@ -3,13 +3,16 @@ import type { ChatMessage } from '../openclaw';
 import type { Session } from '../store';
 import { exportSessions, importSessions } from '../store';
 import { ECOSYSTEM_APPS } from '../chat-utils';
+import type { GatewayMode } from '../preferences-store';
 
 export interface HeaderMoreMenuProps {
   open: boolean;
   onClose: () => void;
-  // OpenClaw mode
+  // Gateway mode
   openclawMode: boolean;
   onToggleOpenclawMode: () => void;
+  gatewayMode: GatewayMode;
+  onSetGatewayMode: (mode: GatewayMode) => void;
   // Compare
   compareMode: boolean;
   onToggleCompare: () => void;
@@ -55,6 +58,8 @@ export function HeaderMoreMenu({
   onClose,
   openclawMode,
   onToggleOpenclawMode,
+  gatewayMode,
+  onSetGatewayMode,
   compareMode,
   onToggleCompare,
   comparePickerRef,
@@ -96,20 +101,28 @@ export function HeaderMoreMenu({
           overflowY: 'auto',
         }}
       >
-        <button
-          onClick={() => {
-            onToggleOpenclawMode();
-            onClose();
-          }}
-          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-          style={{ color: 'var(--c-text-1)' }}
-        >
-          <span
-            className="inline-block h-2 w-2 rounded-full"
-            style={{ background: openclawMode ? '#a855f7' : '#3b82f6' }}
-          />
-          {openclawMode ? 'Switch to Router' : 'Switch to OpenClaw'}
-        </button>
+        <SectionLabel>Gateway</SectionLabel>
+        <GatewayOption
+          label="Shre Router"
+          description="Trust gate, RAG, scoring"
+          color="#3b82f6"
+          active={gatewayMode === 'router'}
+          onClick={() => { onSetGatewayMode('router'); onClose(); }}
+        />
+        <GatewayOption
+          label="OpenClaw"
+          description="Agent workspace, tools"
+          color="#a855f7"
+          active={gatewayMode === 'openclaw'}
+          onClick={() => { onSetGatewayMode('openclaw'); onClose(); }}
+        />
+        <GatewayOption
+          label="Direct (Ollama)"
+          description="Local models, no gateway"
+          color="#22c55e"
+          active={gatewayMode === 'direct'}
+          onClick={() => { onSetGatewayMode('direct'); onClose(); }}
+        />
 
         <Divider />
 
@@ -720,6 +733,35 @@ export function HeaderMoreMenu({
 
         <Divider />
 
+        <HeaderMenuItem
+          label="Check for Updates"
+          icon={
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          }
+          onClick={() => {
+            onClose();
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then((regs) => {
+                regs.forEach((r) => r.update());
+              });
+            }
+            window.location.reload();
+          }}
+        />
+
+        <Divider />
+
         <SectionLabel>Data</SectionLabel>
         <HeaderMenuItem
           label="Export Sessions"
@@ -778,6 +820,51 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     >
       {children}
     </div>
+  );
+}
+
+function GatewayOption({
+  label,
+  description,
+  color,
+  active,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  color: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-3 py-1.5 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+      style={{
+        color: active ? color : 'var(--c-text-2)',
+        background: active ? `${color}10` : 'transparent',
+      }}
+    >
+      <span
+        className="inline-block shrink-0"
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: active ? color : 'var(--c-text-5)',
+          boxShadow: active ? `0 0 6px ${color}` : 'none',
+        }}
+      />
+      <span className="flex flex-col leading-tight">
+        <span style={{ fontWeight: active ? 600 : 400 }}>{label}</span>
+        <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>{description}</span>
+      </span>
+      {active && (
+        <svg className="h-3.5 w-3.5 ml-auto shrink-0" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
+    </button>
   );
 }
 

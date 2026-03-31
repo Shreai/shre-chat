@@ -511,6 +511,7 @@ export async function sendMessage(
   threadContext?: ThreadContext,
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
+  directMode?: boolean,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -544,6 +545,7 @@ export async function sendMessage(
       threadContext,
       contextHealth,
       claudeCliMode,
+      directMode,
     );
   } catch (err) {
     if (done) return;
@@ -628,6 +630,7 @@ async function streamViaFallback(
   threadContext?: ThreadContext,
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
+  directMode?: boolean,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
 
@@ -636,7 +639,9 @@ async function streamViaFallback(
     { role: 'user', content: message },
   ];
 
-  const res = await fetchWithRetry(`${SHRE_ROUTER_URL}/v1/chat`, {
+  // Direct mode bypasses shre-router — sends to local Ollama via serve.js proxy
+  const chatUrl = directMode ? '/api/direct/v1/chat' : `${SHRE_ROUTER_URL}/v1/chat`;
+  const res = await fetchWithRetry(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
