@@ -8,8 +8,8 @@
  *   - escalation.resolved — escalation completed successfully
  *   - escalation.failed   — escalation failed, council notified
  */
-import { useEffect, useRef, useCallback } from "react";
-import { setPlan, updateTaskStatus, updatePlanStatus, parsePlanTasks } from "../planStore";
+import { useEffect, useRef, useCallback } from 'react';
+import { setPlan, updateTaskStatus, updatePlanStatus, parsePlanTasks } from '../planStore';
 
 interface EscalationEvent {
   type: string;
@@ -25,31 +25,37 @@ interface EscalationEvent {
 }
 
 const ESCALATION_TYPES = new Set([
-  "ellie.escalation",
-  "chat.message",
-  "escalation.resolved",
-  "escalation.failed",
-  "project_progress",
-  "project_fallback",
-  "project.pending_approval",
-  "budget_warning",
-  "budget_blocked",
-  "file_diff",
-  "approval.requested",
-  "approval.resolved",
+  'ellie.escalation',
+  'chat.message',
+  'escalation.resolved',
+  'escalation.failed',
+  'project_progress',
+  'project_fallback',
+  'project.pending_approval',
+  'budget_warning',
+  'budget_blocked',
+  'file_diff',
+  'approval.requested',
+  'approval.resolved',
 ]);
 
 interface UseEscalationListenerOptions {
   activeSessionId: string | null;
-  addMessage: (sessionId: string, msg: {
-    role: "user" | "assistant";
-    content: string;
-    timestamp?: number;
-    meta?: Record<string, string>;
-  }) => void;
+  addMessage: (
+    sessionId: string,
+    msg: {
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp?: number;
+      meta?: Record<string, string>;
+    },
+  ) => void;
 }
 
-export function useEscalationListener({ activeSessionId, addMessage }: UseEscalationListenerOptions): void {
+export function useEscalationListener({
+  activeSessionId,
+  addMessage,
+}: UseEscalationListenerOptions): void {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSessionIdRef = useRef(activeSessionId);
@@ -59,18 +65,21 @@ export function useEscalationListener({ activeSessionId, addMessage }: UseEscala
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
-  const injectSystemMessage = useCallback((sessionId: string, content: string, event: string) => {
-    addMessage(sessionId, {
-      role: "assistant",
-      content: `[system] ${content}`,
-      timestamp: Date.now(),
-      meta: { system: "true", type: "escalation", event },
-    });
-  }, [addMessage]);
+  const injectSystemMessage = useCallback(
+    (sessionId: string, content: string, event: string) => {
+      addMessage(sessionId, {
+        role: 'assistant',
+        content: `[system] ${content}`,
+        timestamp: Date.now(),
+        meta: { system: 'true', type: 'escalation', event },
+      });
+    },
+    [addMessage],
+  );
 
   useEffect(() => {
     function connect() {
-      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${proto}//${location.host}/ws/notifications`);
       wsRef.current = ws;
 
@@ -86,199 +95,215 @@ export function useEscalationListener({ activeSessionId, addMessage }: UseEscala
           if (data.sessionId && data.sessionId !== currentSession) return;
 
           switch (data.type) {
-            case "ellie.escalation": {
-              const agentName = data.agentName || data.source || "An agent";
+            case 'ellie.escalation': {
+              const agentName = data.agentName || data.source || 'An agent';
               injectSystemMessage(
                 currentSession,
                 `${agentName} couldn't complete your request. Ellie is investigating and will follow up.`,
-                "ellie.escalation",
+                'ellie.escalation',
               );
               break;
             }
 
-            case "chat.message": {
+            case 'chat.message': {
               // Resolution message from Ellie — add as a real assistant message
-              const content = data.content || data.body || "";
+              const content = data.content || data.body || '';
               if (content) {
                 addMessage(currentSession, {
-                  role: "assistant",
+                  role: 'assistant',
                   content,
                   timestamp: Date.now(),
-                  meta: { source: data.source || "ellie", event: "escalation.resolution" },
+                  meta: { source: data.source || 'ellie', event: 'escalation.resolution' },
                 });
               }
               break;
             }
 
-            case "escalation.resolved": {
+            case 'escalation.resolved': {
               injectSystemMessage(
                 currentSession,
-                "Ellie resolved the issue.",
-                "escalation.resolved",
+                'Ellie resolved the issue.',
+                'escalation.resolved',
               );
               break;
             }
 
-            case "escalation.failed": {
+            case 'escalation.failed': {
               injectSystemMessage(
                 currentSession,
                 "Escalation couldn't be resolved. The Architecture Council has been notified.",
-                "escalation.failed",
+                'escalation.failed',
               );
               break;
             }
 
-            case "project_fallback": {
+            case 'project_fallback': {
               injectSystemMessage(
                 currentSession,
-                "Project decomposition unavailable — creating single task instead.",
-                "project_fallback",
+                'Project decomposition unavailable — creating single task instead.',
+                'project_fallback',
               );
               break;
             }
 
-            case "project.pending_approval": {
+            case 'project.pending_approval': {
               const subtaskCount = (data as Record<string, unknown>).subtaskCount || 0;
-              const summary = String((data as Record<string, unknown>).summary || "");
-              const projectId = String((data as Record<string, unknown>).projectId || "");
-              const planText = summary ? `\n${summary}` : "";
+              const summary = String((data as Record<string, unknown>).summary || '');
+              const projectId = String((data as Record<string, unknown>).projectId || '');
+              const planText = summary ? `\n${summary}` : '';
 
               // Populate plan store for interactive checklist
               if (projectId) {
                 const tasks = parsePlanTasks(summary);
                 setPlan(projectId, {
                   projectId,
-                  tasks: tasks.length > 0 ? tasks : Array.from({ length: Number(subtaskCount) || 0 }, (_, i) => ({
-                    id: `task-${i + 1}`,
-                    title: `Task ${i + 1}`,
-                    status: "pending" as const,
-                  })),
-                  status: "pending_approval",
+                  tasks:
+                    tasks.length > 0
+                      ? tasks
+                      : Array.from({ length: Number(subtaskCount) || 0 }, (_, i) => ({
+                          id: `task-${i + 1}`,
+                          title: `Task ${i + 1}`,
+                          status: 'pending' as const,
+                        })),
+                  status: 'pending_approval',
                 });
               }
 
               injectSystemMessage(
                 currentSession,
                 `[project_pending] Project plan ready — ${subtaskCount} tasks.${planText}\nProject ID: ${projectId}`,
-                "project.pending_approval",
+                'project.pending_approval',
               );
               break;
             }
 
-            case "budget_warning":
-            case "budget_blocked": {
-              const budgetMsg = (data as Record<string, unknown>).message
-                || `Budget ${data.type === "budget_blocked" ? "exceeded" : "warning"} for agent ${(data as Record<string, unknown>).agentId || "unknown"}.`;
+            case 'budget_warning':
+            case 'budget_blocked': {
+              const budgetMsg =
+                (data as Record<string, unknown>).message ||
+                `Budget ${data.type === 'budget_blocked' ? 'exceeded' : 'warning'} for agent ${(data as Record<string, unknown>).agentId || 'unknown'}.`;
               injectSystemMessage(currentSession, String(budgetMsg), data.type);
               break;
             }
 
-            case "approval.requested": {
+            case 'approval.requested': {
               const d = data as unknown as Record<string, unknown>;
-              const approvalId = d.approvalId || "";
-              const action = d.action || "browser action";
-              const target = d.target || "";
-              const agent = d.agentId || d.agent || "";
-              const reason = d.reason || "";
-              const risk = d.risk || "medium";
+              const approvalId = d.approvalId || '';
+              const action = d.action || 'browser action';
+              const target = d.target || '';
+              const agent = d.agentId || d.agent || '';
+              const reason = d.reason || '';
+              const risk = d.risk || 'medium';
               injectSystemMessage(
                 currentSession,
                 `[browser_approval] Approval ID: ${approvalId}\nAction: ${action}\nTarget: ${target}\nAgent: ${agent}\nReason: ${reason}\nRisk: ${risk}`,
-                "approval.requested",
+                'approval.requested',
               );
               break;
             }
 
-            case "approval.resolved": {
+            case 'approval.resolved': {
               const d = data as unknown as Record<string, unknown>;
-              const status = d.status || "resolved";
-              const action = d.action || "browser action";
-              const target = d.target || "";
-              const agent = d.agentId || "";
-              const tag = status === "approved" ? "[browser_approved]" : "[browser_denied]";
-              const verb = status === "approved" ? "approved — executing" : "denied — cancelled";
+              const status = d.status || 'resolved';
+              const action = d.action || 'browser action';
+              const target = d.target || '';
+              const agent = d.agentId || '';
+              const tag = status === 'approved' ? '[browser_approved]' : '[browser_denied]';
+              const verb = status === 'approved' ? 'approved — executing' : 'denied — cancelled';
               injectSystemMessage(
                 currentSession,
-                `${tag} Browser ${String(action).replace("browser_", "")} ${verb}${target ? ` (${target})` : ""}${agent ? ` for ${agent}` : ""}`,
-                "approval.resolved",
+                `${tag} Browser ${String(action).replace('browser_', '')} ${verb}${target ? ` (${target})` : ''}${agent ? ` for ${agent}` : ''}`,
+                'approval.resolved',
               );
               break;
             }
 
-            case "project_progress": {
-              const subtype = data.metadata?.subtype || (data as Record<string, unknown>).subtype || "";
-              const taskTitle = (data as Record<string, unknown>).taskTitle || "Task";
-              const agent = (data as Record<string, unknown>).agent || "";
+            case 'project_progress': {
+              const subtype =
+                data.metadata?.subtype || (data as Record<string, unknown>).subtype || '';
+              const taskTitle = (data as Record<string, unknown>).taskTitle || 'Task';
+              const agent = (data as Record<string, unknown>).agent || '';
               const quality = (data as Record<string, unknown>).quality;
-              const progress = (data as Record<string, unknown>).progress || "";
-              const reason = (data as Record<string, unknown>).reason || "";
-              const progressProjectId = String((data as Record<string, unknown>).projectId || "");
+              const progress = (data as Record<string, unknown>).progress || '';
+              const reason = (data as Record<string, unknown>).reason || '';
+              const progressProjectId = String((data as Record<string, unknown>).projectId || '');
 
               // Update plan store based on subtype
               if (progressProjectId) {
                 switch (subtype) {
-                  case "task_assigned":
-                    updateTaskStatus(progressProjectId, String(taskTitle), "assigned", String(agent));
+                  case 'task_assigned':
+                    updateTaskStatus(
+                      progressProjectId,
+                      String(taskTitle),
+                      'assigned',
+                      String(agent),
+                    );
                     break;
-                  case "task_completed":
-                    updateTaskStatus(progressProjectId, String(taskTitle), "completed", String(agent), quality != null ? Number(quality) : undefined);
+                  case 'task_completed':
+                    updateTaskStatus(
+                      progressProjectId,
+                      String(taskTitle),
+                      'completed',
+                      String(agent),
+                      quality != null ? Number(quality) : undefined,
+                    );
                     break;
-                  case "task_failed":
-                    updateTaskStatus(progressProjectId, String(taskTitle), "failed", String(agent));
+                  case 'task_failed':
+                    updateTaskStatus(progressProjectId, String(taskTitle), 'failed', String(agent));
                     break;
-                  case "project_completed":
-                    updatePlanStatus(progressProjectId, "completed");
+                  case 'project_completed':
+                    updatePlanStatus(progressProjectId, 'completed');
                     break;
                 }
               }
 
-              let message = "";
+              let message = '';
               switch (subtype) {
-                case "task_assigned":
-                  message = `[project_progress:task_assigned] ${agent} picked up: ${taskTitle}${progress ? ` (${progress})` : ""}`;
+                case 'task_assigned':
+                  message = `[project_progress:task_assigned] ${agent} picked up: ${taskTitle}${progress ? ` (${progress})` : ''}`;
                   break;
-                case "task_completed":
-                  message = `[project_progress:task_completed] ${taskTitle} completed by ${agent}${quality ? ` — quality ${quality}` : ""}${progress ? ` (${progress})` : ""}`;
+                case 'task_completed':
+                  message = `[project_progress:task_completed] ${taskTitle} completed by ${agent}${quality ? ` — quality ${quality}` : ''}${progress ? ` (${progress})` : ''}`;
                   break;
-                case "task_failed":
-                  message = `[project_progress:task_failed] ${taskTitle} failed${agent ? ` (${agent})` : ""}${reason ? ` — ${reason}` : ""}${progress ? ` (${progress})` : ""}`;
+                case 'task_failed':
+                  message = `[project_progress:task_failed] ${taskTitle} failed${agent ? ` (${agent})` : ''}${reason ? ` — ${reason}` : ''}${progress ? ` (${progress})` : ''}`;
                   break;
-                case "project_created":
+                case 'project_created':
                   message = `[project_progress:project_created] New project: ${taskTitle}`;
                   break;
-                case "project_decomposed":
-                  message = `[project_progress:project_decomposed] ${taskTitle} broken into ${progress || "subtasks"}`;
+                case 'project_decomposed':
+                  message = `[project_progress:project_decomposed] ${taskTitle} broken into ${progress || 'subtasks'}`;
                   break;
-                case "project_completed":
-                  message = `[project_progress:project_completed] Project complete: ${taskTitle}${progress ? ` (${progress})` : ""}`;
+                case 'project_completed':
+                  message = `[project_progress:project_completed] Project complete: ${taskTitle}${progress ? ` (${progress})` : ''}`;
                   break;
-                case "quality_gate_failed": {
+                case 'quality_gate_failed': {
                   const minQ = (data as Record<string, unknown>).minQuality || 3.0;
-                  message = `[project_progress:quality_gate_failed] ⚠️ Project PAUSED — ${taskTitle} scored ${quality}/${minQ} quality. ${progress || ""}. Type "resume" to continue or "cancel" to abort.`;
+                  message = `[project_progress:quality_gate_failed] ⚠️ Project PAUSED — ${taskTitle} scored ${quality}/${minQ} quality. ${progress || ''}. Type "resume" to continue or "cancel" to abort.`;
                   break;
                 }
-                case "merge_pr_created": {
-                  const prUrl = (data as Record<string, unknown>).prUrl || "";
-                  message = `[project_progress:pr_created] 🔗 Pull request created: ${prUrl || taskTitle}${agent ? ` (${agent})` : ""}`;
+                case 'merge_pr_created': {
+                  const prUrl = (data as Record<string, unknown>).prUrl || '';
+                  message = `[project_progress:pr_created] 🔗 Pull request created: ${prUrl || taskTitle}${agent ? ` (${agent})` : ''}`;
                   break;
                 }
                 default:
-                  message = `[project_progress] ${taskTitle}${progress ? ` — ${progress}` : ""}`;
+                  message = `[project_progress] ${taskTitle}${progress ? ` — ${progress}` : ''}`;
               }
 
               injectSystemMessage(currentSession, message, `project_progress.${subtype}`);
               break;
             }
 
-            case "file_diff": {
-              const filePath = (data as Record<string, unknown>).path || "";
-              const action = (data as Record<string, unknown>).subtype || "edit";
-              const agent = (data as Record<string, unknown>).agentId || "";
+            case 'file_diff': {
+              const filePath = (data as Record<string, unknown>).path || '';
+              const action = (data as Record<string, unknown>).subtype || 'edit';
+              const agent = (data as Record<string, unknown>).agentId || '';
               const lines = (data as Record<string, unknown>).linesChanged || 0;
-              const preview = String((data as Record<string, unknown>).preview || "").slice(0, 200);
-              const icon = action === "create" ? "📄" : "✏️";
-              const msg = `[file_diff] ${icon} ${agent} ${action}d ${filePath} (${lines} lines)${preview ? `\n\`\`\`\n${preview}\n\`\`\`` : ""}`;
-              injectSystemMessage(currentSession, msg, "file_diff");
+              const preview = String((data as Record<string, unknown>).preview || '').slice(0, 200);
+              const icon = action === 'create' ? '📄' : '✏️';
+              const msg = `[file_diff] ${icon} ${agent} ${action}d ${filePath} (${lines} lines)${preview ? `\n\`\`\`\n${preview}\n\`\`\`` : ''}`;
+              injectSystemMessage(currentSession, msg, 'file_diff');
               break;
             }
           }

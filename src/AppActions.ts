@@ -2,7 +2,7 @@
  * AppActions factory — creates the AppActions object for MainApp.
  * Extracted from App.tsx to keep modularity score ≤ 800 LOC.
  */
-import type { Dispatch, SetStateAction, MutableRefObject } from "react";
+import type { Dispatch, SetStateAction, MutableRefObject } from 'react';
 import type {
   AppActions,
   Session,
@@ -12,7 +12,7 @@ import type {
   QueuedMessage,
   FeedEntry,
   UploadedFile,
-} from "./store";
+} from './store';
 import {
   uid,
   createSession,
@@ -32,12 +32,12 @@ import {
   fetchFullSessionMessages,
   loadSessions,
   saveSessions,
-} from "./store";
-import type { ActivityStatus, ChatMessage } from "./openclaw";
+} from './store';
+import type { ActivityStatus, ChatMessage } from './openclaw';
 
-const AGENT_KEY = "shre-active-agent";
-const COMPACT_KEY = "shre-compact";
-const WRITE_ENABLED_KEY = "shre-write-enabled";
+const AGENT_KEY = 'shre-active-agent';
+const COMPACT_KEY = 'shre-compact';
+const WRITE_ENABLED_KEY = 'shre-write-enabled';
 
 export interface ActionDeps {
   sessionsRef: MutableRefObject<Session[]>;
@@ -75,20 +75,45 @@ export interface ActionDeps {
 
 export function buildActions(deps: ActionDeps): AppActions {
   const {
-    sessionsRef, agentRef, queueRef, draftsRef, draftSaveTimer, crossTabRef,
+    sessionsRef,
+    agentRef,
+    queueRef,
+    draftsRef,
+    draftSaveTimer,
+    crossTabRef,
     activeSessionId,
-    setActiveSessionId, setOpenTabs, setActiveAgentId, setView,
-    setActivity, setFeed, setFiles, setStreaming, setStreamText,
-    setStatusLine, setGatewayUp, setSidebarOpen, setSyncing, setTheme,
-    setCompact, setWriteEnabled, setClaudeCliMode, setReplyToIndex, setThemeCustomState,
-    updateSessions, onLogout,
+    setActiveSessionId,
+    setOpenTabs,
+    setActiveAgentId,
+    setView,
+    setActivity,
+    setFeed,
+    setFiles,
+    setStreaming,
+    setStreamText,
+    setStatusLine,
+    setGatewayUp,
+    setSidebarOpen,
+    setSyncing,
+    setTheme,
+    setCompact,
+    setWriteEnabled,
+    setClaudeCliMode,
+    setReplyToIndex,
+    setThemeCustomState,
+    updateSessions,
+    onLogout,
   } = deps;
 
   const actions: AppActions = {
     newSession: () => {
       const s = createSession(undefined, agentRef.current);
       updateSessions((prev) => [...prev, s]);
-      setOpenTabs((prev) => { const next = [...prev, s.id]; saveTabs(next); return next; });
+      setOpenTabs((prev) => {
+        const next = [...prev, s.id];
+        saveTabs(next);
+        return next;
+      });
       return s.id;
     },
 
@@ -96,7 +121,7 @@ export function buildActions(deps: ActionDeps): AppActions {
       const RESUME_WINDOW = 30 * 60 * 1000;
       const now = Date.now();
       const existing = sessionsRef.current.find(
-        (s) => s.type === "voice" && s.agentId === agentId && (now - s.updatedAt) < RESUME_WINDOW
+        (s) => s.type === 'voice' && s.agentId === agentId && now - s.updatedAt < RESUME_WINDOW,
       );
       if (existing) return existing.id;
       const s = createVoiceSession(agentId);
@@ -111,9 +136,13 @@ export function buildActions(deps: ActionDeps): AppActions {
       if (session?.agentId) {
         setActiveAgentId(session.agentId);
         localStorage.setItem(AGENT_KEY, session.agentId);
-        const PINNED_KEY = "shre-pinned-sessions";
+        const PINNED_KEY = 'shre-pinned-sessions';
         let pinned: Record<string, string> = {};
-        try { pinned = JSON.parse(localStorage.getItem(PINNED_KEY) || "{}"); } catch (err) { console.debug("pinned sessions JSON parse", err); }
+        try {
+          pinned = JSON.parse(localStorage.getItem(PINNED_KEY) || '{}');
+        } catch (err) {
+          console.debug('pinned sessions JSON parse', err);
+        }
         pinned[session.agentId] = id;
         localStorage.setItem(PINNED_KEY, JSON.stringify(pinned));
       }
@@ -153,9 +182,9 @@ export function buildActions(deps: ActionDeps): AppActions {
         const next = prev.map((s) => {
           if (s.id !== sessionId) return s;
           let messages = [...s.messages];
-          if (msg.role === "assistant" && !msg.meta?.partial && !msg.meta?.system) {
+          if (msg.role === 'assistant' && !msg.meta?.partial && !msg.meta?.system) {
             const last = messages[messages.length - 1];
-            if (last?.role === "assistant" && last.meta?.partial) {
+            if (last?.role === 'assistant' && last.meta?.partial) {
               messages = messages.slice(0, -1);
             }
           }
@@ -168,9 +197,7 @@ export function buildActions(deps: ActionDeps): AppActions {
     },
 
     updateSessionTitle: (sessionId, title) => {
-      updateSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, title } : s))
-      );
+      updateSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title } : s)));
     },
 
     addActivity: (sessionId, status, summary) => {
@@ -179,7 +206,7 @@ export function buildActions(deps: ActionDeps): AppActions {
         const evt = {
           id: uid(),
           sessionId,
-          sessionTitle: session?.title || "Chat",
+          sessionTitle: session?.title || 'Chat',
           agentId: session?.agentId || agentRef.current,
           status,
           summary,
@@ -197,7 +224,7 @@ export function buildActions(deps: ActionDeps): AppActions {
         const entry: FeedEntry = {
           id: uid(),
           sessionId,
-          sessionTitle: session?.title || "Chat",
+          sessionTitle: session?.title || 'Chat',
           type,
           message,
           meta: { ...meta, agent: session?.agentId || agentRef.current },
@@ -225,8 +252,15 @@ export function buildActions(deps: ActionDeps): AppActions {
       });
     },
 
-    enqueue: (msg) => { queueRef.current.push(msg); saveQueue(queueRef.current); },
-    dequeue: () => { const msg = queueRef.current.shift(); saveQueue(queueRef.current); return msg; },
+    enqueue: (msg) => {
+      queueRef.current.push(msg);
+      saveQueue(queueRef.current);
+    },
+    dequeue: () => {
+      const msg = queueRef.current.shift();
+      saveQueue(queueRef.current);
+      return msg;
+    },
 
     setStreaming,
     setStreamText,
@@ -238,9 +272,13 @@ export function buildActions(deps: ActionDeps): AppActions {
       setActiveAgentId(agentId);
       localStorage.setItem(AGENT_KEY, agentId);
 
-      const PINNED_KEY = "shre-pinned-sessions";
+      const PINNED_KEY = 'shre-pinned-sessions';
       let pinned: Record<string, string> = {};
-      try { pinned = JSON.parse(localStorage.getItem(PINNED_KEY) || "{}"); } catch (err) { console.debug("pinned sessions JSON parse", err); }
+      try {
+        pinned = JSON.parse(localStorage.getItem(PINNED_KEY) || '{}');
+      } catch (err) {
+        console.debug('pinned sessions JSON parse', err);
+      }
       const pinnedId = pinned[agentId];
       const pinnedSession = pinnedId ? sessionsRef.current.find((s) => s.id === pinnedId) : null;
 
@@ -254,14 +292,16 @@ export function buildActions(deps: ActionDeps): AppActions {
           return next;
         });
         // Restore trimmed sessions from server (localStorage quota may have stripped messages)
-        if (target.trimmed || (target.messages.length <= 2 && target.updatedAt > target.createdAt + 60_000)) {
+        if (
+          target.trimmed ||
+          (target.messages.length <= 2 && target.updatedAt > target.createdAt + 60_000)
+        ) {
           fetchFullSessionMessages(target.id).then((serverMessages) => {
             if (serverMessages && serverMessages.length > target.messages.length) {
               updateSessions((prev) =>
-                prev.map((s) => s.id === target.id
-                  ? { ...s, messages: serverMessages, trimmed: undefined }
-                  : s
-                )
+                prev.map((s) =>
+                  s.id === target.id ? { ...s, messages: serverMessages, trimmed: undefined } : s,
+                ),
               );
             }
           });
@@ -271,7 +311,7 @@ export function buildActions(deps: ActionDeps): AppActions {
       if (pinnedSession) {
         activateSession(pinnedSession);
       } else {
-        const agentSessions = sessionsRef.current.filter((s) => (s.agentId || "main") === agentId);
+        const agentSessions = sessionsRef.current.filter((s) => (s.agentId || 'main') === agentId);
         if (agentSessions.length > 0) {
           const mostRecent = agentSessions.sort((a, b) => b.updatedAt - a.updatedAt)[0];
           activateSession(mostRecent);
@@ -282,17 +322,15 @@ export function buildActions(deps: ActionDeps): AppActions {
     setSyncing,
 
     toggleTheme: () => {
-      document.documentElement.classList.add("theme-transitioning");
-      setTheme((prev) => prev === "dark" ? "light" : "dark");
-      setTimeout(() => document.documentElement.classList.remove("theme-transitioning"), 300);
+      document.documentElement.classList.add('theme-transitioning');
+      setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+      setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 300);
     },
 
     replaceSessionMessages: (sessionId: string, msgs: ChatMessage[]) => {
       updateSessions((prev) => {
         const next = prev.map((s) =>
-          s.id === sessionId
-            ? { ...s, messages: msgs, updatedAt: Date.now() }
-            : s
+          s.id === sessionId ? { ...s, messages: msgs, updatedAt: Date.now() } : s,
         );
         const updated = next.find((s) => s.id === sessionId);
         if (updated) saveSessionImmediate(updated);
@@ -300,7 +338,11 @@ export function buildActions(deps: ActionDeps): AppActions {
       });
     },
 
-    setMessageFeedback: (sessionId: string, msgIndex: number, feedback: "like" | "dislike" | null) => {
+    setMessageFeedback: (
+      sessionId: string,
+      msgIndex: number,
+      feedback: 'like' | 'dislike' | null,
+    ) => {
       updateSessions((prev) =>
         prev.map((s) => {
           if (s.id !== sessionId) return s;
@@ -309,7 +351,7 @@ export function buildActions(deps: ActionDeps): AppActions {
             msgs[msgIndex] = { ...msgs[msgIndex], feedback };
           }
           return { ...s, messages: msgs };
-        })
+        }),
       );
     },
 
@@ -322,7 +364,7 @@ export function buildActions(deps: ActionDeps): AppActions {
             msgs[messageIndex] = { ...msgs[messageIndex], annotation: text || undefined };
           }
           return { ...s, messages: msgs };
-        })
+        }),
       );
     },
 
@@ -339,18 +381,19 @@ export function buildActions(deps: ActionDeps): AppActions {
             } else {
               existing[emoji] = 1;
             }
-            msgs[messageIndex] = { ...msgs[messageIndex], reactions: Object.keys(existing).length > 0 ? existing : undefined };
+            msgs[messageIndex] = {
+              ...msgs[messageIndex],
+              reactions: Object.keys(existing).length > 0 ? existing : undefined,
+            };
           }
           return { ...s, messages: msgs };
-        })
+        }),
       );
     },
 
     togglePin: (sessionId: string) => {
       updateSessions((prev) =>
-        prev.map((s) =>
-          s.id === sessionId ? { ...s, pinned: !s.pinned } : s
-        )
+        prev.map((s) => (s.id === sessionId ? { ...s, pinned: !s.pinned } : s)),
       );
     },
 
@@ -363,7 +406,7 @@ export function buildActions(deps: ActionDeps): AppActions {
           const existing = s.tags || [];
           if (existing.includes(normalized)) return s;
           return { ...s, tags: [...existing, normalized] };
-        })
+        }),
       );
     },
 
@@ -372,7 +415,7 @@ export function buildActions(deps: ActionDeps): AppActions {
         prev.map((s) => {
           if (s.id !== sessionId) return s;
           return { ...s, tags: (s.tags || []).filter((t) => t !== tag) };
-        })
+        }),
       );
     },
 
@@ -392,14 +435,12 @@ export function buildActions(deps: ActionDeps): AppActions {
     },
     setClaudeCliMode: (on: boolean) => {
       setClaudeCliMode(on);
-      localStorage.setItem("shre-claude-cli-mode", String(on));
+      localStorage.setItem('shre-claude-cli-mode', String(on));
     },
 
     setSystemPrompt: (sessionId: string, prompt: string) => {
       updateSessions((prev) =>
-        prev.map((s) =>
-          s.id === sessionId ? { ...s, systemPrompt: prompt || undefined } : s
-        )
+        prev.map((s) => (s.id === sessionId ? { ...s, systemPrompt: prompt || undefined } : s)),
       );
     },
 
@@ -415,12 +456,13 @@ export function buildActions(deps: ActionDeps): AppActions {
 
       const recentMsgs = branchedMessages.slice(-4);
       const contextLines = recentMsgs.map((m) => {
-        const snippet = m.content.replace(/\n/g, " ").slice(0, 200);
-        return `- [${m.role}]: ${snippet}${m.content.length > 200 ? "..." : ""}`;
+        const snippet = m.content.replace(/\n/g, ' ').slice(0, 200);
+        return `- [${m.role}]: ${snippet}${m.content.length > 200 ? '...' : ''}`;
       });
-      const branchContext = `[This conversation was branched from "${source.title}" at message ${messageIndex + 1} of ${source.messages.length}. ` +
+      const branchContext =
+        `[This conversation was branched from "${source.title}" at message ${messageIndex + 1} of ${source.messages.length}. ` +
         `The user wants to continue or follow up on what was being discussed. ` +
-        `Recent context:\n${contextLines.join("\n")}\n` +
+        `Recent context:\n${contextLines.join('\n')}\n` +
         `IMPORTANT: When the user says "this", "status on this", or asks if something is done/complete, ` +
         `they are referring to the task or topic in the conversation above. ` +
         `Review the full conversation history to determine: what was being worked on, ` +
@@ -429,16 +471,20 @@ export function buildActions(deps: ActionDeps): AppActions {
       const newId = uid();
       const branched: Session = {
         id: newId,
-        title: source.title + " (branch)",
+        title: source.title + ' (branch)',
         agentId: source.agentId,
         messages: branchedMessages.map((m) => ({ ...m })),
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        systemPrompt: (source.systemPrompt ? source.systemPrompt + "\n\n" : "") + branchContext,
+        systemPrompt: (source.systemPrompt ? source.systemPrompt + '\n\n' : '') + branchContext,
         parentId: source.id,
       };
       updateSessions((prev) => [...prev, branched]);
-      setOpenTabs((prev) => { const next = [...prev, newId]; saveTabs(next); return next; });
+      setOpenTabs((prev) => {
+        const next = [...prev, newId];
+        saveTabs(next);
+        return next;
+      });
       setActiveSessionId(newId);
       saveActiveSession(newId);
       return newId;
@@ -448,11 +494,14 @@ export function buildActions(deps: ActionDeps): AppActions {
       if (text) draftsRef.current[sessionId] = text;
       else delete draftsRef.current[sessionId];
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-      draftSaveTimer.current = setTimeout(() => { saveDrafts(draftsRef.current); draftSaveTimer.current = null; }, 500);
+      draftSaveTimer.current = setTimeout(() => {
+        saveDrafts(draftsRef.current);
+        draftSaveTimer.current = null;
+      }, 500);
     },
 
     getDraft: (sessionId: string) => {
-      return draftsRef.current[sessionId] || "";
+      return draftsRef.current[sessionId] || '';
     },
 
     setReplyTo: (index: number | null) => {

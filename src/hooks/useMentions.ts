@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 
 export interface MentionItem {
   id: string;
@@ -49,11 +49,10 @@ export function useMentions(params: UseMentionsParams): UseMentionsReturn {
 
   const mentionFiltered = useMemo(() => {
     if (mentionQuery === null) return [];
-    if (mentionQuery === "") return agents.slice(0, 15);
+    if (mentionQuery === '') return agents.slice(0, 15);
     return agents.filter(
       (a) =>
-        a.name.toLowerCase().includes(mentionQuery) ||
-        a.id.toLowerCase().includes(mentionQuery)
+        a.name.toLowerCase().includes(mentionQuery) || a.id.toLowerCase().includes(mentionQuery),
     );
   }, [mentionQuery, agents]);
 
@@ -70,7 +69,7 @@ export function useMentions(params: UseMentionsParams): UseMentionsReturn {
   useEffect(() => {
     if (mentionOpen && mentionRef.current) {
       const active = mentionRef.current.querySelector("[data-mention-active='true']");
-      if (active) (active as HTMLElement).scrollIntoView({ block: "nearest" });
+      if (active) (active as HTMLElement).scrollIntoView({ block: 'nearest' });
     }
   }, [mentionIndex, mentionOpen]);
 
@@ -83,7 +82,7 @@ export function useMentions(params: UseMentionsParams): UseMentionsReturn {
       setMentionOpen(false);
       inputRef.current?.focus();
     },
-    [input, setInput, inputRef]
+    [input, setInput, inputRef],
   );
 
   const clearMention = useCallback(() => {
@@ -98,17 +97,17 @@ export function useMentions(params: UseMentionsParams): UseMentionsReturn {
 
       const mentionName = match[1].toLowerCase();
       const agent = agents.find(
-        (a) => a.name.toLowerCase() === mentionName || a.id.toLowerCase() === mentionName
+        (a) => a.name.toLowerCase() === mentionName || a.id.toLowerCase() === mentionName,
       );
 
       // Remove the @@mention from visible text
-      const cleanText = text.replace(/@@\w+\s*/, "").trim();
+      const cleanText = text.replace(/@@\w+\s*/, '').trim();
       return {
         cleanText,
         agentId: agent?.id ?? mentionAgent?.id ?? null,
       };
     },
-    [agents, mentionAgent]
+    [agents, mentionAgent],
   );
 
   return {

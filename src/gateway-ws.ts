@@ -21,10 +21,10 @@ export type {
   QueuedMessage,
   StreamStallState,
   StreamStallInfo,
-} from "./gateway/ws-types";
+} from './gateway/ws-types';
 
 // Re-export token management
-export { clearGatewayToken } from "./gateway/ws-token";
+export { clearGatewayToken } from './gateway/ws-token';
 
 // Re-export state/listeners
 export {
@@ -38,7 +38,7 @@ export {
   onStreamStall,
   onHealthChange,
   getLastHealth,
-} from "./gateway/ws-state";
+} from './gateway/ws-state';
 
 // Re-export connection management
 export {
@@ -48,10 +48,10 @@ export {
   disconnectGateway,
   startHealthPoll,
   stopHealthPoll,
-} from "./gateway/ws-connection";
+} from './gateway/ws-connection';
 
 // Re-export queue
-export { queueMessage, dequeueMessage } from "./gateway/ws-queue";
+export { queueMessage, dequeueMessage } from './gateway/ws-queue';
 
 // Re-export chat operations
 export {
@@ -60,4 +60,4 @@ export {
   abortChatWS,
   abortAllStreams,
   loadHistoryWS,
-} from "./gateway/ws-chat";
+} from './gateway/ws-chat';

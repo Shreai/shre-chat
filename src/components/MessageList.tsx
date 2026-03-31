@@ -1,13 +1,13 @@
-import React, { useRef, useEffect, useCallback, useMemo } from "react";
-import type { Virtualizer } from "@tanstack/react-virtual";
-import type { ChatMessage } from "../openclaw";
-import type { UserProfile } from "../store";
-import type { ProcessRun } from "./process-bar/types";
-import MessageBubble, { SystemEventChip, ToolExecutionChip } from "./MessageBubble";
-import { BrowserApprovalCard } from "./message-parts/BrowserApprovalCard";
-import type { ToolExecStep } from "./MessageBubble";
-import { WelcomeScreen } from "./WelcomeScreen";
-import { formatTime } from "../chat-utils";
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import type { Virtualizer } from '@tanstack/react-virtual';
+import type { ChatMessage } from '../openclaw';
+import type { UserProfile } from '../store';
+import type { ProcessRun } from './process-bar/types';
+import MessageBubble, { SystemEventChip, ToolExecutionChip } from './MessageBubble';
+import { BrowserApprovalCard } from './message-parts/BrowserApprovalCard';
+import type { ToolExecStep } from './MessageBubble';
+import { WelcomeScreen } from './WelcomeScreen';
+import { formatTime } from '../chat-utils';
 
 interface Agent {
   id: string;
@@ -19,10 +19,18 @@ interface Agent {
 function toToolExecStep(msg: ChatMessage): ToolExecStep {
   const m = msg.meta || {};
   return {
-    id: `tool-${msg.timestamp}-${m.tool || "unknown"}`,
-    tool: m.tool || "unknown",
-    status: m.status === "error" ? "error" : m.status === "running" ? "running" : "success",
-    input: m.inputJson ? (() => { try { return JSON.parse(m.inputJson); } catch { return undefined; } })() : undefined,
+    id: `tool-${msg.timestamp}-${m.tool || 'unknown'}`,
+    tool: m.tool || 'unknown',
+    status: m.status === 'error' ? 'error' : m.status === 'running' ? 'running' : 'success',
+    input: m.inputJson
+      ? (() => {
+          try {
+            return JSON.parse(m.inputJson);
+          } catch {
+            return undefined;
+          }
+        })()
+      : undefined,
     outputPreview: m.outputPreview || undefined,
     error: m.error || undefined,
     latencyMs: m.duration ? parseInt(m.duration, 10) || undefined : undefined,
@@ -67,13 +75,18 @@ export interface MessageListProps {
   PULL_THRESHOLD: number;
 
   // Stream state
-  streamStall: "stalling" | "retrying" | "clear" | null;
+  streamStall: 'stalling' | 'retrying' | 'clear' | null;
   stallCountdown: number;
   streamElapsed: number;
   streamPhase: string;
   activeToolName: string | null;
   compacting: boolean;
-  pendingApproval: { approvalId: string; tool: string; reason: string; input?: Record<string, unknown> } | null;
+  pendingApproval: {
+    approvalId: string;
+    tool: string;
+    reason: string;
+    input?: Record<string, unknown>;
+  } | null;
 
   // Process runs
   runs: ProcessRun[];
@@ -90,7 +103,7 @@ export interface MessageListProps {
   onJumpToLatest: () => void;
   onImageClick: (src: string) => void;
   onSelectTemplate: (prompt: string) => void;
-  onFeedback: (msgIndex: number, fb: "like" | "dislike") => void;
+  onFeedback: (msgIndex: number, fb: 'like' | 'dislike') => void;
   onEditStart: (msgIndex: number, content: string) => void;
   onEditChange: (text: string) => void;
   onEditCancel: () => void;
@@ -113,64 +126,136 @@ export interface MessageListProps {
 
 export function MessageList(props: MessageListProps) {
   const {
-    filteredMessages, messages, streaming, streamText, syncing, compact,
-    currentAgent, activeAgentId, userName, activeSessionId,
-    chatSearchOpen, chatSearch, chatSearchResults, chatSearchIndex,
-    selectedMsgIndex, editingMsgIndex, editingMsgText,
-    scrollRef, showJumpToLatest, newMsgStartIndex,
-    pullDistance, pullRefreshing, PULL_THRESHOLD,
-    streamStall, stallCountdown, streamElapsed, streamPhase, activeToolName,
-    compacting, pendingApproval,
-    runs, getRunForMessage, userProfile,
-    onScroll, onPullStart, onPullMove, onPullEnd, onJumpToLatest,
-    onImageClick, onSelectTemplate, onFeedback,
-    onEditStart, onEditChange, onEditCancel, onEdit,
-    onRegenerate, onAnnotate, onBranch, onReaction, onReply, onRetry,
-    onRunCommand, onContentExpand, onApprove, onDeny,
-    virtualizer, useVirtual,
+    filteredMessages,
+    messages,
+    streaming,
+    streamText,
+    syncing,
+    compact,
+    currentAgent,
+    activeAgentId,
+    userName,
+    activeSessionId,
+    chatSearchOpen,
+    chatSearch,
+    chatSearchResults,
+    chatSearchIndex,
+    selectedMsgIndex,
+    editingMsgIndex,
+    editingMsgText,
+    scrollRef,
+    showJumpToLatest,
+    newMsgStartIndex,
+    pullDistance,
+    pullRefreshing,
+    PULL_THRESHOLD,
+    streamStall,
+    stallCountdown,
+    streamElapsed,
+    streamPhase,
+    activeToolName,
+    compacting,
+    pendingApproval,
+    runs,
+    getRunForMessage,
+    userProfile,
+    onScroll,
+    onPullStart,
+    onPullMove,
+    onPullEnd,
+    onJumpToLatest,
+    onImageClick,
+    onSelectTemplate,
+    onFeedback,
+    onEditStart,
+    onEditChange,
+    onEditCancel,
+    onEdit,
+    onRegenerate,
+    onAnnotate,
+    onBranch,
+    onReaction,
+    onReply,
+    onRetry,
+    onRunCommand,
+    onContentExpand,
+    onApprove,
+    onDeny,
+    virtualizer,
+    useVirtual,
   } = props;
 
-  const renderMessageProps = useCallback((msg: ChatMessage, i: number) => ({
-    message: msg,
-    compact,
-    agentName: currentAgent.name,
-    agentEmoji: currentAgent.emoji,
-    userName,
-    onImageClick,
-    searchHighlight: chatSearchOpen && chatSearch.trim() ? chatSearch : undefined,
-    isCurrentSearchHit: chatSearchOpen && chatSearchResults[chatSearchIndex] === i,
-    selected: selectedMsgIndex === i,
-    onRunCommand,
-    onFeedback: (fb: "like" | "dislike") => onFeedback(i, fb),
-    editing: editingMsgIndex === i,
-    editText: editingMsgIndex === i ? editingMsgText : "",
-    onEditStart: () => onEditStart(i, msg.content),
-    onEditChange: (text: string) => onEditChange(text),
-    onEditCancel,
-    onEdit: (newText: string) => onEdit(i, newText),
-    onRegenerate: (!streaming && msg.role === "assistant" && i === filteredMessages.length - 1)
-      ? () => onRegenerate(i)
-      : undefined,
-    onAnnotate: (text: string) => onAnnotate(i, text),
-    onBranch: () => onBranch(i),
-    onReaction: (emoji: string) => onReaction(i, emoji),
-    onReply: () => onReply(i),
-    replyPreview: msg.replyTo != null
-      ? (filteredMessages[msg.replyTo] ?? messages[msg.replyTo])?.content.replace(/\n/g, " ").slice(0, 80) ?? null
-      : null,
-    processRun: getRunForMessage(msg, i),
-    onRetry: (!streaming && msg.role === "assistant" && msg.content.startsWith("Error:"))
-      ? () => onRetry(i)
-      : undefined,
-    onContentExpand,
-  }), [
-    compact, currentAgent.name, currentAgent.emoji, userName, onImageClick,
-    chatSearchOpen, chatSearch, chatSearchResults, chatSearchIndex,
-    selectedMsgIndex, onRunCommand, onFeedback, editingMsgIndex, editingMsgText,
-    onEditStart, onEditChange, onEditCancel, onEdit, streaming, filteredMessages,
-    onRegenerate, onAnnotate, onBranch, onReaction, onReply, getRunForMessage,
-    onRetry, onContentExpand,
-  ]);
+  const renderMessageProps = useCallback(
+    (msg: ChatMessage, i: number) => ({
+      message: msg,
+      compact,
+      agentName: currentAgent.name,
+      agentEmoji: currentAgent.emoji,
+      userName,
+      onImageClick,
+      searchHighlight: chatSearchOpen && chatSearch.trim() ? chatSearch : undefined,
+      isCurrentSearchHit: chatSearchOpen && chatSearchResults[chatSearchIndex] === i,
+      selected: selectedMsgIndex === i,
+      onRunCommand,
+      onFeedback: (fb: 'like' | 'dislike') => onFeedback(i, fb),
+      editing: editingMsgIndex === i,
+      editText: editingMsgIndex === i ? editingMsgText : '',
+      onEditStart: () => onEditStart(i, msg.content),
+      onEditChange: (text: string) => onEditChange(text),
+      onEditCancel,
+      onEdit: (newText: string) => onEdit(i, newText),
+      onRegenerate:
+        !streaming && msg.role === 'assistant' && i === filteredMessages.length - 1
+          ? () => onRegenerate(i)
+          : undefined,
+      onAnnotate: (text: string) => onAnnotate(i, text),
+      onBranch: () => onBranch(i),
+      onReaction: (emoji: string) => onReaction(i, emoji),
+      onReply: () => onReply(i),
+      replyPreview:
+        msg.replyTo != null
+          ? ((filteredMessages[msg.replyTo] ?? messages[msg.replyTo])?.content
+              .replace(/\n/g, ' ')
+              .slice(0, 80) ?? null)
+          : null,
+      processRun: getRunForMessage(msg, i),
+      onRetry:
+        !streaming && msg.role === 'assistant' && msg.content.startsWith('Error:')
+          ? () => onRetry(i)
+          : undefined,
+      onContentExpand,
+    }),
+    [
+      compact,
+      currentAgent.name,
+      currentAgent.emoji,
+      userName,
+      onImageClick,
+      chatSearchOpen,
+      chatSearch,
+      chatSearchResults,
+      chatSearchIndex,
+      selectedMsgIndex,
+      onRunCommand,
+      onFeedback,
+      editingMsgIndex,
+      editingMsgText,
+      onEditStart,
+      onEditChange,
+      onEditCancel,
+      onEdit,
+      streaming,
+      filteredMessages,
+      onRegenerate,
+      onAnnotate,
+      onBranch,
+      onReaction,
+      onReply,
+      getRunForMessage,
+      onRetry,
+      onContentExpand,
+    ],
+  );
 
   return (
     <>
@@ -188,34 +273,74 @@ export function MessageList(props: MessageListProps) {
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || pullRefreshing) && (
-          <div className="flex justify-center items-center transition-all" style={{ height: pullDistance, overflow: "hidden" }}>
-            <div className={`flex items-center gap-2 text-xs ${pullRefreshing ? "animate-pulse" : ""}`} style={{ color: pullDistance >= PULL_THRESHOLD ? "var(--c-accent)" : "var(--c-text-5)" }}>
-              <svg className={`h-4 w-4 transition-transform ${pullRefreshing ? "animate-spin" : ""}`} style={{ transform: pullDistance >= PULL_THRESHOLD && !pullRefreshing ? "rotate(180deg)" : "rotate(0deg)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-              {pullRefreshing ? "Reconnecting..." : pullDistance >= PULL_THRESHOLD ? "Release to reconnect" : "Pull to reconnect"}
+          <div
+            className="flex justify-center items-center transition-all"
+            style={{ height: pullDistance, overflow: 'hidden' }}
+          >
+            <div
+              className={`flex items-center gap-2 text-xs ${pullRefreshing ? 'animate-pulse' : ''}`}
+              style={{
+                color: pullDistance >= PULL_THRESHOLD ? 'var(--c-accent)' : 'var(--c-text-5)',
+              }}
+            >
+              <svg
+                className={`h-4 w-4 transition-transform ${pullRefreshing ? 'animate-spin' : ''}`}
+                style={{
+                  transform:
+                    pullDistance >= PULL_THRESHOLD && !pullRefreshing
+                      ? 'rotate(180deg)'
+                      : 'rotate(0deg)',
+                }}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+              {pullRefreshing
+                ? 'Reconnecting...'
+                : pullDistance >= PULL_THRESHOLD
+                  ? 'Release to reconnect'
+                  : 'Pull to reconnect'}
             </div>
           </div>
         )}
 
         {/* Empty state */}
-        {messages.length === 0 && !streaming && (
-          syncing ? (
+        {messages.length === 0 &&
+          !streaming &&
+          (syncing ? (
             <div className="max-w-3xl mx-auto space-y-4 animate-pulse">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}>
-                  <div className="rounded-2xl px-4 py-3" style={{
-                    background: "var(--c-bg-card)",
-                    width: `${45 + (i % 3) * 15}%`,
-                    minHeight: i % 2 === 0 ? "36px" : "60px",
-                  }}>
+                <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className="rounded-2xl px-4 py-3"
+                    style={{
+                      background: 'var(--c-bg-card)',
+                      width: `${45 + (i % 3) * 15}%`,
+                      minHeight: i % 2 === 0 ? '36px' : '60px',
+                    }}
+                  >
                     <div className="space-y-2">
-                      <div className="h-3 rounded" style={{ background: "var(--c-border-2)", width: "90%" }} />
-                      {i % 2 !== 0 && <div className="h-3 rounded" style={{ background: "var(--c-border-2)", width: "60%" }} />}
+                      <div
+                        className="h-3 rounded"
+                        style={{ background: 'var(--c-border-2)', width: '90%' }}
+                      />
+                      {i % 2 !== 0 && (
+                        <div
+                          className="h-3 rounded"
+                          style={{ background: 'var(--c-border-2)', width: '60%' }}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
               ))}
               <div className="text-center pt-2">
-                <span className="text-[11px]" style={{ color: "var(--c-text-5)" }}>Syncing {currentAgent.name}'s history...</span>
+                <span className="text-[11px]" style={{ color: 'var(--c-text-5)' }}>
+                  Syncing {currentAgent.name}'s history...
+                </span>
               </div>
             </div>
           ) : (
@@ -225,12 +350,17 @@ export function MessageList(props: MessageListProps) {
               userProfile={userProfile}
               onSelectTemplate={onSelectTemplate}
             />
-          )
-        )}
+          ))}
 
         {/* Message list */}
         {useVirtual ? (
-          <div style={{ height: `${virtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const msg = filteredMessages[virtualRow.index];
               const i = virtualRow.index;
@@ -239,20 +369,27 @@ export function MessageList(props: MessageListProps) {
                   key={virtualRow.key}
                   data-index={virtualRow.index}
                   ref={virtualizer.measureElement}
-                  className={newMsgStartIndex.current !== null && virtualRow.index >= newMsgStartIndex.current ? "msg-enter" : undefined}
+                  className={
+                    newMsgStartIndex.current !== null &&
+                    virtualRow.index >= newMsgStartIndex.current
+                      ? 'msg-enter'
+                      : undefined
+                  }
                   style={{
-                    position: "absolute",
+                    position: 'absolute',
                     top: 0,
                     left: 0,
-                    width: "100%",
+                    width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
-                    paddingBottom: compact ? "4px" : "12px",
+                    paddingBottom: compact ? '4px' : '12px',
                   }}
                 >
-                  {msg.meta?.type === "tool_exec" ? (
+                  {msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
-                  ) : (msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
-                    msg.content?.includes("[browser_approval]") ? (
+                  ) : (msg as ChatMessage & { _system?: boolean })._system ||
+                    msg.meta?.system ||
+                    (msg.role === 'assistant' && msg.content?.startsWith('[system]')) ? (
+                    msg.content?.includes('[browser_approval]') ? (
                       <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
                     ) : (
                       <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
@@ -260,9 +397,14 @@ export function MessageList(props: MessageListProps) {
                   ) : (
                     <MessageBubble
                       {...renderMessageProps(msg, i)}
-                      onReplyClick={msg.replyTo != null ? () => {
-                        if (msg.replyTo != null) virtualizer.scrollToIndex(msg.replyTo, { align: 'center' });
-                      } : undefined}
+                      onReplyClick={
+                        msg.replyTo != null
+                          ? () => {
+                              if (msg.replyTo != null)
+                                virtualizer.scrollToIndex(msg.replyTo, { align: 'center' });
+                            }
+                          : undefined
+                      }
                     />
                   )}
                 </div>
@@ -275,22 +417,34 @@ export function MessageList(props: MessageListProps) {
               <div
                 key={msg.timestamp || i}
                 data-msg-index={i}
-                className={newMsgStartIndex.current !== null && i >= newMsgStartIndex.current ? "msg-enter" : undefined}
-                style={{ paddingBottom: compact ? "4px" : "12px" }}
+                className={
+                  newMsgStartIndex.current !== null && i >= newMsgStartIndex.current
+                    ? 'msg-enter'
+                    : undefined
+                }
+                style={{ paddingBottom: compact ? '4px' : '12px' }}
               >
-                {msg.meta?.type === "tool_exec" ? (
+                {msg.meta?.type === 'tool_exec' ? (
                   <ToolExecutionChip step={toToolExecStep(msg)} />
-                ) : (msg as ChatMessage & { _system?: boolean })._system || msg.meta?.system || (msg.role === "assistant" && msg.content?.startsWith("[system]")) ? (
+                ) : (msg as ChatMessage & { _system?: boolean })._system ||
+                  msg.meta?.system ||
+                  (msg.role === 'assistant' && msg.content?.startsWith('[system]')) ? (
                   <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
                 ) : (
                   <MessageBubble
                     {...renderMessageProps(msg, i)}
-                    onReplyClick={msg.replyTo != null ? () => {
-                      if (msg.replyTo != null) {
-                        const el = scrollRef.current?.querySelector(`[data-msg-index="${msg.replyTo}"]`);
-                        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }
-                    } : undefined}
+                    onReplyClick={
+                      msg.replyTo != null
+                        ? () => {
+                            if (msg.replyTo != null) {
+                              const el = scrollRef.current?.querySelector(
+                                `[data-msg-index="${msg.replyTo}"]`,
+                              );
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </div>
@@ -302,8 +456,14 @@ export function MessageList(props: MessageListProps) {
         {streaming && (
           <div className="max-w-3xl mx-auto w-full">
             {streamElapsed >= 3 && !streamStall && (
-              <div className="flex items-center gap-1.5 px-3 py-0.5 mb-0.5 text-[10px] select-none" style={{ color: "var(--c-text-2)" }}>
-                <span className="inline-block h-1 w-1 rounded-full animate-pulse" style={{ background: "var(--c-text-2)" }} />
+              <div
+                className="flex items-center gap-1.5 px-3 py-0.5 mb-0.5 text-[10px] select-none"
+                style={{ color: 'var(--c-text-2)' }}
+              >
+                <span
+                  className="inline-block h-1 w-1 rounded-full animate-pulse"
+                  style={{ background: 'var(--c-text-2)' }}
+                />
                 {streamElapsed < 10 ? `Thinking\u2026 ${streamElapsed}s` : `${streamElapsed}s`}
               </div>
             )}
@@ -312,21 +472,24 @@ export function MessageList(props: MessageListProps) {
               <div
                 className="flex items-center gap-1.5 px-3 py-1 mb-1 rounded-lg text-[11px]"
                 style={{
-                  background: streamStall === "retrying"
-                    ? "rgba(251, 146, 60, 0.10)"
-                    : "rgba(234, 179, 8, 0.08)",
-                  color: streamStall === "retrying" ? "var(--c-orange)" : "var(--c-yellow)",
+                  background:
+                    streamStall === 'retrying'
+                      ? 'rgba(251, 146, 60, 0.10)'
+                      : 'rgba(234, 179, 8, 0.08)',
+                  color: streamStall === 'retrying' ? 'var(--c-orange)' : 'var(--c-yellow)',
                 }}
               >
                 <span
                   className="inline-block h-1.5 w-1.5 rounded-full ws-reconnect-pulse"
-                  style={{ background: streamStall === "retrying" ? "var(--c-orange)" : "var(--c-yellow)" }}
+                  style={{
+                    background: streamStall === 'retrying' ? 'var(--c-orange)' : 'var(--c-yellow)',
+                  }}
                 />
-                {streamStall === "retrying"
-                  ? "Retrying stream..."
+                {streamStall === 'retrying'
+                  ? 'Retrying stream...'
                   : stallCountdown > 0
                     ? `Response delayed — auto-retry in ${stallCountdown}s`
-                    : "Response delayed..."}
+                    : 'Response delayed...'}
               </div>
             )}
 
@@ -336,10 +499,14 @@ export function MessageList(props: MessageListProps) {
                 <div className="text-amber-100/80 text-xs mb-2">
                   <strong>{pendingApproval.tool}</strong>: {pendingApproval.reason}
                   {!!pendingApproval.input?.command && (
-                    <pre className="mt-1 p-1 bg-black/30 rounded text-xs overflow-x-auto">{String(pendingApproval.input.command).slice(0, 200)}</pre>
+                    <pre className="mt-1 p-1 bg-black/30 rounded text-xs overflow-x-auto">
+                      {String(pendingApproval.input.command).slice(0, 200)}
+                    </pre>
                   )}
                   {!!pendingApproval.input?.path && (
-                    <div className="mt-1 text-xs opacity-70">Path: {String(pendingApproval.input.path)}</div>
+                    <div className="mt-1 text-xs opacity-70">
+                      Path: {String(pendingApproval.input.path)}
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -361,7 +528,7 @@ export function MessageList(props: MessageListProps) {
 
             {streamText ? (
               <MessageBubble
-                message={{ role: "assistant", content: streamText }}
+                message={{ role: 'assistant', content: streamText }}
                 streaming
                 compact={compact}
                 agentName={currentAgent.name}
@@ -376,31 +543,90 @@ export function MessageList(props: MessageListProps) {
                 <div className="max-w-[85%]">
                   <div className="flex items-center gap-1.5 mb-0.5 px-1">
                     <span className="text-[11px]">{currentAgent.emoji}</span>
-                    <span className="text-[11px] font-medium" style={{ color: "var(--c-text-3)" }}>{currentAgent.name}</span>
+                    <span className="text-[11px] font-medium" style={{ color: 'var(--c-text-3)' }}>
+                      {currentAgent.name}
+                    </span>
                   </div>
-                  <div className="rounded-2xl px-3 py-2 text-sm" style={{ background: "var(--c-msg-ai)", border: "1px solid var(--c-border-2)" }}>
+                  <div
+                    className="rounded-2xl px-3 py-2 text-sm"
+                    style={{ background: 'var(--c-msg-ai)', border: '1px solid var(--c-border-2)' }}
+                  >
                     {(() => {
-                      const badges: Record<string, { icon: string; label: string; color: string; bg: string; spin?: boolean }> = {
-                        connecting: { icon: "\uD83D\uDD17",  label: "Connecting",              color: "var(--c-slate)", bg: "rgba(148,163,184,0.12)" },
-                        thinking:   { icon: "\uD83E\uDDE0",  label: "Thinking",                color: "var(--c-text-2)", bg: "var(--c-bg-hover)" },
-                        planning:   { icon: "\uD83D\uDCCB",  label: "Planning strategy",       color: "var(--c-purple)", bg: "rgba(167,139,250,0.12)" },
-                        tool_use:   { icon: "\u26A1",  label: activeToolName || "Tool",   color: "var(--c-info-soft)", bg: "rgba(96,165,250,0.12)", spin: true },
-                        writing:    { icon: "\u270D\uFE0F",  label: "Writing",                 color: "var(--c-success-soft)", bg: "rgba(74,222,128,0.12)" },
-                        compacting: { icon: "\uD83D\uDCE6",  label: "Compacting",              color: "var(--c-orange)", bg: "rgba(251,146,60,0.12)", spin: true },
-                        done:       { icon: "\u2705",  label: "Done",                     color: "var(--c-emerald)", bg: "rgba(52,211,153,0.12)" },
-                        attention:  { icon: "\u26A0\uFE0F",  label: "Attention Needed",         color: "var(--c-yellow)", bg: "rgba(250,204,21,0.12)" },
-                        error:      { icon: "\u274C",  label: "Error",                    color: "var(--c-danger-soft)", bg: "rgba(248,113,113,0.12)" },
+                      const badges: Record<
+                        string,
+                        { icon: string; label: string; color: string; bg: string; spin?: boolean }
+                      > = {
+                        connecting: {
+                          icon: '\uD83D\uDD17',
+                          label: 'Connecting',
+                          color: 'var(--c-slate)',
+                          bg: 'rgba(148,163,184,0.12)',
+                        },
+                        thinking: {
+                          icon: '\uD83E\uDDE0',
+                          label: 'Thinking',
+                          color: 'var(--c-text-2)',
+                          bg: 'var(--c-bg-hover)',
+                        },
+                        planning: {
+                          icon: '\uD83D\uDCCB',
+                          label: 'Planning strategy',
+                          color: 'var(--c-purple)',
+                          bg: 'rgba(167,139,250,0.12)',
+                        },
+                        tool_use: {
+                          icon: '\u26A1',
+                          label: activeToolName || 'Tool',
+                          color: 'var(--c-info-soft)',
+                          bg: 'rgba(96,165,250,0.12)',
+                          spin: true,
+                        },
+                        writing: {
+                          icon: '\u270D\uFE0F',
+                          label: 'Writing',
+                          color: 'var(--c-success-soft)',
+                          bg: 'rgba(74,222,128,0.12)',
+                        },
+                        compacting: {
+                          icon: '\uD83D\uDCE6',
+                          label: 'Compacting',
+                          color: 'var(--c-orange)',
+                          bg: 'rgba(251,146,60,0.12)',
+                          spin: true,
+                        },
+                        done: {
+                          icon: '\u2705',
+                          label: 'Done',
+                          color: 'var(--c-emerald)',
+                          bg: 'rgba(52,211,153,0.12)',
+                        },
+                        attention: {
+                          icon: '\u26A0\uFE0F',
+                          label: 'Attention Needed',
+                          color: 'var(--c-yellow)',
+                          bg: 'rgba(250,204,21,0.12)',
+                        },
+                        error: {
+                          icon: '\u274C',
+                          label: 'Error',
+                          color: 'var(--c-danger-soft)',
+                          bg: 'rgba(248,113,113,0.12)',
+                        },
                       };
                       const b = badges[streamPhase] || badges.thinking;
                       return (
                         <span
                           className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full"
-                          style={{ background: b.bg, color: b.color, border: `1px solid ${b.color}33` }}
+                          style={{
+                            background: b.bg,
+                            color: b.color,
+                            border: `1px solid ${b.color}33`,
+                          }}
                           role="status"
                           aria-live="polite"
                           aria-label={`Agent is ${b.label.toLowerCase()}`}
                         >
-                          <span className={b.spin ? "animate-spin" : "animate-pulse"}>
+                          <span className={b.spin ? 'animate-spin' : 'animate-pulse'}>
                             {b.icon}
                           </span>
                           {b.label}
@@ -416,19 +642,39 @@ export function MessageList(props: MessageListProps) {
 
         {/* Jump to latest — sticky inside scroll container */}
         {showJumpToLatest && (
-          <div style={{ position: "sticky", bottom: 12, zIndex: 20, pointerEvents: "none", display: "flex", justifyContent: "center" }}>
+          <div
+            style={{
+              position: 'sticky',
+              bottom: 12,
+              zIndex: 20,
+              pointerEvents: 'none',
+              display: 'flex',
+              justifyContent: 'center',
+            }}
+          >
             <button
               onClick={onJumpToLatest}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all hover:scale-105 active:scale-95 animate-fade-in"
               style={{
-                pointerEvents: "auto",
-                background: "var(--c-accent)",
-                color: "var(--c-on-accent)",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                border: "1px solid rgba(255,255,255,0.15)",
+                pointerEvents: 'auto',
+                background: 'var(--c-accent)',
+                color: 'var(--c-on-accent)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                border: '1px solid rgba(255,255,255,0.15)',
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
               Latest messages
             </button>
           </div>

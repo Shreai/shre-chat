@@ -2,7 +2,7 @@
  * Shared types for the WebSocket gateway client.
  */
 
-export type WSState = "disconnected" | "connecting" | "connected" | "failed";
+export type WSState = 'disconnected' | 'connecting' | 'connected' | 'failed';
 
 /** Extended state info for UI consumption. */
 export interface WSStateInfo {
@@ -18,7 +18,7 @@ export interface ActiveStream {
   fullSessionKey: string;
   runId: string | null;
   startedAt: number;
-  status: "connecting" | "thinking" | "writing" | "compacting";
+  status: 'connecting' | 'thinking' | 'writing' | 'compacting';
 }
 
 export interface WSStreamCallbacks {
@@ -42,7 +42,7 @@ export interface QueuedMessage {
   queuedAt: number;
 }
 
-export type StreamStallState = "stalling" | "retrying" | "clear";
+export type StreamStallState = 'stalling' | 'retrying' | 'clear';
 export interface StreamStallInfo {
   state: StreamStallState;
   agentId: string;
@@ -58,6 +58,6 @@ export type StreamStallListener = (info: StreamStallInfo) => void;
 export type HealthListener = (up: boolean) => void;
 
 export type CrossTabMessage =
-  | { type: "stream-update"; streams: ActiveStream[] }
-  | { type: "ws-state"; state: WSState; errorMessage?: string }
-  | { type: "queue-update"; count: number };
+  | { type: 'stream-update'; streams: ActiveStream[] }
+  | { type: 'ws-state'; state: WSState; errorMessage?: string }
+  | { type: 'queue-update'; count: number };

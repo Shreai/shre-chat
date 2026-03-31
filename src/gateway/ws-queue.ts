@@ -4,8 +4,8 @@
  * and automatically flushed once the connection is re-established.
  */
 
-import type { WSStreamCallbacks } from "./ws-types";
-import { messageQueue, notifyQueue, uuid } from "./ws-state";
+import type { WSStreamCallbacks } from './ws-types';
+import { messageQueue, notifyQueue, uuid } from './ws-state';
 
 /** Queue a message for sending when WS reconnects. */
 export function queueMessage(
@@ -17,7 +17,16 @@ export function queueMessage(
   systemPrompt?: string,
 ): string {
   const id = uuid();
-  messageQueue.push({ id, agentId, sessionKey, message, callbacks, modelOverride, systemPrompt, queuedAt: Date.now() });
+  messageQueue.push({
+    id,
+    agentId,
+    sessionKey,
+    message,
+    callbacks,
+    modelOverride,
+    systemPrompt,
+    queuedAt: Date.now(),
+  });
   notifyQueue();
   return id;
 }
@@ -38,12 +47,19 @@ export async function flushMessageQueue() {
   if (messageQueue.length === 0) return;
   console.log(`[ws] flushing ${messageQueue.length} queued message(s)`);
   // We need to import sendChatWS lazily to avoid circular dependency
-  const { sendChatWS } = await import("./ws-chat");
+  const { sendChatWS } = await import('./ws-chat');
   const toSend = messageQueue.splice(0, messageQueue.length);
   notifyQueue();
   for (const msg of toSend) {
     try {
-      await sendChatWS(msg.agentId, msg.sessionKey, msg.message, msg.callbacks, msg.modelOverride, msg.systemPrompt);
+      await sendChatWS(
+        msg.agentId,
+        msg.sessionKey,
+        msg.message,
+        msg.callbacks,
+        msg.modelOverride,
+        msg.systemPrompt,
+      );
     } catch (err) {
       msg.callbacks.onError(`Failed to send queued message: ${err}`);
     }

@@ -396,8 +396,11 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
       const mobile = window.innerWidth <= 768;
       setIsMobileView(mobile);
       // Re-fit terminal on viewport change (fold/unfold, orientation)
+      // Two-phase fit: immediate (100ms) for same-layout resize,
+      // deferred (350ms) for parent re-render after mobile/desktop toggle
       if (activeTab?.fit) {
         setTimeout(() => activeTab.fit?.fit(), 100);
+        setTimeout(() => activeTab.fit?.fit(), 350);
       }
     };
     window.addEventListener('resize', checkViewport);

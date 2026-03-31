@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from 'react';
 
 interface Workspace {
   id: string;
@@ -13,7 +13,11 @@ interface WorkspaceSwitcherProps {
   onSwitch: (workspaceId: string) => void;
 }
 
-export function WorkspaceSwitcher({ activeWorkspace, workspaces, onSwitch }: WorkspaceSwitcherProps) {
+export function WorkspaceSwitcher({
+  activeWorkspace,
+  workspaces,
+  onSwitch,
+}: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -21,21 +25,23 @@ export function WorkspaceSwitcher({ activeWorkspace, workspaces, onSwitch }: Wor
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   if (!activeWorkspace || workspaces.length <= 1) return null;
 
   const roleBadge = (role: string) => {
     const colors: Record<string, string> = {
-      owner: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-      admin: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-      member: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-      viewer: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+      owner: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+      admin: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+      member: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+      viewer: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
     };
     return (
-      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${colors[role] ?? colors.member}`}>
+      <span
+        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${colors[role] ?? colors.member}`}
+      >
         {role}
       </span>
     );
@@ -50,7 +56,12 @@ export function WorkspaceSwitcher({ activeWorkspace, workspaces, onSwitch }: Wor
         <span className="w-2 h-2 rounded-full bg-green-500" />
         <span className="font-medium truncate max-w-[120px]">{activeWorkspace.name}</span>
         {roleBadge(activeWorkspace.role)}
-        <svg className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -70,9 +81,11 @@ export function WorkspaceSwitcher({ activeWorkspace, workspaces, onSwitch }: Wor
                 setOpen(false);
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors
-                ${ws.id === activeWorkspace.id ? "bg-gray-50 dark:bg-gray-800" : ""}`}
+                ${ws.id === activeWorkspace.id ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
             >
-              <span className={`w-2 h-2 rounded-full ${ws.id === activeWorkspace.id ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`} />
+              <span
+                className={`w-2 h-2 rounded-full ${ws.id === activeWorkspace.id ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+              />
               <span className="flex-1 text-left truncate">{ws.name}</span>
               {roleBadge(ws.role)}
             </button>

@@ -1,6 +1,6 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import type { Virtualizer } from "@tanstack/react-virtual";
-import type { ChatMessage } from "../openclaw";
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import type { Virtualizer } from '@tanstack/react-virtual';
+import type { ChatMessage } from '../openclaw';
 
 export interface UseChatSearchReturn {
   // Global search
@@ -8,8 +8,24 @@ export interface UseChatSearchReturn {
   setGlobalSearchOpen: React.Dispatch<React.SetStateAction<boolean>>;
   globalSearchQuery: string;
   setGlobalSearchQuery: React.Dispatch<React.SetStateAction<string>>;
-  globalSearchResults: Array<{ agentId: string; sessionKey: string; sessionId: string; matches: number; preview: string }>;
-  setGlobalSearchResults: React.Dispatch<React.SetStateAction<Array<{ agentId: string; sessionKey: string; sessionId: string; matches: number; preview: string }>>>;
+  globalSearchResults: Array<{
+    agentId: string;
+    sessionKey: string;
+    sessionId: string;
+    matches: number;
+    preview: string;
+  }>;
+  setGlobalSearchResults: React.Dispatch<
+    React.SetStateAction<
+      Array<{
+        agentId: string;
+        sessionKey: string;
+        sessionId: string;
+        matches: number;
+        preview: string;
+      }>
+    >
+  >;
   globalSearching: boolean;
   setGlobalSearching: React.Dispatch<React.SetStateAction<boolean>>;
   globalSearchRef: React.RefObject<HTMLInputElement | null>;
@@ -33,14 +49,22 @@ export function useChatSearch(
 ): UseChatSearchReturn {
   // Global search state
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
-  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
-  const [globalSearchResults, setGlobalSearchResults] = useState<Array<{ agentId: string; sessionKey: string; sessionId: string; matches: number; preview: string }>>([]);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchResults, setGlobalSearchResults] = useState<
+    Array<{
+      agentId: string;
+      sessionKey: string;
+      sessionId: string;
+      matches: number;
+      preview: string;
+    }>
+  >([]);
   const [globalSearching, setGlobalSearching] = useState(false);
   const globalSearchRef = useRef<HTMLInputElement>(null);
 
   // In-conversation search state
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
-  const [chatSearch, setChatSearch] = useState("");
+  const [chatSearch, setChatSearch] = useState('');
   const [chatSearchIndex, setChatSearchIndex] = useState(0);
   const chatSearchRef = useRef<HTMLInputElement>(null);
 
@@ -55,30 +79,42 @@ export function useChatSearch(
     return hits;
   }, [chatSearch, filteredMessages]);
 
-  useEffect(() => { setChatSearchIndex(0); }, [chatSearchResults.length]);
+  useEffect(() => {
+    setChatSearchIndex(0);
+  }, [chatSearchResults.length]);
 
-  const chatSearchNavigate = useCallback((dir: 1 | -1) => {
-    if (chatSearchResults.length === 0) return;
-    const next = (chatSearchIndex + dir + chatSearchResults.length) % chatSearchResults.length;
-    setChatSearchIndex(next);
-    virtualizer.scrollToIndex(chatSearchResults[next], { align: "center", behavior: "smooth" });
-  }, [chatSearchResults, chatSearchIndex, virtualizer]);
+  const chatSearchNavigate = useCallback(
+    (dir: 1 | -1) => {
+      if (chatSearchResults.length === 0) return;
+      const next = (chatSearchIndex + dir + chatSearchResults.length) % chatSearchResults.length;
+      setChatSearchIndex(next);
+      virtualizer.scrollToIndex(chatSearchResults[next], { align: 'center', behavior: 'smooth' });
+    },
+    [chatSearchResults, chatSearchIndex, virtualizer],
+  );
 
   const closeChatSearch = useCallback(() => {
     setChatSearchOpen(false);
-    setChatSearch("");
+    setChatSearch('');
     setChatSearchIndex(0);
   }, []);
 
   return {
-    globalSearchOpen, setGlobalSearchOpen,
-    globalSearchQuery, setGlobalSearchQuery,
-    globalSearchResults, setGlobalSearchResults,
-    globalSearching, setGlobalSearching,
+    globalSearchOpen,
+    setGlobalSearchOpen,
+    globalSearchQuery,
+    setGlobalSearchQuery,
+    globalSearchResults,
+    setGlobalSearchResults,
+    globalSearching,
+    setGlobalSearching,
     globalSearchRef,
-    chatSearchOpen, setChatSearchOpen,
-    chatSearch, setChatSearch,
-    chatSearchIndex, setChatSearchIndex,
+    chatSearchOpen,
+    setChatSearchOpen,
+    chatSearch,
+    setChatSearch,
+    chatSearchIndex,
+    setChatSearchIndex,
     chatSearchRef,
     chatSearchResults,
     chatSearchNavigate,

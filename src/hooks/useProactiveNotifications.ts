@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface Notification {
   id: string;
@@ -32,7 +32,7 @@ export function useProactiveNotifications(enabled: boolean): UseProactiveNotific
       return;
     }
 
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws/notifications`);
     wsRef.current = ws;
 
@@ -40,9 +40,10 @@ export function useProactiveNotifications(enabled: boolean): UseProactiveNotific
     ws.onclose = () => {
       setIsConnected(false);
       // Auto-reconnect after 5s
-      if (enabled) setTimeout(() => {
-        if (wsRef.current === ws) wsRef.current = null;
-      }, 5000);
+      if (enabled)
+        setTimeout(() => {
+          if (wsRef.current === ws) wsRef.current = null;
+        }, 5000);
     };
     ws.onerror = () => ws.close();
 
@@ -51,18 +52,20 @@ export function useProactiveNotifications(enabled: boolean): UseProactiveNotific
         const data = JSON.parse(event.data);
         const notif: Notification = {
           id: data.id || crypto.randomUUID(),
-          type: data.type || "unknown",
-          title: data.title || data.type || "Notification",
+          type: data.type || 'unknown',
+          title: data.title || data.type || 'Notification',
           body: data.body || null,
-          source: data.source || "system",
-          severity: data.severity || data.type?.includes("failed") ? "warning" : "info",
+          source: data.source || 'system',
+          severity: data.severity || data.type?.includes('failed') ? 'warning' : 'info',
         };
 
-        const priority = SEVERITY_PRIORITY[notif.severity || "info"] || 0;
+        const priority = SEVERITY_PRIORITY[notif.severity || 'info'] || 0;
         if (priority >= MIN_SEVERITY) {
-          setQueue(prev => [...prev, notif]);
+          setQueue((prev) => [...prev, notif]);
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     };
 
     return () => {
@@ -73,7 +76,7 @@ export function useProactiveNotifications(enabled: boolean): UseProactiveNotific
 
   const speakNext = useCallback((): Notification | null => {
     let next: Notification | null = null;
-    setQueue(prev => {
+    setQueue((prev) => {
       if (prev.length === 0) return prev;
       next = prev[0];
       return prev.slice(1);

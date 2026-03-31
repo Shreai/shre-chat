@@ -1,7 +1,7 @@
-import { useEffect, useCallback } from "react";
-import type { ChatMessage } from "../openclaw";
-import type { AppActions } from "../store";
-import { abortChatWS } from "../gateway-ws";
+import { useEffect, useCallback } from 'react';
+import type { ChatMessage } from '../openclaw';
+import type { AppActions } from '../store';
+import { abortChatWS } from '../gateway-ws';
 
 export interface UseKeyboardShortcutsParams {
   streaming: boolean;
@@ -29,24 +29,44 @@ export interface UseKeyboardShortcutsParams {
   setInput: (v: string) => void;
   setEditingMsgIndex: (v: number | null) => void;
   setEditingMsgText: (v: string) => void;
-  actions: Pick<AppActions, "newSession" | "switchSession" | "replaceSessionMessages">;
+  actions: Pick<AppActions, 'newSession' | 'switchSession' | 'replaceSessionMessages'>;
   virtualizer: { scrollToIndex: (idx: number, opts?: any) => void };
 }
 
 export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
   const {
-    streaming, wsConnected, activeAgentId, activeSessionId, messages,
-    filteredMessages, selectedMsgIndex, setSelectedMsgIndex,
-    chatSearchOpen, setChatSearchOpen, chatSearchRef, closeChatSearch,
-    globalSearchOpen, setGlobalSearchOpen, globalSearchRef,
-    shortcutsOpen, setShortcutsOpen, showModelPicker, setShowModelPicker,
-    abortRef, inputRef, pendingEditSendRef, setInput,
-    setEditingMsgIndex, setEditingMsgText, actions, virtualizer,
+    streaming,
+    wsConnected,
+    activeAgentId,
+    activeSessionId,
+    messages,
+    filteredMessages,
+    selectedMsgIndex,
+    setSelectedMsgIndex,
+    chatSearchOpen,
+    setChatSearchOpen,
+    chatSearchRef,
+    closeChatSearch,
+    globalSearchOpen,
+    setGlobalSearchOpen,
+    globalSearchRef,
+    shortcutsOpen,
+    setShortcutsOpen,
+    showModelPicker,
+    setShowModelPicker,
+    abortRef,
+    inputRef,
+    pendingEditSendRef,
+    setInput,
+    setEditingMsgIndex,
+    setEditingMsgText,
+    actions,
+    virtualizer,
   } = params;
 
   const handleAbort = useCallback(() => {
     if (wsConnected) {
-      abortChatWS(activeAgentId, "main");
+      abortChatWS(activeAgentId, 'main');
     }
     abortRef.current?.abort();
   }, [wsConnected, activeAgentId, abortRef]);
@@ -57,14 +77,14 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       const mod = e.metaKey || e.ctrlKey;
 
       // Escape to cancel streaming
-      if (e.key === "Escape" && streaming) {
+      if (e.key === 'Escape' && streaming) {
         e.preventDefault();
         handleAbort();
         return;
       }
 
       // Cmd/Ctrl+K for new chat
-      if (mod && e.key === "k") {
+      if (mod && e.key === 'k') {
         e.preventDefault();
         const id = actions.newSession();
         actions.switchSession(id);
@@ -72,13 +92,13 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // Cmd/Ctrl+/ to toggle model picker
-      if (mod && e.key === "/") {
+      if (mod && e.key === '/') {
         e.preventDefault();
         setShowModelPicker((prev: boolean) => !prev);
       }
 
       // Cmd/Ctrl+F for in-chat search
-      if (mod && e.key === "f" && !e.shiftKey) {
+      if (mod && e.key === 'f' && !e.shiftKey) {
         e.preventDefault();
         setChatSearchOpen(true);
         setTimeout(() => chatSearchRef.current?.focus(), 50);
@@ -86,7 +106,7 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // Cmd/Ctrl+Shift+F for cross-session search
-      if (mod && e.key === "f" && e.shiftKey) {
+      if (mod && e.key === 'f' && e.shiftKey) {
         e.preventDefault();
         setGlobalSearchOpen(true);
         setTimeout(() => globalSearchRef.current?.focus(), 50);
@@ -94,35 +114,50 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // Cmd/Ctrl+? for keyboard shortcuts overlay
-      if (mod && (e.key === "?" || (e.shiftKey && e.key === "/"))) {
+      if (mod && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
         e.preventDefault();
         setShortcutsOpen(!shortcutsOpen);
         return;
       }
 
       // Escape to close chat search (when not streaming)
-      if (e.key === "Escape" && chatSearchOpen && !streaming) {
+      if (e.key === 'Escape' && chatSearchOpen && !streaming) {
         e.preventDefault();
         closeChatSearch();
         return;
       }
 
       // Escape to close shortcuts or global search
-      if (e.key === "Escape" && shortcutsOpen) {
+      if (e.key === 'Escape' && shortcutsOpen) {
         e.preventDefault();
         setShortcutsOpen(false);
         return;
       }
-      if (e.key === "Escape" && globalSearchOpen) {
+      if (e.key === 'Escape' && globalSearchOpen) {
         e.preventDefault();
         setGlobalSearchOpen(false);
         return;
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [streaming, handleAbort, actions, showModelPicker, chatSearchOpen, closeChatSearch, shortcutsOpen, globalSearchOpen, setChatSearchOpen, chatSearchRef, setGlobalSearchOpen, globalSearchRef, setShortcutsOpen, setShowModelPicker]);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    streaming,
+    handleAbort,
+    actions,
+    showModelPicker,
+    chatSearchOpen,
+    closeChatSearch,
+    shortcutsOpen,
+    globalSearchOpen,
+    setChatSearchOpen,
+    chatSearchRef,
+    setGlobalSearchOpen,
+    globalSearchRef,
+    setShortcutsOpen,
+    setShowModelPicker,
+  ]);
 
   // Message keyboard navigation (when textarea is NOT focused)
   useEffect(() => {
@@ -136,13 +171,14 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
         active instanceof HTMLTextAreaElement ||
         active instanceof HTMLInputElement ||
         (active instanceof HTMLElement && active.isContentEditable)
-      ) return;
+      )
+        return;
 
       const len = filteredMessages.length;
       if (len === 0) return;
 
       // ArrowUp / k — select previous message
-      if (e.key === "ArrowUp" || e.key === "k") {
+      if (e.key === 'ArrowUp' || e.key === 'k') {
         e.preventDefault();
         setSelectedMsgIndex((prev) => {
           if (prev === null) return len - 1;
@@ -152,7 +188,7 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // ArrowDown / j — select next message
-      if (e.key === "ArrowDown" || e.key === "j") {
+      if (e.key === 'ArrowDown' || e.key === 'j') {
         e.preventDefault();
         setSelectedMsgIndex((prev) => {
           if (prev === null) return 0;
@@ -163,14 +199,14 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // Escape — deselect
-      if (e.key === "Escape" && selectedMsgIndex !== null) {
+      if (e.key === 'Escape' && selectedMsgIndex !== null) {
         e.preventDefault();
         setSelectedMsgIndex(null);
         return;
       }
 
       // Enter or Space — focus textarea, start typing
-      if ((e.key === "Enter" || e.key === " ") && selectedMsgIndex !== null) {
+      if ((e.key === 'Enter' || e.key === ' ') && selectedMsgIndex !== null) {
         e.preventDefault();
         setSelectedMsgIndex(null);
         inputRef.current?.focus();
@@ -178,7 +214,7 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // c — copy selected message content
-      if (e.key === "c" && selectedMsgIndex !== null) {
+      if (e.key === 'c' && selectedMsgIndex !== null) {
         e.preventDefault();
         const msg = filteredMessages[selectedMsgIndex];
         if (msg) navigator.clipboard.writeText(msg.content);
@@ -186,9 +222,9 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // e — edit selected message (user messages only)
-      if (e.key === "e" && selectedMsgIndex !== null) {
+      if (e.key === 'e' && selectedMsgIndex !== null) {
         const msg = filteredMessages[selectedMsgIndex];
-        if (msg && msg.role === "user") {
+        if (msg && msg.role === 'user') {
           e.preventDefault();
           setEditingMsgIndex(selectedMsgIndex);
           setEditingMsgText(msg.content);
@@ -197,17 +233,17 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
 
       // r — regenerate (last assistant message only)
-      if (e.key === "r" && selectedMsgIndex !== null) {
+      if (e.key === 'r' && selectedMsgIndex !== null) {
         const msg = filteredMessages[selectedMsgIndex];
         if (
           msg &&
-          msg.role === "assistant" &&
+          msg.role === 'assistant' &&
           selectedMsgIndex === filteredMessages.length - 1 &&
           !streaming &&
           activeSessionId
         ) {
           e.preventDefault();
-          const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+          const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
           if (!lastUserMsg) return;
           const truncated = messages.slice(0, messages.length - 1);
           actions.replaceSessionMessages(activeSessionId, truncated);
@@ -219,14 +255,27 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
       }
     };
 
-    window.addEventListener("keydown", navHandler);
-    return () => window.removeEventListener("keydown", navHandler);
-  }, [filteredMessages, selectedMsgIndex, streaming, activeSessionId, messages, actions, setSelectedMsgIndex, inputRef, setInput, setEditingMsgIndex, setEditingMsgText, pendingEditSendRef]);
+    window.addEventListener('keydown', navHandler);
+    return () => window.removeEventListener('keydown', navHandler);
+  }, [
+    filteredMessages,
+    selectedMsgIndex,
+    streaming,
+    activeSessionId,
+    messages,
+    actions,
+    setSelectedMsgIndex,
+    inputRef,
+    setInput,
+    setEditingMsgIndex,
+    setEditingMsgText,
+    pendingEditSendRef,
+  ]);
 
   // Scroll to selected message when it changes
   useEffect(() => {
     if (selectedMsgIndex !== null) {
-      virtualizer.scrollToIndex(selectedMsgIndex, { align: "center", behavior: "smooth" });
+      virtualizer.scrollToIndex(selectedMsgIndex, { align: 'center', behavior: 'smooth' });
     }
   }, [selectedMsgIndex, virtualizer]);
 

@@ -3,12 +3,12 @@
  * Uses useSyncExternalStore for React 18 compatibility.
  * No external dependencies (no Zustand).
  */
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore } from 'react';
 
 export interface PlanTask {
   id: string;
   title: string;
-  status: "pending" | "assigned" | "completed" | "failed";
+  status: 'pending' | 'assigned' | 'completed' | 'failed';
   agent?: string;
   quality?: number;
 }
@@ -16,7 +16,7 @@ export interface PlanTask {
 export interface Plan {
   projectId: string;
   tasks: PlanTask[];
-  status: "pending_approval" | "approved" | "executing" | "completed";
+  status: 'pending_approval' | 'approved' | 'executing' | 'completed';
 }
 
 const plans = new Map<string, Plan>();
@@ -37,7 +37,7 @@ export function getPlan(projectId: string): Plan | undefined {
   return plans.get(projectId);
 }
 
-export function updatePlanStatus(projectId: string, status: Plan["status"]): void {
+export function updatePlanStatus(projectId: string, status: Plan['status']): void {
   const plan = plans.get(projectId);
   if (!plan) return;
   plan.status = status;
@@ -47,7 +47,7 @@ export function updatePlanStatus(projectId: string, status: Plan["status"]): voi
 export function updateTaskStatus(
   projectId: string,
   taskTitle: string,
-  status: PlanTask["status"],
+  status: PlanTask['status'],
   agent?: string,
   quality?: number,
 ): void {
@@ -58,7 +58,9 @@ export function updateTaskStatus(
   let task = plan.tasks.find((t) => t.title === taskTitle);
   if (!task) {
     const lower = taskTitle.toLowerCase();
-    task = plan.tasks.find((t) => t.title.toLowerCase().includes(lower) || lower.includes(t.title.toLowerCase()));
+    task = plan.tasks.find(
+      (t) => t.title.toLowerCase().includes(lower) || lower.includes(t.title.toLowerCase()),
+    );
   }
 
   if (task) {
@@ -68,11 +70,11 @@ export function updateTaskStatus(
   }
 
   // Check if all tasks are done
-  const allDone = plan.tasks.every((t) => t.status === "completed" || t.status === "failed");
+  const allDone = plan.tasks.every((t) => t.status === 'completed' || t.status === 'failed');
   if (allDone && plan.tasks.length > 0) {
-    plan.status = "completed";
-  } else if (plan.tasks.some((t) => t.status === "assigned" || t.status === "completed")) {
-    plan.status = "executing";
+    plan.status = 'completed';
+  } else if (plan.tasks.some((t) => t.status === 'assigned' || t.status === 'completed')) {
+    plan.status = 'executing';
   }
 
   notify();
@@ -81,7 +83,7 @@ export function updateTaskStatus(
 /** Parse plan summary text into individual task items */
 export function parsePlanTasks(summary: string): PlanTask[] {
   if (!summary) return [];
-  const lines = summary.split("\n");
+  const lines = summary.split('\n');
   const tasks: PlanTask[] = [];
   let idx = 0;
 
@@ -92,15 +94,13 @@ export function parsePlanTasks(summary: string): PlanTask[] {
     // Match numbered items: "1. Task title", "1) Task title"
     // Match bullet items: "- Task title", "* Task title", "• Task title"
     // Match checkbox items: "[ ] Task title", "[x] Task title"
-    const taskMatch = trimmed.match(
-      /^(?:\d+[.)]\s*|[-*•]\s*|\[[ x]?\]\s*)(.*)/i,
-    );
+    const taskMatch = trimmed.match(/^(?:\d+[.)]\s*|[-*•]\s*|\[[ x]?\]\s*)(.*)/i);
     if (taskMatch && taskMatch[1].trim().length > 2) {
       idx++;
       tasks.push({
         id: `task-${idx}`,
         title: taskMatch[1].trim(),
-        status: "pending",
+        status: 'pending',
       });
     }
   }

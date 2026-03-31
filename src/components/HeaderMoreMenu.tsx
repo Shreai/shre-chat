@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ChatMessage } from '../openclaw';
 import type { Session } from '../store';
 import { exportSessions, importSessions } from '../store';
 import { ECOSYSTEM_APPS } from '../chat-utils';
-import type { GatewayMode } from '../preferences-store';
+import {
+  usePreferences,
+  FEATURE_LABELS,
+  type GatewayMode,
+  type FeatureKey,
+} from '../preferences-store';
 
 export interface HeaderMoreMenuProps {
   open: boolean;
@@ -87,6 +92,11 @@ export function HeaderMoreMenu({
   importInputRef,
   onImportSessions,
 }: HeaderMoreMenuProps) {
+  const features = usePreferences((s) => s.features);
+  const setFeature = usePreferences((s) => s.setFeature);
+  const [showFeatureSettings, setShowFeatureSettings] = useState(false);
+  const feat = (key: FeatureKey) => features[key] ?? false;
+
   if (!open) return null;
 
   return (
@@ -126,29 +136,32 @@ export function HeaderMoreMenu({
 
         <Divider />
 
-        <div className="relative" ref={comparePickerRef}>
-          <button
-            onClick={() => {
-              onToggleCompare();
-              onClose();
-            }}
-            className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-            style={{ color: compareMode ? 'var(--c-warning)' : 'var(--c-text-1)' }}
-          >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
+        {feat('compareModels') && (
+          <div className="relative" ref={comparePickerRef}>
+            <button
+              onClick={() => {
+                onToggleCompare();
+                onClose();
+              }}
+              className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+              style={{ color: compareMode ? 'var(--c-warning)' : 'var(--c-text-1)' }}
             >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="12" y1="3" x2="12" y2="21" />
-            </svg>
-            {compareMode ? 'Exit Compare' : 'Compare Models'}
-          </button>
-        </div>
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="12" y1="3" x2="12" y2="21" />
+              </svg>
+              {compareMode ? 'Exit Compare' : 'Compare Models'}
+            </button>
+          </div>
+        )}
 
+        {feat('systemPrompt') && (
         <button
           onClick={() => {
             onOpenSystemPrompt();
@@ -171,6 +184,7 @@ export function HeaderMoreMenu({
           </svg>
           System Prompt
         </button>
+        )}
 
         <button
           onClick={() => {
@@ -282,6 +296,7 @@ export function HeaderMoreMenu({
               </button>
             )}
 
+            {feat('analytics') && (
             <button
               onClick={() => {
                 onOpenAnalytics();
@@ -305,6 +320,7 @@ export function HeaderMoreMenu({
               </svg>
               Analytics
             </button>
+            )}
 
             {activeSessionId && (
               <button
@@ -429,10 +445,10 @@ export function HeaderMoreMenu({
           Ecosystem Apps
         </button>
 
-        <Divider />
+        {(feat('feedView') || feat('costDashboard') || feat('reports')) && <Divider />}
 
-        <SectionLabel>Views</SectionLabel>
-        <HeaderMenuItem
+        {(feat('feedView') || feat('costDashboard') || feat('reports')) && <SectionLabel>Views</SectionLabel>}
+        {feat('feedView') && <HeaderMenuItem
           label="Feed"
           icon={
             <svg
@@ -449,8 +465,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'feed'}
           onClick={() => onSetView('feed')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('feedView') && <HeaderMenuItem
           label="Feed Analytics"
           icon={
             <svg
@@ -467,8 +483,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'feed-analytics'}
           onClick={() => onSetView('feed-analytics')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('costDashboard') && <HeaderMenuItem
           label="Cost Dashboard"
           icon={
             <svg
@@ -484,8 +500,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'cost-dashboard'}
           onClick={() => onSetView('cost-dashboard')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('reports') && <HeaderMenuItem
           label="Reports"
           icon={
             <svg
@@ -504,11 +520,11 @@ export function HeaderMoreMenu({
           }
           active={view === 'reports'}
           onClick={() => onSetView('reports')}
-        />
+        />}
 
-        <Divider />
+        {feat('externalApps') && <Divider />}
 
-        <SectionLabel>Apps</SectionLabel>
+        {feat('externalApps') && <><SectionLabel>Apps</SectionLabel>
         <HeaderMenuItem
           label="OpenClaw"
           icon={
@@ -617,8 +633,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'marketplace'}
           onClick={() => onSetView('marketplace')}
-        />
-        <HeaderMenuItem
+        /></>}
+        {feat('taskTimeline') && <HeaderMenuItem
           label="Task Timeline"
           icon={
             <svg
@@ -638,8 +654,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'task-timeline'}
           onClick={() => onSetView('task-timeline')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('tasks') && <HeaderMenuItem
           label="Tasks"
           icon={
             <svg
@@ -655,8 +671,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'tasks'}
           onClick={() => onSetView('tasks')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('reminders') && <HeaderMenuItem
           label="Reminders"
           icon={
             <svg
@@ -672,8 +688,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'reminders'}
           onClick={() => onSetView('reminders')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('projects') && <HeaderMenuItem
           label="Projects"
           icon={
             <svg
@@ -689,12 +705,12 @@ export function HeaderMoreMenu({
           }
           active={view === 'projects'}
           onClick={() => onSetView('projects')}
-        />
+        />}
 
-        <Divider />
+        {(feat('admin') || feat('fineTuning')) && <Divider />}
 
-        <SectionLabel>Tools</SectionLabel>
-        <HeaderMenuItem
+        {(feat('admin') || feat('fineTuning')) && <SectionLabel>Tools</SectionLabel>}
+        {feat('admin') && <HeaderMenuItem
           label="Admin"
           icon={
             <svg
@@ -712,8 +728,8 @@ export function HeaderMoreMenu({
           }
           active={view === 'admin'}
           onClick={() => onSetView('admin')}
-        />
-        <HeaderMenuItem
+        />}
+        {feat('fineTuning') && <HeaderMenuItem
           label="Fine-Tuning"
           icon={
             <svg
@@ -729,7 +745,61 @@ export function HeaderMoreMenu({
           }
           active={view === 'finetune'}
           onClick={() => onSetView('finetune')}
-        />
+        />}
+
+        <Divider />
+
+        {/* ── Feature Settings ── */}
+        <button
+          onClick={() => setShowFeatureSettings(!showFeatureSettings)}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: 'var(--c-text-1)' }}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Feature Settings
+          <svg
+            className="h-3 w-3 ml-auto transition-transform"
+            style={{ transform: showFeatureSettings ? 'rotate(180deg)' : 'rotate(0deg)', color: 'var(--c-text-4)' }}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {showFeatureSettings && (
+          <div className="px-2 pb-2">
+            {(Object.keys(FEATURE_LABELS) as FeatureKey[]).map((key) => (
+              <label
+                key={key}
+                className="flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/5"
+                style={{ color: 'var(--c-text-2)' }}
+              >
+                <span className="text-[12px]">{FEATURE_LABELS[key]}</span>
+                <button
+                  onClick={(e) => { e.preventDefault(); setFeature(key, !features[key]); }}
+                  className="relative w-8 h-[18px] rounded-full transition-colors"
+                  style={{
+                    background: features[key] ? 'var(--c-accent)' : 'var(--c-bg-3)',
+                  }}
+                >
+                  <span
+                    className="absolute top-[2px] w-[14px] h-[14px] rounded-full transition-all"
+                    style={{
+                      left: features[key] ? 14 : 2,
+                      background: features[key] ? '#fff' : 'var(--c-text-4)',
+                    }}
+                  />
+                </button>
+              </label>
+            ))}
+          </div>
+        )}
 
         <Divider />
 

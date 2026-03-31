@@ -3,18 +3,18 @@
 // ---------------------------------------------------------------------------
 
 export type ProcessStepKind =
-  | "thinking"
-  | "planning"
-  | "tool_use"
-  | "tool_result"
-  | "generating"
-  | "compacting"
-  | "done"
-  | "attention"
-  | "approval"
-  | "error";
+  | 'thinking'
+  | 'planning'
+  | 'tool_use'
+  | 'tool_result'
+  | 'generating'
+  | 'compacting'
+  | 'done'
+  | 'attention'
+  | 'approval'
+  | 'error';
 
-export type ProcessStepStatus = "active" | "completed" | "error";
+export type ProcessStepStatus = 'active' | 'completed' | 'error';
 
 export interface ProcessStep {
   id: string;

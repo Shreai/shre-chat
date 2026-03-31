@@ -1,5 +1,42 @@
 User-agent: *
 Disallow: /
 
-# AROS Chat — private application, no indexing
-# Public site: https://nirtek.net
+# Block AI crawlers explicitly
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Cohere-ai
+Disallow: /
+
+# Shre Chat — private application, no indexing
+# No sitemap. No public content.

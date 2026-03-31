@@ -1,6 +1,15 @@
-import { app, BrowserWindow, shell, globalShortcut, Menu, net, session, systemPreferences } from "electron";
-import * as path from "path";
-import { fork, type ChildProcess } from "child_process";
+import {
+  app,
+  BrowserWindow,
+  shell,
+  globalShortcut,
+  Menu,
+  net,
+  session,
+  systemPreferences,
+} from 'electron';
+import * as path from 'path';
+import { fork, type ChildProcess } from 'child_process';
 
 let win: BrowserWindow | null = null;
 let server: ChildProcess | null = null;
@@ -13,28 +22,28 @@ const SERVER_URL = `https://localhost:${SERVER_PORT}`;
 // Check if serve.js is already running (LaunchAgent)
 async function isServerRunning(): Promise<boolean> {
   return new Promise((resolve) => {
-    const request = net.request({ url: SERVER_URL, method: "HEAD" });
-    request.on("response", () => resolve(true));
-    request.on("error", () => resolve(false));
+    const request = net.request({ url: SERVER_URL, method: 'HEAD' });
+    request.on('response', () => resolve(true));
+    request.on('error', () => resolve(false));
     request.end();
   });
 }
 
 function startServer(): void {
   const servePath = isDev
-    ? path.join(__dirname, "..", "..", "serve.js")
-    : path.join(process.resourcesPath, "serve.js");
+    ? path.join(__dirname, '..', '..', 'serve.js')
+    : path.join(process.resourcesPath, 'serve.js');
 
   server = fork(servePath, [], {
     env: { ...process.env, PORT: String(SERVER_PORT) },
-    stdio: "pipe",
+    stdio: 'pipe',
   });
 
   ownsServer = true;
-  server.stdout?.on("data", (d) => console.log("[serve]", d.toString().trim()));
-  server.stderr?.on("data", (d) => console.error("[serve]", d.toString().trim()));
-  server.on("exit", (code) => {
-    console.log("[serve] exited:", code);
+  server.stdout?.on('data', (d) => console.log('[serve]', d.toString().trim()));
+  server.stderr?.on('data', (d) => console.error('[serve]', d.toString().trim()));
+  server.on('exit', (code) => {
+    console.log('[serve] exited:', code);
     ownsServer = false;
   });
 }
@@ -45,13 +54,13 @@ function createWindow(): void {
     height: 780,
     minWidth: 380,
     minHeight: 500,
-    title: "Shre",
-    titleBarStyle: "hiddenInset",
+    title: 'Shre',
+    titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
-    backgroundColor: "#0a1628",
+    backgroundColor: '#0a1628',
     hasShadow: true,
     roundedCorners: true,
-    vibrancy: "under-window",
+    vibrancy: 'under-window',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -63,7 +72,7 @@ function createWindow(): void {
 
   // Grant microphone permission for voice input
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    if (permission === "media" || (permission as string) === "microphone") {
+    if (permission === 'media' || (permission as string) === 'microphone') {
       callback(true);
     } else {
       callback(true); // Allow all permissions for local app
@@ -71,17 +80,17 @@ function createWindow(): void {
   });
 
   // On macOS, request mic access at OS level if needed
-  if (process.platform === "darwin") {
-    systemPreferences.askForMediaAccess("microphone").catch(() => {});
+  if (process.platform === 'darwin') {
+    systemPreferences.askForMediaAccess('microphone').catch(() => {});
   }
 
   // Open external links in browser
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
-    return { action: "deny" };
+    return { action: 'deny' };
   });
 
-  win.on("closed", () => {
+  win.on('closed', () => {
     win = null;
   });
 }
@@ -91,48 +100,44 @@ function createWindow(): void {
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: "Shre",
+      label: 'Shre',
       submenu: [
-        { role: "about" },
-        { type: "separator" },
-        { role: "hide" },
-        { role: "hideOthers" },
-        { role: "unhide" },
-        { type: "separator" },
-        { role: "quit" },
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
       ],
     },
     {
-      label: "Edit",
+      label: 'Edit',
       submenu: [
-        { role: "undo" },
-        { role: "redo" },
-        { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { role: "selectAll" },
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
       ],
     },
     {
-      label: "View",
+      label: 'View',
       submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
-        { role: "toggleDevTools" },
-        { type: "separator" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
-        { role: "resetZoom" },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'resetZoom' },
       ],
     },
     {
-      label: "Window",
-      submenu: [
-        { role: "minimize" },
-        { role: "zoom" },
-        { role: "close" },
-      ],
+      label: 'Window',
+      submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }],
     },
   ];
 
@@ -141,13 +146,13 @@ function buildMenu(): void {
 
 // ── Lifecycle ──
 
-app.on("certificate-error", (event, _webContents, _url, _error, _cert, callback) => {
+app.on('certificate-error', (event, _webContents, _url, _error, _cert, callback) => {
   // Trust local self-signed certs (mkcert localhost)
   event.preventDefault();
   callback(true);
 });
 
-app.on("ready", async () => {
+app.on('ready', async () => {
   buildMenu();
 
   // Trust self-signed certs (mkcert) for ALL requests — webContents + net.request
@@ -160,9 +165,9 @@ app.on("ready", async () => {
 
   const running = await isServerRunning();
   if (running) {
-    console.log("[shre] Server already running on port", SERVER_PORT);
+    console.log('[shre] Server already running on port', SERVER_PORT);
   } else {
-    console.log("[shre] Starting server...");
+    console.log('[shre] Starting server...');
     startServer();
     // Wait for server to be ready
     await new Promise<void>((resolve) => setTimeout(resolve, 1200));
@@ -171,7 +176,7 @@ app.on("ready", async () => {
   createWindow();
 
   // Cmd+Shift+S to focus
-  globalShortcut.register("CommandOrControl+Shift+S", () => {
+  globalShortcut.register('CommandOrControl+Shift+S', () => {
     if (win) {
       win.show();
       win.focus();
@@ -179,16 +184,16 @@ app.on("ready", async () => {
   });
 });
 
-app.on("activate", () => {
+app.on('activate', () => {
   if (win === null) createWindow();
   else win.show();
 });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
 });
 
-app.on("will-quit", () => {
+app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   // Only kill server if we started it
   if (ownsServer && server) {

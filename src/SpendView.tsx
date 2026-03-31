@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { SBadge } from "@shre/ui-kit";
-import ports from "../../ports.json";
+import { useState, useEffect } from 'react';
+import { SBadge } from '@shre/ui-kit';
+import ports from '../../ports.json';
 
-const ROUTER_BASE = `https://localhost:${ports.services["shre-router"].port}`;
+const ROUTER_BASE = `https://localhost:${ports.services['shre-router'].port}`;
 
 interface CostSummary {
   totalCostUsd: number;
@@ -31,7 +31,7 @@ interface CostByModel {
 
 interface ProviderStatus {
   provider: string;
-  status: "active" | "degraded" | "down" | "no_keys";
+  status: 'active' | 'degraded' | 'down' | 'no_keys';
   keys: { total: number; healthy: number; inCooldown: number };
   lastUsed: string | null;
   lastError: string | null;
@@ -54,11 +54,10 @@ async function fetchJson<T>(path: string): Promise<T | null> {
   }
 }
 
-
 function fmtUsd(n: number): string {
   if (n >= 1) return `$${n.toFixed(2)}`;
   if (n >= 0.01) return `$${n.toFixed(3)}`;
-  if (n === 0) return "$0.00";
+  if (n === 0) return '$0.00';
   return `$${n.toFixed(4)}`;
 }
 
@@ -88,15 +87,15 @@ export function SpendView() {
       setError(null);
 
       const [s, m, p] = await Promise.all([
-        fetchJson<CostSummary>("/v1/costs/summary"),
-        fetchJson<CostByModel[]>("/v1/costs/by-model"),
-        fetchJson<ProviderStatus[]>("/v1/provider-status"),
+        fetchJson<CostSummary>('/v1/costs/summary'),
+        fetchJson<CostByModel[]>('/v1/costs/by-model'),
+        fetchJson<ProviderStatus[]>('/v1/provider-status'),
       ]);
 
       if (cancelled) return;
 
       if (!s && !m && !p) {
-        setError("Could not reach shre-router. Is it running?");
+        setError('Could not reach shre-router. Is it running?');
       }
       setSummary(s);
       setByModel(m ?? []);
@@ -106,29 +105,56 @@ export function SpendView() {
 
     load();
     const interval = setInterval(load, 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden" style={{ background: "var(--c-bg-1)" }}>
+    <div
+      className="flex-1 flex flex-col h-full overflow-hidden"
+      style={{ background: 'var(--c-bg-1)' }}
+    >
       {/* Header */}
-      <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--c-border-1)" }}>
-        <svg className="h-4 w-4" style={{ color: "var(--c-text-3)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      <div
+        className="px-4 py-3 flex items-center gap-2"
+        style={{ borderBottom: '1px solid var(--c-border-1)' }}
+      >
+        <svg
+          className="h-4 w-4"
+          style={{ color: 'var(--c-text-3)' }}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <line x1="12" y1="1" x2="12" y2="23" />
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
         </svg>
-        <span className="text-sm font-semibold" style={{ color: "var(--c-text-1)" }}>Provider Spend</span>
-        <span className="text-[10px] font-mono" style={{ color: "var(--c-text-5)" }}>via shre-router</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--c-text-1)' }}>
+          Provider Spend
+        </span>
+        <span className="text-[10px] font-mono" style={{ color: 'var(--c-text-5)' }}>
+          via shre-router
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading && (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full" style={{ color: "var(--c-text-5)" }} />
+            <div
+              className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full"
+              style={{ color: 'var(--c-text-5)' }}
+            />
           </div>
         )}
 
         {error && (
-          <SBadge variant="destructive" className="w-full justify-center rounded-lg px-4 py-3 text-sm">
+          <SBadge
+            variant="destructive"
+            className="w-full justify-center rounded-lg px-4 py-3 text-sm"
+          >
             {error}
           </SBadge>
         )}
@@ -138,7 +164,11 @@ export function SpendView() {
             {/* Summary Cards */}
             <div className="grid grid-cols-2 gap-2">
               <SummaryCard label="Total Spend" value={fmtUsd(summary.totalCostUsd)} />
-              <SummaryCard label="Savings (Local)" value={fmtUsd(summary.totalSavingsUsd)} accent="#4ade80" />
+              <SummaryCard
+                label="Savings (Local)"
+                value={fmtUsd(summary.totalSavingsUsd)}
+                accent="#4ade80"
+              />
               <SummaryCard label="Requests" value={String(summary.totalRequests)} />
               <SummaryCard label="Avg / Request" value={fmtUsd(summary.avgCostPerRequest)} />
               <SummaryCard label="Local %" value={`${summary.localPercent}%`} accent="#4ade80" />
@@ -148,39 +178,68 @@ export function SpendView() {
             {/* Provider Status */}
             {providers.length > 0 && (
               <div>
-                <h3 className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-text-5)" }}>
+                <h3
+                  className="text-[10px] font-semibold uppercase tracking-wider mb-2"
+                  style={{ color: 'var(--c-text-5)' }}
+                >
                   Providers
                 </h3>
                 <div className="space-y-1.5">
                   {providers.map((p) => (
-                      <div
-                        key={p.provider}
-                        className="rounded-lg px-3 py-2.5 flex items-center justify-between"
-                        style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)" }}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <SBadge
-                            variant={p.status === "active" ? "success" : p.status === "degraded" ? "warning" : p.status === "down" ? "destructive" : "secondary"}
-                            className="h-2 w-2 p-0 shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <div className="text-xs font-medium capitalize" style={{ color: "var(--c-text-1)" }}>{p.provider}</div>
-                            <div className="text-[10px]" style={{ color: "var(--c-text-4)" }}>
-                              {p.keys.healthy}/{p.keys.total} keys healthy
-                              {p.keys.inCooldown > 0 && ` · ${p.keys.inCooldown} cooling`}
-                            </div>
+                    <div
+                      key={p.provider}
+                      className="rounded-lg px-3 py-2.5 flex items-center justify-between"
+                      style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <SBadge
+                          variant={
+                            p.status === 'active'
+                              ? 'success'
+                              : p.status === 'degraded'
+                                ? 'warning'
+                                : p.status === 'down'
+                                  ? 'destructive'
+                                  : 'secondary'
+                          }
+                          className="h-2 w-2 p-0 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div
+                            className="text-xs font-medium capitalize"
+                            style={{ color: 'var(--c-text-1)' }}
+                          >
+                            {p.provider}
+                          </div>
+                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                            {p.keys.healthy}/{p.keys.total} keys healthy
+                            {p.keys.inCooldown > 0 && ` · ${p.keys.inCooldown} cooling`}
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-xs font-mono font-medium" style={{ color: "var(--c-text-1)" }}>{fmtUsd(p.spendUsd)}</div>
-                          <SBadge
-                            variant={p.status === "active" ? "success" : p.status === "degraded" ? "warning" : p.status === "down" ? "destructive" : "secondary"}
-                            className="text-[9px] px-1.5 py-0 h-4"
-                          >
-                            {p.status}
-                          </SBadge>
-                        </div>
                       </div>
+                      <div className="text-right shrink-0">
+                        <div
+                          className="text-xs font-mono font-medium"
+                          style={{ color: 'var(--c-text-1)' }}
+                        >
+                          {fmtUsd(p.spendUsd)}
+                        </div>
+                        <SBadge
+                          variant={
+                            p.status === 'active'
+                              ? 'success'
+                              : p.status === 'degraded'
+                                ? 'warning'
+                                : p.status === 'down'
+                                  ? 'destructive'
+                                  : 'secondary'
+                          }
+                          className="text-[9px] px-1.5 py-0 h-4"
+                        >
+                          {p.status}
+                        </SBadge>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -189,7 +248,10 @@ export function SpendView() {
             {/* By Model */}
             {byModel.length > 0 && (
               <div>
-                <h3 className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-text-5)" }}>
+                <h3
+                  className="text-[10px] font-semibold uppercase tracking-wider mb-2"
+                  style={{ color: 'var(--c-text-5)' }}
+                >
                   By Model
                 </h3>
                 <div className="space-y-1">
@@ -197,20 +259,35 @@ export function SpendView() {
                     <div
                       key={m.model}
                       className="rounded-lg px-3 py-2 flex items-center justify-between"
-                      style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)" }}
+                      style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}
                     >
                       <div className="min-w-0">
-                        <div className="text-[11px] font-medium truncate" style={{ color: "var(--c-text-1)" }}>{m.model}</div>
-                        <div className="text-[10px] flex gap-2" style={{ color: "var(--c-text-4)" }}>
+                        <div
+                          className="text-[11px] font-medium truncate"
+                          style={{ color: 'var(--c-text-1)' }}
+                        >
+                          {m.model}
+                        </div>
+                        <div
+                          className="text-[10px] flex gap-2"
+                          style={{ color: 'var(--c-text-4)' }}
+                        >
                           <span>{m.requests} req</span>
                           <span>{fmtTokens(m.totalTokens)} tok</span>
                           <span>{fmtMs(m.avgLatencyMs)}</span>
-                          {m.local && <span style={{ color: "var(--c-success-soft)" }}>local</span>}
+                          {m.local && <span style={{ color: 'var(--c-success-soft)' }}>local</span>}
                         </div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
-                        <div className="text-xs font-mono font-medium" style={{ color: "var(--c-text-1)" }}>{fmtUsd(m.costUsd)}</div>
-                        <div className="text-[9px]" style={{ color: "var(--c-text-5)" }}>{m.pct}%</div>
+                        <div
+                          className="text-xs font-mono font-medium"
+                          style={{ color: 'var(--c-text-1)' }}
+                        >
+                          {fmtUsd(m.costUsd)}
+                        </div>
+                        <div className="text-[9px]" style={{ color: 'var(--c-text-5)' }}>
+                          {m.pct}%
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -219,7 +296,7 @@ export function SpendView() {
             )}
 
             {/* Top model & period */}
-            <div className="text-[10px] pt-2" style={{ color: "var(--c-text-5)" }}>
+            <div className="text-[10px] pt-2" style={{ color: 'var(--c-text-5)' }}>
               Top model: {summary.topModel} · Auto-refreshes every 30s
             </div>
           </>
@@ -231,9 +308,19 @@ export function SpendView() {
 
 function SummaryCard({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
-    <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--c-bg-2)", border: "1px solid var(--c-border-2)" }}>
-      <div className="text-[10px] mb-0.5" style={{ color: "var(--c-text-5)" }}>{label}</div>
-      <div className="text-base font-semibold font-mono" style={{ color: accent || "var(--c-text-1)" }}>{value}</div>
+    <div
+      className="rounded-lg px-3 py-2.5"
+      style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}
+    >
+      <div className="text-[10px] mb-0.5" style={{ color: 'var(--c-text-5)' }}>
+        {label}
+      </div>
+      <div
+        className="text-base font-semibold font-mono"
+        style={{ color: accent || 'var(--c-text-1)' }}
+      >
+        {value}
+      </div>
     </div>
   );
 }

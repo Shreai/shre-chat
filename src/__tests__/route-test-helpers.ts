@@ -6,9 +6,9 @@
  * exercise the actual production code — not a reimplemented copy.
  */
 
-import { EventEmitter } from "node:events";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Socket } from "node:net";
+import { EventEmitter } from 'node:events';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Socket } from 'node:net';
 
 // ── Mock logger ──────────────────────────────────────────────────────
 
@@ -37,8 +37,8 @@ export interface MockReqOptions {
  */
 export function createMockReq(opts: MockReqOptions = {}): IncomingMessage {
   const emitter = new EventEmitter() as any;
-  emitter.method = opts.method || "GET";
-  emitter.url = opts.url || "/";
+  emitter.method = opts.method || 'GET';
+  emitter.url = opts.url || '/';
   emitter.headers = {};
   // Normalize header keys to lowercase (Node.js convention)
   if (opts.headers) {
@@ -46,17 +46,17 @@ export function createMockReq(opts: MockReqOptions = {}): IncomingMessage {
       emitter.headers[k.toLowerCase()] = v;
     }
   }
-  emitter.socket = { remoteAddress: opts.remoteAddress || "127.0.0.1" } as Socket;
+  emitter.socket = { remoteAddress: opts.remoteAddress || '127.0.0.1' } as Socket;
 
   // Schedule body emission on next tick so listeners can attach
   if (opts.body !== undefined) {
     process.nextTick(() => {
-      emitter.emit("data", Buffer.from(opts.body!));
-      emitter.emit("end");
+      emitter.emit('data', Buffer.from(opts.body!));
+      emitter.emit('end');
     });
   } else {
     process.nextTick(() => {
-      emitter.emit("end");
+      emitter.emit('end');
     });
   }
 
@@ -81,9 +81,11 @@ export interface MockRes extends ServerResponse {
  * Create a mock ServerResponse that captures status, headers, and body.
  */
 export function createMockRes(): MockRes {
-  const result: MockResResult = { statusCode: 200, headers: {}, body: "" };
+  const result: MockResResult = { statusCode: 200, headers: {}, body: '' };
   let resolvePromise: (r: MockResResult) => void;
-  const promise = new Promise<MockResResult>((resolve) => { resolvePromise = resolve; });
+  const promise = new Promise<MockResResult>((resolve) => {
+    resolvePromise = resolve;
+  });
 
   const res = {
     statusCode: 200,
@@ -125,7 +127,7 @@ export function createMockRes(): MockRes {
 export function createJsonHelper() {
   return function json(res: any, data: any, status = 200) {
     res.statusCode = status;
-    res.setHeader("Content-Type", "application/json");
+    res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(data));
   };
 }
@@ -139,16 +141,16 @@ export function createCollectBodyHelper(maxBytes = 1024 * 1024) {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       let size = 0;
-      req.on("data", (chunk: Buffer) => {
+      req.on('data', (chunk: Buffer) => {
         size += chunk.length;
         if (size > max) {
-          reject(new Error("Body too large"));
+          reject(new Error('Body too large'));
           return;
         }
         chunks.push(chunk);
       });
-      req.on("end", () => resolve(Buffer.concat(chunks).toString()));
-      req.on("error", reject);
+      req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+      req.on('error', reject);
     });
   };
 }
@@ -179,7 +181,9 @@ export function createAuthCookieHelper() {
 
 // ── Helper to parse mock response body as JSON ───────────────────────
 
-export async function getJsonResponse(resPromise: Promise<MockResResult>): Promise<{ status: number; body: any }> {
+export async function getJsonResponse(
+  resPromise: Promise<MockResResult>,
+): Promise<{ status: number; body: any }> {
   const result = await resPromise;
   let body: any;
   try {

@@ -11,6 +11,74 @@ const LEGACY_MODEL_KEY = 'shre-model-overrides';
 export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
 export type GatewayMode = 'router' | 'openclaw' | 'direct';
 
+// Feature keys that can be toggled on/off
+export type FeatureKey =
+  | 'terminal'
+  | 'claudeCli'
+  | 'billing'
+  | 'marketplace'
+  | 'bookmarks'
+  | 'compareModels'
+  | 'systemPrompt'
+  | 'analytics'
+  | 'feedView'
+  | 'costDashboard'
+  | 'reports'
+  | 'admin'
+  | 'fineTuning'
+  | 'taskTimeline'
+  | 'tasks'
+  | 'reminders'
+  | 'projects'
+  | 'externalApps';
+
+export const FEATURE_LABELS: Record<FeatureKey, string> = {
+  terminal: 'Terminal',
+  claudeCli: 'Claude CLI',
+  billing: 'Billing',
+  marketplace: 'Marketplace',
+  bookmarks: 'Bookmarks',
+  compareModels: 'Compare Models',
+  systemPrompt: 'System Prompt',
+  analytics: 'Session Analytics',
+  feedView: 'Feed / Feed Analytics',
+  costDashboard: 'Cost Dashboard',
+  reports: 'Reports',
+  admin: 'Admin',
+  fineTuning: 'Fine-Tuning',
+  taskTimeline: 'Task Timeline',
+  tasks: 'Tasks',
+  reminders: 'Reminders',
+  projects: 'Projects',
+  externalApps: 'External Apps',
+};
+
+// On localhost all features default ON; on public domain (chat.nirtek.net) only core features
+const _isLocal =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+export const DEFAULT_FEATURES: Record<FeatureKey, boolean> = {
+  terminal: _isLocal,
+  claudeCli: _isLocal,
+  billing: _isLocal,
+  marketplace: _isLocal,
+  bookmarks: true,
+  compareModels: _isLocal,
+  systemPrompt: _isLocal,
+  analytics: _isLocal,
+  feedView: _isLocal,
+  costDashboard: _isLocal,
+  reports: _isLocal,
+  admin: _isLocal,
+  fineTuning: _isLocal,
+  taskTimeline: _isLocal,
+  tasks: _isLocal,
+  reminders: true,
+  projects: _isLocal,
+  externalApps: _isLocal,
+};
+
 export interface PreferencesState {
   notifSound: boolean;
   voiceMode: boolean;
@@ -19,6 +87,7 @@ export interface PreferencesState {
   ttsProvider: TTSProvider;
   modelOverrides: Record<string, string>; // agentId → modelId
   gatewayMode: GatewayMode; // router | openclaw | direct (Ollama)
+  features: Record<FeatureKey, boolean>; // Feature toggles
 
   // Actions
   setNotifSound: (v: boolean) => void;
@@ -29,6 +98,8 @@ export interface PreferencesState {
   setModelOverride: (agentId: string, modelId: string | null) => void;
   getModelOverride: (agentId: string) => string | null;
   setGatewayMode: (v: GatewayMode) => void;
+  setFeature: (key: FeatureKey, enabled: boolean) => void;
+  isFeatureEnabled: (key: FeatureKey) => boolean;
 }
 
 /**
@@ -94,6 +165,7 @@ export const usePreferences = create<PreferencesState>()(
         ttsProvider: (legacy as any).ttsProvider ?? 'auto',
         modelOverrides: legacy.modelOverrides ?? {},
         gatewayMode: legacy.gatewayMode ?? 'router',
+        features: { ...DEFAULT_FEATURES },
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
@@ -101,6 +173,16 @@ export const usePreferences = create<PreferencesState>()(
         setTtsVoice: (v) => set({ ttsVoice: v }),
         setTtsProvider: (v) => set({ ttsProvider: v }),
         setGatewayMode: (v) => set({ gatewayMode: v }),
+
+        setFeature: (key, enabled) =>
+          set((state) => ({
+            features: { ...state.features, [key]: enabled },
+          })),
+
+        isFeatureEnabled: (key) => {
+          const f = get().features;
+          return f[key] ?? DEFAULT_FEATURES[key] ?? false;
+        },
 
         setModelOverride: (agentId, modelId) =>
           set((state) => {
@@ -126,6 +208,7 @@ export const usePreferences = create<PreferencesState>()(
         ttsProvider: state.ttsProvider,
         modelOverrides: state.modelOverrides,
         gatewayMode: state.gatewayMode,
+        features: state.features,
       }),
       // After rehydration, clean up legacy keys (one-time)
       onRehydrateStorage: () => {

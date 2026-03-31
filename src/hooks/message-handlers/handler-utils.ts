@@ -2,22 +2,23 @@
  * Shared utilities for message handlers.
  * Extracted from useMessageHandlers.ts.
  */
-import { mib007Link } from "../../chat-utils";
+import { mib007Link } from '../../chat-utils';
 
 /** Version stamp for the default system prompt — bump when prompt logic changes. */
-export const SYSTEM_PROMPT_VERSION = "1.0.0";
+export const SYSTEM_PROMPT_VERSION = '1.0.0';
 
 /**
  * Validate custom system prompt — reject injection patterns and excessive length.
  * Returns the prompt if safe, or null if it should be discarded.
  */
 export function validateCustomPrompt(prompt: string): string | null {
-  if (!prompt || typeof prompt !== "string") return null;
+  if (!prompt || typeof prompt !== 'string') return null;
 
   const MAX_CHARS = 14_000;
   if (prompt.length > MAX_CHARS) {
-    console.warn("[shre] Custom system prompt exceeds length limit, using default", {
-      length: prompt.length, max: MAX_CHARS
+    console.warn('[shre] Custom system prompt exceeds length limit, using default', {
+      length: prompt.length,
+      max: MAX_CHARS,
     });
     return null;
   }
@@ -36,7 +37,7 @@ export function validateCustomPrompt(prompt: string): string | null {
 
   for (const pattern of INJECTION_PATTERNS) {
     if (pattern.test(prompt)) {
-      console.warn("[shre] Custom system prompt contains injection pattern, using default", {
+      console.warn('[shre] Custom system prompt contains injection pattern, using default', {
         pattern: pattern.source,
       });
       return null;
@@ -55,8 +56,8 @@ UI Capabilities: This chat app has a Preview tab that renders HTML. When the use
 Task Management: You can help manage tasks and todos. When the user asks to create, check, update, or manage tasks:
 - To create a task: tell the user what you're creating, and include "create task: [title]" in your response so the system auto-creates it
 - To check task status: the user's tasks are tracked in the system \u2014 reference them by what was discussed
-- To link to tasks: use [View Tasks](${mib007Link("tasks")}) or [View Issues](${mib007Link("issues")})
-- Available MIB007 views: [Tasks](${mib007Link("tasks")}), [Issues](${mib007Link("issues")}), [Skills](${mib007Link("skills")}), [Agents](${mib007Link("agents")})
+- To link to tasks: use [View Tasks](${mib007Link('tasks')}) or [View Issues](${mib007Link('issues')})
+- Available MIB007 views: [Tasks](${mib007Link('tasks')}), [Issues](${mib007Link('issues')}), [Skills](${mib007Link('skills')}), [Agents](${mib007Link('agents')})
 
 Conversation Memory: You have access to the full conversation in this session. When the user references earlier discussions ("what did we talk about", "the task I mentioned", "status update"), look through the conversation history to find the relevant context. Never say you don't remember \u2014 the history is right here. Summarize what was discussed and provide updates.`;
 }
