@@ -402,6 +402,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     if (navigator.vibrate) navigator.vibrate(30);
     cleanupAudioLevel();
 
+    // Stop SpeechRecognition — text is already live in the textarea
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -411,96 +412,35 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       recognitionRef.current = null;
     }
 
+    // Stop MediaRecorder — no Whisper re-transcription needed since
+    // SpeechRecognition already put the text in the input box live.
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
-      setVoicePhase('transcribing');
-      setInterimTranscript('Transcribing your voice...');
-
-      await new Promise<void>((resolve) => {
-        recorder.onstop = async () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-          audioChunksRef.current = [];
-          // Don't stop shared stream tracks — they're cached for reuse (avoids re-prompting permissions)
-
-          if (audioBlob.size < 5000) {
-            setInterimTranscript('Recording too short — try again');
-            clearInterimAfter(2000);
-            setIsRecording(false);
-            setVoicePhase('idle');
-            setInput('');
-            resolve();
-            return;
-          }
-
-          let transcribedText = '';
-          try {
-            const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
-            const form = new FormData();
-            form.append('file', audioBlob, `recording.${ext}`);
-            form.append('model', 'whisper-1');
-            form.append('language', 'en');
-            const res = await fetch('/api/transcribe', {
-              method: 'POST',
-              body: form,
-              signal: AbortSignal.timeout(30_000),
-            });
-            const data = await res.json();
-            if (data.text && data.text.trim()) {
-              transcribedText = data.text.trim();
-            }
-          } catch (err: any) {
-            console.warn('[voice] Whisper transcription failed, keeping browser transcript:', err);
-            const msg =
-              err?.name === 'TimeoutError'
-                ? 'Transcription timed out — try a shorter recording'
-                : 'Transcription failed — check connection';
-            setInterimTranscript(msg);
-            clearInterimAfter(3000);
-          }
-
-          setIsRecording(false);
-          setVoicePhase('idle');
-
-          // Use Whisper result first, then accumulated SpeechRecognition transcript from ref
-          let finalText = transcribedText || voiceFinalTranscriptRef.current.trim() || '';
-          finalText = finalText
-            .replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, '')
-            .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
-            .trim();
-          if (finalText) {
-            setInterimTranscript('');
-            setInput(finalText);
-            // Also sync to textarea DOM for any listeners (autogrow, etc.)
-            requestAnimationFrame(() => {
-              const ta = document.getElementById('shre-chat-textarea') as HTMLTextAreaElement;
-              if (ta && ta.value !== finalText) {
-                ta.value = finalText;
-                ta.dispatchEvent(new Event('input', { bubbles: true }));
-              }
-            });
-            setVoicePendingSend(finalText);
-          } else {
-            if (
-              !interimTranscriptRef.current.includes('failed') &&
-              !interimTranscriptRef.current.includes('timed out')
-            ) {
-              setInterimTranscript('No speech detected — try again');
-            }
-            clearInterimAfter(3000);
-            setInput('');
-          }
-          resolve();
-        };
+      try {
         recorder.stop();
-      });
+      } catch (_) {
+        void _;
+      }
       mediaRecorderRef.current = null;
-      return;
+      audioChunksRef.current = [];
+    }
+
+    // Clean wake word artifacts from whatever text is already in the input
+    const currentText = voiceFinalTranscriptRef.current.trim();
+    if (currentText) {
+      const cleaned = currentText
+        .replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, '')
+        .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
+        .trim();
+      setInput(cleaned);
+      setInterimTranscript('');
     }
 
     setIsRecording(false);
     setVoicePhase('idle');
-    setInterimTranscript('');
-    setInput('');
+    if (!currentText) {
+      setInterimTranscript('');
+    }
   }, [cleanupAudioLevel]);
 
   // Keep ref in sync
