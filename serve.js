@@ -6143,7 +6143,7 @@ termWss.on("connection", (ws, req) => {
   });
 });
 
-// Route WebSocket upgrades — only known paths allowed (no raw OpenClaw proxy)
+// Route WebSocket upgrades
 function handleUpgrade(req, socket, head) {
   const pathname = new URL(req.url, `${SCHEME}://${req.headers.host}`).pathname;
   if (pathname === "/ws/terminal") {
@@ -6154,11 +6154,10 @@ function handleUpgrade(req, socket, head) {
     notifyWss.handleUpgrade(req, socket, head, (ws) => {
       notifyWss.emit("connection", ws, req);
     });
-  } else if (pathname === "/ws/openclaw" && req.headers["x-shre-admin"]) {
-    // Admin-only OpenClaw proxy — disabled in production (use shre-router instead)
-    log.warn("[ws] Rejected /ws/openclaw admin bypass attempt", { ip: req.socket.remoteAddress });
-    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
-    socket.destroy();
+  } else if (pathname === "/" || pathname.startsWith("/openclaw")) {
+    // OpenClaw Control UI WebSocket — proxy to gateway
+    log.info("[ws] Proxying OpenClaw WebSocket upgrade", { pathname });
+    proxyOpenClawWS(req, socket, head);
   } else {
     log.warn("[ws] Rejected unknown WebSocket path", { pathname });
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
