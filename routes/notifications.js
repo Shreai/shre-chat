@@ -177,11 +177,26 @@ export function registerNotificationRoutes({ log, eventBus, chatDb }) {
   //  the default formatter handles any event type passed to enqueueEvent)
 
   // Prune old notifications on startup (older than 7 days)
+  // Also cap repetitive escalation notifications — keep only 5 most recent per type
   try {
     stmtPrune.run(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // Prune escalation noise: keep only the 5 most recent per noisy type
+    for (const noisyType of ['ellie.escalation', 'ellie.failed', 'error.escalation']) {
+      chatDb.prepare(`
+        DELETE FROM notifications WHERE type = ? AND id NOT IN (
+          SELECT id FROM notifications WHERE type = ? ORDER BY created_at DESC LIMIT 5
+        )
+      `).run(noisyType, noisyType);
+    }
   } catch (err) {
     log.warn("Failed to prune old notifications on startup", {}, err);
   }
+
+  // Diversified query: fetch latest per type to avoid one noisy type burying others
+  const stmtGetDiversified = chatDb.prepare(`
+    SELECT id, type, title, body, source, read, created_at FROM notifications
+    WHERE created_at > ? ORDER BY created_at DESC LIMIT ?
+  `);
 
   return async function handleNotificationRoute(req, res, url, { json, collectBody }) {
     // GET /api/notifications?since=<timestamp>&limit=20
@@ -189,8 +204,40 @@ export function registerNotificationRoutes({ log, eventBus, chatDb }) {
       const since = Number(url.searchParams.get("since")) || 0;
       const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 100);
       try {
-        const rows = stmtGetRecent.all(since, limit);
-        return json(res, { notifications: rows.map(r => ({
+        // Fetch 3x the limit then deduplicate by type — ensure each type gets representation
+        const rows = stmtGetDiversified.all(since, limit * 3);
+        /** @type {Map<string, typeof rows>} */
+        const byType = new Map();
+        for (const r of rows) {
+          if (!byType.has(r.type)) byType.set(r.type, []);
+          byType.get(r.type).push(r);
+        }
+        // Round-robin: take up to 3 per type, then fill remaining with newest
+        /** @type {Set<string>} */
+        const pickedIds = new Set();
+        const picked = [];
+        const maxPerType = Math.max(3, Math.floor(limit / byType.size) || 3);
+        for (const [, typeRows] of byType) {
+          for (const r of typeRows.slice(0, maxPerType)) {
+            if (picked.length < limit) {
+              picked.push(r);
+              pickedIds.add(r.id);
+            }
+          }
+        }
+        // Fill remaining slots with newest not yet picked
+        if (picked.length < limit) {
+          for (const r of rows) {
+            if (picked.length >= limit) break;
+            if (!pickedIds.has(r.id)) {
+              picked.push(r);
+              pickedIds.add(r.id);
+            }
+          }
+        }
+        // Sort final result by created_at descending
+        picked.sort((a, b) => b.created_at - a.created_at);
+        return json(res, { notifications: picked.map(r => ({
           id: r.id,
           type: r.type,
           title: r.title,
