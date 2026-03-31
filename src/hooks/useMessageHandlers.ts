@@ -1221,6 +1221,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             executing: detail ? `Executing: ${detail}` : 'Executing...',
             tool_call: detail ? `Using tool: ${detail}` : 'Processing...',
             done: 'Done',
+            warning: detail || 'Warning',
             attention: detail || 'Attention needed',
             error: detail || 'Error occurred',
           };
@@ -1275,6 +1276,16 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
                 detail ? { tool: detail } : undefined,
               );
           }
+        },
+        onBillingWarning: (message: string) => {
+          actions.addMessage(sessionId, {
+            role: 'assistant',
+            content: `[system] ${message}`,
+            timestamp: Date.now(),
+            meta: { system: 'true', type: 'system', event: 'billing-warning' },
+          });
+          actions.addActivity(sessionId, 'warning', message);
+          actions.addFeed(sessionId, 'system', message);
         },
         onApprovalRequired: (approval) => {
           setPendingApproval(approval);
