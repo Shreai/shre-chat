@@ -17,7 +17,7 @@ interface ProviderConfig {
   keyPlaceholder: string;
   keyPrefix: string;
   color: string;
-  icon: JSX.Element;
+  icon: React.ReactNode;
 }
 
 const PROVIDERS: ProviderConfig[] = [

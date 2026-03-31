@@ -635,7 +635,17 @@ async function streamViaFallback(
   callbacks.onStatus?.('connecting');
 
   const messages = [
-    ...history.filter((m) => !m.meta?.system).map((m) => ({ role: m.role, content: m.content })),
+    ...history.filter((m) => {
+      if (!m.meta?.system) return true;
+      // Keep system messages that carry substantive context (errors, escalations)
+      // Drop pure routing noise — the server-side noise filter handles the rest
+      const t = m.content.trim();
+      if (t.startsWith('[system] Routing via ')) return false;
+      if (t.startsWith('[tool_exec]')) return false;
+      if (/^\[system\] .+ API quota exceeded/.test(t)) return false;
+      // Keep error messages, escalation notices, and other substantive system info
+      return true;
+    }).map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: message },
   ];
 
@@ -691,10 +701,22 @@ async function streamViaFallback(
   let routedModel = '';
   const fallbackStart = Date.now();
 
+  // Stream silence timeout — if no data for 60s, assume connection died
+  const STREAM_SILENCE_TIMEOUT = 60_000;
+  let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetSilenceTimer = () => {
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+      try { reader.cancel(); } catch {}
+    }, STREAM_SILENCE_TIMEOUT);
+  };
+
   try {
+    resetSilenceTimer();
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      resetSilenceTimer();
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -847,7 +869,19 @@ async function streamViaFallback(
       }
     }
   } finally {
+    if (silenceTimer) clearTimeout(silenceTimer);
     reader.releaseLock();
+  }
+
+  // If stream ended with no content, surface error instead of empty message
+  if (!fullText || fullText.trim().length < 3) {
+    const elapsed = Date.now() - fallbackStart;
+    if (elapsed >= STREAM_SILENCE_TIMEOUT - 1000) {
+      callbacks.onError('Request timed out — no response received. The service may be restarting. Please try again.');
+    } else {
+      callbacks.onError('The model returned an empty response. This has been escalated automatically. Please try again.');
+    }
+    return;
   }
 
   callbacks.onDone(fullText);
