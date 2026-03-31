@@ -8,7 +8,7 @@ import {
   type ToolErrorEvent,
   type ThreadContext,
 } from '../openclaw';
-import { sendChatWS, isWSConnected, queueMessage, onStateChange } from '../gateway-ws';
+import { sendChatWS, isWSConnected, queueMessage } from '../gateway-ws';
 import {
   uid,
   generateTitle,
@@ -223,29 +223,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
 
   const currentAgent = getAgent(activeAgentId);
 
-  // Surface WS connection state changes as system messages
-  useEffect(() => {
-    const unsubscribe = onStateChange((_state, info) => {
-      const activeSession = sessions[0]?.id;
-      if (!activeSession) return;
-      if (info.state === 'disconnected' || info.state === 'failed') {
-        actions.addMessage(activeSession, {
-          role: 'assistant',
-          content: `[system] ${info.errorMessage || 'Gateway disconnected'}`,
-          timestamp: Date.now(),
-          meta: { system: 'true', type: 'system', event: 'disconnect' },
-        });
-      } else if (info.state === 'connected') {
-        actions.addMessage(activeSession, {
-          role: 'assistant',
-          content: '[system] Gateway reconnected',
-          timestamp: Date.now(),
-          meta: { system: 'true', type: 'system', event: 'reconnect' },
-        });
-      }
-    });
-    return unsubscribe;
-  }, [sessions, actions]);
+  // Gateway WS is disabled — all chat routes through HTTP/SSE via shre-router.
+  // No WS state change messages needed (they only caused false "disconnected" noise).
 
   const generateSuggestions = useCallback(
     async (assistantResponse: string) => {
