@@ -1546,6 +1546,7 @@ async function requestHandler(req, res) {
     const csrfExempt = PUBLIC_PATHS.has(url.pathname)
       || url.pathname.startsWith("/api/auth/")
       || url.pathname.startsWith("/api/router/")
+      || url.pathname.startsWith("/api/oauth/")
       || url.pathname.startsWith("/api/direct/")
       || url.pathname.startsWith("/v1/")
       || req.headers["authorization"]?.startsWith("Bearer ");
@@ -4884,6 +4885,38 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.error("[router-proxy] proxy failed:", err.message);
       if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: "Proxy error" })); }
+    }
+    return;
+  }
+
+  // ── Proxy /api/oauth/* to shre-router OAuth endpoints ──────────
+  if (url.pathname.startsWith("/api/oauth/")) {
+    const oauthPath = url.pathname.replace("/api/oauth", "/v1/oauth");
+    const oauthUrl = `${serviceUrl("shre-router")}${oauthPath}${url.search}`;
+    try {
+      const oauthHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
+      delete oauthHeaders["accept-encoding"];
+      delete oauthHeaders["content-length"];
+      // Inject admin auth for shre-router requireAdmin middleware
+      if (authClaims) {
+        const adminToken = process.env.ROUTER_ADMIN_TOKEN || (() => { try { return readFileSync(join(homedir(), ".shre", "router", "admin-token"), "utf-8").trim(); } catch { return ""; } })();
+        if (adminToken) oauthHeaders["authorization"] = `Bearer ${adminToken}`;
+      }
+      const proto = serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default;
+      const oauthReq = proto.request(oauthUrl, { method: req.method, headers: oauthHeaders, rejectUnauthorized: false }, (oauthRes) => {
+        const rHeaders = { ...oauthRes.headers };
+        rHeaders["cache-control"] = "no-cache";
+        res.writeHead(oauthRes.statusCode ?? 502, rHeaders);
+        oauthRes.pipe(res);
+      });
+      oauthReq.on("error", (err) => {
+        log.error("[oauth-proxy] shre-router error:", err.message);
+        if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: "OAuth proxy failed" })); }
+      });
+      req.pipe(oauthReq);
+    } catch (err) {
+      log.error("[oauth-proxy] proxy failed:", err.message);
+      if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: "OAuth proxy error" })); }
     }
     return;
   }
