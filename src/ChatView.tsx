@@ -635,6 +635,18 @@ export function ChatView() {
     handleSendRef,
   });
 
+  // ── Header mic → ChatComposer push-to-talk bridge ──
+  useEffect(() => {
+    const onMicStart = () => { startRecording(); };
+    const onMicStop = () => { stopRecording(); };
+    window.addEventListener('shre-mic-start', onMicStart);
+    window.addEventListener('shre-mic-stop', onMicStop);
+    return () => {
+      window.removeEventListener('shre-mic-start', onMicStart);
+      window.removeEventListener('shre-mic-stop', onMicStop);
+    };
+  }, [startRecording, stopRecording]);
+
   // ── Keyboard shortcuts (extracted hook) ──
   const { handleAbort } = useKeyboardShortcuts({
     streaming,
