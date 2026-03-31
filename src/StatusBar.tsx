@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, getAgent } from './store';
-import { usePreferences } from './preferences-store';
+import { usePreferences, type GatewayMode } from './preferences-store';
 import { getOrRequestStream } from './hooks/useVoiceRecording';
 
 // ── Notification types ──────────────────────────────────────────────
@@ -158,56 +158,35 @@ function formatCountdown(ms: number): string {
 
 // ── Component ────────────────────────────────────────────────────────
 
-/** Routing mode indicator — shows which path chat messages take */
+/** Routing mode indicator — shows which gateway path chat messages take */
 function RoutingModeIndicator() {
-  const [mode, setMode] = useState<'cli' | 'openclaw' | 'router'>(() => {
-    if (localStorage.getItem('shre-claude-cli-mode') === 'true') return 'cli';
-    if (localStorage.getItem('shre-openclaw-mode') === 'true') return 'openclaw';
-    return 'router';
-  });
+  const gatewayMode = usePreferences((s) => s.gatewayMode);
+  const setGatewayMode = usePreferences((s) => s.setGatewayMode);
 
-  // Listen for localStorage changes from other components
-  useEffect(() => {
-    const sync = () => {
-      if (localStorage.getItem('shre-claude-cli-mode') === 'true') setMode('cli');
-      else if (localStorage.getItem('shre-openclaw-mode') === 'true') setMode('openclaw');
-      else setMode('router');
-    };
-    window.addEventListener('storage', sync);
-    // Also poll briefly since same-tab storage changes don't fire 'storage'
-    const id = setInterval(sync, 2000);
-    return () => {
-      window.removeEventListener('storage', sync);
-      clearInterval(id);
-    };
-  }, []);
-
-  const config: Record<string, { label: string; color: string; title: string }> = {
-    cli: {
-      label: 'CLI',
-      color: '#a855f7',
-      title: 'Claude Code CLI — coding tasks execute locally',
-    },
-    openclaw: {
-      label: 'OpenClaw',
-      color: '#8b5cf6',
-      title: 'OpenClaw Gateway — full agent workspace',
-    },
-    router: { label: 'Router', color: '#3b82f6', title: 'shre-router — auto-routes to best model' },
+  const config: Record<GatewayMode, { label: string; color: string; title: string }> = {
+    router: { label: 'Router', color: '#3b82f6', title: 'Shre Router — trust gate, RAG, scoring' },
+    openclaw: { label: 'OpenClaw', color: '#a855f7', title: 'OpenClaw Gateway — agent workspace' },
+    direct: { label: 'Direct', color: '#22c55e', title: 'Direct Ollama — local models, no gateway' },
   };
-  const c = config[mode];
+  const modes: GatewayMode[] = ['router', 'openclaw', 'direct'];
+  const c = config[gatewayMode];
 
   return (
-    <div
+    <button
       className="status-bar-item hidden sm:flex items-center"
       style={{
         gap: 4,
         padding: '1px 6px',
         borderRadius: 4,
         background: `${c.color}15`,
-        cursor: 'default',
+        border: `1px solid ${c.color}25`,
+        cursor: 'pointer',
       }}
-      title={c.title}
+      title={`${c.title} — click to cycle`}
+      onClick={() => {
+        const idx = modes.indexOf(gatewayMode);
+        setGatewayMode(modes[(idx + 1) % modes.length]);
+      }}
     >
       <span
         style={{
@@ -221,7 +200,45 @@ function RoutingModeIndicator() {
       <span style={{ fontSize: 11, fontWeight: 600, color: c.color, letterSpacing: '0.02em' }}>
         {c.label}
       </span>
-    </div>
+    </button>
+  );
+}
+
+/** Compact gateway pill for the bottom status bar — click to cycle modes */
+function StatusBarGatewayPill() {
+  const gatewayMode = usePreferences((s) => s.gatewayMode);
+  const setGatewayMode = usePreferences((s) => s.setGatewayMode);
+  const modes: GatewayMode[] = ['router', 'openclaw', 'direct'];
+  const cfg: Record<GatewayMode, { label: string; color: string }> = {
+    router: { label: 'R', color: '#3b82f6' },
+    openclaw: { label: 'OC', color: '#a855f7' },
+    direct: { label: 'D', color: '#22c55e' },
+  };
+  const c = cfg[gatewayMode];
+  return (
+    <button
+      onClick={() => {
+        const idx = modes.indexOf(gatewayMode);
+        setGatewayMode(modes[(idx + 1) % modes.length]);
+      }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        padding: '1px 7px',
+        borderRadius: 6,
+        fontSize: 11,
+        fontWeight: 600,
+        background: `${c.color}15`,
+        color: c.color,
+        border: `1px solid ${c.color}30`,
+        cursor: 'pointer',
+      }}
+      title={`Gateway: ${gatewayMode} — click to cycle`}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.color }} />
+      {c.label}
+    </button>
   );
 }
 
@@ -921,43 +938,8 @@ export function StatusBar() {
         <span style={{ ...styles.label, fontSize: 10 }}>{agentBusy ? 'busy' : 'idle'}</span>
       </div>
 
-      {/* Router / OpenClaw toggle */}
-      <button
-        onClick={() => {
-          const curr = localStorage.getItem('shre-openclaw-mode') === 'true';
-          const next = !curr;
-          localStorage.setItem('shre-openclaw-mode', String(next));
-          window.dispatchEvent(
-            new StorageEvent('storage', { key: 'shre-openclaw-mode', newValue: String(next) }),
-          );
-          setData((d) => ({ ...d }));
-        }}
-        style={{
-          ...styles.pillBtn,
-          background:
-            localStorage.getItem('shre-openclaw-mode') === 'true'
-              ? 'rgba(168,85,247,0.15)'
-              : 'rgba(59,130,246,0.1)',
-          color: localStorage.getItem('shre-openclaw-mode') === 'true' ? '#a855f7' : '#3b82f6',
-          border: `1px solid ${localStorage.getItem('shre-openclaw-mode') === 'true' ? 'rgba(168,85,247,0.25)' : 'rgba(59,130,246,0.2)'}`,
-        }}
-        title={
-          localStorage.getItem('shre-openclaw-mode') === 'true'
-            ? 'OpenClaw mode — click to switch to Router'
-            : 'Router mode — click to switch to OpenClaw'
-        }
-      >
-        <span
-          style={{
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            background:
-              localStorage.getItem('shre-openclaw-mode') === 'true' ? '#a855f7' : '#3b82f6',
-          }}
-        />
-        {localStorage.getItem('shre-openclaw-mode') === 'true' ? 'OC' : 'R'}
-      </button>
+      {/* Gateway mode pill — uses RoutingModeIndicator at top, this is the compact status-bar version */}
+      <StatusBarGatewayPill />
 
       {/* Language selector */}
       <select

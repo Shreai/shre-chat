@@ -9,6 +9,7 @@ const LEGACY_MODEL_KEY = 'shre-model-overrides';
 // ── Preferences slice — persisted via Zustand persist middleware ─────
 
 export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
+export type GatewayMode = 'router' | 'openclaw' | 'direct';
 
 export interface PreferencesState {
   notifSound: boolean;
@@ -17,6 +18,7 @@ export interface PreferencesState {
   ttsVoice: string;
   ttsProvider: TTSProvider;
   modelOverrides: Record<string, string>; // agentId → modelId
+  gatewayMode: GatewayMode; // router | openclaw | direct (Ollama)
 
   // Actions
   setNotifSound: (v: boolean) => void;
@@ -26,12 +28,15 @@ export interface PreferencesState {
   setTtsProvider: (v: TTSProvider) => void;
   setModelOverride: (agentId: string, modelId: string | null) => void;
   getModelOverride: (agentId: string) => string | null;
+  setGatewayMode: (v: GatewayMode) => void;
 }
 
 /**
  * Migrate legacy localStorage keys into the Zustand persist store on first load.
  * After migration, the persist middleware owns these values.
  */
+const LEGACY_OPENCLAW_KEY = 'shre-openclaw-mode';
+
 function migrateFromLegacyKeys(): Partial<PreferencesState> {
   const migrated: Partial<PreferencesState> = {};
 
@@ -62,6 +67,12 @@ function migrateFromLegacyKeys(): Partial<PreferencesState> {
         migrated.modelOverrides = parsed;
       }
     }
+
+    // gatewayMode: migrate from legacy shre-openclaw-mode boolean
+    const ocRaw = localStorage.getItem(LEGACY_OPENCLAW_KEY);
+    if (ocRaw === 'true') {
+      migrated.gatewayMode = 'openclaw';
+    }
   } catch {
     // Ignore migration errors — defaults are safe
   }
@@ -82,12 +93,14 @@ export const usePreferences = create<PreferencesState>()(
         ttsVoice: legacy.ttsVoice ?? 'nova',
         ttsProvider: (legacy as any).ttsProvider ?? 'auto',
         modelOverrides: legacy.modelOverrides ?? {},
+        gatewayMode: legacy.gatewayMode ?? 'router',
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
         setMicEnabled: (v) => set({ micEnabled: v }),
         setTtsVoice: (v) => set({ ttsVoice: v }),
         setTtsProvider: (v) => set({ ttsProvider: v }),
+        setGatewayMode: (v) => set({ gatewayMode: v }),
 
         setModelOverride: (agentId, modelId) =>
           set((state) => {
@@ -112,6 +125,7 @@ export const usePreferences = create<PreferencesState>()(
         ttsVoice: state.ttsVoice,
         ttsProvider: state.ttsProvider,
         modelOverrides: state.modelOverrides,
+        gatewayMode: state.gatewayMode,
       }),
       // After rehydration, clean up legacy keys (one-time)
       onRehydrateStorage: () => {
@@ -123,6 +137,7 @@ export const usePreferences = create<PreferencesState>()(
               localStorage.removeItem(LEGACY_VOICE_KEY);
               localStorage.removeItem('shre-tts-voice');
               localStorage.removeItem(LEGACY_MODEL_KEY);
+              localStorage.removeItem(LEGACY_OPENCLAW_KEY);
             } catch {
               /* ignore */
             }

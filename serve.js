@@ -1546,6 +1546,7 @@ async function requestHandler(req, res) {
     const csrfExempt = PUBLIC_PATHS.has(url.pathname)
       || url.pathname.startsWith("/api/auth/")
       || url.pathname.startsWith("/api/router/")
+      || url.pathname.startsWith("/api/direct/")
       || url.pathname.startsWith("/v1/")
       || req.headers["authorization"]?.startsWith("Bearer ");
     if (!csrfExempt) {
@@ -1572,7 +1573,8 @@ async function requestHandler(req, res) {
     || url.pathname === "/api/push/vapid-key";
   const authClaims = checkAuth(req);
   const isRouterProxy = url.pathname.startsWith("/api/router/");
-  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy) {
+  const isDirectProxy = url.pathname.startsWith("/api/direct/");
+  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isDirectProxy) {
     if (!authClaims) {
       // Emit structured auth failure event for security dashboard
       try {
@@ -2753,6 +2755,26 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Marketplace activated apps proxy (MIB007 app_enablements) ──
+  if (url.pathname === "/api/marketplace/activated-apps" && req.method === "GET") {
+    try {
+      const companyId = await mib007CompanyId(req);
+      if (!companyId) return json(res, { appIds: [] });
+      const upstream = await mib007Fetch(
+        `/api/marketplace/apps/enabled?companyId=${encodeURIComponent(companyId)}`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      const data = await upstream.json().catch(() => []);
+      // MIB007 returns string[] of enabled appIds — wrap for frontend
+      const appIds = Array.isArray(data) ? data : [];
+      json(res, { appIds });
+    } catch (err) {
+      log.warn("Marketplace activated-apps proxy failed:", err.message);
+      json(res, { appIds: [] }, 502);
+    }
+    return;
+  }
+
   // ── Agents list proxy (enriched with fleet session data) ──
   if (url.pathname === "/api/agents" && req.method === "GET") {
     try {
@@ -3025,10 +3047,11 @@ async function requestHandler(req, res) {
       if (!boundary) return json(res, { error: "Missing multipart boundary" }, 400);
       const sttStart = Date.now();
 
-      // Fallback chain: shre-router (OpenAI) → shre-voice → browser SpeechRecognition signal
+      // Fallback chain: local faster-whisper → shre-voice → shre-router (OpenAI) → browser SpeechRecognition
       const sttEndpoints = [
-        `${serviceUrl("shre-router")}/v1/audio/transcriptions`,
-        `http://127.0.0.1:5456/v1/audio/transcriptions`,
+        `http://127.0.0.1:5464/v1/audio/transcriptions`,  // local faster-whisper (no API key)
+        `http://127.0.0.1:5456/v1/audio/transcriptions`,  // shre-voice (ElevenLabs/OpenAI)
+        `${serviceUrl("shre-router")}/v1/audio/transcriptions`, // shre-router (OpenAI)
       ];
 
       for (let i = 0; i < sttEndpoints.length; i++) {
@@ -3084,7 +3107,7 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── TTS endpoint — converts text to speech via shre-router (OpenAI TTS) ──
+  // ── TTS endpoint — fallback chain: local piper → shre-voice → shre-router (OpenAI) ──
   if (url.pathname === "/api/tts" && req.method === "POST") {
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
@@ -3093,33 +3116,63 @@ async function requestHandler(req, res) {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
         if (!body.input) return json(res, { error: "Missing input text" }, 400);
 
-        const routerRes = await fetch(`${serviceUrl("shre-router")}/v1/audio/speech`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: body.input,
-            voice: body.voice || "nova",
-            model: body.model || "tts-1-hd",
-            speed: body.speed || 1.05,
-            provider: body.provider || "auto",
-          }),
-          signal: AbortSignal.timeout(30000),
+        const ttsPayload = JSON.stringify({
+          input: body.input,
+          voice: body.voice || "nova",
+          model: body.model || "tts-1-hd",
+          speed: body.speed || 1.05,
+          provider: body.provider || "auto",
         });
 
-        if (!routerRes.ok) {
-          const errBody = await routerRes.text();
-          recordVoiceFailure("tts_error", { detail: `HTTP ${routerRes.status}: ${errBody.slice(0, 200)}` });
-          return json(res, { error: `TTS failed: ${errBody}` }, routerRes.status);
+        // Fallback chain: local → shre-voice → shre-router
+        const ttsEndpoints = [
+          "http://127.0.0.1:5464/v1/audio/speech",           // local piper-tts
+          "http://127.0.0.1:5456/v1/audio/speech",           // shre-voice
+          `${serviceUrl("shre-router")}/v1/audio/speech`,    // shre-router (OpenAI)
+        ];
+
+        for (let i = 0; i < ttsEndpoints.length; i++) {
+          try {
+            const ttsRes = await fetch(ttsEndpoints[i], {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: ttsPayload,
+              signal: AbortSignal.timeout(30000),
+            });
+
+            if (ttsRes.status === 429 || ttsRes.status >= 500) {
+              log.warn(`[tts] ${ttsRes.status} from ${ttsEndpoints[i]}, trying fallback`);
+              continue;
+            }
+
+            if (!ttsRes.ok) {
+              if (i < ttsEndpoints.length - 1) continue;
+              const errBody = await ttsRes.text();
+              recordVoiceFailure("tts_error", { detail: `HTTP ${ttsRes.status}: ${errBody.slice(0, 200)}` });
+              return json(res, { error: `TTS failed: ${errBody}` }, ttsRes.status);
+            }
+
+            const audioBuffer = await ttsRes.arrayBuffer();
+            const provider = ttsRes.headers.get("X-TTS-Provider") || (i === 0 ? "piper-local" : "cloud");
+            res.writeHead(200, {
+              "Content-Type": ttsRes.headers.get("Content-Type") || "audio/mpeg",
+              "Content-Length": audioBuffer.byteLength,
+              "X-TTS-Provider": provider,
+            });
+            return res.end(Buffer.from(audioBuffer));
+          } catch (err) {
+            if (i < ttsEndpoints.length - 1) {
+              log.warn(`[tts] ${err.message} from ${ttsEndpoints[i]}, trying fallback`);
+              continue;
+            }
+            recordVoiceFailure("tts_error", { detail: err.message, critical: err.name === "AbortError" });
+            return json(res, { error: "TTS request failed: " + err.message }, 502);
+          }
         }
 
-        const audioBuffer = await routerRes.arrayBuffer();
-        res.writeHead(200, {
-          "Content-Type": routerRes.headers.get("Content-Type") || "audio/mpeg",
-          "Content-Length": audioBuffer.byteLength,
-        });
-        res.end(Buffer.from(audioBuffer));
+        return json(res, { error: "All TTS providers failed" }, 502);
       } catch (err) {
-        recordVoiceFailure("tts_error", { detail: err.message, critical: err.name === "AbortError" });
+        recordVoiceFailure("tts_error", { detail: err.message });
         return json(res, { error: "TTS request failed: " + err.message }, 502);
       }
     });
@@ -4521,6 +4574,107 @@ async function requestHandler(req, res) {
     } catch (e) {
       return json(res, { error: e.message }, 400);
     }
+  }
+
+  // ── Direct Ollama proxy — /api/direct/v1/chat ──────────────────────
+  // Bypasses shre-router entirely — sends directly to local Ollama for fast local inference
+  if (url.pathname === "/api/direct/v1/chat" && req.method === "POST") {
+    try {
+      const bodyBuf = await new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on("data", (c) => chunks.push(c));
+        req.on("end", () => resolve(Buffer.concat(chunks)));
+        req.on("error", reject);
+      });
+      const body = JSON.parse(bodyBuf.toString());
+      const ollamaUrl = "http://127.0.0.1:11434/api/chat";
+      const ollamaBody = {
+        model: body.model && body.model !== "auto" ? body.model.replace(/^.*\//, "") : "shre:latest",
+        messages: [
+          ...(body.systemPrompt ? [{ role: "system", content: body.systemPrompt }] : []),
+          ...(body.messages || []),
+        ],
+        stream: body.stream !== false,
+      };
+
+      const ollamaReq = httpRequest(ollamaUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }, (ollamaRes) => {
+        if (!body.stream) {
+          // Non-streaming — collect and return
+          const chunks = [];
+          ollamaRes.on("data", (c) => chunks.push(c));
+          ollamaRes.on("end", () => {
+            try {
+              const result = JSON.parse(Buffer.concat(chunks).toString());
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({
+                choices: [{ message: { role: "assistant", content: result.message?.content || "" } }],
+              }));
+            } catch { res.writeHead(502).end("Ollama parse error"); }
+          });
+          return;
+        }
+
+        // Streaming — convert Ollama NDJSON to shre-router SSE format
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+
+        // Send route event so UI knows which model is being used
+        res.write(`data: ${JSON.stringify({ type: "route", model: ollamaBody.model, provider: "ollama-direct" })}\n\n`);
+
+        let buffer = "";
+        ollamaRes.on("data", (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const parsed = JSON.parse(line);
+              const content = parsed.message?.content || "";
+              if (content) {
+                // Use shre-router delta format so the existing SSE parser works
+                res.write(`data: ${JSON.stringify({ type: "delta", text: content })}\n\n`);
+              }
+              if (parsed.done) {
+                res.write("data: [DONE]\n\n");
+              }
+            } catch { /* skip malformed lines */ }
+          }
+        });
+        ollamaRes.on("end", () => {
+          if (buffer.trim()) {
+            try {
+              const parsed = JSON.parse(buffer);
+              const content = parsed.message?.content || "";
+              if (content) res.write(`data: ${JSON.stringify({ type: "delta", text: content })}\n\n`);
+            } catch { /* skip */ }
+          }
+          res.write("data: [DONE]\n\n");
+          res.end();
+        });
+        ollamaRes.on("error", () => { try { res.end(); } catch {} });
+      });
+
+      ollamaReq.on("error", (err) => {
+        log.warn("[direct] Ollama unreachable", { error: err.message });
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `Ollama unreachable: ${err.message}` }));
+      });
+      ollamaReq.write(JSON.stringify(ollamaBody));
+      ollamaReq.end();
+    } catch (err) {
+      log.error("[direct] Error", { error: err.message });
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
   }
 
   // ── Proxy /api/router/* to shre-router (SSE streaming-safe) ──────
