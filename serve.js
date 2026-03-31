@@ -5898,7 +5898,9 @@ Examples:
     const content = readFileSync(filePath);
     const ext = extname(filePath);
     // Vite hashed assets can be cached forever; HTML should never be cached
-    const cacheControl = ext === ".html" ? "no-cache, no-store, must-revalidate" : "public, max-age=31536000, immutable";
+    // HTML + service worker must never be cached; hashed assets are immutable
+    const noCache = ext === ".html" || filePath.endsWith("sw.js");
+    const cacheControl = noCache ? "no-cache, no-store, must-revalidate" : "public, max-age=31536000, immutable";
     res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": cacheControl });
     res.end(content);
   } catch {
