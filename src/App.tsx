@@ -114,6 +114,34 @@ const LazyFallback = () => (
   </div>
 );
 
+/** OpenClaw Control UI embed — auto-injects gateway token + WS URL */
+function OpenClawEmbed() {
+  const [iframeSrc, setIframeSrc] = useState('/openclaw/');
+  useEffect(() => {
+    fetch('/api/gateway-token')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.token) {
+          // Control UI reads token from URL hash fragment
+          setIframeSrc(`/openclaw/#token=${encodeURIComponent(d.token)}`);
+        }
+      })
+      .catch(() => {
+        // Fall back to plain URL — user will need to enter token manually
+      });
+  }, []);
+  return (
+    <div className="flex-1 w-full h-full flex flex-col" style={{ background: 'var(--c-bg-1)' }}>
+      <iframe
+        src={iframeSrc}
+        className="flex-1 w-full border-0"
+        title="OpenClaw Gateway"
+        style={{ background: '#1a1a2e', minHeight: 0 }}
+      />
+    </div>
+  );
+}
+
 const AGENT_KEY = 'shre-active-agent';
 const THEME_KEY = 'shre-theme';
 
@@ -743,17 +771,7 @@ function MainApp({
                   )}
                   {view === 'openclaw' && (
                     <ViewErrorBoundary viewName="OpenClaw">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/openclaw/"
-                          className="flex-1 w-full border-0"
-                          title="OpenClaw Gateway"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
+                      <OpenClawEmbed />
                     </ViewErrorBoundary>
                   )}
                   {view === 'shre-dashboard' && (
