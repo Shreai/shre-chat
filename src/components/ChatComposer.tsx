@@ -3,6 +3,7 @@ import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
 import type { TTSProvider } from '../preferences-store';
+import emojiData from '@emoji-mart/data';
 
 const EmojiPicker = lazy(() =>
   import('@emoji-mart/react').then((mod) => ({
@@ -546,6 +547,93 @@ export function ChatComposer(props: ChatComposerProps) {
             </div>
           )}
 
+          {/* Voice status mini toolbar */}
+          {(isRecording || voicePhase === 'transcribing' || isSpeaking || (isHandsFree && !isRecording) ||
+            (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
+              style={{
+                background: 'var(--c-bg-3)',
+                borderBottom: '1px solid var(--c-border-1)',
+              }}
+            >
+              {isRecording && voicePhase === 'recording' && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                  <span style={{ color: '#f87171' }} className="font-medium">Recording</span>
+                  <span className="tabular-nums" style={{ color: 'var(--c-text-3)' }}>
+                    {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                  </span>
+                  {recordingDuration >= MAX_RECORDING_SECONDS - 30 && (
+                    <span className="text-yellow-400 animate-pulse">Stopping soon...</span>
+                  )}
+                  <button
+                    onClick={onStopRecording}
+                    className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
+                  >
+                    Stop
+                  </button>
+                </>
+              )}
+              {isRecording && voicePhase === 'waiting' && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                  <span style={{ color: '#facc15' }}>Listening for voice...</span>
+                </>
+              )}
+              {voicePhase === 'transcribing' && (
+                <>
+                  <svg className="h-3 w-3 animate-spin text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" opacity="0.3" />
+                    <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                  </svg>
+                  <span style={{ color: '#60a5fa' }}>Transcribing...</span>
+                </>
+              )}
+              {isSpeaking && !isRecording && (
+                <>
+                  <svg className="h-3 w-3 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  </svg>
+                  <span style={{ color: '#60a5fa' }}>Speaking...</span>
+                  <button
+                    onClick={onStopTTS}
+                    className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
+                    style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}
+                  >
+                    Stop
+                  </button>
+                </>
+              )}
+              {!isRecording && !voicePhase.startsWith('trans') && !isSpeaking && interimTranscript && (
+                <span
+                  className="truncate"
+                  style={{
+                    color: interimTranscript.includes('failed') || interimTranscript.includes('blocked') ||
+                      interimTranscript.includes('timed') || interimTranscript.includes('error')
+                        ? '#f87171' : 'var(--c-text-4)',
+                  }}
+                >
+                  {interimTranscript}
+                </span>
+              )}
+              {isHandsFree && !isRecording && !interimTranscript && !isSpeaking && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span style={{ color: 'var(--c-text-4)' }}>Hands-free listening...</span>
+                  <button
+                    onClick={() => setIsHandsFree(false)}
+                    className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
+                    style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}
+                  >
+                    Turn off
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Textarea */}
           <textarea
             id="shre-chat-textarea"
@@ -650,6 +738,7 @@ export function ChatComposer(props: ChatComposerProps) {
                         }
                       >
                         <EmojiPicker
+                          data={emojiData}
                           theme="dark"
                           onEmojiSelect={(emoji: any) => {
                             setInput(input + emoji.native);
@@ -772,61 +861,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 </button>
               )}
 
-              {/* Voice mode */}
-              {speechSupported && (
-                <button
-                  tabIndex={-1}
-                  onClick={() => {
-                    const next = !voiceMode;
-                    setVoiceMode(next);
-                    if (!next) onStopTTS();
-                  }}
-                  className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-blue-500/20 text-blue-400' : ''}`}
-                  style={{ ...(voiceMode ? {} : { color: 'var(--c-text-2)' }), minWidth: 36, minHeight: 36 }}
-                  title={
-                    voiceMode
-                      ? 'Voice mode ON — responses will be spoken'
-                      : 'Enable voice mode (auto-speak responses)'
-                  }
-                  aria-label={voiceMode ? 'Disable voice mode' : 'Enable voice mode'}
-                >
-                  <svg
-                    className="h-4 w-4 sm:h-4 sm:w-4"
-                    viewBox="0 0 24 24"
-                    fill={voiceMode ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  </svg>
-                </button>
-              )}
-
-              {/* TTS voice selector — only when voice mode is on */}
-              {voiceMode && (
-                <select
-                  tabIndex={-1}
-                  value={ttsVoice}
-                  onChange={(e) => setTtsVoice(e.target.value)}
-                  className="h-7 sm:h-6 rounded text-[10px] px-1 border-none outline-none cursor-pointer hidden sm:block"
-                  style={{
-                    background: 'var(--c-bg-hover, rgba(255,255,255,0.08))',
-                    color: 'var(--c-text-2)',
-                    minWidth: 56,
-                  }}
-                  title="TTS voice"
-                  aria-label="Select TTS voice"
-                >
-                  <option value="alloy">Alloy</option>
-                  <option value="echo">Echo</option>
-                  <option value="fable">Fable</option>
-                  <option value="nova">Nova</option>
-                  <option value="onyx">Onyx</option>
-                  <option value="shimmer">Shimmer</option>
-                </select>
-              )}
+              {/* Voice mode + TTS voice selector — hidden pending proper implementation */}
 
               {/* Claude CLI mode toggle — auto-routes coding tasks to Claude Code CLI */}
               <button
@@ -916,94 +951,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 </button>
               )}
 
-              {/* Voice status indicators */}
-              {isRecording && voicePhase === 'waiting' && (
-                <span className="text-xs text-yellow-400 flex items-center gap-1 ml-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                  Say "shre shre" to start
-                </span>
-              )}
-              {isRecording && voicePhase === 'recording' && (
-                <span className="text-xs text-red-400 flex items-center gap-1.5 ml-1">
-                  <span className="flex items-end gap-px h-3">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <span
-                        key={i}
-                        className="w-[2px] rounded-full bg-red-400"
-                        style={{
-                          height: `${Math.max(3, audioLevel * 12 * (0.6 + Math.sin(Date.now() / 150 + i * 1.2) * 0.4))}px`,
-                          transition: 'height 120ms ease-out',
-                        }}
-                      />
-                    ))}
-                  </span>
-                  <span className="tabular-nums">
-                    {Math.floor(recordingDuration / 60)}:
-                    {String(recordingDuration % 60).padStart(2, '0')}
-                  </span>
-                  {recordingDuration >= MAX_RECORDING_SECONDS - 30 ? (
-                    <span className="text-yellow-400 animate-pulse hidden sm:inline">
-                      Stopping soon...
-                    </span>
-                  ) : (
-                    <span className="hidden sm:inline opacity-70">Tap to stop</span>
-                  )}
-                </span>
-              )}
-              {voicePhase === 'transcribing' && (
-                <span className="text-xs text-blue-400 flex items-center gap-1.5 ml-1 animate-pulse">
-                  <svg
-                    className="h-3 w-3 animate-spin"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <circle cx="12" cy="12" r="10" opacity="0.3" />
-                    <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-                  </svg>
-                  Transcribing...
-                </span>
-              )}
-              {isSpeaking && !isRecording && (
-                <span className="text-xs text-blue-400 flex items-center gap-1 ml-1">
-                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path
-                      d="M15.54 8.46a5 5 0 0 1 0 7.07"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                  Speaking...
-                </span>
-              )}
-              {!isRecording && !voicePhase.startsWith('trans') && interimTranscript && (
-                <span
-                  className="text-xs flex items-center gap-1 ml-1 max-w-[200px] sm:max-w-none"
-                  style={{
-                    color:
-                      interimTranscript.includes('failed') ||
-                      interimTranscript.includes('blocked') ||
-                      interimTranscript.includes('timed') ||
-                      interimTranscript.includes('error')
-                        ? '#f87171'
-                        : 'var(--c-text-4)',
-                  }}
-                >
-                  <span className="truncate">{interimTranscript}</span>
-                </span>
-              )}
-              {isHandsFree && !isRecording && !interimTranscript && (
-                <span
-                  className="text-xs flex items-center gap-1 ml-1"
-                  style={{ color: 'var(--c-text-5)' }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  Listening...
-                </span>
-              )}
+              {/* Voice status indicators moved to mini toolbar above textarea */}
             </div>
 
             <div className="flex items-center gap-1">
