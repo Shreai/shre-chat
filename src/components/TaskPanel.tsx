@@ -1,0 +1,682 @@
+/**
+ * TaskPanel — Slide-out drawer showing task detail, trace route, subtasks
+ * with interactive checkboxes for approving/completing/cancelling tasks.
+ */
+import React, { useState, useEffect, useCallback } from 'react';
+import type { TrackedTask, TraceStep } from '../hooks/useTaskTracker';
+import { mib007Link } from '../chat-utils';
+
+// ── Status & Priority styling ──
+
+const STATUS_COLORS: Record<string, string> = {
+  created: '#6b7280',
+  todo: '#3b82f6',
+  in_progress: '#8b5cf6',
+  pending_review: '#f59e0b',
+  blocked: '#ef4444',
+  done: '#22c55e',
+  completed: '#22c55e',
+  cancelled: '#9ca3af',
+  failed: '#ef4444',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  created: 'Created',
+  todo: 'To-Do',
+  in_progress: 'In Progress',
+  pending_review: 'Review',
+  blocked: 'Blocked',
+  done: 'Done',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  failed: 'Failed',
+};
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+// ── Props ──
+
+interface TaskPanelProps {
+  task: TrackedTask;
+  onClose: () => void;
+  onUpdateTask: (id: string, patch: Record<string, unknown>) => Promise<any>;
+  fetchSubtasks: (parentId: string) => Promise<TrackedTask[]>;
+  fetchTrace: (traceId: string) => Promise<TraceStep[]>;
+}
+
+export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTrace }: TaskPanelProps) {
+  const [subtasks, setSubtasks] = useState<TrackedTask[]>([]);
+  const [traceSteps, setTraceSteps] = useState<TraceStep[]>([]);
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  const [loadingTrace, setLoadingTrace] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'detail' | 'trace' | 'subtasks'>('detail');
+
+  // Load subtasks
+  useEffect(() => {
+    setLoadingSubtasks(true);
+    fetchSubtasks(task.id).then((list) => {
+      setSubtasks(list);
+      setLoadingSubtasks(false);
+      if (list.length > 0 && activeTab === 'detail') setActiveTab('subtasks');
+    });
+  }, [task.id, fetchSubtasks]);
+
+  // Load trace if available
+  useEffect(() => {
+    if (task.trace_id) {
+      setLoadingTrace(true);
+      fetchTrace(task.trace_id).then((steps) => {
+        setTraceSteps(steps);
+        setLoadingTrace(false);
+      });
+    }
+  }, [task.trace_id, fetchTrace]);
+
+  const handleUpdate = useCallback(
+    async (taskId: string, patch: Record<string, unknown>) => {
+      setUpdating(taskId);
+      await onUpdateTask(taskId, patch);
+      // Refresh subtasks
+      const refreshed = await fetchSubtasks(task.id);
+      setSubtasks(refreshed);
+      setUpdating(null);
+    },
+    [onUpdateTask, fetchSubtasks, task.id],
+  );
+
+  const isDone = task.status === 'done' || task.status === 'completed' || task.status === 'cancelled';
+  const completedSubtasks = subtasks.filter((s) => s.status === 'done' || s.status === 'completed').length;
+  const progress =
+    task.completion_ratio != null
+      ? Math.round(task.completion_ratio * 100)
+      : subtasks.length > 0
+        ? Math.round((completedSubtasks / subtasks.length) * 100)
+        : undefined;
+
+  return (
+    <div
+      className="flex flex-col h-full"
+      style={{
+        width: 380,
+        background: 'var(--c-bg-1)',
+        borderLeft: '1px solid var(--c-border-2)',
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-3 shrink-0"
+        style={{ borderBottom: '1px solid var(--c-border-2)' }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="shrink-0 h-2.5 w-2.5 rounded-full"
+            style={{ background: STATUS_COLORS[task.status] || '#6b7280' }}
+          />
+          <span
+            className="text-sm font-semibold truncate"
+            style={{ color: 'var(--c-text-1)' }}
+          >
+            {task.title}
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 p-1 rounded hover:bg-white/5 transition-colors"
+          style={{ color: 'var(--c-text-4)' }}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Status bar + progress */}
+      <div className="px-4 py-2 shrink-0" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
+        <div className="flex items-center gap-3 text-[12px]" style={{ color: 'var(--c-text-3)' }}>
+          <span
+            className="px-2 py-0.5 rounded-full text-[11px] font-medium"
+            style={{
+              background: `${STATUS_COLORS[task.status] || '#6b7280'}20`,
+              color: STATUS_COLORS[task.status] || '#6b7280',
+            }}
+          >
+            {STATUS_LABELS[task.status] || task.status}
+          </span>
+          {task.agent && <span>Agent: {task.agent}</span>}
+          {task.priority && (
+            <span style={{ textTransform: 'capitalize' }}>{task.priority}</span>
+          )}
+          <span>{relativeTime(task.updated_at || task.created_at)}</span>
+        </div>
+        {progress != null && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--c-text-4)' }}>
+              <span>Progress</span>
+              <span>{progress}%</span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--c-bg-3, rgba(255,255,255,0.06))' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${progress}%`,
+                  background: progress === 100 ? '#22c55e' : '#8b5cf6',
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
+        {(['detail', 'subtasks', 'trace'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className="flex-1 text-[11px] py-2 transition-colors"
+            style={{
+              color: activeTab === tab ? 'var(--c-accent, #8b5cf6)' : 'var(--c-text-4)',
+              borderBottom: activeTab === tab ? '2px solid var(--c-accent, #8b5cf6)' : '2px solid transparent',
+              fontWeight: activeTab === tab ? 600 : 400,
+            }}
+          >
+            {tab === 'detail' && 'Detail'}
+            {tab === 'subtasks' && `Subtasks${subtasks.length > 0 ? ` (${subtasks.length})` : ''}`}
+            {tab === 'trace' && 'Trace Route'}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {activeTab === 'detail' && (
+          <DetailTab task={task} isDone={isDone} onUpdate={handleUpdate} updating={updating} />
+        )}
+        {activeTab === 'subtasks' && (
+          <SubtasksTab
+            subtasks={subtasks}
+            loading={loadingSubtasks}
+            onUpdate={handleUpdate}
+            updating={updating}
+          />
+        )}
+        {activeTab === 'trace' && (
+          <TraceTab steps={traceSteps} loading={loadingTrace} traceId={task.trace_id} />
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div
+        className="flex items-center gap-2 px-4 py-3 shrink-0"
+        style={{ borderTop: '1px solid var(--c-border-2)' }}
+      >
+        {!isDone && (
+          <>
+            {(task.status === 'in_progress' || task.status === 'pending_review') && (
+              <ActionButton
+                label="Complete"
+                color="#22c55e"
+                loading={updating === task.id}
+                onClick={() =>
+                  handleUpdate(task.id, { status: 'done', expected_status: task.status })
+                }
+              />
+            )}
+            {task.status === 'blocked' && (
+              <ActionButton
+                label="Unblock"
+                color="#3b82f6"
+                loading={updating === task.id}
+                onClick={() =>
+                  handleUpdate(task.id, { status: 'in_progress', expected_status: 'blocked' })
+                }
+              />
+            )}
+            <ActionButton
+              label="Cancel"
+              color="#ef4444"
+              loading={updating === task.id}
+              onClick={() => handleUpdate(task.id, { status: 'cancelled' })}
+            />
+          </>
+        )}
+        {(task.status === 'failed' || task.status === 'cancelled') && (
+          <ActionButton
+            label="Retry"
+            color="#f59e0b"
+            loading={updating === task.id}
+            onClick={() => handleUpdate(task.id, { status: 'todo' })}
+          />
+        )}
+        <a
+          href={mib007Link('tasks', `id=${task.id}`)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto text-[11px] px-2 py-1.5 rounded-lg transition-colors hover:bg-white/5"
+          style={{ color: 'var(--c-text-4)' }}
+        >
+          Open in MIB007
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ── Detail Tab ──
+
+function DetailTab({
+  task,
+  isDone,
+  onUpdate,
+  updating,
+}: {
+  task: TrackedTask;
+  isDone: boolean;
+  onUpdate: (id: string, patch: Record<string, unknown>) => void;
+  updating: string | null;
+}) {
+  return (
+    <div className="space-y-3">
+      {task.description && (
+        <p className="text-[12px] leading-relaxed" style={{ color: 'var(--c-text-2)' }}>
+          {task.description}
+        </p>
+      )}
+
+      <div className="space-y-1.5">
+        <InfoRow label="ID" value={task.id.slice(0, 16)} />
+        {task.project_id && <InfoRow label="Project" value={task.project_id.slice(0, 16)} />}
+        {task.source && <InfoRow label="Source" value={task.source} />}
+        {task.quality_score != null && (
+          <InfoRow label="Quality" value={`${task.quality_score.toFixed(1)} / 5.0`} />
+        )}
+        {task.depends_on && task.depends_on.length > 0 && (
+          <InfoRow label="Depends on" value={task.depends_on.map((d) => d.slice(0, 8)).join(', ')} />
+        )}
+        <InfoRow label="Created" value={new Date(task.created_at).toLocaleString()} />
+        {task.updated_at && <InfoRow label="Updated" value={relativeTime(task.updated_at)} />}
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-[11px]">
+      <span style={{ color: 'var(--c-text-4)' }}>{label}</span>
+      <span style={{ color: 'var(--c-text-2)' }} className="font-mono text-right max-w-[200px] truncate">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ── Subtasks Tab (Interactive Checkboxes) ──
+
+function SubtasksTab({
+  subtasks,
+  loading,
+  onUpdate,
+  updating,
+}: {
+  subtasks: TrackedTask[];
+  loading: boolean;
+  onUpdate: (id: string, patch: Record<string, unknown>) => void;
+  updating: string | null;
+}) {
+  if (loading) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        Loading subtasks...
+      </div>
+    );
+  }
+
+  if (subtasks.length === 0) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        No subtasks. This is a standalone task.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {subtasks.map((sub) => {
+        const isChecked = sub.status === 'done' || sub.status === 'completed';
+        const isFailed = sub.status === 'failed';
+        const isActive = sub.status === 'in_progress';
+        const isUpdating = updating === sub.id;
+
+        return (
+          <div
+            key={sub.id}
+            className="flex items-start gap-2.5 py-2 px-2 rounded-lg transition-colors hover:bg-white/[0.03]"
+          >
+            {/* Checkbox */}
+            <button
+              disabled={isUpdating}
+              onClick={() => {
+                if (isChecked) {
+                  onUpdate(sub.id, { status: 'in_progress', expected_status: sub.status });
+                } else {
+                  onUpdate(sub.id, { status: 'done', expected_status: sub.status });
+                }
+              }}
+              className="shrink-0 mt-0.5 h-4 w-4 rounded border transition-all duration-150 flex items-center justify-center"
+              style={{
+                borderColor: isChecked
+                  ? '#22c55e'
+                  : isFailed
+                    ? '#ef4444'
+                    : isActive
+                      ? '#8b5cf6'
+                      : 'var(--c-border-2)',
+                background: isChecked
+                  ? '#22c55e'
+                  : isFailed
+                    ? 'rgba(239,68,68,0.15)'
+                    : 'transparent',
+                opacity: isUpdating ? 0.5 : 1,
+              }}
+            >
+              {isChecked && (
+                <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M2 6l3 3 5-5" />
+                </svg>
+              )}
+              {isFailed && (
+                <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" stroke="#ef4444" strokeWidth="2">
+                  <path d="M3 3l6 6M9 3l-6 6" />
+                </svg>
+              )}
+              {isActive && (
+                <span
+                  className="h-2 w-2 rounded-full animate-pulse"
+                  style={{ background: '#8b5cf6' }}
+                />
+              )}
+            </button>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div
+                className="text-[12px] leading-snug"
+                style={{
+                  color: isChecked ? 'var(--c-text-4)' : 'var(--c-text-1)',
+                  textDecoration: isChecked ? 'line-through' : 'none',
+                }}
+              >
+                {sub.title}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                {sub.agent && <span>{sub.agent}</span>}
+                {sub.quality_score != null && <span>Q: {sub.quality_score.toFixed(1)}</span>}
+                <span
+                  className="px-1 py-px rounded"
+                  style={{
+                    background: `${STATUS_COLORS[sub.status] || '#6b7280'}15`,
+                    color: STATUS_COLORS[sub.status] || '#6b7280',
+                  }}
+                >
+                  {STATUS_LABELS[sub.status] || sub.status}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Trace Route Tab ──
+
+function TraceTab({
+  steps,
+  loading,
+  traceId,
+}: {
+  steps: TraceStep[];
+  loading: boolean;
+  traceId?: string;
+}) {
+  if (!traceId) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        No trace ID attached to this task.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        Loading trace route...
+      </div>
+    );
+  }
+
+  if (steps.length === 0) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        Trace data not available yet.
+        <div className="mt-1 text-[10px]">ID: {traceId.slice(0, 20)}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {/* Vertical line */}
+      <div
+        className="absolute left-[7px] top-2 bottom-2 w-px"
+        style={{ background: 'var(--c-border-2)' }}
+      />
+
+      <div className="space-y-0.5">
+        {steps.map((step, i) => {
+          const icon = step.status === 'ok' ? 'check' : step.status === 'fail' ? 'x' : step.status === 'running' ? 'pulse' : 'dot';
+          const color =
+            step.status === 'ok'
+              ? '#22c55e'
+              : step.status === 'fail'
+                ? '#ef4444'
+                : step.status === 'running'
+                  ? '#8b5cf6'
+                  : '#6b7280';
+
+          return (
+            <div key={i} className="flex items-start gap-3 py-1.5 pl-0 relative">
+              {/* Icon */}
+              <div
+                className="shrink-0 h-[14px] w-[14px] rounded-full flex items-center justify-center z-10"
+                style={{ background: 'var(--c-bg-1)' }}
+              >
+                {icon === 'check' && (
+                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill={color}>
+                    <circle cx="6" cy="6" r="6" />
+                    <path d="M3.5 6l2 2 3-3.5" fill="none" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                )}
+                {icon === 'x' && (
+                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill={color}>
+                    <circle cx="6" cy="6" r="6" />
+                    <path d="M4 4l4 4M8 4l-4 4" fill="none" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                )}
+                {icon === 'pulse' && (
+                  <span className="h-3 w-3 rounded-full animate-pulse" style={{ background: color }} />
+                )}
+                {icon === 'dot' && (
+                  <span
+                    className="h-2.5 w-2.5 rounded-full border-2"
+                    style={{ borderColor: color }}
+                  />
+                )}
+              </div>
+
+              {/* Label */}
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px]" style={{ color: step.status === 'pending' ? 'var(--c-text-4)' : 'var(--c-text-1)' }}>
+                  {step.name}
+                </div>
+                <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                  {step.duration_ms != null && (
+                    <span>
+                      {step.duration_ms < 1000
+                        ? `${step.duration_ms}ms`
+                        : `${(step.duration_ms / 1000).toFixed(1)}s`}
+                    </span>
+                  )}
+                  {step.error && (
+                    <span style={{ color: '#ef4444' }} className="truncate max-w-[200px]">
+                      {step.error}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared Components ──
+
+function ActionButton({
+  label,
+  color,
+  loading,
+  onClick,
+}: {
+  label: string;
+  color: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      disabled={loading}
+      onClick={onClick}
+      className="text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all duration-150 hover:brightness-110"
+      style={{
+        background: `${color}20`,
+        color,
+        opacity: loading ? 0.5 : 1,
+      }}
+    >
+      {loading ? '...' : label}
+    </button>
+  );
+}
+
+// ── Inline Task Status Pills (for use inside message bubbles) ──
+
+export function InlineTaskPills({
+  tasks,
+  onSelectTask,
+}: {
+  tasks: TrackedTask[];
+  onSelectTask: (id: string) => void;
+}) {
+  if (tasks.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {tasks.map((task) => {
+        const color = STATUS_COLORS[task.status] || '#6b7280';
+        const isDone = task.status === 'done' || task.status === 'completed';
+        const isActive = task.status === 'in_progress';
+
+        return (
+          <button
+            key={task.id}
+            onClick={() => onSelectTask(task.id)}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium transition-all duration-150 hover:brightness-110 cursor-pointer"
+            style={{
+              background: `${color}15`,
+              color,
+              border: `1px solid ${color}30`,
+            }}
+          >
+            {/* Status indicator */}
+            {isDone ? (
+              <svg className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
+                <path d="M6 0a6 6 0 110 12A6 6 0 016 0zm2.4 4.2a.5.5 0 00-.7.02L5.5 6.8l-1.2-1.3a.5.5 0 10-.7.7l1.6 1.7a.5.5 0 00.7 0l2.5-2.9a.5.5 0 000-.7z" />
+              </svg>
+            ) : isActive ? (
+              <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: color }} />
+            ) : (
+              <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+            )}
+
+            {/* Agent + status */}
+            <span className="truncate max-w-[120px]">{task.agent || 'agent'}</span>
+            <span style={{ opacity: 0.7 }}>
+              {STATUS_LABELS[task.status] || task.status}
+            </span>
+
+            {/* Completion */}
+            {task.completion_ratio != null && task.completion_ratio > 0 && (
+              <span style={{ opacity: 0.7 }}>{Math.round(task.completion_ratio * 100)}%</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Floating Task Indicator (shows in chat header/sidebar) ──
+
+export function TaskIndicatorButton({
+  activeTasks,
+  onClick,
+}: {
+  activeTasks: TrackedTask[];
+  onClick: () => void;
+}) {
+  if (activeTasks.length === 0) return null;
+
+  const inProgress = activeTasks.filter((t) => t.status === 'in_progress').length;
+  const blocked = activeTasks.filter((t) => t.status === 'blocked').length;
+
+  return (
+    <button
+      onClick={onClick}
+      className="relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-200 hover:brightness-110"
+      style={{
+        background: 'rgba(139,92,246,0.1)',
+        color: '#a78bfa',
+        border: '1px solid rgba(139,92,246,0.2)',
+      }}
+      title={`${activeTasks.length} active task${activeTasks.length > 1 ? 's' : ''}`}
+    >
+      {/* Animated dot for active tasks */}
+      {inProgress > 0 && (
+        <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: '#8b5cf6' }} />
+      )}
+      {blocked > 0 && inProgress === 0 && (
+        <span className="h-2 w-2 rounded-full" style={{ background: '#ef4444' }} />
+      )}
+
+      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+
+      <span>{activeTasks.length}</span>
+    </button>
+  );
+}

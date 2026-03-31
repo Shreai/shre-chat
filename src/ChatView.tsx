@@ -27,7 +27,8 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useVoiceHandlers } from './hooks/useVoiceHandlers';
 import { useChatEffects } from './hooks/useChatEffects';
 import { useMessageHandlers } from './hooks/useMessageHandlers';
-import { useConversationTasks } from './hooks/useConversationTasks';
+import { useTaskTracker } from './hooks/useTaskTracker';
+import { TaskPanel, TaskIndicatorButton } from './components/TaskPanel';
 import { useFileHandling } from './hooks/useFileHandling';
 import { useHeaderActions } from './hooks/useHeaderActions';
 import { useMessageListHandlers } from './hooks/useMessageListHandlers';
@@ -187,8 +188,18 @@ export function ChatView() {
   const voiceSession = sessions.find((s) => s.id === voiceSessionId);
   const voiceMessages = voiceSession?.messages || [];
 
-  // ── Conversation task loop (badge on messages) ──
-  const { latestTask } = useConversationTasks(activeSessionId);
+  // ── Conversation task loop (unified: polling + WS real-time) ──
+  const {
+    tasks: sessionTasks,
+    activeTasks,
+    latestTask,
+    selectedTask,
+    selectedTaskId,
+    setSelectedTaskId,
+    updateTask,
+    fetchSubtasks,
+    fetchTrace,
+  } = useTaskTracker({ sessionId: activeSessionId });
 
   // ── Escalation visibility (Ellie escalation WS events → chat) ──
   useEscalationListener({ activeSessionId, addMessage: actions.addMessage });
@@ -885,9 +896,27 @@ export function ChatView() {
 
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && (
+        <div className="flex-1 flex min-h-0">
+        {/* Chat column */}
         <div className="flex-1 flex flex-col min-h-0">
           {/* Trial status banner */}
           <TrialBanner />
+
+          {/* Active task indicator — click to open task panel */}
+          {activeTasks.length > 0 && (
+            <div className="flex items-center px-4 py-1 shrink-0" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
+              <TaskIndicatorButton
+                activeTasks={activeTasks}
+                onClick={() => setSelectedTaskId(activeTasks[0]?.id ?? null)}
+              />
+              <span className="ml-2 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                {activeTasks.filter(t => t.status === 'in_progress').length > 0
+                  ? `${activeTasks.filter(t => t.status === 'in_progress').length} running`
+                  : `${activeTasks.length} pending`}
+              </span>
+            </div>
+          )}
+
           <ChatPanels
             sessions={sessions}
             activeSessionId={activeSessionId}
@@ -1259,6 +1288,18 @@ export function ChatView() {
             }}
             filteredMessages={filteredMessages}
           />
+        </div>
+
+        {/* Task detail drawer — slides in from right when a task is selected */}
+        {selectedTask && (
+          <TaskPanel
+            task={selectedTask}
+            onClose={() => setSelectedTaskId(null)}
+            onUpdateTask={updateTask}
+            fetchSubtasks={fetchSubtasks}
+            fetchTrace={fetchTrace}
+          />
+        )}
         </div>
       )}
 
