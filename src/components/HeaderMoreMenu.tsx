@@ -9,6 +9,7 @@ import {
   type GatewayMode,
   type FeatureKey,
 } from '../preferences-store';
+import { OAuthSetup } from './OAuthSetup';
 
 export interface HeaderMoreMenuProps {
   open: boolean;
@@ -95,6 +96,7 @@ export function HeaderMoreMenu({
   const features = usePreferences((s) => s.features);
   const setFeature = usePreferences((s) => s.setFeature);
   const [showFeatureSettings, setShowFeatureSettings] = useState(false);
+  const [showOAuthSetup, setShowOAuthSetup] = useState(false);
   const feat = (key: FeatureKey) => features[key] ?? false;
 
   if (!open) return null;
@@ -800,6 +802,30 @@ export function HeaderMoreMenu({
             ))}
           </div>
         )}
+
+        {/* ── Claude OAuth ── */}
+        <button
+          onClick={() => setShowOAuthSetup(!showOAuthSetup)}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: 'var(--c-text-1)' }}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          Claude OAuth
+          <svg
+            className="h-3 w-3 ml-auto transition-transform"
+            style={{ transform: showOAuthSetup ? 'rotate(180deg)' : 'rotate(0deg)', color: 'var(--c-text-4)' }}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {showOAuthSetup && <OAuthSetup onClose={() => setShowOAuthSetup(false)} />}
 
         <Divider />
 
