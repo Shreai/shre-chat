@@ -72,6 +72,20 @@ const EVENT_FORMATTERS = {
     body: data.message || data.title || null,
     source: "monitor",
   }),
+  "prediction.alert.fired": (data) => ({
+    type: "prediction.alert.fired",
+    title: `${data.severity === "critical" ? "🚨" : "⚠️"} ${data.message || `Alert: ${data.metric}`}`,
+    body: data.diagnostic
+      ? `${data.diagnostic.suggestedActions?.[0] || ""} | Confidence: ${Math.round((data.confidence?.score || 0) * 100)}%`
+      : `Value: ${data.value}${data.threshold != null ? ` (threshold: ${data.threshold})` : ""}`,
+    source: "prediction",
+  }),
+  "prediction.alert.acknowledged": (data) => ({
+    type: "prediction.alert.acknowledged",
+    title: `Alert acknowledged: ${data.metric}`,
+    body: null,
+    source: "prediction",
+  }),
 };
 
 /**
