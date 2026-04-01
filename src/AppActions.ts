@@ -272,51 +272,16 @@ export function buildActions(deps: ActionDeps): AppActions {
       setActiveAgentId(agentId);
       localStorage.setItem(AGENT_KEY, agentId);
 
-      const PINNED_KEY = 'shre-pinned-sessions';
-      let pinned: Record<string, string> = {};
-      try {
-        pinned = JSON.parse(localStorage.getItem(PINNED_KEY) || '{}');
-      } catch (err) {
-        console.debug('pinned sessions JSON parse', err);
-      }
-      const pinnedId = pinned[agentId];
-      const pinnedSession = pinnedId ? sessionsRef.current.find((s) => s.id === pinnedId) : null;
-
-      const activateSession = (target: Session) => {
-        setActiveSessionId(target.id);
-        saveActiveSession(target.id);
-        setOpenTabs((prev) => {
-          if (prev.includes(target.id)) return prev;
-          const next = [...prev, target.id];
-          saveTabs(next);
-          return next;
-        });
-        // Restore trimmed sessions from server (localStorage quota may have stripped messages)
-        if (
-          target.trimmed ||
-          (target.messages.length <= 2 && target.updatedAt > target.createdAt + 60_000)
-        ) {
-          fetchFullSessionMessages(target.id).then((serverMessages) => {
-            if (serverMessages && serverMessages.length > target.messages.length) {
-              updateSessions((prev) =>
-                prev.map((s) =>
-                  s.id === target.id ? { ...s, messages: serverMessages, trimmed: undefined } : s,
-                ),
-              );
-            }
-          });
-        }
-      };
-
-      if (pinnedSession) {
-        activateSession(pinnedSession);
-      } else {
-        const agentSessions = sessionsRef.current.filter((s) => (s.agentId || 'main') === agentId);
-        if (agentSessions.length > 0) {
-          const mostRecent = agentSessions.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-          activateSession(mostRecent);
-        }
-      }
+      // Always start a fresh session when switching agents
+      const s = createSession(undefined, agentId);
+      updateSessions((prev) => [...prev, s]);
+      setActiveSessionId(s.id);
+      saveActiveSession(s.id);
+      setOpenTabs((prev) => {
+        const next = [...prev, s.id];
+        saveTabs(next);
+        return next;
+      });
     },
 
     setSyncing,
