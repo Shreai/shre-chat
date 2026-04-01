@@ -324,6 +324,55 @@ export const DOMAIN_META: Record<string, { label: string; color: string }> = {
   product: { label: 'Product', color: '#e879f9' },
 };
 
+/**
+ * Fetch canonical agent registry from platform-registry (single source of truth).
+ * Falls back to hardcoded AGENT_META if MIB007 is unreachable.
+ */
+export async function fetchAgentRegistry(): Promise<void> {
+  try {
+    const res = await fetch('/api/registry/agents', { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return;
+    const data = (await res.json()) as {
+      agents: Array<{
+        id: string; name: string; emoji: string; tier: string;
+        audience: string; group: string; domains: string[]; description: string;
+      }>;
+    };
+    if (!data.agents?.length) return;
+
+    // Map platform-registry group names to shre-chat group type
+    const mapGroup = (g: string): 'core' | 'department' | 'council' =>
+      g === 'council' ? 'council' : g === 'department' || g === 'business' ? 'department' : 'core';
+
+    // Filter out infra-only agents (shre-fleet, shre-voice, claude-code)
+    const INFRA_AGENTS = new Set(['shre-fleet', 'shre-voice', 'claude-code']);
+
+    // Replace AGENTS contents with registry data (preserve array reference)
+    const registryAgents = data.agents
+      .filter((a) => !INFRA_AGENTS.has(a.id))
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        emoji: a.emoji,
+        model: getAgentModelFromConfig(a.id),
+        group: mapGroup(a.group),
+        domains: a.domains,
+        description: a.description,
+      }));
+
+    // Preserve any agents in AGENTS not in registry (runtime-added)
+    const registryIds = new Set(registryAgents.map((a) => a.id));
+    const preserved = AGENTS.filter((a) => !registryIds.has(a.id) && !INFRA_AGENTS.has(a.id));
+
+    AGENTS.length = 0;
+    AGENTS.push(...registryAgents, ...preserved);
+
+    log.info('Agent registry loaded from platform-registry', { count: AGENTS.length });
+  } catch {
+    // MIB007 unreachable — keep using hardcoded AGENT_META fallback
+  }
+}
+
 /** Fetch agent capabilities from shre-router and merge domains into AGENTS */
 export async function fetchAgentCapabilities(): Promise<void> {
   try {

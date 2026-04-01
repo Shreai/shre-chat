@@ -1966,6 +1966,33 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Platform registry proxy (MIB007 single source of truth) ──
+  if (url.pathname === "/api/registry/agents" && req.method === "GET") {
+    try {
+      const upstream = await mib007Fetch("/api/registry/agents", { signal: AbortSignal.timeout(5000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Registry agents proxy failed:", err.message);
+      json(res, { error: "mib007 unreachable" }, 502);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/registry/apps" && req.method === "GET") {
+    try {
+      const upstream = await mib007Fetch("/api/registry/apps", { signal: AbortSignal.timeout(5000) });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Registry apps proxy failed:", err.message);
+      json(res, { error: "mib007 unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Budget proxy (shre-router) ──
   if (url.pathname === "/api/budgets/tenants" && req.method === "GET") {
     try {

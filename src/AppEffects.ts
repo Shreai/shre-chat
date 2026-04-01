@@ -25,6 +25,7 @@ import {
   flushPendingSave,
   saveSessionImmediate,
   fetchAgentModels,
+  fetchAgentRegistry,
   fetchAgentCapabilities,
   initStorage,
   debouncedSaveSessions,
@@ -107,7 +108,7 @@ export function useInitEffects(
 ) {
   useEffect(() => {
     fetchAgentModels();
-    fetchAgentCapabilities();
+    fetchAgentRegistry().then(() => fetchAgentCapabilities());
   }, []);
   useEffect(() => {
     initStorage();
