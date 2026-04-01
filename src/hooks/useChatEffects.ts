@@ -347,9 +347,9 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
         } catch (_) {
           void _;
         }
-        const existingSession = liveSessions.find(
-          (s: Session) => (s.agentId || 'main') === activeAgentId,
-        );
+        const existingSession =
+          liveSessions.find((s: Session) => s.id === activeSessionId) ||
+          liveSessions.find((s: Session) => (s.agentId || 'main') === activeAgentId);
 
         if (existingSession) {
           if (isInitialSync) {
