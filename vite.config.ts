@@ -75,6 +75,22 @@ export default defineConfig({
           if (id.includes('node_modules/xterm/') || id.includes('node_modules/@xterm/')) {
             return 'xterm';
           }
+          // Emoji picker — rarely used, ~300K
+          if (id.includes('node_modules/emoji-mart/') || id.includes('node_modules/@emoji-mart/')) {
+            return 'emoji';
+          }
+          // Icons — tree-shaking helps but chunk split is cleaner
+          if (id.includes('node_modules/lucide-react/')) {
+            return 'icons';
+          }
+          // Radix UI primitives
+          if (id.includes('node_modules/@radix-ui/')) {
+            return 'radix';
+          }
+          // DOMPurify
+          if (id.includes('node_modules/dompurify/')) {
+            return 'sanitize';
+          }
         },
       },
     },

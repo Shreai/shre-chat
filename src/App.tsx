@@ -26,7 +26,11 @@ import type { ChatMessage } from './openclaw';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
-import { ChatView } from './ChatView';
+// ChatView lazy-loaded with preload — it's the default view so it starts
+// fetching immediately, but the chunk split keeps the initial bundle small.
+const ChatView = lazy(() => import('./ChatView').then((m) => ({ default: m.ChatView })));
+// Preload ChatView chunk immediately so first paint isn't delayed
+import('./ChatView').catch(() => {});
 import { ErrorBoundary } from './ErrorBoundary';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { LoginView } from './LoginView';
@@ -629,7 +633,9 @@ function MainApp({
             <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
             <Sidebar />
             <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
-              <ChatView />
+              <Suspense fallback={<LazyFallback />}>
+                <ChatView />
+              </Suspense>
             </div>
             {view !== 'chat' && (
               <div className="flex-1 flex flex-col min-h-0 min-w-0">
