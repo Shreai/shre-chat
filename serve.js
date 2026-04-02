@@ -1804,10 +1804,31 @@ async function requestHandler(req, res) {
   // Web Push routes (subscribe/unsubscribe/vapid-key)
   if (await handlePushRoute(req, res, url, _routeUtils)) return;
 
+  // ── Cost proxy helper: convert ?days=N to ?from=ISO&to=ISO for shre-meter ──
+  // Uses calendar-day boundaries so "today" = midnight-to-now, "7d" = 7 days ago midnight-to-now
+  function meterQueryString(searchParams) {
+    const days = searchParams.get("days");
+    if (days && !searchParams.get("from")) {
+      const n = parseInt(days, 10);
+      if (n > 0) {
+        const now = new Date();
+        const from = new Date(now);
+        from.setDate(from.getDate() - (n === 1 ? 0 : n)); // days=1 means "today" (midnight today)
+        from.setHours(0, 0, 0, 0);
+        const copy = new URLSearchParams(searchParams);
+        copy.delete("days");
+        copy.set("from", from.toISOString());
+        copy.set("to", now.toISOString());
+        return "?" + copy.toString();
+      }
+    }
+    return searchParams.toString() ? "?" + searchParams.toString() : "";
+  }
+
   // ── Cost dashboard proxies (shre-meter) ──
   if (url.pathname.startsWith("/api/costs/") && req.method === "GET") {
     const meterPath = url.pathname.replace("/api/costs/", "/v1/costs/");
-    const qs = url.search || "";
+    const qs = meterQueryString(url.searchParams);
     try {
       const meterUrl = serviceUrl("shre-meter");
       const upstream = await fetch(`${meterUrl}${meterPath}${qs}`, { signal: AbortSignal.timeout(8000) });
@@ -1823,7 +1844,7 @@ async function requestHandler(req, res) {
 
   // ── Usage summary proxy (shre-meter) ──
   if (url.pathname === "/api/usage-summary" && req.method === "GET") {
-    const qs = url.search || "";
+    const qs = meterQueryString(url.searchParams);
     try {
       const meterUrl = serviceUrl("shre-meter");
       const upstream = await fetch(`${meterUrl}/v1/costs/summary${qs}`, { signal: AbortSignal.timeout(8000) });
@@ -2314,20 +2335,8 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Briefing proxy (shre-tasks) ──
-  if (url.pathname === "/api/briefing" && req.method === "GET") {
-    try {
-      const tasksUrl = serviceUrl("shre-tasks");
-      const upstream = await fetch(`${tasksUrl}/v1/briefing`, { signal: AbortSignal.timeout(8000) });
-      const data = await upstream.text();
-      res.writeHead(upstream.status, { "Content-Type": "application/json" });
-      res.end(data);
-    } catch (err) {
-      log.warn("Briefing proxy failed:", err.message);
-      json(res, { error: "shre-tasks unreachable" }, 502);
-    }
-    return;
-  }
+  // NOTE: /api/briefing is handled by the comprehensive briefing generator below (line ~5312).
+  // Do NOT add a simple proxy here — it would shadow the full briefing aggregator.
 
   // ── Finetune status proxy ──
   if (url.pathname.startsWith("/api/finetune/") && req.method === "GET") {
@@ -5311,7 +5320,7 @@ async function requestHandler(req, res) {
   // ── Briefing — personal assistant daily briefing ──────────────────
   if (url.pathname === "/api/briefing" && req.method === "GET") {
     // Server-side cache (5 minutes)
-    if (_briefingCache && Date.now() - _briefingCacheTs < 300_000) {
+    if (_briefingCache && Date.now() - _briefingCacheTs < 60_000) {
       return json(res, _briefingCache);
     }
 
@@ -5780,7 +5789,7 @@ Examples:
   // GET /v1/briefing — generate morning briefing (proxies to /api/briefing logic)
   if (url.pathname === "/v1/briefing" && req.method === "GET") {
     // Reuse briefing cache
-    if (_briefingCache && Date.now() - _briefingCacheTs < 300_000) {
+    if (_briefingCache && Date.now() - _briefingCacheTs < 60_000) {
       return json(res, _briefingCache);
     }
 
@@ -6587,6 +6596,23 @@ eventBus.subscribe("briefing.daily", async (event) => {
   }
 }).catch((err) => {
   log.warn("[briefing] Failed to subscribe to briefing.daily events", {}, err);
+});
+
+// ─── Invalidate briefing cache on service recovery events ─────────────────────
+eventBus.subscribe("service.recovered", () => {
+  _briefingCache = null;
+  _briefingCacheTs = 0;
+  log.info("[briefing] Cache invalidated — service recovered");
+}).catch((err) => {
+  log.warn("[briefing] Failed to subscribe to service.recovered events", {}, err);
+});
+
+eventBus.subscribe("service.crash_loop.resolved", () => {
+  _briefingCache = null;
+  _briefingCacheTs = 0;
+  log.info("[briefing] Cache invalidated — crash loop resolved");
+}).catch((err) => {
+  log.warn("[briefing] Failed to subscribe to service.crash_loop.resolved events", {}, err);
 });
 
 // ─── Subscribe to browser approval events ────────────────────────────────────
