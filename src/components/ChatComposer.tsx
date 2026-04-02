@@ -3,12 +3,13 @@ import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
 import { usePreferences, type TTSProvider } from '../preferences-store';
-import emojiData from '@emoji-mart/data';
-
+// Lazy-load both emoji data (~300KB) and picker — only fetched when user opens picker
 const EmojiPicker = lazy(() =>
-  import('@emoji-mart/react').then((mod) => ({
-    default: (props: any) => <mod.default {...props} />,
-  })),
+  Promise.all([import('@emoji-mart/data'), import('@emoji-mart/react')]).then(
+    ([dataModule, mod]) => ({
+      default: (props: any) => <mod.default {...props} data={dataModule.default} />,
+    }),
+  ),
 );
 
 interface ChatComposerProps {
@@ -660,7 +661,8 @@ export function ChatComposer(props: ChatComposerProps) {
             onInput={(e) => {
               const el = e.currentTarget;
               el.style.height = '36px';
-              el.style.height = Math.min(el.scrollHeight, 240) + 'px';
+              const maxH = window.innerWidth <= 768 ? 160 : 240;
+              el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
             }}
           />
 
@@ -717,7 +719,7 @@ export function ChatComposer(props: ChatComposerProps) {
                         fallback={
                           <div
                             style={{
-                              width: 320,
+                              width: 'min(320px, calc(100vw - 16px))',
                               height: 350,
                               display: 'flex',
                               alignItems: 'center',
@@ -732,7 +734,6 @@ export function ChatComposer(props: ChatComposerProps) {
                         }
                       >
                         <EmojiPicker
-                          data={emojiData}
                           theme="dark"
                           onEmojiSelect={(emoji: any) => {
                             setInput(input + emoji.native);
