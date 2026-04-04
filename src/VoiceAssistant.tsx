@@ -175,7 +175,7 @@ export default function VoiceAssistant({
 
   // ── VAD setup ──
   const vad = useVAD({
-    speechThreshold: 0.015,
+    speechThreshold: 0.025,
     silenceDuration: 4000,
     onSilence: useCallback(() => {}, []),
     onSpeechStart: useCallback(() => {
@@ -208,8 +208,9 @@ export default function VoiceAssistant({
   }, []);
 
   const releaseMic = useCallback(() => {
-    // Don't stop tracks — they're in the shared cache for reuse
     mediaStreamRef.current = null;
+    // Release the shared cached stream when VoiceAssistant closes to free hardware
+    releaseCachedStream();
   }, []);
 
   // ── Cleanup ──
@@ -245,6 +246,7 @@ export default function VoiceAssistant({
       }
       mediaRecorderRef.current = null;
     }
+    audioChunksRef.current = []; // prevent stale chunks from accumulating
     releaseMic();
     window.speechSynthesis?.cancel();
     dispatch({ type: 'CLOSE' });
@@ -355,10 +357,15 @@ export default function VoiceAssistant({
 
   // ── Whisper transcription ──
   const transcribeWithWhisper = useCallback(async (audioBlob: Blob): Promise<string> => {
+    // Abort any previous in-flight Whisper request to prevent stacking
+    if (whisperAbortRef.current) {
+      whisperAbortRef.current.abort();
+      whisperAbortRef.current = null;
+    }
     try {
       const ctrl = new AbortController();
       whisperAbortRef.current = ctrl;
-      const timeout = setTimeout(() => ctrl.abort(), 15_000);
+      const timeout = setTimeout(() => ctrl.abort(), 10_000);
       const formData = new FormData();
       formData.append('file', audioBlob, 'voice.webm');
       formData.append('model', 'whisper-1');

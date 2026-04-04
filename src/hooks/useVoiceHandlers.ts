@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { playVoiceCue, MAX_RECORDING_SECONDS } from '../chat-utils';
-import { getOrRequestStream } from './useVoiceRecording';
+import { getOrRequestStream, releaseCachedStream } from './useVoiceRecording';
 import type { TTSProvider } from '../preferences-store';
 
 export interface UseVoiceHandlersParams {
@@ -101,11 +101,17 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   const ttsAbortRef = useRef<AbortController | null>(null);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  const recordingInProgressRef = useRef(false);
+
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       alert('Microphone access is not available in this browser.');
       return;
     }
+
+    // Prevent concurrent startRecording calls (double-tap race)
+    if (recordingInProgressRef.current) return;
+    recordingInProgressRef.current = true;
 
     // Clean up previous sessions
     if (recognitionRef.current) {
@@ -239,6 +245,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         clearInterimAfter(4000);
         setIsRecording(false);
         setVoicePhase('idle');
+        recordingInProgressRef.current = false;
         return;
       }
 
@@ -355,6 +362,8 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
             }
           }
         };
+        let restartCount = 0;
+        const MAX_SR_RESTARTS = 20; // prevent infinite restart loops
         rec.onend = () => {
           // Never restart if recording was stopped or recognition was cleared
           if (!hasStarted || stopped || recognitionRef.current !== rec) {
@@ -362,7 +371,13 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
             return;
           }
           // Only restart if we're still actively recording (MediaRecorder is active)
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          // Guard against infinite restart loop if MediaRecorder is in a bad state
+          if (
+            mediaRecorderRef.current &&
+            mediaRecorderRef.current.state === 'recording' &&
+            restartCount < MAX_SR_RESTARTS
+          ) {
+            restartCount++;
             try {
               rec.start();
               return;
@@ -438,6 +453,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
     setIsRecording(false);
     setVoicePhase('idle');
+    recordingInProgressRef.current = false;
     if (!currentText) {
       setInterimTranscript('');
     }
@@ -483,8 +499,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       if (levelRafRef.current) cancelAnimationFrame(levelRafRef.current);
       if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-      // Note: we do NOT release the cached stream on unmount — it persists for reuse
-      // to avoid re-prompting mic permissions. It's released when the page unloads.
+      // Release the cached MediaStream on full unmount to free hardware
+      // The page-level beforeunload listener also handles this as a safety net
+      releaseCachedStream();
     };
   }, []);
 
