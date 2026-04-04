@@ -58,6 +58,11 @@ export function createSpeak(deps: TTSDeps) {
         if (resolved) return;
         resolved = true;
         clearTimeout(safetyTimer);
+        // Safety: if we're still in speaking phase after TTS completes, dispatch SPEAK_DONE
+        // This prevents the "black hole" where phase gets stuck on speaking
+        if (activeRef.current && phaseRef.current === 'speaking') {
+          dispatch({ type: 'SPEAK_DONE' });
+        }
         resolve();
       };
 

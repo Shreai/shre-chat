@@ -79,6 +79,22 @@ export function releaseCachedStream(): void {
   }
 }
 
+// Release cached stream on page unload to free hardware
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => releaseCachedStream(), { once: true });
+  // Also release on visibilitychange to 'hidden' (mobile tab close / app switch)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && _cachedStream) {
+      // Only release if nobody is actively recording
+      const tracks = _cachedStream.getAudioTracks();
+      const anyActive = tracks.some(
+        (t) => t.readyState === 'live' && t.enabled && (t as any)._shreRecording,
+      );
+      if (!anyActive) releaseCachedStream();
+    }
+  });
+}
+
 export function useVoiceRecording(): UseVoiceRecordingReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [voicePhase, setVoicePhase] = useState<'idle' | 'waiting' | 'recording' | 'transcribing'>(
