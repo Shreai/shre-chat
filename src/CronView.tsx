@@ -69,16 +69,6 @@ const CRON_JOBS: CronJob[] = [
     port: ports.services['shre-cortex-bridge'].port,
   },
   {
-    id: 'gateway-guard',
-    name: 'gateway-guard',
-    schedule: 'KeepAlive',
-    interval: 'always',
-    service: 'ai.shre.gateway-guard',
-    category: 'always-on',
-    description: 'Gateway security & rate limiting',
-    port: ports.services['shre-gateway-guard'].port,
-  },
-  {
     id: 'meter',
     name: 'shre-meter',
     schedule: 'KeepAlive',

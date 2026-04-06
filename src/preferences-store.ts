@@ -9,7 +9,7 @@ const LEGACY_MODEL_KEY = 'shre-model-overrides';
 // ── Preferences slice — persisted via Zustand persist middleware ─────
 
 export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
-export type GatewayMode = 'router' | 'openclaw' | 'direct';
+export type GatewayMode = 'router' | 'direct';
 
 // Feature keys that can be toggled on/off
 export type FeatureKey =
@@ -88,6 +88,7 @@ export interface PreferencesState {
   modelOverrides: Record<string, string>; // agentId → modelId
   gatewayMode: GatewayMode; // router | openclaw | direct (Ollama)
   features: Record<FeatureKey, boolean>; // Feature toggles
+  focusMode: boolean; // Hide system/cron/automated messages from chat
 
   // Actions
   setNotifSound: (v: boolean) => void;
@@ -100,6 +101,7 @@ export interface PreferencesState {
   setGatewayMode: (v: GatewayMode) => void;
   setFeature: (key: FeatureKey, enabled: boolean) => void;
   isFeatureEnabled: (key: FeatureKey) => boolean;
+  setFocusMode: (v: boolean) => void;
 }
 
 /**
@@ -139,10 +141,10 @@ function migrateFromLegacyKeys(): Partial<PreferencesState> {
       }
     }
 
-    // gatewayMode: migrate from legacy shre-openclaw-mode boolean
+    // gatewayMode: migrate from legacy shre-openclaw-mode boolean → router
     const ocRaw = localStorage.getItem(LEGACY_OPENCLAW_KEY);
     if (ocRaw === 'true') {
-      migrated.gatewayMode = 'openclaw';
+      migrated.gatewayMode = 'router';
     }
   } catch {
     // Ignore migration errors — defaults are safe
@@ -166,6 +168,7 @@ export const usePreferences = create<PreferencesState>()(
         modelOverrides: legacy.modelOverrides ?? {},
         gatewayMode: legacy.gatewayMode ?? 'router',
         features: { ...DEFAULT_FEATURES },
+        focusMode: false,
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
@@ -173,6 +176,7 @@ export const usePreferences = create<PreferencesState>()(
         setTtsVoice: (v) => set({ ttsVoice: v }),
         setTtsProvider: (v) => set({ ttsProvider: v }),
         setGatewayMode: (v) => set({ gatewayMode: v }),
+        setFocusMode: (v) => set({ focusMode: v }),
 
         setFeature: (key, enabled) =>
           set((state) => ({
@@ -209,6 +213,7 @@ export const usePreferences = create<PreferencesState>()(
         modelOverrides: state.modelOverrides,
         gatewayMode: state.gatewayMode,
         features: state.features,
+        focusMode: state.focusMode,
       }),
       // After rehydration, clean up legacy keys (one-time)
       onRehydrateStorage: () => {

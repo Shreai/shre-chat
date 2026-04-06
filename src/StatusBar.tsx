@@ -165,10 +165,9 @@ function RoutingModeIndicator() {
 
   const config: Record<GatewayMode, { label: string; color: string; title: string }> = {
     router: { label: 'Router', color: '#3b82f6', title: 'Shre Router — trust gate, RAG, scoring' },
-    openclaw: { label: 'OpenClaw', color: '#a855f7', title: 'OpenClaw Gateway — agent workspace' },
     direct: { label: 'Direct', color: '#22c55e', title: 'Direct Ollama — local models, no gateway' },
   };
-  const modes: GatewayMode[] = ['router', 'openclaw', 'direct'];
+  const modes: GatewayMode[] = ['router', 'direct'];
   const c = config[gatewayMode];
 
   return (
@@ -208,10 +207,9 @@ function RoutingModeIndicator() {
 function StatusBarGatewayPill() {
   const gatewayMode = usePreferences((s) => s.gatewayMode);
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
-  const modes: GatewayMode[] = ['router', 'openclaw', 'direct'];
+  const modes: GatewayMode[] = ['router', 'direct'];
   const cfg: Record<GatewayMode, { label: string; color: string }> = {
     router: { label: 'R', color: '#3b82f6' },
-    openclaw: { label: 'OC', color: '#a855f7' },
     direct: { label: 'D', color: '#22c55e' },
   };
   const c = cfg[gatewayMode];
@@ -247,6 +245,8 @@ export function StatusBar() {
   const [data, setData] = useState<StatusBarData>(EMPTY_DATA);
   const micEnabled = usePreferences((s) => s.micEnabled);
   const setMicEnabled = usePreferences((s) => s.setMicEnabled);
+  const focusMode = usePreferences((s) => s.focusMode);
+  const setFocusMode = usePreferences((s) => s.setFocusMode);
   const [recording, setRecording] = useState(false);
   const [now, setNow] = useState(Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1024,6 +1024,52 @@ export function StatusBar() {
           )}
         </button>
       </div>
+
+      {/* Focus mode toggle — hides system/cron/automated messages */}
+      <button
+        onClick={() => setFocusMode(!focusMode)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          background: focusMode
+            ? 'var(--c-accent, #6366f1)'
+            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
+          color: focusMode ? '#fff' : 'var(--c-text-3)',
+          transition: 'all 0.2s ease',
+          flexShrink: 0,
+        }}
+        title={focusMode ? 'Focus mode ON — system events hidden. Click to show all' : 'Focus mode OFF — showing all messages. Click to hide system events'}
+        aria-label={focusMode ? 'Disable focus mode' : 'Enable focus mode'}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {focusMode ? (
+            <>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+            </>
+          ) : (
+            <>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 5v-2M12 21v-2M7.05 7.05L5.64 5.64M18.36 18.36l-1.41-1.41M5 12H3M21 12h-2M7.05 16.95l-1.41 1.41M18.36 5.64l-1.41 1.41" />
+            </>
+          )}
+        </svg>
+      </button>
 
       {/* Mic button — persistent on/off with permission check */}
       <button
