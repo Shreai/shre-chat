@@ -29,12 +29,8 @@ export function useHeaderActions({
 }: UseHeaderActionsOptions) {
   const gatewayMode = usePreferences((s) => s.gatewayMode);
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
-  // Derived boolean for backward compat
-  const openclawMode = gatewayMode === 'openclaw';
-  const setOpenclawMode = useCallback(
-    (v: boolean) => setGatewayMode(v ? 'openclaw' : 'router'),
-    [setGatewayMode],
-  );
+  // Derived boolean — openclaw removed, always false
+  const openclawMode = false;
   const [compareMode, setCompareMode] = useState(false);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
@@ -51,9 +47,9 @@ export function useHeaderActions({
   const setNotifSound = usePreferences((s) => s.setNotifSound);
 
   const handleToggleOpenclawMode = useCallback(() => {
-    // Legacy toggle — cycles router ↔ openclaw
-    setGatewayMode(openclawMode ? 'router' : 'openclaw');
-  }, [openclawMode, setGatewayMode]);
+    // Legacy toggle — now just ensures router mode
+    setGatewayMode('router');
+  }, [setGatewayMode]);
 
   const handleSetGatewayMode = useCallback(
     (mode: GatewayMode) => setGatewayMode(mode),
@@ -207,7 +203,7 @@ export function useHeaderActions({
 
   return {
     openclawMode,
-    setOpenclawMode,
+    setOpenclawMode: () => {},
     gatewayMode,
     handleSetGatewayMode,
     compareMode,

@@ -122,13 +122,6 @@ export function HeaderMoreMenu({
           onClick={() => { onSetGatewayMode('router'); onClose(); }}
         />
         <GatewayOption
-          label="OpenClaw"
-          description="Agent workspace, tools"
-          color="#a855f7"
-          active={gatewayMode === 'openclaw'}
-          onClick={() => { onSetGatewayMode('openclaw'); onClose(); }}
-        />
-        <GatewayOption
           label="Direct (Ollama)"
           description="Local models, no gateway"
           color="#22c55e"
@@ -527,24 +520,6 @@ export function HeaderMoreMenu({
         {feat('externalApps') && <Divider />}
 
         {feat('externalApps') && <><SectionLabel>Apps</SectionLabel>
-        <HeaderMenuItem
-          label="OpenClaw"
-          icon={
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M2 12h20" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-          }
-          active={view === 'openclaw'}
-          onClick={() => onSetView('openclaw')}
-        />
         <HeaderMenuItem
           label="Shre Dashboard"
           icon={

@@ -46,5 +46,5 @@ The `/v1/*` proxy also routes through shre-router (not directly to OpenClaw).
 - shre-router (port 5497) — PRIMARY: all chat, model routing, Whisper, cost tracking, learning
 - shre-tasks (port 5460) — task creation from chat, pending task counts for status bar
 - shre-fleet (port 5498) — active agent count for status bar
-- OpenClaw Gateway (port 18789) — accessed ONLY through shre-router (never directly)
+- Ollama (port 11434) — direct mode fallback (local models)
 - Cloudflare Tunnel — exposed at chat.nirtek.net
