@@ -8,6 +8,7 @@ import { BrowserApprovalCard } from './message-parts/BrowserApprovalCard';
 import type { ToolExecStep } from './MessageBubble';
 import { WelcomeScreen } from './WelcomeScreen';
 import { formatTime } from '../chat-utils';
+import StreamTimeoutIndicator from './StreamTimeoutIndicator';
 
 interface Agent {
   id: string;
@@ -468,28 +469,23 @@ export function MessageList(props: MessageListProps) {
               </div>
             )}
 
-            {streamStall && (
+            {streamStall === 'stalling' && stallCountdown > 0 && (
+              <StreamTimeoutIndicator stallCountdown={stallCountdown} />
+            )}
+
+            {streamStall === 'retrying' && (
               <div
                 className="flex items-center gap-1.5 px-3 py-1 mb-1 rounded-lg text-[11px]"
                 style={{
-                  background:
-                    streamStall === 'retrying'
-                      ? 'rgba(251, 146, 60, 0.10)'
-                      : 'rgba(234, 179, 8, 0.08)',
-                  color: streamStall === 'retrying' ? 'var(--c-orange)' : 'var(--c-yellow)',
+                  background: 'rgba(251, 146, 60, 0.10)',
+                  color: 'var(--c-orange)',
                 }}
               >
                 <span
                   className="inline-block h-1.5 w-1.5 rounded-full ws-reconnect-pulse"
-                  style={{
-                    background: streamStall === 'retrying' ? 'var(--c-orange)' : 'var(--c-yellow)',
-                  }}
+                  style={{ background: 'var(--c-orange)' }}
                 />
-                {streamStall === 'retrying'
-                  ? 'Retrying stream...'
-                  : stallCountdown > 0
-                    ? `Response delayed — auto-retry in ${stallCountdown}s`
-                    : 'Response delayed...'}
+                Retrying stream...
               </div>
             )}
 
