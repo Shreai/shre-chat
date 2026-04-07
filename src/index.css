@@ -479,6 +479,25 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 24px;
 }
 
+/* ── Stream Timeout Indicator ────────────────────────────────────── */
+@keyframes stream-timeout-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes stream-timeout-ring-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.stream-timeout-indicator {
+  animation: stream-timeout-fade-in 300ms ease-out both;
+}
+
+.stream-timeout-ring {
+  animation: stream-timeout-ring-pulse 2s ease-in-out infinite;
+}
+
 /* ── Fade in animation ───────────────────────────────────────────── */
 @keyframes fade-in {
   from { opacity: 0; }
