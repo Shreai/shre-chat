@@ -558,10 +558,13 @@ export async function sendMessage(
     // Classify error for better UX — order matters: check specific patterns before generic fallback
     const isToolLoopError = msg.includes('iterations') || msg.includes('tool loop') || msg.includes('maximum iteration') || msg.includes('tool_loop');
     const isNetworkError = msg.includes('Failed to fetch') || msg.includes('NetworkError') || (msg.includes('TypeError') && msg.includes('fetch'));
+    const isAuthError = msg.includes('auth_expired') || msg.includes('Session expired') || msg.includes('sign in again');
     if (isToolLoopError) {
       // Tool loop exhaustion — NOT a gateway error, NOT transient. Prefix with 'tool_loop_exhausted:'
       // so useMessageHandlers knows not to auto-retry.
       safeCallbacks.onError('tool_loop_exhausted: The agent ran out of tool iterations. Your message has been escalated for review. Try rephrasing or breaking the request into smaller steps.');
+    } else if (isAuthError) {
+      safeCallbacks.onError('Session expired — please sign in again.');
     } else if (isNetworkError) {
       safeCallbacks.onError('Cannot reach the gateway — check if shre-router is running. Please try again.');
     } else {
@@ -631,6 +634,12 @@ async function streamViaFallback(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // Handle auth errors — session expired or unauthorized
+    if (res.status === 401 || res.status === 403) {
+      const parsed = (() => { try { return JSON.parse(text); } catch { return null; } })();
+      const errMsg = parsed?.message || text.slice(0, 200) || 'Session expired';
+      throw new Error(`auth_expired: ${errMsg}`);
+    }
     // Handle billing kill switch — 402 Payment Required
     if (res.status === 402) {
       try {

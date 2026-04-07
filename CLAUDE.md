@@ -3,13 +3,13 @@
 Port: 5510 | Protocol: HTTPS | Dir: shre-chat/
 
 ## Purpose
-Web-based chat interface for the Shre AI platform. All chat routes through shre-router for trust gate, budget enforcement, cost tracking, muscle memory, and conversation learning. No direct OpenClaw bypass.
+Web-based chat interface for the Shre AI platform. All chat routes through shre-router for trust gate, budget enforcement, cost tracking, muscle memory, and conversation learning.
 
 ## Key Files
 - `serve.js` — Express backend: shre-router proxy, auth, session sync, suggestions, reminders, task proxy
 - `src/ChatView.tsx` — Main chat UI: message send/receive, streaming, process bar, agent switching
-- `src/gateway-ws.ts` — WebSocket: terminal, notifications (no raw OpenClaw proxy)
-- `src/openclaw.ts` — HTTP streaming: SSE parsing, status mapping, shre-router primary (no OpenClaw fallback)
+- `src/gateway-ws.ts` — WebSocket: terminal, notifications
+- `src/openclaw.ts` — HTTP streaming: SSE parsing, status mapping, shre-router primary
 - `src/StatusBar.tsx` — Persistent status bar: connection status, active agents, pending tasks, calendar, reminders
 - `src/taskDetector.ts` — "remind me to..." pattern detection + task creation via shre-tasks proxy
 - `src/components/SuggestionsBar.tsx` — Contextual quick-reply suggestions based on assistant response patterns
@@ -36,11 +36,11 @@ All chat messages route through shre-router — no bypass:
 1. Browser → `sendMessage()` in `openclaw.ts` → POST `/api/router/v1/chat`
 2. serve.js proxies to shre-router:5497 (SSE streaming-safe)
 3. shre-router: trust gate → budget → soul injection → RAG → 10-gate routing → provider proxy → cost recording → learning
-4. If shre-router is down → user sees error (no silent OpenClaw fallback)
+4. If shre-router is down → user sees error (no silent fallback)
 
 WebSocket paths: `/ws/terminal` (PTY), `/ws/notifications` (reminders/status). All other WS upgrade requests are rejected (403).
 
-The `/v1/*` proxy also routes through shre-router (not directly to OpenClaw).
+The `/v1/*` proxy also routes through shre-router.
 
 ## Dependencies
 - shre-router (port 5497) — PRIMARY: all chat, model routing, Whisper, cost tracking, learning
