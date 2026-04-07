@@ -570,52 +570,7 @@ export async function sendMessage(
   }
 }
 
-// ── OpenClaw Gateway (primary path) ──────────────────────────────────
-
-async function streamViaGateway(
-  message: string,
-  history: ChatMessage[],
-  systemPrompt: string,
-  callbacks: StreamCallbacks,
-  signal?: AbortSignal,
-  modelOverride?: string,
-): Promise<void> {
-  // Don't send `instructions` — let OpenClaw load SOUL.md/IDENTITY.md from the agent workspace
-  // OpenClaw manages session history via sessionKey — just send the current message as a string
-  // Strip provider prefix — gateway expects bare IDs like "claude-sonnet-4-6"
-  const model = modelOverride ? stripProviderPrefix(modelOverride) : currentAgentModel;
-  const payload: Record<string, unknown> = {
-    model,
-    input: message,
-    stream: true,
-    metadata: {
-      agentId: currentAgentId,
-      sessionKey: activeSessionKey,
-      user: 'nirlab@nirlab.com',
-    },
-  };
-
-  const res = await fetchWithRetry(OPENCLAW_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Auth injected server-side by serve.js proxy
-      'x-openclaw-agent-id': currentAgentId,
-      'x-openclaw-session-key': `agent:${currentAgentId}:${activeSessionKey}`,
-    },
-    body: JSON.stringify(payload),
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Gateway ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  await readSSEStream(res, callbacks);
-}
-
-// ── Fallback: shre-router Smart Gateway ─────────────────────────────
+// ── shre-router Smart Gateway ─────────────────────────────
 // Uses /v1/chat which auto-routes, manages API keys, and falls back through providers
 
 async function streamViaFallback(
@@ -631,6 +586,7 @@ async function streamViaFallback(
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
   directMode?: boolean,
+  _emptyRetry?: boolean,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
 
@@ -873,14 +829,26 @@ async function streamViaFallback(
     reader.releaseLock();
   }
 
-  // If stream ended with no content, surface error instead of empty message
+  // If stream ended with no content, auto-retry once before surfacing error
   if (!fullText || fullText.trim().length < 3) {
     const elapsed = Date.now() - fallbackStart;
     if (elapsed >= STREAM_SILENCE_TIMEOUT - 1000) {
       callbacks.onError('Request timed out — no response received. The service may be restarting. Please try again.');
-    } else {
-      callbacks.onError('The model returned an empty response. This has been escalated automatically. Please try again.');
+      return;
     }
+
+    // One automatic retry — transient empty responses often succeed on second attempt
+    if (!_emptyRetry && !signal?.aborted) {
+      callbacks.onStatus?.('thinking', 'Empty response — retrying...');
+      await new Promise((r) => setTimeout(r, 800));
+      return streamViaFallback(
+        message, history, systemPrompt, callbacks, signal, modelOverride,
+        attachments, openclawMode, threadContext, contextHealth, claudeCliMode, directMode,
+        true,
+      );
+    }
+
+    callbacks.onError('The model returned an empty response. This has been escalated automatically. Please try again.');
     return;
   }
 
