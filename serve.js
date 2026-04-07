@@ -52,10 +52,9 @@ const heartbeat = createHeartbeatMonitor("shre-chat", {
   publishFn: (event, severity, data) => eventBus.publish(event, severity, data),
 });
 heartbeat.registerDependency("cortexdb", `${infraUrl("cortexservice-api")}/health/live`);
-heartbeat.registerDependency("shre-router", "https://127.0.0.1:5497/health");
+heartbeat.registerDependency("shre-router", `${serviceUrl("shre-router")}/health`);
 const DIST = join(import.meta.dirname, "dist");
-const OPENCLAW_HOST = "127.0.0.1";
-const OPENCLAW_PORT = Number(new URL(infraUrl("openclaw-gateway")).port);
+const ROUTER_PORT = Number(new URL(serviceUrl("shre-router")).port);
 const OPENCLAW_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
@@ -1413,7 +1412,7 @@ const handleAuth = registerAuthRoutes({ log });
 const intentRouter = registerIntentRouter({ log, chatDb });
 const conversationEvaluator = createConversationEvaluator({ log, chatDb });
 const handleVoice = registerVoiceRoutes({
-  log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb,
+  log, GATEWAY_TOKEN, chatDb,
   logConversationToCortex, emitConversationComplete, extractAndLogSkills,
   conversationLearner, conversationEvaluator, feedbackPipeline,
 });
@@ -5593,12 +5592,12 @@ async function requestHandler(req, res) {
       }
     } catch { /* shre-tasks unreachable — show 0 */ }
 
-    // Check OpenClaw gateway connectivity (gateway is HTTP, not HTTPS)
+    // Check shre-router connectivity
     let gatewayConnected = false;
     try {
-      const gwReq = httpRequest({
-        hostname: OPENCLAW_HOST, port: OPENCLAW_PORT, path: "/health",
-        method: "GET", timeout: 1500,
+      const gwReq = httpsRequest({
+        hostname: "127.0.0.1", port: ROUTER_PORT, path: "/health",
+        method: "GET", timeout: 1500, rejectUnauthorized: false,
       });
       gatewayConnected = await new Promise((resolve) => {
         gwReq.on("response", (r) => { r.resume(); resolve(r.statusCode < 500); });
@@ -5606,7 +5605,7 @@ async function requestHandler(req, res) {
         gwReq.on("timeout", () => { gwReq.destroy(); resolve(false); });
         gwReq.end();
       });
-    } catch { /* gateway unreachable */ }
+    } catch { /* router unreachable */ }
 
     return json(res, {
       reminders: { active: active.length, overdue: overdue.length },
@@ -6049,7 +6048,6 @@ Examples:
   // Each prefix strips its path and forwards to the upstream service.
   // X-Frame-Options and CSP are removed so iframe embedding works.
   const EMBEDDED_PROXIES = [
-    { prefix: "/openclaw", host: OPENCLAW_HOST, port: OPENCLAW_PORT, proto: "http", label: "OpenClaw Gateway" },
     { prefix: "/shre-dashboard", host: "127.0.0.1", port: 5500, proto: "https", label: "Shre AI Dashboard" },
     { prefix: "/cortexdb-ui", host: "127.0.0.1", port: 3400, proto: "http", label: "CortexDB Dashboard" },
     { prefix: "/storepulse", host: "127.0.0.1", port: 8899, proto: "http", label: "StorePulse" },
@@ -6120,53 +6118,7 @@ Examples:
   }
 }
 
-// ── WebSocket proxy — OpenClaw upgrade handler ───────────────────
-
-function proxyOpenClawWS(req, socket, head) {
-  log.info("[ws-proxy] Upgrade request received");
-
-  const proxyReq = httpRequest({
-    hostname: OPENCLAW_HOST,
-    port: OPENCLAW_PORT,
-    path: req.url,
-    method: "GET",
-    headers: {
-      ...req.headers,
-      host: `${OPENCLAW_HOST}:${OPENCLAW_PORT}`,
-      origin: `http://${OPENCLAW_HOST}:${OPENCLAW_PORT}`,
-    },
-  });
-
-  proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
-    log.info("[ws-proxy] Connected to OpenClaw WebSocket");
-
-    let responseHead = "HTTP/1.1 101 Switching Protocols\r\n";
-    for (const [key, value] of Object.entries(proxyRes.headers)) {
-      responseHead += `${key}: ${value}\r\n`;
-    }
-    responseHead += "\r\n";
-    socket.write(responseHead);
-
-    if (proxyHead.length > 0) socket.write(proxyHead);
-    if (head.length > 0) proxySocket.write(head);
-
-    proxySocket.pipe(socket);
-    socket.pipe(proxySocket);
-
-    proxySocket.on("error", (err) => { log.error("[ws-proxy] proxySocket error:", err.message); socket.destroy(); });
-    socket.on("error", (err) => { log.error("[ws-proxy] clientSocket error:", err.message); proxySocket.destroy(); });
-    proxySocket.on("close", () => { log.info("[ws-proxy] proxySocket closed (gateway side)"); socket.destroy(); });
-    socket.on("close", () => { log.info("[ws-proxy] clientSocket closed (browser side)"); proxySocket.destroy(); });
-  });
-
-  proxyReq.on("error", (err) => {
-    log.error("[ws-proxy] OpenClaw WebSocket error:", err.message);
-    socket.write("HTTP/1.1 502 Bad Gateway\r\n\r\n");
-    socket.destroy();
-  });
-
-  proxyReq.end();
-}
+// ── (OpenClaw WebSocket proxy removed — all traffic routes through shre-router) ──
 
 // ── Notification WebSocket — push due reminders + status updates ──
 
@@ -6522,10 +6474,6 @@ function handleUpgrade(req, socket, head) {
     notifyWss.handleUpgrade(req, socket, head, (ws) => {
       notifyWss.emit("connection", ws, req);
     });
-  } else if (pathname === "/" || pathname.startsWith("/openclaw")) {
-    // OpenClaw Control UI WebSocket — proxy to gateway
-    log.info("[ws] Proxying OpenClaw WebSocket upgrade", { pathname });
-    proxyOpenClawWS(req, socket, head);
   } else {
     log.warn("[ws] Rejected unknown WebSocket path", { pathname });
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");

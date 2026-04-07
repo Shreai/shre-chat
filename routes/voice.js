@@ -12,8 +12,6 @@ import { recordVoiceFailure } from "./voice-quality-monitor.js";
 /**
  * @typedef {object} VoiceDeps
  * @property {import('shre-sdk').Logger} log
- * @property {string} OPENCLAW_HOST
- * @property {number|string} OPENCLAW_PORT
  * @property {string} GATEWAY_TOKEN
  * @property {import('better-sqlite3').Database} chatDb
  * @property {Function} logConversationToCortex
@@ -130,7 +128,7 @@ function validatePrompt(prompt) {
  * @param {VoiceDeps} deps
  * @returns {(req: IncomingMessage, res: ServerResponse, url: URL, helpers: { json: Function, collectBody: Function }) => Promise<boolean>}
  */
-export function registerVoiceRoutes({ log, OPENCLAW_HOST, OPENCLAW_PORT, GATEWAY_TOKEN, chatDb, logConversationToCortex, emitConversationComplete, extractAndLogSkills, conversationLearner, conversationEvaluator, feedbackPipeline }) {
+export function registerVoiceRoutes({ log, GATEWAY_TOKEN, chatDb, logConversationToCortex, emitConversationComplete, extractAndLogSkills, conversationLearner, conversationEvaluator, feedbackPipeline }) {
 
   // ── DB schema validation at init ──
   let dbReady = false;
