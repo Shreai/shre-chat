@@ -1,5 +1,5 @@
 // @ts-check
-// Session routes — SQLite chat_sessions CRUD + sync, OpenClaw session reading
+// Session routes — SQLite chat_sessions CRUD + sync, router session reading
 
 /** @typedef {import('node:http').IncomingMessage} IncomingMessage */
 /** @typedef {import('node:http').ServerResponse} ServerResponse */

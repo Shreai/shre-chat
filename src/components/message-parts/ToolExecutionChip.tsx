@@ -77,7 +77,7 @@ export const ToolExecutionChip = memo(function ToolExecutionChip({ step }: { ste
   }[step.status];
 
   return (
-    <div className="max-w-3xl mx-auto my-0.5">
+    <div className="max-w-3xl mx-auto my-0.5 tool-chip-stable">
       <div className="flex items-center gap-1.5 py-0.5 px-2">
         <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
         <button
@@ -123,7 +123,7 @@ export const ToolExecutionChip = memo(function ToolExecutionChip({ step }: { ste
 
       {expanded && (
         <div
-          className="mx-8 mb-1 rounded-lg overflow-hidden text-[11px] leading-relaxed"
+          className="mx-8 mb-1 rounded-lg overflow-hidden text-[11px] leading-relaxed chip-expand-enter"
           style={{
             background: 'var(--c-bg-3)',
             border: `1px solid ${config.borderColor}`,

@@ -2,13 +2,13 @@
  * Chat send/receive over WebSocket — stream handling, model sync, abort, history.
  */
 
-import { stripProviderPrefix } from '../openclaw';
+import { stripProviderPrefix } from '../router-client';
 import type { WSStreamCallbacks, ActiveStream } from './ws-types';
 import { activeStreams, notifyStreamChange, notifyStreamStall, onEvent, uuid } from './ws-state';
 import { rpc } from './ws-connection';
 
 /**
- * Set the active model by writing directly to openclaw.json.
+ * Set the active model via the gateway config API.
  */
 export async function setModelWS(modelId: string, agentId: string = 'main'): Promise<void> {
   try {

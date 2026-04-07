@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import type { Session } from '../store';
 import { exportSessions, importSessions } from '../store';
 import { ECOSYSTEM_APPS } from '../chat-utils';
@@ -15,8 +15,8 @@ export interface HeaderMoreMenuProps {
   open: boolean;
   onClose: () => void;
   // Gateway mode
-  openclawMode: boolean;
-  onToggleOpenclawMode: () => void;
+  routerMode: boolean;
+  onToggleRouterMode: () => void;
   gatewayMode: GatewayMode;
   onSetGatewayMode: (mode: GatewayMode) => void;
   // Compare
@@ -62,8 +62,8 @@ export interface HeaderMoreMenuProps {
 export function HeaderMoreMenu({
   open,
   onClose,
-  openclawMode,
-  onToggleOpenclawMode,
+  routerMode,
+  onToggleRouterMode,
   gatewayMode,
   onSetGatewayMode,
   compareMode,

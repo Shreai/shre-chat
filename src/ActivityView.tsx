@@ -1,5 +1,5 @@
 import { useApp, getAgent, type ActivityEvent } from './store';
-import type { ActivityStatus } from './openclaw';
+import type { ActivityStatus } from './router-client';
 
 const STATUS_ICONS: Record<ActivityStatus, string> = {
   connecting: '🔗',

@@ -442,6 +442,43 @@ h1, h2, h3, h4, h5, h6 {
 }
 .msg-enter { animation: msg-enter 180ms cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 
+/* ── Layout Shift Prevention ───────────────────────────────────── */
+
+/* Smooth expand/collapse for tool and system event detail panels */
+.chip-expand-enter {
+  animation: chip-expand 150ms ease-out forwards;
+}
+@keyframes chip-expand {
+  from { opacity: 0; max-height: 0; margin-top: 0; margin-bottom: 0; }
+  to { opacity: 1; max-height: 200px; }
+}
+
+/* Scroll anchoring — keep viewport stable when content above grows */
+.scroll-anchor-container {
+  overflow-anchor: auto;
+}
+.scroll-anchor-container > * {
+  overflow-anchor: none;
+}
+.scroll-anchor-container::after {
+  content: '';
+  display: block;
+  overflow-anchor: auto;
+  height: 1px;
+}
+
+/* Reserve stable height for streaming indicator area */
+.stream-indicator-zone {
+  min-height: 48px;
+  contain: layout style;
+}
+
+/* Prevent tool/system chips from causing reflow during status transitions */
+.tool-chip-stable {
+  contain: content;
+  min-height: 24px;
+}
+
 /* ── Fade in animation ───────────────────────────────────────────── */
 @keyframes fade-in {
   from { opacity: 0; }
@@ -486,8 +523,13 @@ h1, h2, h3, h4, h5, h6 {
   }
   .sidebar-mobile-slide.sidebar-hidden { transform: translateX(-100%); }
 
-  .prose-chat { line-height: 1.55; }
+  .prose-chat { line-height: 1.55; overflow-wrap: break-word; word-break: break-word; }
   .msg-bubble-mobile { padding: 0.5rem 0.75rem; }
+
+  /* Prevent tables and code blocks from causing horizontal scroll */
+  .prose-chat table { display: block; overflow-x: auto; max-width: 100%; }
+  .prose-chat pre { overflow-x: auto; max-width: calc(100vw - 48px); }
+  .prose-chat img { max-width: 100%; height: auto; }
 
   .mobile-input-area textarea {
     min-height: 44px;
@@ -539,14 +581,22 @@ h1, h2, h3, h4, h5, h6 {
 
 @media (max-width: 768px) {
   .mobile-input-sticky {
-    position: sticky;
+    position: fixed;
     bottom: 0;
+    left: 0;
+    right: 0;
     z-index: 20;
+    bottom: env(safe-area-inset-bottom, 0px);
   }
 }
 
 @media (max-width: 768px) {
-  html, body, #root { height: var(--vv-height, 100dvh); }
+  html, body, #root {
+    height: var(--vv-height, 100dvh);
+    overflow: hidden;
+  }
+  /* Prevent horizontal scroll from wide content (tables, code blocks, link previews) */
+  #root { overflow-x: hidden; }
 }
 
 /* ── Landscape orientation on small devices ────────────────────── */

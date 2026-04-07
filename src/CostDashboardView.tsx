@@ -24,6 +24,7 @@ interface CostByModel {
 }
 interface CostByAgent {
   agent: string;
+  agentId?: string;
   requests: number;
   costUsd: number;
   savingsUsd: number;
@@ -112,7 +113,7 @@ export function CostDashboardView() {
       const [s, m, a, t, b] = await Promise.all([
         fetchApi<CostSummary>(`/api/costs/summary?${qs}`),
         fetchApi<CostByModel[]>(`/api/costs/by-model?${qs}`),
-        fetchApi<CostByAgent[]>(`/api/costs/by-agent?${qs}`),
+        fetchApi<any[]>(`/api/costs/by-agent?${qs}`),
         fetchApi<TimelinePoint[]>(`/api/costs/timeline?${qs}&granularity=day`),
         fetchApi<BudgetInfo[]>(`/api/budgets/tenants`),
       ]);
@@ -120,7 +121,13 @@ export function CostDashboardView() {
       if (!s && !m && !a) setError('Could not reach cost APIs. Is shre-meter running?');
       setSummary(s);
       setByModel(m ?? []);
-      setByAgent(a ?? []);
+      // Normalize: shre-meter returns agentId, UI expects agent
+      setByAgent((a ?? []).map((x: any) => ({
+        agent: x.agent || x.agentId || 'unknown',
+        requests: x.requests || 0,
+        costUsd: x.costUsd || 0,
+        savingsUsd: x.savingsUsd || 0,
+      })));
       setTimeline(t ?? []);
       setBudgets(b ?? []);
       setLoading(false);

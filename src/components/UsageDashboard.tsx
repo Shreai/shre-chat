@@ -36,6 +36,15 @@ interface AgentBreakdown {
   pct: number;
 }
 
+interface TokenAccuracyRow {
+  token_source: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+}
+
 interface BudgetStatus {
   limitUsd: number;
   usedUsd: number;
@@ -74,18 +83,20 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
   const [models, setModels] = useState<ModelBreakdown[]>([]);
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
+  const [tokenAccuracy, setTokenAccuracy] = useState<TokenAccuracyRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState(1);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const [summaryRes, modelsRes, agentsRes, budgetRes] = await Promise.allSettled([
+        const [summaryRes, modelsRes, agentsRes, budgetRes, accuracyRes] = await Promise.allSettled([
           fetch(`/api/usage-summary?days=${days}`).then((r) => (r.ok ? r.json() : null)),
           fetch(`/api/costs/by-model?days=${days}`).then((r) => (r.ok ? r.json() : null)),
           fetch(`/api/costs/by-agent?days=${days}`).then((r) => (r.ok ? r.json() : null)),
           fetch('/api/costs/budget').then((r) => (r.ok ? r.json() : null)),
+          fetch(`/api/costs/token-accuracy?days=${days}`).then((r) => (r.ok ? r.json() : null)),
         ]);
         if (summaryRes.status === 'fulfilled' && summaryRes.value) setSummary(summaryRes.value);
         if (
@@ -95,7 +106,10 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
         ) {
           const raw = modelsRes.value;
           const arr = Array.isArray(raw) ? raw : Array.isArray(raw.models) ? raw.models : [];
-          setModels(arr.filter((m: any) => m && typeof m.model === 'string'));
+          setModels(arr.filter((m: any) => m && typeof m.model === 'string').map((m: any) => ({
+            ...m,
+            local: m.local ?? (m.provider === 'ollama' || m.provider === 'ollama-local'),
+          })));
         }
         if (
           agentsRes.status === 'fulfilled' &&
@@ -104,9 +118,20 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
         ) {
           const raw = agentsRes.value;
           const arr = Array.isArray(raw) ? raw : Array.isArray(raw.agents) ? raw.agents : [];
-          setAgents(arr.filter((a: any) => a && typeof a.agentId === 'string'));
+          const filtered = arr.filter((a: any) => a && typeof a.agentId === 'string');
+          // Compute pct client-side if shre-meter doesn't provide it
+          const totalCost = filtered.reduce((s: number, a: any) => s + (a.costUsd || 0), 0);
+          setAgents(filtered.map((a: any) => ({
+            ...a,
+            agentName: a.agentName || a.agentId,
+            tokens: a.tokens || a.totalTokens || 0,
+            pct: totalCost > 0 ? ((a.costUsd || 0) / totalCost) * 100 : 0,
+          })));
         }
         if (budgetRes.status === 'fulfilled' && budgetRes.value) setBudget(budgetRes.value);
+        if (accuracyRes.status === 'fulfilled' && accuracyRes.value?.breakdown) {
+          setTokenAccuracy(accuracyRes.value.breakdown);
+        }
       } catch {
         // silent — individual sections just won't render
       } finally {
@@ -136,7 +161,7 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
           Usage Breakdown
         </h3>
         <div className="flex gap-1">
-          {[7, 30, 90].map((d) => (
+          {[1, 7, 30, 90].map((d) => (
             <button
               key={d}
               onClick={() => setDays(d)}
@@ -146,7 +171,7 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
                 color: days === d ? '#fff' : 'var(--c-text-3)',
               }}
             >
-              {d}d
+              {d === 1 ? 'Today' : `${d}d`}
             </button>
           ))}
         </div>
@@ -362,6 +387,68 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
               Cloud {summary.cloudPercent.toFixed(0)}%
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Token Accuracy */}
+      {tokenAccuracy.length > 0 && (
+        <div
+          className="rounded-xl p-4"
+          style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-1)' }}
+        >
+          <h4 className="text-xs font-medium mb-3" style={{ color: 'var(--c-text-3)' }}>
+            Token Tracking
+          </h4>
+          <div className="space-y-2">
+            {tokenAccuracy.map((row) => {
+              const totalReqs = tokenAccuracy.reduce((s, r) => s + r.requests, 0);
+              const pct = totalReqs > 0 ? (row.requests / totalReqs) * 100 : 0;
+              const label =
+                row.token_source === 'actual'
+                  ? 'Provider'
+                  : row.token_source === 'metered'
+                    ? 'Metered'
+                    : 'Estimated';
+              const color =
+                row.token_source === 'actual'
+                  ? '#34d399'
+                  : row.token_source === 'metered'
+                    ? '#818cf8'
+                    : '#fb923c';
+              return (
+                <div key={row.token_source} className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ background: color }}
+                      />
+                      <span style={{ color: 'var(--c-text-2)' }}>{label}</span>
+                    </div>
+                    <div className="flex items-center gap-3" style={{ color: 'var(--c-text-4)' }}>
+                      <span>{fmtNumber(row.requests)} req</span>
+                      <span>{fmtNumber(row.total_tokens)} tok</span>
+                      <span className="font-medium" style={{ color: 'var(--c-text-2)' }}>
+                        {fmtUsd(row.cost_usd)}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className="h-1 rounded-full overflow-hidden"
+                    style={{ background: 'var(--c-bg-3)' }}
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct}%`, background: color }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[9px] mt-2" style={{ color: 'var(--c-text-5)' }}>
+            Provider = API-reported | Metered = boundary tokenizer | Estimated = char/4 fallback
+          </p>
         </div>
       )}
 

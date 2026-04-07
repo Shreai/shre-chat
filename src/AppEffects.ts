@@ -31,7 +31,7 @@ import {
   debouncedSaveSessions,
   markSessionDirty,
 } from './store';
-import { compactSession, listSessions } from './openclaw';
+import { compactSession, listSessions } from './router-client';
 
 const THEME_KEY = 'shre-theme';
 
@@ -346,7 +346,11 @@ export function useViewSwitchEvent(setView: Dispatch<SetStateAction<View>>) {
 export function useVisualViewport() {
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    if (!vv) {
+      // Fallback for browsers without VisualViewport API
+      document.documentElement.style.setProperty('--vv-height', `${window.innerHeight}px`);
+      return;
+    }
     let prevHeight = vv.height;
     const handler = () => {
       document.documentElement.style.setProperty('--vv-height', `${vv.height}px`);
@@ -362,9 +366,15 @@ export function useVisualViewport() {
         });
       }
     };
+    // Set immediately — critical for initial mobile layout before any resize
     handler();
     vv.addEventListener('resize', handler);
-    return () => vv.removeEventListener('resize', handler);
+    // Also listen for scroll events (iOS Safari shifts viewport on address bar hide/show)
+    vv.addEventListener('scroll', handler);
+    return () => {
+      vv.removeEventListener('resize', handler);
+      vv.removeEventListener('scroll', handler);
+    };
   }, []);
 }
 

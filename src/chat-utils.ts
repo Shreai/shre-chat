@@ -350,9 +350,9 @@ export const ECOSYSTEM_APPS = [
     description: 'Dashboard',
   },
   {
-    id: 'openclaw',
-    name: 'OpenClaw',
-    icon: 'O',
+    id: 'router-gateway',
+    name: 'Router Gateway',
+    icon: 'R',
     url: '/openclaw/',
     color: 'from-amber-500 to-orange-500',
     description: 'AI Gateway',

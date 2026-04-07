@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import type { Session, AppActions } from '../store';
 import { formatTime, copyToClipboard } from '../chat-utils';
 

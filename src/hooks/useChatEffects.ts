@@ -6,7 +6,7 @@ import {
   fetchAvailableModels,
   type ChatMessage,
   type RouterModel,
-} from '../openclaw';
+} from '../router-client';
 import {
   isWSConnected,
   startHealthPoll,
@@ -287,16 +287,16 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
     sendClientInfo();
   }, []);
 
-  // Sync OpenClaw agent when active agent changes
+  // Sync router agent when active agent changes
   useEffect(() => {
     setAgent(activeAgentId);
   }, [activeAgentId]);
 
-  // Sync messages from OpenClaw session files on agent change
+  // Sync messages from router session files on agent change
   useEffect(() => {
     let cancelled = false;
 
-    async function syncFromOpenClaw() {
+    async function syncFromRouter() {
       const isInitialSync = syncedAgentRef.current !== activeAgentId;
       if (isInitialSync) {
         actions.setSyncing(true);
@@ -363,7 +363,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
               existingSession.messages.map((m) => m.content.trim().slice(0, 100)),
             );
             const localWithoutTs = existingSession.messages.filter((m) => !m.timestamp);
-            const openClawNew = chatMessages.filter(
+            const routerNew = chatMessages.filter(
               (m) =>
                 m.timestamp &&
                 !localTimestamps.has(m.timestamp) &&
@@ -371,7 +371,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
             );
             const allTimestamped = [
               ...existingSession.messages.filter((m) => m.timestamp),
-              ...openClawNew,
+              ...routerNew,
             ];
             const seen = new Set<string>();
             const deduped = allTimestamped.filter((m) => {
@@ -403,15 +403,15 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
               actions.addFeed(
                 existingSession.id,
                 'received',
-                `[OpenClaw] ${msg.content.slice(0, 80)}${msg.content.length > 80 ? '\u2026' : ''}`,
-                { source: 'openclaw', agent: activeAgentId, model: msg.model || '' },
+                `[Router] ${msg.content.slice(0, 80)}${msg.content.length > 80 ? '\u2026' : ''}`,
+                { source: 'router', agent: activeAgentId, model: msg.model || '' },
               );
             }
           }
         } else {
           const id = actions.newSession();
           const firstUserMsg = chatMessages.find((m) => m.role === 'user');
-          actions.updateSessionTitle(id, generateTitle(firstUserMsg?.content || 'OpenClaw chat'));
+          actions.updateSessionTitle(id, generateTitle(firstUserMsg?.content || 'Router chat'));
           actions.replaceSessionMessages(id, chatMessages);
           actions.switchSession(id);
         }
@@ -424,10 +424,10 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       }
     }
 
-    syncFromOpenClaw();
+    syncFromRouter();
     const iv = setInterval(async () => {
       if (streaming || isWSConnected() || recentWSSendRef.current) return;
-      await syncFromOpenClaw();
+      await syncFromRouter();
     }, 15000);
     return () => {
       cancelled = true;

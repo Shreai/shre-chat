@@ -3,7 +3,7 @@ import type { ChatWidgetProps } from '../types';
 
 /**
  * Reads model, cost, and token info from sessionStorage.
- * shre-chat's openclaw.ts stores routing metadata per message;
+ * shre-chat's router-client.ts stores routing metadata per message;
  * this panel aggregates the current session totals.
  */
 function getSessionStats() {

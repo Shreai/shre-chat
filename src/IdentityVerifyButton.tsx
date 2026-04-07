@@ -2,7 +2,7 @@
  * IdentityVerifyButton
  *
  * Security model:
- *   - Clicking this button POSTs to POST /v1/identity/verify on the OpenClaw gateway.
+ *   - Clicking this button POSTs to POST /v1/identity/verify on the router gateway.
  *   - The request body is EMPTY — the passcode is NEVER sent from the browser.
  *   - The gateway plugin opens a native macOS dialog on the host to collect the passcode.
  *   - Only { ok: true } or { ok: false } is returned to the browser.

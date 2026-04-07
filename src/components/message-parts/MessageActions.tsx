@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
-import { copyToClipboard, REACTION_EMOJIS } from '../../chat-utils';
+import { copyToClipboard, REACTION_EMOJIS, TAG_STYLES } from '../../chat-utils';
 import { usePreferences } from '../../preferences-store';
 
 const MessageExportMenu = lazy(() =>
@@ -386,7 +386,7 @@ export function MessageActions({
 // ── ActionTagChips ──
 export function ActionTagChips({ tags }: { tags: import('../../chat-utils').ActionTag[] }) {
   if (tags.length === 0) return null;
-  const { TAG_STYLES } = require('../../chat-utils');
+  // TAG_STYLES imported at top level
   return (
     <div
       className="flex flex-wrap gap-1.5 mt-2 pt-2"

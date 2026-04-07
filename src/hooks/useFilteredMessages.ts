@@ -4,8 +4,27 @@
  */
 import { useMemo, useCallback, type RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import type { ProcessRun } from '../components/process-bar/types';
+import { usePreferences } from '../preferences-store';
+
+// System event patterns filtered in focus mode
+const SYSTEM_EVENT_PATTERNS = [
+  /^\[project_progress:/,
+  /^\[ellie\.escalation\]/,
+  /^\[escalation\./,
+  /^\[budget_/,
+  /^\[file_diff\]/,
+  /^\[project_fallback\]/,
+  /^\[approval\./,
+  /^\[browser_approval\]/,
+  /^\[browser_approved\]/,
+  /^\[browser_denied\]/,
+  /^\[project_pending\]/,
+  /^\[cron\b/,
+  /^\[scheduled\b/,
+  /^\[auto[-_]?task\b/,
+];
 
 interface UseFilteredMessagesOptions {
   messages: ChatMessage[];
@@ -20,6 +39,8 @@ export function useFilteredMessages({
   runs,
   scrollRef,
 }: UseFilteredMessagesOptions) {
+  const focusMode = usePreferences((s) => s.focusMode);
+
   // Last assistant message content — for SuggestionsBar pattern detection
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -59,6 +80,11 @@ export function useFilteredMessages({
           if (t.includes('identity verification') && t.length > 200) return false;
           if (t.includes('You are an AI assistant') && t.includes('session') && t.length > 800)
             return false;
+          // Focus mode: hide system/cron/automated event messages
+          if (focusMode) {
+            if (msg.meta?.system === 'true' || msg.meta?.type === 'tool_exec') return false;
+            if (SYSTEM_EVENT_PATTERNS.some((p) => p.test(t))) return false;
+          }
           return true;
         })
         .map((msg) => {
@@ -76,7 +102,7 @@ export function useFilteredMessages({
           }
           return msg;
         }),
-    [messages, latestTask],
+    [messages, latestTask, focusMode],
   );
 
   // Match process runs to assistant messages by timestamp proximity

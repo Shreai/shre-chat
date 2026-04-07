@@ -220,6 +220,8 @@ export function ExecutionTimeline({ run, className, onExpand }: ExecutionTimelin
         border: '1px solid var(--c-border-2, rgba(255,255,255,0.06))',
         cursor: onExpand ? 'pointer' : 'default',
         transition: 'all 0.2s ease',
+        minWidth: 0,
+        overflow: 'hidden',
         marginBottom: '4px',
       }}
     >
@@ -275,6 +277,8 @@ export function ExecutionTimeline({ run, className, onExpand }: ExecutionTimelin
           display: 'flex',
           alignItems: 'flex-start',
           gap: '4px',
+          minWidth: 0,
+          maxWidth: '100%',
           overflowX: 'auto',
           paddingBottom: '2px',
         }}

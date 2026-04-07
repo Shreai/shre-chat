@@ -37,7 +37,7 @@ test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => 
     await page.waitForTimeout(800);
 
     // Check for known ecosystem app names
-    const knownApps = ['MIB007', 'OpenClaw', 'CortexDB', 'StorePulse', 'Marketplace'];
+    const knownApps = ['MIB007', 'Router Gateway', 'CortexDB', 'StorePulse', 'Marketplace'];
     let foundCount = 0;
     for (const app of knownApps) {
       const el = page.locator(`text=${app}`).first();
@@ -56,8 +56,8 @@ test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => 
 
   // ═══════════ Proxied Views ═══════════
 
-  test('OpenClaw iframe route exists', async ({ page }) => {
-    const res = await page.goto('/openclaw/', { waitUntil: 'domcontentloaded' });
+  test('Router Gateway iframe route exists', async ({ page }) => {
+    const res = await page.goto('/openclaw/', { waitUntil: 'domcontentloaded' }); // URL path kept for backward compat
     // Should serve the proxied content or redirect
     expect(res?.status()).toBeLessThan(500);
   });
@@ -85,16 +85,16 @@ test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => 
 
   // ═══════════ Iframe View Loading ═══════════
 
-  test('OpenClaw view loads in iframe', async ({ page }) => {
+  test('Router Gateway view loads in iframe', async ({ page }) => {
     await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'openclaw' }));
+      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'router-gateway' }));
     });
     await page.waitForTimeout(1500);
 
     const iframe = page.locator('iframe').first();
     const hasIframe = await iframe.isVisible({ timeout: 5000 }).catch(() => false);
     if (!hasIframe) {
-      console.log('GAP: OpenClaw view did not render an iframe');
+      console.log('GAP: Router Gateway view did not render an iframe');
     }
   });
 

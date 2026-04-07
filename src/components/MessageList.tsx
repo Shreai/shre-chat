@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import type { UserProfile } from '../store';
 import type { ProcessRun } from './process-bar/types';
 import MessageBubble, { SystemEventChip, ToolExecutionChip } from './MessageBubble';
@@ -265,11 +265,11 @@ export function MessageList(props: MessageListProps) {
         onTouchStart={onPullStart}
         onTouchMove={onPullMove}
         onTouchEnd={onPullEnd}
-        className="flex-1 overflow-y-auto px-6 py-6 select-text relative"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text relative scroll-anchor-container"
         role="log"
         aria-label="Message history"
         aria-relevant="additions"
-        style={{ paddingLeft: '24px', paddingRight: '24px' }}
+        style={{ paddingLeft: '24px', paddingRight: '24px', paddingBottom: window.innerWidth <= 768 ? '120px' : '24px' }}
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || pullRefreshing) && (
@@ -454,7 +454,7 @@ export function MessageList(props: MessageListProps) {
 
         {/* Streaming indicator */}
         {streaming && (
-          <div className="max-w-3xl mx-auto w-full">
+          <div className="max-w-3xl mx-auto w-full stream-indicator-zone">
             {streamElapsed >= 3 && !streamStall && (
               <div
                 className="flex items-center gap-1.5 px-3 py-0.5 mb-0.5 text-[10px] select-none"

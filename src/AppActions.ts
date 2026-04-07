@@ -33,7 +33,7 @@ import {
   loadSessions,
   saveSessions,
 } from './store';
-import type { ActivityStatus, ChatMessage } from './openclaw';
+import type { ActivityStatus, ChatMessage } from './router-client';
 
 const AGENT_KEY = 'shre-active-agent';
 const COMPACT_KEY = 'shre-compact';

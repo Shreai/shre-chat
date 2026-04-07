@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('OpenClaw Connection Test', () => {
+test.describe('Router Connection Test', () => {
   test.setTimeout(60_000);
 
   test.beforeEach(async ({ page }) => {
@@ -55,18 +55,18 @@ test.describe('OpenClaw Connection Test', () => {
     await expect(response).toBeVisible({ timeout: 30_000 });
   });
 
-  test('OpenClaw mode sends message without error', async ({ page }) => {
+  test('Router mode sends message without error', async ({ page }) => {
     // Look for model picker / mode selector
     const modelPicker = page.locator('[data-testid="model-picker"], button:has-text("Model"), [class*="model-picker"]').first();
 
-    // If model picker exists, try switching to OpenClaw
+    // If model picker exists, try switching to Router
     if (await modelPicker.isVisible({ timeout: 3000 }).catch(() => false)) {
       await modelPicker.click();
 
-      // Look for OpenClaw option
-      const openclawOption = page.locator('text=/openclaw/i').first();
-      if (await openclawOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await openclawOption.click();
+      // Look for Router option
+      const routerOption = page.locator('text=/router/i').first();
+      if (await routerOption.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await routerOption.click();
         await page.waitForTimeout(1000);
       }
     }
@@ -81,7 +81,7 @@ test.describe('OpenClaw Connection Test', () => {
     await page.waitForTimeout(10_000);
 
     // Check no error messages appeared
-    const errorMsgs = page.locator('text=/OpenClaw.*error|scope.*error|forbidden|disconnected/i');
+    const errorMsgs = page.locator('text=/Router.*error|scope.*error|forbidden|disconnected/i');
     const errorCount = await errorMsgs.count();
     expect(errorCount).toBe(0);
   });

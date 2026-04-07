@@ -108,7 +108,7 @@ export interface PreferencesState {
  * Migrate legacy localStorage keys into the Zustand persist store on first load.
  * After migration, the persist middleware owns these values.
  */
-const LEGACY_OPENCLAW_KEY = 'shre-openclaw-mode';
+const LEGACY_ROUTER_MODE_KEY = 'shre-openclaw-mode'; // legacy localStorage key — value kept for migration
 
 function migrateFromLegacyKeys(): Partial<PreferencesState> {
   const migrated: Partial<PreferencesState> = {};
@@ -141,8 +141,8 @@ function migrateFromLegacyKeys(): Partial<PreferencesState> {
       }
     }
 
-    // gatewayMode: migrate from legacy shre-openclaw-mode boolean → router
-    const ocRaw = localStorage.getItem(LEGACY_OPENCLAW_KEY);
+    // gatewayMode: migrate from legacy shre-router-mode boolean → router
+    const ocRaw = localStorage.getItem(LEGACY_ROUTER_MODE_KEY);
     if (ocRaw === 'true') {
       migrated.gatewayMode = 'router';
     }
@@ -225,7 +225,7 @@ export const usePreferences = create<PreferencesState>()(
               localStorage.removeItem(LEGACY_VOICE_KEY);
               localStorage.removeItem('shre-tts-voice');
               localStorage.removeItem(LEGACY_MODEL_KEY);
-              localStorage.removeItem(LEGACY_OPENCLAW_KEY);
+              localStorage.removeItem(LEGACY_ROUTER_MODE_KEY);
             } catch {
               /* ignore */
             }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Unit tests for openclaw.ts — ChatMessage interface, fetchWithRetry,
+ * Unit tests for router-client.ts — ChatMessage interface, fetchWithRetry,
  * generateAITitle, checkGateway, and pure utility functions.
  */
 
@@ -30,7 +30,7 @@ import {
   setAgent,
   listSessions,
   fetchSessionMessages,
-} from '../openclaw';
+} from '../router-client';
 
 // ── Setup / Teardown ─────────────────────────────────────────────────
 
@@ -61,13 +61,13 @@ describe('ChatMessage interface', () => {
       timestamp: Date.now(),
       model: 'claude-sonnet-4-6',
       provider: 'anthropic',
-      fromOpenClaw: true,
+      fromRouter: true,
       feedback: 'like',
       reactions: { thumbsup: 1 },
       annotation: 'Good response',
       meta: { tokens: '150' },
     };
-    expect(msg.fromOpenClaw).toBe(true);
+    expect(msg.fromRouter).toBe(true);
     expect(msg.feedback).toBe('like');
     expect(msg.reactions).toEqual({ thumbsup: 1 });
   });
@@ -229,7 +229,7 @@ describe('fetchSessionMessages', () => {
     expect(result.messages).toHaveLength(2);
     expect(result.messages[0].role).toBe('user');
     expect(result.messages[0].content).toBe('Hello');
-    expect(result.messages[0].fromOpenClaw).toBe(true);
+    expect(result.messages[0].fromRouter).toBe(true);
     expect(result.totalEvents).toBe(5);
   });
 

@@ -118,7 +118,7 @@ export function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: Vi
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
-              maxHeight: 'min(420px, calc(100dvh - 80px))',
+              maxHeight: 'min(420px, calc(var(--vv-height, 100dvh) - 80px - env(safe-area-inset-bottom, 0px)))',
               overflowY: 'auto',
             }}
           >

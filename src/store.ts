@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { ActivityStatus, ChatMessage } from './openclaw';
+import type { ActivityStatus, ChatMessage } from './router-client';
 
 // ── Structured logging (browser-compatible shre-sdk/logger equivalent) ──
 export function createLogger(service: string) {
@@ -626,7 +626,7 @@ export type View =
   | 'projects'
   | 'email'
   | 'billing'
-  | 'openclaw'
+  | 'router-gateway'
   | 'shre-dashboard'
   | 'cortexdb'
   | 'storepulse'
@@ -764,7 +764,7 @@ export interface AppState {
   statusLine: string | null; // one-sentence status shown in chat
   gatewayUp: boolean | null;
   sidebarOpen: boolean;
-  syncing: boolean; // true while loading OpenClaw history
+  syncing: boolean; // true while loading router session history
   theme: Theme;
   themeCustom: ThemeCustom;
   compact: boolean; // compact message display mode

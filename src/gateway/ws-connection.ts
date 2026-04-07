@@ -3,7 +3,7 @@
  */
 
 import ReconnectingWebSocket from 'partysocket/ws';
-import { stripProviderPrefix } from '../openclaw';
+import { stripProviderPrefix } from '../router-client';
 import { getGatewayToken, clearGatewayToken, isTokenFetchFailed } from './ws-token';
 import {
   ws,
@@ -32,7 +32,7 @@ import {
 } from './ws-state';
 import { flushMessageQueue } from './ws-queue';
 
-// Connect via same-origin proxy (serve.js proxies WS to OpenClaw 18789)
+// Connect via same-origin proxy (serve.js proxies WS to gateway)
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 
 function startHeartbeat() {
@@ -98,7 +98,7 @@ function handleFrame(frame: any) {
       connectedResolve?.();
       setConnectedResolve(null);
       setConnectedReject(null);
-      console.log('[ws] connected to OpenClaw gateway');
+      console.log('[ws] connected to router gateway');
       flushMessageQueue();
       return;
     }
@@ -133,7 +133,7 @@ function handleFrame(frame: any) {
 }
 
 /**
- * Connect to OpenClaw gateway via WebSocket.
+ * Connect to router gateway via WebSocket.
  */
 export async function connectGateway(): Promise<void> {
   if (wsState === 'connected' && ws?.readyState === ReconnectingWebSocket.OPEN) return;
@@ -358,7 +358,7 @@ function triggerHealthReconnect() {
   });
 }
 
-/** Map model ID to OpenClaw modelApi format */
+/** Map model ID to router modelApi format */
 export function getModelApi(modelId: string): string {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('openai/')) return 'openai';

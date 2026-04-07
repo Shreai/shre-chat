@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import type { AppActions } from '../store';
 import { abortChatWS } from '../gateway-ws';
 
