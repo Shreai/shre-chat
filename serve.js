@@ -1,4 +1,4 @@
-// Shre Chat — production static server with OpenClaw proxy + session sync + WebSocket proxy
+// Shre Chat — production static server with shre-router proxy + session sync + WebSocket
 import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { createServer as createHttpsServer, request as httpsRequest } from "node:https";
 import { createServer as createNetServer } from "node:net";
@@ -73,7 +73,7 @@ const cortexPool = new pg.Pool({
 });
 cortexPool.on("error", (err) => log.warn("[cortexPool] Idle client error", { error: err.message }));
 
-// ── Gateway token — read from openclaw.json server-side (never expose in bundle) ──
+// ── Gateway token — read from config server-side (never expose in bundle) ──
 let GATEWAY_TOKEN = "";
 try {
   const ocConfig = JSON.parse(readFileSync(join(OPENCLAW_HOME, "openclaw.json"), "utf8"));
@@ -97,7 +97,7 @@ try {
   if (CONTACTS_TOKEN) log.info("Contacts token loaded");
 } catch (err) { log.warn("Failed to load contacts token:", err.message); }
 
-// ── Anthropic API key — for direct calls that bypass OpenClaw session tracking ──
+// ── Anthropic API key — for direct provider calls ──
 let ANTHROPIC_API_KEY = "";
 let OPENAI_API_KEY = "";
 try {
@@ -731,7 +731,7 @@ async function buildAgentMemory(agentId) {
  * conversation and feeds muscle memory, skills, and training data.
  * Fire-and-forget: never blocks the user.
  */
-async function emitConversationComplete(agentId, userMessage, assistantResponse, source = "openclaw", model = "unknown") {
+async function emitConversationComplete(agentId, userMessage, assistantResponse, source = "shre-chat", model = "unknown") {
   // Only emit for meaningful exchanges (not trivial greetings)
   if (!assistantResponse || assistantResponse.length < 100) return;
   if (!agentId || agentId === "shre-scorer" || agentId === "system") return;
@@ -754,10 +754,10 @@ async function emitConversationComplete(agentId, userMessage, assistantResponse,
 
 /**
  * Log a completed conversation to CortexDB for the learning pipeline.
- * Fires for every user↔agent exchange — captures both OpenClaw WS and CLI paths.
+ * Fires for every user↔agent exchange — captures both WS and CLI paths.
  * Fire-and-forget: never blocks the user.
  */
-async function logConversationToCortex(agentId, userMessage, assistantResponse, source = "openclaw", model = "unknown", tenantId = "default") {
+async function logConversationToCortex(agentId, userMessage, assistantResponse, source = "shre-chat", model = "unknown", tenantId = "default") {
   if (!userMessage || !assistantResponse || assistantResponse.length < 20) return;
   try {
     const event = {
@@ -1262,7 +1262,7 @@ function json(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-// ── Session reading from OpenClaw JSONL files ────────────────────────
+// ── Session reading from JSONL files ──────────────────────────────────
 
 function getSessionsDir(agentId) {
   return join(OPENCLAW_HOME, "agents", agentId, "sessions");
@@ -1328,9 +1328,9 @@ function parseJsonlMessages(content, sinceTs = 0) {
   return { messages, events };
 }
 
-// ── Session writing — persist CLI conversations to OpenClaw JSONL ────
+// ── Session writing — persist CLI conversations to JSONL ─────────────
 
-// CLI session file per agent (separate from OpenClaw's native sessions)
+// CLI session file per agent (separate from native agent sessions)
 const CLI_SESSION_KEY = "cli-chat";
 
 function getOrCreateCliSession(agentId) {
@@ -4260,10 +4260,10 @@ async function requestHandler(req, res) {
 
             // Log conversation to CortexDB for learning pipeline
             const cliTenantId = authClaims?.activeWorkspaceId || "default";
-            logConversationToCortex(agent, message, fullResponseText, "openclaw-cli", "claude-cli", cliTenantId).catch(() => {});
+            logConversationToCortex(agent, message, fullResponseText, "cli", "claude-cli", cliTenantId).catch(() => {});
 
             // Emit task.complete → shre-scorer evaluates, feeds muscle memory + skills + training data
-            emitConversationComplete(agent, message, fullResponseText, "openclaw-cli", "claude-cli").catch(() => {});
+            emitConversationComplete(agent, message, fullResponseText, "cli", "claude-cli").catch(() => {});
 
             // RAG conversation learner — extract insights into CortexDB vectors for semantic recall
             conversationLearner.learn(message, fullResponseText, cliTenantId, agent).catch(() => {});
@@ -4297,7 +4297,7 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Model Sync (writes to openclaw.json, config-sync plugin picks it up) ──
+  // ── Model Sync (writes to agent config, config-sync plugin picks it up) ──
 
   if (url.pathname === "/api/model" && req.method === "POST") {
     let body;
@@ -4421,8 +4421,8 @@ async function requestHandler(req, res) {
     return json(res, { locales: allLocales });
   }
 
-  // ── OpenClaw Channel Webhook ────────────────────────────────────
-  // OpenClaw gateway pushes outbound messages here when shre-chat is
+  // ── Channel Webhook ─────────────────────────────────────────────
+  // Gateway pushes outbound messages here when shre-chat is
   // registered as a channel. We forward them to all connected WS clients.
 
   if (url.pathname === "/webhook/openclaw" && req.method === "POST") {
@@ -4430,7 +4430,7 @@ async function requestHandler(req, res) {
     try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
       const payload = JSON.parse(body);
-      log.info("[webhook] OpenClaw channel event:", payload.type || "unknown");
+      log.info("[webhook] Channel event:", payload.type || "unknown");
 
       // Broadcast to all connected WebSocket clients
       if (termWss) {
@@ -4445,7 +4445,7 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // GET /webhook/openclaw — health probe for the channel
+  // GET /webhook/openclaw — health probe for the channel (path kept for backward compat)
   if (url.pathname === "/webhook/openclaw" && req.method === "GET") {
     return json(res, {
       ok: true,
@@ -4707,12 +4707,12 @@ async function requestHandler(req, res) {
 
       // Fire-and-forget: log to CortexDB + extract skills
       const wsTenantId = authClaims?.activeWorkspaceId || "default";
-      logConversationToCortex(agentId || "shre", userMessage, assistantResponse, "openclaw-ws", model || "unknown", wsTenantId).catch(() => {});
+      logConversationToCortex(agentId || "shre", userMessage, assistantResponse, "ws", model || "unknown", wsTenantId).catch(() => {});
       const conversationForSkills = `User: ${userMessage}\n\nAssistant: ${assistantResponse}`;
       extractAndLogSkills(agentId || "shre", conversationForSkills).catch(() => {});
 
       // Emit task.complete → shre-scorer evaluates, feeds muscle memory + skills + training data
-      emitConversationComplete(agentId || "shre", userMessage, assistantResponse, "openclaw-ws", model || "unknown").catch(() => {});
+      emitConversationComplete(agentId || "shre", userMessage, assistantResponse, "ws", model || "unknown").catch(() => {});
 
       // RAG conversation learner — extract insights into CortexDB vectors for semantic recall
       conversationLearner.learn(userMessage, assistantResponse, wsTenantId, agentId || "shre").catch(() => {});
@@ -5276,7 +5276,7 @@ async function requestHandler(req, res) {
   }
 
   // ── Proxy /v1/* through shre-router (enforces trust gate, budgets, cost tracking) ──
-  // All /v1/ requests route through shre-router — no direct OpenClaw bypass.
+  // All /v1/ requests route through shre-router — no direct gateway bypass.
 
   if (url.pathname.startsWith("/v1/")) {
     const routerBase = serviceUrl("shre-router");
@@ -6118,7 +6118,7 @@ Examples:
   }
 }
 
-// ── (OpenClaw WebSocket proxy removed — all traffic routes through shre-router) ──
+// ── (Legacy WebSocket proxy removed — all traffic routes through shre-router) ──
 
 // ── Notification WebSocket — push due reminders + status updates ──
 
@@ -6507,7 +6507,7 @@ if (tlsOpts && httpsServer) {
     log.info("Server started (dual-protocol)", { port: PORT });
     log.info(`[shre-chat] serving on https+http://localhost:${PORT}`);
     log.info(`[shre-chat] All chat routes through shre-router (trust gate, budgets, cost tracking)`);
-    log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications (no raw OpenClaw proxy)`);
+    log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications`);
     lifecycle.started();
     feedbackPipeline.start();
     heartbeat.start();
@@ -6519,7 +6519,7 @@ if (tlsOpts && httpsServer) {
     log.info("Server started (HTTP only)", { port: PORT });
     log.info(`[shre-chat] serving on http://localhost:${PORT}`);
     log.info(`[shre-chat] All chat routes through shre-router (trust gate, budgets, cost tracking)`);
-    log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications (no raw OpenClaw proxy)`);
+    log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications`);
     lifecycle.started();
     feedbackPipeline.start();
     heartbeat.start();

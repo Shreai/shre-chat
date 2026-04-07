@@ -573,7 +573,7 @@ Examples:
 "check that thing" → {"intent":"clarify","question":"Which thing do you mean — a task, a project, or something else?"}
 "how's the weather" → {"intent":"none"}`;
 
-          // Route through shre-router — NEVER directly to OpenClaw
+          // Route through shre-router — NEVER directly to provider APIs
           const classifyRes = await fetch(`${serviceUrl("shre-router")}/v1/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
