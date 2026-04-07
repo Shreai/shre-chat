@@ -353,7 +353,7 @@ export const ECOSYSTEM_APPS = [
     id: 'router-gateway',
     name: 'Router Gateway',
     icon: 'R',
-    url: '/openclaw/',
+    url: '/router/',
     color: 'from-amber-500 to-orange-500',
     description: 'AI Gateway',
   },

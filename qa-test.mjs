@@ -4,7 +4,7 @@
 //        gateway WebSocket, status bar, concurrency, error handling
 
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -22,7 +22,11 @@ const CREDS = {
 // Load gateway token for WS auth
 let GW_TOKEN = '';
 try {
-  const ocConfig = JSON.parse(readFileSync(join(homedir(), '.openclaw', 'openclaw.json'), 'utf8')); // legacy config path
+  // Try shre-router config first, fall back to legacy path
+  const shreConfigPath = join(homedir(), '.shre', 'router.json');
+  const legacyConfigPath = join(homedir(), '.openclaw', 'openclaw.json');
+  const configPath = existsSync(shreConfigPath) ? shreConfigPath : legacyConfigPath;
+  const ocConfig = JSON.parse(readFileSync(configPath, 'utf8'));
   GW_TOKEN = ocConfig?.gateway?.auth?.token || ocConfig?.auth?.token || '';
 } catch {}
 
