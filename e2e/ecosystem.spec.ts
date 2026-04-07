@@ -57,7 +57,7 @@ test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => 
   // ═══════════ Proxied Views ═══════════
 
   test('Router Gateway iframe route exists', async ({ page }) => {
-    const res = await page.goto('/openclaw/', { waitUntil: 'domcontentloaded' }); // URL path kept for backward compat
+    const res = await page.goto('/router/', { waitUntil: 'domcontentloaded' });
     // Should serve the proxied content or redirect
     expect(res?.status()).toBeLessThan(500);
   });
