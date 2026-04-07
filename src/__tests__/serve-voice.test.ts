@@ -37,8 +37,8 @@ let handleVoice: ReturnType<typeof registerVoiceRoutes>;
 beforeAll(() => {
   handleVoice = registerVoiceRoutes({
     log: log as any,
-    OPENCLAW_HOST: 'localhost',
-    OPENCLAW_PORT: 18789,
+    GATEWAY_HOST: 'localhost',
+    GATEWAY_PORT: 18789,
     GATEWAY_TOKEN: 'test-token',
   });
 });

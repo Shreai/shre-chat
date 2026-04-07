@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
@@ -198,6 +198,13 @@ export function ChatComposer(props: ChatComposerProps) {
   } = props;
 
   const features = usePreferences((s) => s.features);
+
+  // Reset textarea height when input is cleared (e.g. after send)
+  useEffect(() => {
+    if (!input && inputRef.current) {
+      inputRef.current.style.height = '36px';
+    }
+  }, [input, inputRef]);
 
   return (
     <>

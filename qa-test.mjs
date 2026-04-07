@@ -22,7 +22,7 @@ const CREDS = {
 // Load gateway token for WS auth
 let GW_TOKEN = '';
 try {
-  const ocConfig = JSON.parse(readFileSync(join(homedir(), '.openclaw', 'openclaw.json'), 'utf8'));
+  const ocConfig = JSON.parse(readFileSync(join(homedir(), '.openclaw', 'openclaw.json'), 'utf8')); // legacy config path
   GW_TOKEN = ocConfig?.gateway?.auth?.token || ocConfig?.auth?.token || '';
 } catch {}
 
@@ -376,7 +376,7 @@ async function testGatewayWebSocket() {
                 minProtocol: 3,
                 maxProtocol: 3,
                 client: {
-                  id: 'openclaw-control-ui',
+                  id: 'router-control-ui',
                   version: '1.0.0',
                   platform: 'web',
                   mode: 'ui',

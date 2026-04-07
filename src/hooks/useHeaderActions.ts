@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import { shareSession } from '../store';
 import { playNotifSound, formatTime } from '../chat-utils';
 import { usePreferences, type GatewayMode } from '../preferences-store';
@@ -30,7 +30,7 @@ export function useHeaderActions({
   const gatewayMode = usePreferences((s) => s.gatewayMode);
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
   // Legacy flag — always false (all routing via shre-router)
-  const openclawMode = false;
+  const routerMode = false;
   const [compareMode, setCompareMode] = useState(false);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
@@ -46,7 +46,7 @@ export function useHeaderActions({
   const notifSound = usePreferences((s) => s.notifSound);
   const setNotifSound = usePreferences((s) => s.setNotifSound);
 
-  const handleToggleOpenclawMode = useCallback(() => {
+  const handleToggleRouterMode = useCallback(() => {
     // Legacy toggle — now just ensures router mode
     setGatewayMode('router');
   }, [setGatewayMode]);
@@ -202,8 +202,8 @@ export function useHeaderActions({
   }, [activeSessionId, systemPromptDraft, actions]);
 
   return {
-    openclawMode,
-    setOpenclawMode: () => {},
+    routerMode,
+    setRouterMode: () => {},
     gatewayMode,
     handleSetGatewayMode,
     compareMode,
@@ -227,7 +227,7 @@ export function useHeaderActions({
     setShareCopied,
     notifSound,
     setNotifSound,
-    handleToggleOpenclawMode,
+    handleToggleRouterMode,
     handleToggleCompare,
     handleOpenSystemPrompt,
     handleToggleNotifSound,

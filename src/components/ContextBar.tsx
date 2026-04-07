@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ChatMessage, RouterModel } from '../openclaw';
+import type { ChatMessage, RouterModel } from '../router-client';
 import {
   estimateTokens,
   formatTokenCount,

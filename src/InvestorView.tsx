@@ -412,7 +412,7 @@ export function InvestorView() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--c-text-3)' }}>
           <div>CortexDB (PG + Qdrant + Redis)</div>
-          <div>OpenClaw Gateway (multi-model)</div>
+          <div>shre-router Gateway (multi-model)</div>
           <div>Architecture Council</div>
           <div>shre-router (trust gate + billing)</div>
           <div>shre-fleet (agent orchestration)</div>

@@ -6,7 +6,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { retryConnection } from '../gateway-ws';
 import { setModelOverride, ECOSYSTEM_APPS } from '../chat-utils';
 import { importSessions, type Session, type View } from '../store';
-import type { ChatMessage, RouterModel } from '../openclaw';
+import type { ChatMessage, RouterModel } from '../router-client';
 import { useI18n } from '../useI18n';
 import { LOCALE_LABELS, type Locale } from '../i18n';
 
@@ -55,12 +55,13 @@ interface ChatPanelsProps {
   setTtsProvider: (v: TTSProvider) => void;
   // Voice chat
   onOpenVoiceChat: () => void;
+  onOpenRealtimeVoice?: () => void;
   // Header more menu
   showHeaderMore: boolean;
   setShowHeaderMore: (v: boolean) => void;
   headerMoreRef: React.RefObject<HTMLDivElement | null>;
-  openclawMode: boolean;
-  handleToggleOpenclawMode: () => void;
+  routerMode: boolean;
+  handleToggleRouterMode: () => void;
   gatewayMode: GatewayMode;
   handleSetGatewayMode: (mode: GatewayMode) => void;
   compareMode: boolean;
@@ -146,11 +147,12 @@ export function ChatPanels(props: ChatPanelsProps) {
     setTtsProvider,
     ensureSession,
     onOpenVoiceChat,
+    onOpenRealtimeVoice,
     showHeaderMore,
     setShowHeaderMore,
     headerMoreRef,
-    openclawMode,
-    handleToggleOpenclawMode,
+    routerMode,
+    handleToggleRouterMode,
     gatewayMode,
     handleSetGatewayMode,
     compareMode,
@@ -478,6 +480,21 @@ export function ChatPanels(props: ChatPanelsProps) {
             </svg>
           </button>
 
+          {/* Realtime full-duplex voice — PersonaPlex / OpenAI Realtime */}
+          {onOpenRealtimeVoice && (
+            <button
+              onClick={onOpenRealtimeVoice}
+              className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+              style={{ color: 'var(--c-text-3)' }}
+              aria-label="Realtime voice call"
+              title="Realtime voice (full-duplex)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+            </button>
+          )}
+
           <div className="relative" ref={headerMoreRef}>
             <button
               onClick={() => setShowHeaderMore(!showHeaderMore)}
@@ -495,8 +512,8 @@ export function ChatPanels(props: ChatPanelsProps) {
             <HeaderMoreMenu
               open={showHeaderMore}
               onClose={() => setShowHeaderMore(false)}
-              openclawMode={openclawMode}
-              onToggleOpenclawMode={handleToggleOpenclawMode}
+              routerMode={routerMode}
+              onToggleRouterMode={handleToggleRouterMode}
               gatewayMode={gatewayMode}
               onSetGatewayMode={handleSetGatewayMode}
               compareMode={compareMode}

@@ -184,7 +184,7 @@
       "shre-fleet",
       "shre-meter",
       "shre-contacts",
-      "openclaw-gateway",
+      "router-gateway",
       "redis"
     ]
   },

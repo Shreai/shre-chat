@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useApp, AGENTS, getAgent, DOMAIN_META, type Session } from './store';
-import { fetchAllAgentMessages } from './openclaw';
+import { fetchAllAgentMessages } from './router-client';
 import { onStreamChange, type ActiveStream } from './gateway-ws';
 import { ThemeCustomizer } from './ThemeCustomizer';
 import { IdentityVerifyButton } from './IdentityVerifyButton';
@@ -294,7 +294,8 @@ export function Sidebar() {
         }}
         onTouchEnd={(e) => {
           const dx = e.changedTouches[0].clientX - touchStartRef.current;
-          if (dx < -80) {
+          const swipeThreshold = Math.min(80, window.innerWidth * 0.2);
+          if (dx < -swipeThreshold) {
             actions.setSidebarOpen(false);
           }
         }}

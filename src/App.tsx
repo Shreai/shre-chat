@@ -22,7 +22,7 @@ import {
   loadThemeCustom,
   loadDrafts,
 } from './store';
-import type { ChatMessage } from './openclaw';
+import type { ChatMessage } from './router-client';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
@@ -118,8 +118,8 @@ const LazyFallback = () => (
   </div>
 );
 
-/** OpenClaw Control UI embed — auto-injects gateway token + WS URL */
-function OpenClawEmbed() {
+/** Router Gateway Control UI embed — auto-injects gateway token + WS URL */
+function RouterGatewayEmbed() {
   const [iframeSrc, setIframeSrc] = useState('/openclaw/');
   useEffect(() => {
     fetch('/api/gateway-token')
@@ -127,7 +127,7 @@ function OpenClawEmbed() {
       .then((d) => {
         if (d.token) {
           // Control UI reads token from URL hash fragment
-          setIframeSrc(`/openclaw/#token=${encodeURIComponent(d.token)}`);
+          setIframeSrc(`/openclaw/#token=${encodeURIComponent(d.token)}`); // URL path kept for backward compat
         }
       })
       .catch(() => {
@@ -139,7 +139,7 @@ function OpenClawEmbed() {
       <iframe
         src={iframeSrc}
         className="flex-1 w-full border-0"
-        title="OpenClaw Gateway"
+        title="Router Gateway"
         style={{ background: '#1a1a2e', minHeight: 0 }}
       />
     </div>
@@ -751,9 +751,9 @@ function MainApp({
                       <InvestorView />
                     </ViewErrorBoundary>
                   )}
-                  {view === 'openclaw' && (
-                    <ViewErrorBoundary viewName="OpenClaw">
-                      <OpenClawEmbed />
+                  {view === 'router-gateway' && (
+                    <ViewErrorBoundary viewName="Router Gateway">
+                      <RouterGatewayEmbed />
                     </ViewErrorBoundary>
                   )}
                   {view === 'shre-dashboard' && (

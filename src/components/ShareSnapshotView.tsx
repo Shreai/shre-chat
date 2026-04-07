@@ -1,7 +1,7 @@
 import React from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 
 interface ShareSnapshotViewProps {
   snapshot: {

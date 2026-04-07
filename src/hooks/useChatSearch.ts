@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 
 export interface UseChatSearchReturn {
   // Global search

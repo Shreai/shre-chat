@@ -6,7 +6,7 @@
  * and a deep link to the full details page in MIB007.
  */
 import React, { useState, useCallback } from 'react';
-import type { ChatMessage } from '../../openclaw';
+import type { ChatMessage } from '../../router-client';
 
 interface Props {
   message: ChatMessage;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useApp, getAgent, type FeedEntry } from './store';
-import { fetchFeed } from './openclaw';
+import { fetchFeed } from './router-client';
 
 const TYPE_CONFIG: Record<FeedEntry['type'], { icon: string; color: string; label: string }> = {
   sent: { icon: '↑', color: 'text-blue-400', label: 'Sent' },
@@ -30,10 +30,10 @@ export function FeedView() {
       for (const entry of entries) {
         const agent = getAgent(entry.agentId);
         actions.addFeed(
-          entry.sessionKey || 'openclaw',
+          entry.sessionKey || 'router',
           entry.role === 'user' ? 'sent' : 'received',
           entry.content?.slice(0, 120) + (entry.content?.length > 120 ? '…' : ''),
-          { source: 'openclaw', agent: `${agent.emoji} ${agent.name}`, model: entry.model || '' },
+          { source: 'router', agent: `${agent.emoji} ${agent.name}`, model: entry.model || '' },
         );
       }
       lastFeedSync.current = Date.now();

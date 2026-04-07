@@ -15,7 +15,7 @@ import DOMPurify from 'dompurify';
 const ContentCard = lazy(() => import('./ContentCard'));
 const MibWidgetBlock = lazy(() => import('./MibWidgetBlock'));
 const DataCard = lazy(() => import('./DataCard'));
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import type { ProcessRun } from './process-bar/types';
 import { ChatMessageTools, type ToolCall } from './ChatMessageTools';
 import type { ClaudeToolEvent } from './ClaudeToolView';
@@ -302,6 +302,8 @@ const MessageBubble = memo(function MessageBubble({
                           cursor: 'pointer',
                           borderRadius: 6,
                           maxWidth: '100%',
+                          height: 'auto',
+                          display: 'block',
                           transition: 'opacity 0.15s, box-shadow 0.15s',
                         }}
                         onMouseEnter={(e) => {

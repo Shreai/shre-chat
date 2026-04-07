@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
-import type { ChatMessage } from '../../openclaw';
+import type { ChatMessage } from '../../router-client';
 import { classifySystemEvent, lightweightMarkdown } from '../../chat-utils';
 import { PlanChecklist } from './PlanChecklist';
 
@@ -128,7 +128,7 @@ export function SystemEventChip({
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto tool-chip-stable">
       <div className="flex items-center gap-1.5 py-1 px-2">
         <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
         {chips.map((chip, idx) => (
@@ -158,7 +158,7 @@ export function SystemEventChip({
 
       {expanded && (
         <div
-          className="mx-4 mb-2 rounded-lg overflow-hidden text-[11px] leading-relaxed"
+          className="mx-4 mb-2 rounded-lg overflow-hidden text-[11px] leading-relaxed chip-expand-enter"
           style={{
             background: 'var(--c-bg-3)',
             border: '1px solid var(--c-border-2)',

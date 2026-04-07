@@ -2,7 +2,7 @@
  * useModelList — dynamic model list from shre-router with fallback to static models.
  */
 import { useState, useMemo } from 'react';
-import type { RouterModel } from '../openclaw';
+import type { RouterModel } from '../router-client';
 import { providerIcon, providerLabel, FALLBACK_MODELS } from '../chat-utils';
 
 export function useModelList() {

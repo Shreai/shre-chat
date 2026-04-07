@@ -2,7 +2,7 @@
  * Context building — task context, session context, context anchoring.
  * Extracted from useMessageHandlers.ts handleSend.
  */
-import type { ChatMessage } from '../../openclaw';
+import type { ChatMessage } from '../../router-client';
 import { mib007Link } from '../../chat-utils';
 
 /**

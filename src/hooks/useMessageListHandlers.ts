@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 
 interface UseMessageListHandlersOptions {
   activeSessionId: string | null;

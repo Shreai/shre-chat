@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ChatMessage } from '../openclaw';
+import type { ChatMessage } from '../router-client';
 import { estimateTokens, formatTokenCount, formatTime } from '../chat-utils';
 
 interface SessionAnalyticsModalProps {

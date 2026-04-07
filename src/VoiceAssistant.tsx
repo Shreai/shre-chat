@@ -3,7 +3,7 @@ import { voiceReducer, initialVoiceState } from './voiceStateMachine';
 import type { VoiceAction, VoicePhase } from './voiceStateMachine';
 import { useVAD } from './useVAD';
 import { useProactiveNotifications } from './hooks/useProactiveNotifications';
-import { sendMessage as sendChatMessage, type ChatMessage, type StreamCallbacks } from './openclaw';
+import { sendMessage as sendChatMessage, type ChatMessage, type StreamCallbacks } from './router-client';
 
 // ── Extracted modules ──
 import {
@@ -38,7 +38,7 @@ interface Props {
   agents?: AgentOption[];
   onSwitchAgent?: (agentId: string) => void;
   onVoiceTurn?: (turn: { role: 'user' | 'assistant'; content: string }) => void;
-  openclawMode?: boolean;
+  routerMode?: boolean;
   models?: ModelOption[];
   selectedModel?: string | null;
   onSelectModel?: (id: string | null) => void;
@@ -57,7 +57,7 @@ export default function VoiceAssistant({
   agents,
   onSwitchAgent,
   onVoiceTurn,
-  openclawMode,
+  routerMode,
   models,
   selectedModel,
   onSelectModel,
@@ -336,7 +336,7 @@ export default function VoiceAssistant({
             voiceSessionIdRef.current || undefined,
             undefined,
             undefined,
-            openclawMode,
+            routerMode,
           ).catch((err) => {
             clearTimeout(timeoutId);
             if (err?.name === 'AbortError') {
@@ -352,7 +352,7 @@ export default function VoiceAssistant({
         return "Sorry, I couldn't process that right now. Try again.";
       }
     },
-    [agentId, agentName, messages, openclawMode],
+    [agentId, agentName, messages, routerMode],
   );
 
   // ── Whisper transcription ──

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ProcessBar, ProcessDetail, useProcessRun } from './components/process-bar';
-import type { ChatMessage } from './openclaw';
+import type { ChatMessage } from './router-client';
 import ports from '../../ports.json';
 import { useApp, generateTitle, getAgent, AGENTS, type Session, type View } from './store';
 import type { TerminalHandle } from './TerminalView';
@@ -8,6 +8,9 @@ const TerminalView = lazy(() =>
   import('./TerminalView').then((m) => ({ default: m.TerminalView })),
 );
 const VoiceAssistant = lazy(() => import('./VoiceAssistant'));
+const RealtimeVoiceOverlay = lazy(() =>
+  import('./components/RealtimeVoiceOverlay').then((m) => ({ default: m.RealtimeVoiceOverlay })),
+);
 // ContentCard lazy import moved to PreviewPanel component
 
 // Extracted modules
@@ -177,6 +180,9 @@ export function ChatView() {
   // ── Wake word listener (extracted hook) ──
   useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen);
 
+  // ── Realtime full-duplex voice overlay ──
+  const [realtimeVoiceOpen, setRealtimeVoiceOpen] = useState(false);
+
   // ── Dedicated voice session (isolated from chat) ──
   const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
   useEffect(() => {
@@ -320,8 +326,8 @@ export function ChatView() {
 
   // ── Header actions (extracted hook) ──
   const {
-    openclawMode,
-    setOpenclawMode,
+    routerMode,
+    setRouterMode,
     gatewayMode,
     handleSetGatewayMode,
     compareMode,
@@ -345,7 +351,7 @@ export function ChatView() {
     setShareCopied,
     notifSound,
     setNotifSound,
-    handleToggleOpenclawMode,
+    handleToggleRouterMode,
     handleToggleCompare,
     handleOpenSystemPrompt,
     handleToggleNotifSound,
@@ -559,7 +565,7 @@ export function ChatView() {
     setCompareStreams,
     setCompareWinner,
     cliMode,
-    openclawMode,
+    routerMode,
     directMode: gatewayMode === 'direct',
     claudeCliMode,
     identityVerified,
@@ -896,9 +902,9 @@ export function ChatView() {
 
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && (
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
         {/* Chat column */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
           {/* Trial status banner */}
           <TrialBanner />
 
@@ -941,11 +947,12 @@ export function ChatView() {
             ttsProvider={ttsProvider}
             setTtsProvider={setTtsProvider}
             onOpenVoiceChat={() => setVoiceAssistantOpen(true)}
+            onOpenRealtimeVoice={() => setRealtimeVoiceOpen(true)}
             showHeaderMore={showHeaderMore}
             setShowHeaderMore={setShowHeaderMore}
             headerMoreRef={headerMoreRef}
-            openclawMode={openclawMode}
-            handleToggleOpenclawMode={handleToggleOpenclawMode}
+            routerMode={routerMode}
+            handleToggleRouterMode={handleToggleRouterMode}
             gatewayMode={gatewayMode}
             handleSetGatewayMode={handleSetGatewayMode}
             compareMode={compareMode}
@@ -1332,7 +1339,7 @@ export function ChatView() {
                 }
               }
             }}
-            openclawMode={openclawMode}
+            routerMode={routerMode}
             models={AVAILABLE_MODELS}
             selectedModel={selectedModel}
             onSelectModel={setSelectedModel}
@@ -1340,6 +1347,18 @@ export function ChatView() {
           />
         </Suspense>
       </ViewErrorBoundary>
+
+      {/* ── Realtime Full-Duplex Voice Overlay ──────────────────────────── */}
+      {realtimeVoiceOpen && (
+        <ViewErrorBoundary viewName="Realtime Voice">
+          <Suspense fallback={null}>
+            <RealtimeVoiceOverlay
+              onClose={() => setRealtimeVoiceOpen(false)}
+              defaultPersona={currentAgent.id === 'ellie' ? 'ellie' : 'shre'}
+            />
+          </Suspense>
+        </ViewErrorBoundary>
+      )}
 
       {/* ── Keyboard Shortcuts Overlay (Cmd+?) ──────────────────────────── */}
       <ShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

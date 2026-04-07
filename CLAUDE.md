@@ -9,7 +9,7 @@ Web-based chat interface for the Shre AI platform. All chat routes through shre-
 - `serve.js` — Express backend: shre-router proxy, auth, session sync, suggestions, reminders, task proxy
 - `src/ChatView.tsx` — Main chat UI: message send/receive, streaming, process bar, agent switching
 - `src/gateway-ws.ts` — WebSocket: terminal, notifications
-- `src/openclaw.ts` — HTTP streaming: SSE parsing, status mapping, shre-router primary
+- `src/router-client.ts` — HTTP streaming: SSE parsing, status mapping, shre-router primary
 - `src/StatusBar.tsx` — Persistent status bar: connection status, active agents, pending tasks, calendar, reminders
 - `src/taskDetector.ts` — "remind me to..." pattern detection + task creation via shre-tasks proxy
 - `src/components/SuggestionsBar.tsx` — Contextual quick-reply suggestions based on assistant response patterns
@@ -33,7 +33,7 @@ Events rendered as inline system messages in chat via `useEscalationListener` ho
 
 ## Chat Flow (v2.0)
 All chat messages route through shre-router — no bypass:
-1. Browser → `sendMessage()` in `openclaw.ts` → POST `/api/router/v1/chat`
+1. Browser → `sendMessage()` in `router-client.ts` → POST `/api/router/v1/chat`
 2. serve.js proxies to shre-router:5497 (SSE streaming-safe)
 3. shre-router: trust gate → budget → soul injection → RAG → 10-gate routing → provider proxy → cost recording → learning
 4. If shre-router is down → user sees error (no silent fallback)

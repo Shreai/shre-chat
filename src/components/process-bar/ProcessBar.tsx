@@ -108,6 +108,8 @@ export function ProcessBar({ runs, activeRun, onStepClick, compact, className }:
         borderTop: '1px solid var(--c-border-2, rgba(255,255,255,0.08))',
         background: 'var(--c-bg-active, rgba(255,255,255,0.03))',
         flexShrink: 0,
+        minWidth: 0,
+        maxWidth: '100%',
         overflowX: 'auto',
       }}
     >

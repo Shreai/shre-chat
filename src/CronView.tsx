@@ -252,7 +252,7 @@ const CRON_JOBS: CronJob[] = [
     interval: '30 min',
     service: 'crontab',
     category: 'crontab',
-    description: 'Ingest OpenClaw sessions into CortexDB',
+    description: 'Ingest router sessions into CortexDB',
   },
   {
     id: 'cron-consolidate',

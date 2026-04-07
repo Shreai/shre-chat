@@ -1,8 +1,8 @@
 /**
- * OpenClaw Gateway WebSocket Client
+ * Router Gateway WebSocket Client
  *
- * Connects to OpenClaw via WebSocket (same protocol as native chat UI).
- * This ensures Shre Chat and OpenClaw share the same sessions.
+ * Connects to Router Gateway via WebSocket (same protocol as native chat UI).
+ * This ensures Shre Chat and the Router share the same sessions.
  *
  * Features:
  * - Auto-reconnect with exponential backoff via partysocket (1s -> 2s -> 4s -> 8s -> 16s max)

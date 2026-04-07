@@ -7,7 +7,7 @@ import {
   type ToolStartEvent,
   type ToolErrorEvent,
   type ThreadContext,
-} from '../openclaw';
+} from '../router-client';
 import { sendChatWS, isWSConnected, queueMessage } from '../gateway-ws';
 import {
   uid,
@@ -80,7 +80,7 @@ export interface UseMessageHandlersParams {
   ) => void;
   setCompareWinner: (v: string | null) => void;
   cliMode: boolean;
-  openclawMode: boolean;
+  routerMode: boolean;
   directMode: boolean;
   claudeCliMode: boolean;
   identityVerified: boolean;
@@ -176,7 +176,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     setCompareStreams,
     setCompareWinner,
     cliMode,
-    openclawMode,
+    routerMode,
     directMode,
     claudeCliMode,
     identityVerified,
@@ -629,7 +629,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             undefined,
             modelId,
             undefined,
-            openclawMode,
+            routerMode,
           );
         } catch (err) {
           setCompareStreams((prev: any) => ({
@@ -833,14 +833,14 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ROUTING: OpenClaw Gateway (WebSocket) → shre-router (HTTP fallback)
+    // ROUTING: Router Gateway (WebSocket) → shre-router (HTTP fallback)
     // ═══════════════════════════════════════════════════════════
-    const useOpenClawWS = isWSConnected();
-    if (useOpenClawWS) {
-      actions.addFeed(sessionId, 'gateway', 'OpenClaw Gateway (full agent)', { transport: 'ws' });
+    const useRouterWS = isWSConnected();
+    if (useRouterWS) {
+      actions.addFeed(sessionId, 'gateway', 'Router Gateway (full agent)', { transport: 'ws' });
       actions.addMessage(sessionId, {
         role: 'assistant',
-        content: '[system] Routing via OpenClaw Gateway (WebSocket)',
+        content: '[system] Routing via Router Gateway (WebSocket)',
         timestamp: Date.now(),
         meta: { system: 'true', type: 'system', event: 'route-change' },
       });
@@ -1053,7 +1053,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       ? `shre-router \u2192 ${selectedModel.split('/')[1] || selectedModel}`
       : 'shre-router (auto)';
     actions.addFeed(sessionId, 'gateway', routeLabel, { transport: 'http' });
-    if (!useOpenClawWS) {
+    if (!useRouterWS) {
       actions.addMessage(sessionId, {
         role: 'assistant',
         content: `[system] Routing via shre-router${selectedModel ? ` \u2192 ${selectedModel.split('/').pop() || selectedModel}` : ' (auto)'}`,
@@ -1174,7 +1174,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             // Tool loop exhaustion: not a transient error — retrying the same prompt
             // will hit the same limit. Show accurate message; escalation already fired.
             // Check both the prefixed form AND raw iteration keywords (defensive — catches
-            // errors that slipped through openclaw.ts classification as "Gateway unavailable — ...iterations...")
+            // errors that slipped through router-client.ts classification as "Gateway unavailable — ...iterations...")
             const isToolLoop =
               error.startsWith('tool_loop_exhausted:') ||
               error.includes('maximum iteration') ||
@@ -1508,7 +1508,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       sessionId,
       selectedModel || undefined,
       attachments.length > 0 ? attachments : undefined,
-      openclawMode,
+      routerMode,
       session?.parentId || replyToIndex !== null
         ? ({
             ...(session?.parentId
@@ -1535,7 +1535,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     activeAgentId,
     currentAgent.name,
     cliMode,
-    openclawMode,
+    routerMode,
     directMode,
     claudeCliMode,
     sendViaCLI,

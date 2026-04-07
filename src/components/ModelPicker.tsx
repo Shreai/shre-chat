@@ -186,7 +186,7 @@ export function ModelPicker({
               width: 280,
               top: '100%',
               marginTop: 4,
-              maxHeight: 'min(400px, calc(100vh - 100px))',
+              maxHeight: 'min(400px, calc(var(--vv-height, 100dvh) - 100px))',
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-1)',
               animation: 'picker-fade-in 150ms ease-out forwards',
@@ -299,7 +299,7 @@ export function ModelPicker({
             top: 48px !important;
             bottom: auto !important;
             width: auto !important;
-            max-height: calc(100vh - 120px) !important;
+            max-height: calc(var(--vv-height, 100dvh) - 120px) !important;
           }
         }
       `}</style>

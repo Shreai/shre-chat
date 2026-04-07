@@ -63,12 +63,12 @@ export function registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, getAct
     // ── Readyz — check gateway reachability ──
     if ((url.pathname === "/readyz" || url.pathname === "/api/readyz") && req.method === "GET") {
       try {
-        const r = await fetch(`${infraUrl("openclaw-gateway")}/health`, { signal: AbortSignal.timeout(2000) });
-        if (!r.ok) return json(res, { ready: false, reason: "openclaw gateway unhealthy" }, 503);
+        const r = await fetch(`${infraUrl("openclaw-gateway")}/health`, { signal: AbortSignal.timeout(2000) }); // infra name kept for backward compat
+        if (!r.ok) return json(res, { ready: false, reason: "router gateway unhealthy" }, 503);
         json(res, { ready: true });
         return true;
       } catch {
-        json(res, { ready: false, reason: "openclaw gateway unreachable" }, 503);
+        json(res, { ready: false, reason: "router gateway unreachable" }, 503);
         return true;
       }
     }

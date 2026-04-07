@@ -53,7 +53,7 @@ const LinkPreview = memo(function LinkPreview({ url }: { url: string }) {
         background: 'var(--c-bg-2)',
         color: 'var(--c-text-1)',
         textDecoration: 'none',
-        maxWidth: 480,
+        maxWidth: 'min(480px, 100%)',
         display: 'flex',
       }}
       onMouseEnter={(e) => {

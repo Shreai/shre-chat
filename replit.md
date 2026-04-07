@@ -27,7 +27,7 @@ Web-based AI-powered chat interface for the Shre platform. Built with React + Vi
 - `src/components/ChatComposer.tsx` — Message input composer with toolbar
 - `src/components/MessageBubble.tsx` — Chat message bubbles with actions
 - `src/gateway-ws.ts` — WebSocket client (terminal/notifications)
-- `src/openclaw.ts` — HTTP SSE streaming chat client
+- `src/router-client.ts` — HTTP SSE streaming chat client
 - `src/StatusBar.tsx` — Status bar with connection/agent info
 - `src/store.ts` — Zustand state management
 - `serve.js` — Production backend server
@@ -58,7 +58,7 @@ These stubs are wired via `package.json` `file:` references pointing to `stubs/`
 - `shre-router` (port 5497) — All chat routing and AI model access
 - `shre-tasks` (port 5460) — Task creation and management
 - `shre-fleet` (port 5498) — Agent fleet management
-- `openclaw-gateway` (port 18789) — AI gateway (accessed via shre-router only)
+- `router-gateway` (port 18789) — AI gateway (accessed via shre-router only)
 
 ## Port Configuration
 A `ports.json` file at `/home/runner/ports.json` (parent of workspace) contains port mappings for all services. The app source imports it as `../../ports.json` from `src/`.

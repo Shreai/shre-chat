@@ -149,10 +149,10 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
-    // ── OpenClaw Connection ──
+    // ── Router Connection ──
     {
-      name: 'openclaw-connect',
-      testMatch: /openclaw-connect\.spec\.ts/,
+      name: 'router-connect',
+      testMatch: /router-connect\.spec\.ts/,
       use: { browserName: 'chromium', storageState: AUTH_FILE },
       dependencies: ['setup'],
     },

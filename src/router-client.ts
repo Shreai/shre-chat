@@ -122,7 +122,7 @@ export interface ChatMessage {
   timestamp?: number;
   model?: string;
   provider?: string;
-  fromOpenClaw?: boolean;
+  fromRouter?: boolean;
   feedback?: 'like' | 'dislike' | null;
   reactions?: Record<string, number>;
   annotation?: string;
@@ -132,7 +132,7 @@ export interface ChatMessage {
 
 // ── Session Sync (reads JSONL sessions via serve.js API) ────
 
-export interface OpenClawSession {
+export interface RouterSession {
   key: string;
   sessionId: string;
   updatedAt: string;
@@ -149,7 +149,7 @@ export interface SyncResult {
 /**
  * List sessions for an agent from session files.
  */
-export async function listSessions(agentId: string): Promise<OpenClawSession[]> {
+export async function listSessions(agentId: string): Promise<RouterSession[]> {
   try {
     const res = await fetch(`/api/sessions/${encodeURIComponent(agentId)}`, {
       signal: AbortSignal.timeout(3000),
@@ -182,7 +182,7 @@ export async function fetchSessionMessages(
         timestamp: m.timestamp,
         model: m.model,
         provider: m.provider,
-        fromOpenClaw: true,
+        fromRouter: true,
       })),
       updatedAt: data.updatedAt || '',
       totalEvents: data.totalEvents || 0,
@@ -215,7 +215,7 @@ export async function fetchSessionMessagesPage(
         timestamp: m.timestamp,
         model: m.model,
         provider: m.provider,
-        fromOpenClaw: true,
+        fromRouter: true,
       })),
       updatedAt: data.updatedAt || '',
       totalEvents: data.totalEvents || 0,
@@ -265,7 +265,7 @@ export async function fetchAllAgentMessages(
       signal: AbortSignal.timeout(3000),
     });
     if (!sessionsRes.ok) return { messages: [], updatedAt: '', totalEvents: 0 };
-    const sessions: OpenClawSession[] = await sessionsRes.json();
+    const sessions: RouterSession[] = await sessionsRes.json();
 
     // Fetch messages from each session in parallel
     const allMessages: ChatMessage[] = [];
@@ -320,7 +320,7 @@ export async function fetchFeed(
       provider: e.provider,
       agentId: e.agentId,
       sessionKey: e.sessionKey,
-      fromOpenClaw: true,
+      fromRouter: true,
     }));
   } catch {
     return [];
@@ -504,7 +504,7 @@ export async function sendMessage(
   sessionId?: string,
   modelOverride?: string,
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
-  openclawMode?: boolean,
+  routerMode?: boolean,
   threadContext?: ThreadContext,
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
@@ -537,7 +537,7 @@ export async function sendMessage(
       signal,
       modelOverride,
       attachments,
-      openclawMode,
+      routerMode,
       threadContext,
       contextHealth,
       claudeCliMode,
@@ -580,7 +580,7 @@ async function streamViaFallback(
   signal?: AbortSignal,
   modelOverride?: string,
   attachments?: Array<{ name: string; type: string; dataUrl: string }>,
-  openclawMode?: boolean,
+  routerMode?: boolean,
   threadContext?: ThreadContext,
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
@@ -619,7 +619,7 @@ async function streamViaFallback(
       tenantId: getTenantId(),
       promptVersion: SYSTEM_PROMPT_VERSION,
       ...(attachments?.length ? { attachments } : {}),
-      ...(openclawMode ? { openclawMode: true } : {}),
+      ...(routerMode ? { routerMode: true } : {}),
       ...(claudeCliMode ? { claudeCliMode: true } : {}),
       ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
       ...(threadContext ? { threadContext } : {}),
@@ -848,7 +848,7 @@ async function streamViaFallback(
       await new Promise((r) => setTimeout(r, 800));
       return streamViaFallback(
         message, history, systemPrompt, callbacks, signal, modelOverride,
-        attachments, openclawMode, threadContext, contextHealth, claudeCliMode, directMode,
+        attachments, routerMode, threadContext, contextHealth, claudeCliMode, directMode,
         true,
       );
     }

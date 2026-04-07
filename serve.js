@@ -55,7 +55,7 @@ heartbeat.registerDependency("cortexdb", `${infraUrl("cortexservice-api")}/healt
 heartbeat.registerDependency("shre-router", `${serviceUrl("shre-router")}/health`);
 const DIST = join(import.meta.dirname, "dist");
 const ROUTER_PORT = Number(new URL(serviceUrl("shre-router")).port);
-const OPENCLAW_HOME = join(homedir(), ".openclaw");
+const GATEWAY_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
@@ -76,8 +76,8 @@ cortexPool.on("error", (err) => log.warn("[cortexPool] Idle client error", { err
 // ── Gateway token — read from config server-side (never expose in bundle) ──
 let GATEWAY_TOKEN = "";
 try {
-  const ocConfig = JSON.parse(readFileSync(join(OPENCLAW_HOME, "openclaw.json"), "utf8"));
-  // Token lives at gateway.auth.token in openclaw.json
+  const ocConfig = JSON.parse(readFileSync(join(GATEWAY_HOME, "openclaw.json"), "utf8")); // legacy config file path
+  // Token lives at gateway.auth.token in config
   GATEWAY_TOKEN = ocConfig?.gateway?.auth?.token || ocConfig?.auth?.token || "";
 } catch { /* will fail gracefully — gateway calls won't auth */ }
 
@@ -102,9 +102,9 @@ let ANTHROPIC_API_KEY = "";
 let OPENAI_API_KEY = "";
 try {
   // Try auth-profiles first, then env
-  const agentDirs = readdirSync(join(OPENCLAW_HOME, "agents"));
+  const agentDirs = readdirSync(join(GATEWAY_HOME, "agents"));
   for (const dir of agentDirs) {
-    const authPath = join(OPENCLAW_HOME, "agents", dir, "agent", "auth-profiles.json");
+    const authPath = join(GATEWAY_HOME, "agents", dir, "agent", "auth-profiles.json");
     if (existsSync(authPath)) {
       const profiles = JSON.parse(readFileSync(authPath, "utf8"));
       if (!ANTHROPIC_API_KEY) {
@@ -1265,7 +1265,7 @@ function json(res, data, status = 200) {
 // ── Session reading from JSONL files ──────────────────────────────────
 
 function getSessionsDir(agentId) {
-  return join(OPENCLAW_HOME, "agents", agentId, "sessions");
+  return join(GATEWAY_HOME, "agents", agentId, "sessions");
 }
 
 function readSessionIndex(agentId) {
@@ -1355,7 +1355,7 @@ function getOrCreateCliSession(agentId) {
     version: 3,
     id: sessionId,
     timestamp: new Date().toISOString(),
-    cwd: join(OPENCLAW_HOME, "workspace"),
+    cwd: join(GATEWAY_HOME, "workspace"),
     source: "shre-chat-cli",
   };
   appendFileSync(filePath, JSON.stringify(initEvt) + "\n");
@@ -3607,7 +3607,7 @@ async function requestHandler(req, res) {
 
   // GET /api/agents — list all agents
   if (url.pathname === "/api/agents" && req.method === "GET") {
-    const agentsDir = join(OPENCLAW_HOME, "agents");
+    const agentsDir = join(GATEWAY_HOME, "agents");
     if (!existsSync(agentsDir)) return json(res, []);
     const agents = readdirSync(agentsDir).filter((d) => {
       const p = join(agentsDir, d);
@@ -3761,7 +3761,7 @@ async function requestHandler(req, res) {
     const query = (url.searchParams.get("q") || "").trim().toLowerCase();
     if (query.length < 2) return json(res, { results: [] });
 
-    const agentsDir = join(OPENCLAW_HOME, "agents");
+    const agentsDir = join(GATEWAY_HOME, "agents");
     if (!existsSync(agentsDir)) return json(res, { results: [] });
 
     const results = [];
@@ -3816,7 +3816,7 @@ async function requestHandler(req, res) {
   // GET /api/feed?since=<timestamp> — get events across ALL agents for feed
   if (url.pathname === "/api/feed" && req.method === "GET") {
     const since = Number(url.searchParams.get("since") || "0");
-    const agentsDir = join(OPENCLAW_HOME, "agents");
+    const agentsDir = join(GATEWAY_HOME, "agents");
     if (!existsSync(agentsDir)) return json(res, { entries: [] });
 
     const entries = [];
@@ -4309,7 +4309,7 @@ async function requestHandler(req, res) {
         res.end(JSON.stringify({ ok: false, error: "agentId and modelId required" }));
         return;
       }
-      const configPath = join(OPENCLAW_HOME, "openclaw.json");
+      const configPath = join(GATEWAY_HOME, "openclaw.json");
       const config = JSON.parse(readFileSync(configPath, "utf8"));
       const list = config?.agents?.list;
       if (!Array.isArray(list)) {
@@ -4343,7 +4343,7 @@ async function requestHandler(req, res) {
   if (url.pathname === "/api/model" && req.method === "GET") {
     try {
       const agentId = url.searchParams.get("agentId") || "main";
-      const configPath = join(OPENCLAW_HOME, "openclaw.json");
+      const configPath = join(GATEWAY_HOME, "openclaw.json");
       const config = JSON.parse(readFileSync(configPath, "utf8"));
       const agent = config?.agents?.list?.find((a) => a.id === agentId);
       const primary = agent?.model?.primary || agent?.model || config?.agents?.defaults?.model?.primary || null;
@@ -4445,7 +4445,7 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // GET /webhook/openclaw — health probe for the channel (path kept for backward compat)
+  // GET /webhook/openclaw — health probe for the channel (URL path kept for backward compat)
   if (url.pathname === "/webhook/openclaw" && req.method === "GET") {
     return json(res, {
       ok: true,
@@ -5361,7 +5361,7 @@ async function requestHandler(req, res) {
       })(),
       // 2. Agent activity — scan recent sessions (tail-read optimization)
       (async () => {
-        const agentsDir = join(OPENCLAW_HOME, "agents");
+        const agentsDir = join(GATEWAY_HOME, "agents");
         if (!existsSync(agentsDir)) return null;
         const allEntries = await readdir(agentsDir);
         const agents = [];
@@ -5421,7 +5421,7 @@ async function requestHandler(req, res) {
             if (agentMsgCount > 0) {
               let name = agentId;
               try {
-                const profilePath = join(OPENCLAW_HOME, "agents", agentId, "agent", "profile.json");
+                const profilePath = join(GATEWAY_HOME, "agents", agentId, "agent", "profile.json");
                 if (existsSync(profilePath)) {
                   const profile = JSON.parse(readFileSync(profilePath, "utf8"));
                   name = profile.name || profile.displayName || agentId;
