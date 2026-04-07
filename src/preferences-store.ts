@@ -86,7 +86,7 @@ export interface PreferencesState {
   ttsVoice: string;
   ttsProvider: TTSProvider;
   modelOverrides: Record<string, string>; // agentId → modelId
-  gatewayMode: GatewayMode; // router | openclaw | direct (Ollama)
+  gatewayMode: GatewayMode; // router | direct (Ollama)
   features: Record<FeatureKey, boolean>; // Feature toggles
   focusMode: boolean; // Hide system/cron/automated messages from chat
 

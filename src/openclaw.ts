@@ -1,20 +1,19 @@
 /**
- * OpenClaw Gateway Client
+ * Shre Chat — Streaming Client
  *
- * Direct connection to OpenClaw for Shre chat.
- * Flow: Shre → OpenClaw → shre-router → LLaMA → optimal model
+ * Primary chat client for Shre chat UI.
+ * Flow: Shre → shre-router → optimal model (budget, RAG, cost tracking, learning)
  *
- * Fallback: If OpenClaw is down, routes through shre-router directly
- * to get optimal model, then calls that model's API.
+ * All chat routes through shre-router /v1/chat. No direct provider calls.
  */
 
 import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
 
-const OPENCLAW_URL = '/v1/responses';
+const RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
 const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
 
-// Gateway auth — token fetched from server at runtime (never bundled in JS)
+// Auth — token fetched from server at runtime (never bundled in JS)
 
 // Active agent ID — defaults to shre, switchable
 let currentAgentId = 'shre';
@@ -55,7 +54,7 @@ export function setUserLanguage(lang: string): void {
 }
 
 /** Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6").
- *  OpenClaw gateway expects bare model IDs without provider prefix. */
+ *  Some providers expect bare model IDs without provider prefix. */
 export function stripProviderPrefix(modelId: string): string {
   return modelId.includes('/') ? modelId.split('/').pop()! : modelId;
 }
@@ -113,8 +112,7 @@ function reportUsage(
   }).catch(() => {}); // fire-and-forget
 }
 
-// Session key — shares session with OpenClaw's native chat
-// Format matches OpenClaw: agent:<agentId>:main
+// Session key — format: agent:<agentId>:main
 let activeSessionKey = 'main';
 
 export interface ChatMessage {
@@ -132,7 +130,7 @@ export interface ChatMessage {
   meta?: Record<string, string>;
 }
 
-// ── Session Sync (reads OpenClaw JSONL sessions via serve.js API) ────
+// ── Session Sync (reads JSONL sessions via serve.js API) ────
 
 export interface OpenClawSession {
   key: string;
@@ -149,7 +147,7 @@ export interface SyncResult {
 }
 
 /**
- * List sessions for an agent from OpenClaw session files.
+ * List sessions for an agent from session files.
  */
 export async function listSessions(agentId: string): Promise<OpenClawSession[]> {
   try {
@@ -164,7 +162,7 @@ export async function listSessions(agentId: string): Promise<OpenClawSession[]> 
 }
 
 /**
- * Fetch messages from an OpenClaw session.
+ * Fetch messages from a session.
  * Pass sinceTs to only get messages after that timestamp (for incremental sync).
  */
 export async function fetchSessionMessages(
@@ -489,8 +487,7 @@ export interface StreamCallbacks {
 }
 
 /**
- * Send a chat message through OpenClaw gateway (streaming).
- * Falls back to shre-router → direct API if gateway is down.
+ * Send a chat message through shre-router (streaming).
  */
 export interface ThreadContext {
   parentSessionId?: string;
@@ -529,9 +526,8 @@ export async function sendMessage(
     },
   };
 
-  // Two routing modes — both go through shre-router /v1/chat (trust gate + training):
-  // - Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
-  // - OpenClaw: shre-router → OpenClaw gateway → agent workspace (SOUL.md, tools, session memory)
+  // All chat routes through shre-router /v1/chat (trust gate + training):
+  // Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
   try {
     await streamViaFallback(
       message,
@@ -735,7 +731,7 @@ async function streamViaFallback(
             callbacks.onToken(evt.text);
             callbacks.onStatus?.('writing');
           } else if (evt.type === 'response.output_text.delta' && evt.delta) {
-            // OpenClaw mode — text deltas in OpenAI Responses API format
+            // Text deltas in OpenAI Responses API format
             fullText += evt.delta;
             callbacks.onToken(evt.delta);
             callbacks.onStatus?.('writing');
@@ -864,7 +860,7 @@ async function streamViaFallback(
   callbacks.onDone(fullText);
 }
 
-// ── SSE Stream Reader (OpenClaw format) ──────────────────────────────
+// ── SSE Stream Reader (Responses API format) ─────────────────────────
 
 async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise<void> {
   const reader = res.body?.getReader();
@@ -886,7 +882,7 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
       buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        // Track named events (OpenClaw sends `event: <type>\ndata: {...}`)
+        // Track named events (SSE format: `event: <type>\ndata: {...}`)
         if (line.startsWith('event: ')) {
           currentEvent = line.slice(7).trim();
           continue;
@@ -943,7 +939,7 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
             reportUsage(r.model || currentAgentModel, r.usage, Date.now() - streamStart);
           }
 
-          // Extract text content — OpenClaw response format
+          // Extract text content — Responses API format
           if (evtType === 'response.output_text.delta' && evt.delta) {
             fullText += evt.delta;
             callbacks.onToken(evt.delta);
@@ -968,7 +964,7 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
 }
 
 /**
- * Check if OpenClaw gateway is reachable via the proxy.
+ * Check if the gateway is reachable via the proxy.
  */
 export async function checkGateway(): Promise<boolean> {
   try {

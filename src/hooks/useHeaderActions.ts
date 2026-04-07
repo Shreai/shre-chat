@@ -29,7 +29,7 @@ export function useHeaderActions({
 }: UseHeaderActionsOptions) {
   const gatewayMode = usePreferences((s) => s.gatewayMode);
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
-  // Derived boolean — openclaw removed, always false
+  // Legacy flag — always false (all routing via shre-router)
   const openclawMode = false;
   const [compareMode, setCompareMode] = useState(false);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
