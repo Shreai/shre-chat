@@ -324,13 +324,52 @@ try {
  */
 function issueAuthToken(username, role = "admin") {
   if (!authSigningKey) return null;
+  // Use cached platformId (UUID from shre-auth) so local fallback tokens
+  // produce the same user_id as platform tokens — critical for session sync.
+  const users = loadUsers();
+  const userRecord = users[username] || {};
+  const sub = userRecord.platformId || username;
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
   const now = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(JSON.stringify({
-    sub: username, role, iat: now, exp: now + AUTH_TOKEN_TTL, jti: randomUUID(),
-  })).toString("base64url");
+  const claims = { sub, role, username, iat: now, exp: now + AUTH_TOKEN_TTL, jti: randomUUID() };
+  // Include cached workspace so tenant_id stays consistent
+  if (userRecord.activeWorkspaceId) claims.activeWorkspaceId = userRecord.activeWorkspaceId;
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
   const sig = createHmac("sha256", authSigningKey).update(`${header}.${payload}`).digest("base64url");
   return `${header}.${payload}.${sig}`;
+}
+
+/** Extract sub (user UUID) from a platform JWT without verifying signature */
+function extractSubFromToken(token) {
+  try {
+    const parts = (token || "").split(".");
+    if (parts.length < 2) return null;
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+    return claims.sub || null;
+  } catch { return null; }
+}
+
+/** Cache the platform UUID + workspace in local users.json for fallback token consistency */
+function cachePlatformId(username, platformToken) {
+  try {
+    const parts = (platformToken || "").split(".");
+    if (parts.length < 2) return;
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+    const platformSub = claims.sub;
+    if (!platformSub || platformSub === username) return;
+    const users = loadUsers();
+    if (!users[username]) return;
+    let changed = false;
+    if (users[username].platformId !== platformSub) {
+      users[username].platformId = platformSub;
+      changed = true;
+    }
+    if (claims.activeWorkspaceId && users[username].activeWorkspaceId !== claims.activeWorkspaceId) {
+      users[username].activeWorkspaceId = claims.activeWorkspaceId;
+      changed = true;
+    }
+    if (changed) saveUsers(users);
+  } catch { /* best effort */ }
 }
 
 /**
@@ -443,6 +482,7 @@ export function registerAuthRoutes({ log }) {
                 const trustToken = trustCookie?.split("=")[1];
                 if (trustToken && isDeviceTrusted(username, trustToken)) {
                   // Trusted device — skip 2FA
+                  cachePlatformId(username, data.token);
                   res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
                   auditLog("login_success_trusted", { ip: clientIp, username });
                   logLogin(username, req, "login_trusted_device");
@@ -460,10 +500,13 @@ export function registerAuthRoutes({ log }) {
 
             // Success or workspace selection needed
             if (data.token) {
+              cachePlatformId(username, data.token);
               res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
               auditLog("login_success", { ip: clientIp, username });
               logLogin(username, req, "login");
             }
+            // Pass username for client-side migration trigger
+            if (data.user && !data.user.username) data.user.username = username;
             return json(res, data);
           } catch (authErr) {
             // shre-auth unavailable — fall back to local auth

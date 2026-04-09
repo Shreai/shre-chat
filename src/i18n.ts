@@ -12,6 +12,7 @@ export type Locale =
   | 'zh-CN'
   | 'zh-TW'
   | 'hi'
+  | 'gu'
   | 'ar'
   | 'ja'
   | 'ko'
@@ -29,6 +30,7 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   'zh-CN': '中文 (简体)',
   'zh-TW': '中文 (繁體)',
   hi: 'हिन्दी',
+  gu: 'ગુજરાતી',
   ar: 'العربية',
   ja: '日本語',
   ko: '한국어',
