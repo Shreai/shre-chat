@@ -617,6 +617,7 @@ async function streamViaFallback(
       agentId: currentAgentId,
       sessionId: activeSessionKey,
       tenantId: getTenantId(),
+      companyId: getTenantId(),
       promptVersion: SYSTEM_PROMPT_VERSION,
       ...(attachments?.length ? { attachments } : {}),
       ...(routerMode ? { routerMode: true } : {}),

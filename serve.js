@@ -421,6 +421,43 @@ const stmtListDeleted = chatDb.prepare(`SELECT id, title, agent_id, deleted_at, 
 // Auto-purge trash older than 30 days
 const stmtPurgeTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE deleted_at < ?`);
 
+// ── Session user_id migration ────────────────────────────────────────
+// When user logs in via shre-auth (sub=UUID) but has old sessions under
+// their username or 'system', migrate those sessions to the UUID.
+const _migratedUsers = new Set();
+const stmtMigrateSessions = chatDb.prepare(
+  `UPDATE chat_sessions SET user_id = ? WHERE user_id = ? AND user_id != ?`
+);
+const stmtMigrateMessages = chatDb.prepare(
+  `UPDATE chat_messages SET user_id = ? WHERE user_id = ? AND user_id != ?`
+);
+const stmtMigrateTenantId = chatDb.prepare(
+  `UPDATE chat_sessions SET tenant_id = ? WHERE user_id = ? AND tenant_id = 'default'`
+);
+function migrateSessionUserId(platformId, username, tenantId) {
+  if (!platformId || !username || platformId === username) return;
+  const key = `${platformId}:${username}`;
+  if (_migratedUsers.has(key)) return;
+  _migratedUsers.add(key);
+  try {
+    const r1 = stmtMigrateSessions.run(platformId, username, platformId);
+    const r2 = stmtMigrateSessions.run(platformId, 'system', platformId);
+    const r3 = stmtMigrateMessages.run(platformId, username, platformId);
+    const r4 = stmtMigrateMessages.run(platformId, 'system', platformId);
+    // Also normalize tenant_id from 'default' to actual workspace
+    let r5 = { changes: 0 };
+    if (tenantId && tenantId !== 'default') {
+      r5 = stmtMigrateTenantId.run(tenantId, platformId);
+    }
+    const total = r1.changes + r2.changes + r3.changes + r4.changes + r5.changes;
+    if (total > 0) {
+      log.info("[sessions] Migrated user_id/tenant_id for session sync", { platformId, username, sessionChanges: r1.changes + r2.changes, messageChanges: r3.changes + r4.changes, tenantChanges: r5.changes });
+    }
+  } catch (err) {
+    log.warn("[sessions] user_id migration failed", {}, err);
+  }
+}
+
 // ── Chat message prepared statements ────────────────────────────
 const stmtInsertMessage = chatDb.prepare(`
   INSERT OR IGNORE INTO chat_messages (id, session_id, role, content, model, agent_id, user_id, metadata, created_at)
@@ -1572,6 +1609,10 @@ async function requestHandler(req, res) {
     || url.pathname === "/api/i18n/available"
     || url.pathname === "/api/push/vapid-key";
   const authClaims = checkAuth(req);
+  // Migrate old sessions if user has both UUID (platform) and username claims
+  if (authClaims?.sub && authClaims?.username && authClaims.sub !== authClaims.username) {
+    migrateSessionUserId(authClaims.sub, authClaims.username, authClaims.activeWorkspaceId);
+  }
   const isRouterProxy = url.pathname.startsWith("/api/router/");
   const isDirectProxy = url.pathname.startsWith("/api/direct/");
   if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isDirectProxy) {
@@ -5595,7 +5636,8 @@ async function requestHandler(req, res) {
     // Check shre-router connectivity
     let gatewayConnected = false;
     try {
-      const gwReq = httpsRequest({
+      const gwRequestFn = serviceUrl("shre-router").startsWith("https") ? httpsRequest : httpRequest;
+      const gwReq = gwRequestFn({
         hostname: "127.0.0.1", port: ROUTER_PORT, path: "/health",
         method: "GET", timeout: 1500, rejectUnauthorized: false,
       });
