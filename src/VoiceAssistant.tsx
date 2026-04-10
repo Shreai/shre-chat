@@ -832,6 +832,30 @@ export default function VoiceAssistant({
     }
   }, [briefingPlaying]);
 
+  // ── Auto-listen after speaking ──
+  // When phase transitions to 'ready' after speaking/thinking, automatically start listening
+  // for continuous hands-free conversation flow
+  const prevPhaseRef = useRef<VoicePhase>('idle');
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = state.phase as VoicePhase;
+    // Auto-listen when transitioning from speaking → ready (AI finished talking)
+    if (
+      state.phase === 'ready' &&
+      (prev === 'speaking' || prev === 'thinking') &&
+      activeRef.current &&
+      open
+    ) {
+      // Small delay to let TTS audio fully stop before mic picks up
+      const timer = setTimeout(() => {
+        if (activeRef.current && phaseRef.current === 'ready') {
+          startListening();
+        }
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [state.phase, open, startListening]);
+
   // ── Stuck-phase watchdog ──
   // Recovers from black holes: if phase stays in thinking/transcribing/speaking for 30s, reset to ready
   useEffect(() => {

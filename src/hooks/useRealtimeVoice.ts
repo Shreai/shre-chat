@@ -43,6 +43,14 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
   const audioCtxPPRef = useRef<AudioContext | null>(null);
 
   const cleanup = useCallback(() => {
+    platformRecordingRef.current = false;
+    if (platformMediaRecorderRef.current) {
+      if (platformMediaRecorderRef.current.state !== 'inactive') {
+        try { platformMediaRecorderRef.current.stop(); } catch { /* ok */ }
+      }
+      platformMediaRecorderRef.current = null;
+    }
+    platformChunksRef.current = [];
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
@@ -98,6 +106,9 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       } else if (session.client_secret?.value) {
         // OpenAI Realtime: WebRTC with ephemeral token
         await connectOpenAIRealtime(session.client_secret.value);
+      } else if (session.provider === 'platform') {
+        // Platform-routed fallback: STT → shre-router /v1/chat → TTS
+        await connectPlatformFallback(persona);
       } else {
         throw new Error('No valid voice session returned');
       }
@@ -218,6 +229,154 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       console.log('[RealtimeVoice] PersonaPlex WebSocket closed', e.code, e.reason);
       cleanup();
     };
+  };
+
+  /** Platform-routed fallback: record → STT → /v1/chat (tools) → TTS → play */
+  const platformRecordingRef = useRef(false);
+  const platformMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const platformChunksRef = useRef<Blob[]>([]);
+
+  const connectPlatformFallback = async (persona: string) => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    streamRef.current = stream;
+    setProvider('platform');
+    setLatency('~1-2s');
+    setState('listening');
+
+    platformRecordingRef.current = true;
+
+    const startPlatformListening = () => {
+      if (!platformRecordingRef.current) return;
+      platformChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+      const mr = new MediaRecorder(stream, { mimeType });
+      platformMediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) platformChunksRef.current.push(e.data);
+      };
+      mr.start(250);
+      setState('listening');
+
+      // Silence detection via AudioContext
+      const audioCtx = new AudioContext();
+      audioCtxPPRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      let silenceStart = 0;
+      const SILENCE_THRESHOLD = 10;
+      const SILENCE_TIMEOUT = 2000;
+      let speechDetected = false;
+
+      const checkSilence = () => {
+        if (!platformRecordingRef.current) return;
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+
+        if (avg > SILENCE_THRESHOLD) {
+          speechDetected = true;
+          silenceStart = 0;
+        } else if (speechDetected) {
+          if (!silenceStart) silenceStart = Date.now();
+          if (Date.now() - silenceStart > SILENCE_TIMEOUT) {
+            // Silence detected after speech — stop recording and process
+            mr.stop();
+            audioCtx.close().catch(() => {});
+            audioCtxPPRef.current = null;
+            return; // Don't continue the loop
+          }
+        }
+        requestAnimationFrame(checkSilence);
+      };
+      requestAnimationFrame(checkSilence);
+
+      mr.onstop = async () => {
+        if (platformChunksRef.current.length === 0) {
+          // No audio captured — restart listening
+          if (platformRecordingRef.current) startPlatformListening();
+          return;
+        }
+
+        const audioBlob = new Blob(platformChunksRef.current, { type: mr.mimeType });
+        platformChunksRef.current = [];
+
+        if (audioBlob.size < 3000) {
+          // Too short — restart listening
+          if (platformRecordingRef.current) startPlatformListening();
+          return;
+        }
+
+        setState('speaking');
+        setTranscript('Processing...');
+
+        try {
+          // Convert audio blob to base64 for /v1/voice/converse JSON API
+          const arrayBuf = await audioBlob.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuf);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          const audioBase64 = btoa(binary);
+
+          const res = await fetch(`${ROUTER_BASE}/v1/voice/converse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: audioBase64, persona }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: 'Unknown' }));
+            setAiTranscript(`Error: ${err.error || res.status}`);
+            setState('listening');
+            if (platformRecordingRef.current) startPlatformListening();
+            return;
+          }
+
+          // Response is always JSON: { text, transcript, audio (base64), ... }
+          const data = await res.json();
+          if (data.transcript) setTranscript(data.transcript);
+          if (data.spokenText || data.text) setAiTranscript(data.spokenText || data.text);
+
+          if (data.audio) {
+            // Decode base64 audio and play it
+            const binaryStr = atob(data.audio);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+            const audioResBlob = new Blob([bytes], { type: 'audio/mp3' });
+
+            audioQueueRef.current.push(audioResBlob);
+            playNextInQueue();
+
+            // Wait for audio to finish, then auto-listen
+            const waitForDrain = () => {
+              if (audioQueueRef.current.length === 0 && !isPlayingRef.current) {
+                if (platformRecordingRef.current) startPlatformListening();
+              } else {
+                setTimeout(waitForDrain, 200);
+              }
+            };
+            setTimeout(waitForDrain, 500);
+          } else {
+            // No audio — show text only, return to listening
+            setState('listening');
+            if (platformRecordingRef.current) startPlatformListening();
+          }
+        } catch (err) {
+          console.error('[RealtimeVoice] Platform fallback error:', err);
+          setAiTranscript('Connection error. Retrying...');
+          setState('listening');
+          if (platformRecordingRef.current) {
+            setTimeout(startPlatformListening, 1000);
+          }
+        }
+      };
+    };
+
+    startPlatformListening();
   };
 
   /** Connect to OpenAI Realtime via WebRTC (fallback, ~300ms) */

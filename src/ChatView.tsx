@@ -1356,6 +1356,17 @@ export function ChatView() {
             <RealtimeVoiceOverlay
               onClose={() => setRealtimeVoiceOpen(false)}
               defaultPersona={currentAgent.id === 'ellie' ? 'ellie' : 'shre'}
+              onVoiceTurn={(turn) => {
+                if (voiceSessionId) {
+                  actions.addMessage(voiceSessionId, { role: turn.role, content: turn.content });
+                  if (turn.role === 'user' && voiceSession && voiceSession.messages.length === 0) {
+                    const title =
+                      'Voice Call: ' +
+                      (turn.content.length > 30 ? turn.content.slice(0, 30) + '…' : turn.content);
+                    actions.updateSessionTitle(voiceSessionId, title);
+                  }
+                }
+              }}
             />
           </Suspense>
         </ViewErrorBoundary>
