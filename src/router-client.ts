@@ -13,6 +13,9 @@ const RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
 const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
 
+// App version sent via X-App-Version header for device metadata tracking
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.0.0';
+
 // Auth — token fetched from server at runtime (never bundled in JS)
 
 // Active agent ID — defaults to shre, switchable
@@ -611,7 +614,11 @@ async function streamViaFallback(
   const chatUrl = directMode ? '/api/direct/v1/chat' : `${SHRE_ROUTER_URL}/v1/chat`;
   const res = await fetchWithRetry(chatUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-App-Version': APP_VERSION,
+      'x-channel': 'shre-chat',
+    },
     body: JSON.stringify({
       messages,
       systemPrompt,
