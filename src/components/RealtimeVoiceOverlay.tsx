@@ -9,12 +9,13 @@
  * - End call button
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRealtimeVoice, type RealtimeVoiceState } from '../hooks/useRealtimeVoice';
 
 interface RealtimeVoiceOverlayProps {
   onClose: () => void;
   defaultPersona?: string;
+  onVoiceTurn?: (turn: { role: 'user' | 'assistant'; content: string }) => void;
 }
 
 const PERSONAS = [
@@ -32,7 +33,7 @@ const stateLabels: Record<RealtimeVoiceState, string> = {
   error: 'Connection lost',
 };
 
-export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre' }: RealtimeVoiceOverlayProps) {
+export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre', onVoiceTurn }: RealtimeVoiceOverlayProps) {
   const [selectedPersona, setSelectedPersona] = useState(defaultPersona);
   const {
     state,
@@ -46,6 +47,24 @@ export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre' }: Realt
   } = useRealtimeVoice();
 
   const persona = PERSONAS.find(p => p.id === selectedPersona) || PERSONAS[0];
+
+  // Persist voice turns to chat history via onVoiceTurn callback
+  const lastUserTranscriptRef = useRef('');
+  const lastAiTranscriptRef = useRef('');
+
+  useEffect(() => {
+    if (transcript && transcript !== lastUserTranscriptRef.current) {
+      lastUserTranscriptRef.current = transcript;
+      onVoiceTurn?.({ role: 'user', content: transcript });
+    }
+  }, [transcript, onVoiceTurn]);
+
+  useEffect(() => {
+    if (aiTranscript && aiTranscript !== lastAiTranscriptRef.current) {
+      lastAiTranscriptRef.current = aiTranscript;
+      onVoiceTurn?.({ role: 'assistant', content: aiTranscript });
+    }
+  }, [aiTranscript, onVoiceTurn]);
 
   const handleToggle = () => {
     if (isActive) {
