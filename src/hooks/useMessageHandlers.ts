@@ -401,6 +401,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
                 streamBufferRef.current = '';
                 const cliDoneMeta: Record<string, string> = { route: 'cli' };
                 if (evt.model) cliDoneMeta.model = evt.model;
+                if (evt.ledgerSessionId) cliDoneMeta.ledgerSessionId = evt.ledgerSessionId;
                 if (sendTimeRef.current > 0)
                   cliDoneMeta.total_ms = String(Date.now() - sendTimeRef.current);
                 if (firstTokenTimeRef.current > 0 && sendTimeRef.current > 0)
@@ -421,6 +422,26 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
                 );
                 setCliContinue(true);
                 return;
+              } else if (evt.type === 'plan_detected') {
+                // CLI produced a plan — show handoff option in activity feed
+                actions.addActivity(
+                  sessionId,
+                  'done',
+                  `Plan detected: ${evt.taskCount} tasks. Click to hand off to agents.`,
+                );
+                // Add a system message with the plan for visibility
+                actions.addMessage(sessionId, {
+                  role: 'assistant',
+                  content: `**Plan Ready** — ${evt.taskCount} tasks extracted. Use the handoff button to assign to agents.\n\n${(evt.tasks || []).map((t: { title: string; priority: string; suggestedAgent: string | null }, i: number) => `${i + 1}. **${t.title}** (${t.priority}${t.suggestedAgent ? ` → ${t.suggestedAgent}` : ''})`).join('\n')}`,
+                  timestamp: Date.now(),
+                  meta: {
+                    type: 'plan_handoff',
+                    route: 'cli',
+                    ledgerSessionId: evt.ledgerSessionId,
+                    planTasks: JSON.stringify(evt.tasks),
+                    taskCount: String(evt.taskCount),
+                  },
+                });
               } else if (evt.type === 'error') {
                 throw new Error(evt.error);
               } else if (evt.type === 'status') {
