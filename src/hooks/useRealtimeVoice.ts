@@ -37,11 +37,23 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioQueueRef = useRef<Blob[]>([]);
+  const isPlayingRef = useRef(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioCtxPPRef = useRef<AudioContext | null>(null);
 
   const cleanup = useCallback(() => {
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (audioCtxPPRef.current) {
+      audioCtxPPRef.current.close().catch(() => {});
+      audioCtxPPRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
@@ -51,6 +63,8 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       audioRef.current.srcObject = null;
     }
     dcRef.current = null;
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
     setState('idle');
     setProvider(null);
   }, []);
@@ -94,12 +108,48 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
     }
   }, []);
 
+  /** Play queued audio chunks sequentially (prevents overlapping playback) */
+  const playNextInQueue = useCallback(() => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0) {
+      // Queue drained — back to listening
+      if (audioQueueRef.current.length === 0 && !isPlayingRef.current) {
+        setState('listening');
+      }
+      return;
+    }
+
+    isPlayingRef.current = true;
+    setState('speaking');
+    const blob = audioQueueRef.current.shift()!;
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      isPlayingRef.current = false;
+      playNextInQueue(); // Play next chunk or return to listening
+    };
+
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      isPlayingRef.current = false;
+      playNextInQueue();
+    };
+
+    audio.play().catch(() => {
+      URL.revokeObjectURL(url);
+      isPlayingRef.current = false;
+      playNextInQueue();
+    });
+  }, []);
+
   /** Connect to PersonaPlex via WebSocket (full-duplex, 70ms) */
   const connectPersonaPlex = async (wsUrl: string) => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
 
     const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
     ws.onopen = () => {
       setState('listening');
@@ -107,6 +157,7 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
 
       // Set up audio capture → send PCM to PersonaPlex
       const audioCtx = new AudioContext({ sampleRate: 16000 });
+      audioCtxPPRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
 
@@ -127,19 +178,14 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
 
     ws.onmessage = (event) => {
       if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
-        // Audio data from PersonaPlex — play it
-        setState('speaking');
-        const audioBlob = event.data instanceof Blob ? event.data : new Blob([event.data]);
-        const url = URL.createObjectURL(audioBlob);
-        const audio = new Audio(url);
-        audio.play().then(() => {
-          audio.onended = () => {
-            URL.revokeObjectURL(url);
-            setState('listening');
-          };
-        });
+        // Audio data from PersonaPlex — queue and play sequentially
+        const audioBlob = event.data instanceof Blob
+          ? event.data
+          : new Blob([event.data], { type: 'audio/pcm' });
+        audioQueueRef.current.push(audioBlob);
+        playNextInQueue();
       } else {
-        // JSON events (transcripts, status)
+        // JSON events (transcripts, status, end-of-turn)
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'transcript' && msg.speaker === 'user') {
@@ -148,16 +194,28 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
           if (msg.type === 'transcript' && msg.speaker === 'agent') {
             setAiTranscript(msg.text);
           }
+          // end_of_turn: agent finished speaking, clear queue marker
+          if (msg.type === 'end_of_turn' || msg.type === 'response_end') {
+            // Audio chunks may still be in queue — playNextInQueue handles drain
+          }
+          // barge_in: user started speaking while agent was talking
+          if (msg.type === 'barge_in' || msg.type === 'speech_started') {
+            audioQueueRef.current = []; // Clear pending audio
+            isPlayingRef.current = false;
+            setState('listening');
+          }
         } catch { /* binary data */ }
       }
     };
 
     ws.onerror = () => {
+      console.error('[RealtimeVoice] PersonaPlex WebSocket error');
       setState('error');
-      cleanup();
+      setTimeout(() => cleanup(), 2000);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      console.log('[RealtimeVoice] PersonaPlex WebSocket closed', e.code, e.reason);
       cleanup();
     };
   };
@@ -199,6 +257,10 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
         }
         if (msg.type === 'response.audio.delta') {
           setState('speaking');
+        }
+        // Response complete — back to listening for next turn
+        if (msg.type === 'response.done' || msg.type === 'response.audio.done') {
+          setState('listening');
         }
       } catch { /* ignore */ }
     };
