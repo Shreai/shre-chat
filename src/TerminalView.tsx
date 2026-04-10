@@ -3,6 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import 'xterm/css/xterm.css';
+import { getSpeechLocale } from './i18n';
 
 // ── Voice-to-text input for terminal (mobile-friendly) ────────────
 const SpeechRec =
@@ -26,7 +27,7 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
     const rec = new SpeechRec();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = 'en-US';
+    rec.lang = getSpeechLocale();
     let finalText = '';
     rec.onresult = (e: SpeechRecognitionEvent) => {
       let interim = '';

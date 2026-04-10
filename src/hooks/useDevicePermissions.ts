@@ -269,7 +269,7 @@ export function useDevicePermissions() {
   const getSettingsInstructions = useCallback((name: PermissionName): string => {
     const label = PERMISSION_LABELS[name];
     if (isIOS()) {
-      return `Open Settings → Safari → Advanced → Website Data → find this site, or go to Settings → Privacy & Security → ${label} and enable for this site.`;
+      return `Open Settings → Safari → scroll to ${label} → Allow. Or Settings → Privacy & Security → ${label} and enable for this site.`;
     }
     if (isAndroid()) {
       return `Tap the lock icon in the address bar → Permissions → ${label} → Allow. Or go to Settings → Apps → Browser → Permissions.`;

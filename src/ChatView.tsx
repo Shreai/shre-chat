@@ -607,6 +607,7 @@ export function ChatView() {
     setShowJumpToLatest,
     setSuggestions,
     setSelectedMsgIndex,
+    voiceMode,
   });
 
   // Wire the real setCliContinue into the ref so useSlashCommands can call it

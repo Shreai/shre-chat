@@ -509,6 +509,7 @@ export async function sendMessage(
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
   directMode?: boolean,
+  voiceMode?: boolean,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -542,6 +543,7 @@ export async function sendMessage(
       contextHealth,
       claudeCliMode,
       directMode,
+      voiceMode,
     );
   } catch (err) {
     if (done) return;
@@ -585,6 +587,7 @@ async function streamViaFallback(
   contextHealth?: Record<string, 'ok' | 'missing' | 'error'>,
   claudeCliMode?: boolean,
   directMode?: boolean,
+  voiceMode?: boolean,
   _emptyRetry?: boolean,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
@@ -623,6 +626,7 @@ async function streamViaFallback(
       ...(routerMode ? { routerMode: true } : {}),
       ...(claudeCliMode ? { claudeCliMode: true } : {}),
       ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
+      ...(voiceMode ? { voiceMode: true } : {}),
       ...(threadContext ? { threadContext } : {}),
       ...(contextHealth ? { contextHealth } : {}),
     }),

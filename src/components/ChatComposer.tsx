@@ -558,7 +558,7 @@ export function ChatComposer(props: ChatComposerProps) {
           )}
 
           {/* Voice status mini toolbar */}
-          {(isRecording || voicePhase === 'transcribing' || (isHandsFree && !isRecording) ||
+          {(isRecording || voicePhase === 'transcribing' ||
             (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
             <div
               className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
@@ -614,6 +614,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   {interimTranscript}
                 </span>
               )}
+              {/* Hands-free disabled for now
               {isHandsFree && !isRecording && !interimTranscript && !isSpeaking && (
                 <>
                   <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -626,7 +627,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     Turn off
                   </button>
                 </>
-              )}
+              )} */}
             </div>
           )}
 
@@ -757,53 +758,19 @@ export function ChatComposer(props: ChatComposerProps) {
                 )}
               </div>
 
-              {/* Mic button — tap = push-to-talk, long-press = hands-free mode */}
+              {/* Mic button — tap = push-to-talk */}
               {speechSupported && (
                 <button
                   tabIndex={-1}
                   onClick={() => {
                     if (isRecording) onStopRecording();
-                    else if (!isHandsFree) onStartRecording();
-                    // If hands-free is on, tap disables it
-                    else setIsHandsFree(false);
-                  }}
-                  onPointerDown={(e) => {
-                    if (isRecording) return;
-                    const timer = setTimeout(() => {
-                      // Long-press: toggle hands-free
-                      setIsHandsFree(!isHandsFree);
-                      (e.currentTarget as HTMLElement).dataset.longPress = '1';
-                    }, 500);
-                    (e.currentTarget as HTMLElement).dataset.longPress = '0';
-                    (e.currentTarget as HTMLElement).dataset.lpTimer = String(timer);
-                  }}
-                  onPointerUp={(e) => {
-                    clearTimeout(Number((e.currentTarget as HTMLElement).dataset.lpTimer));
-                    if ((e.currentTarget as HTMLElement).dataset.longPress === '1') {
-                      e.preventDefault(); // suppress click — long-press already handled
-                      (e.currentTarget as HTMLElement).dataset.longPress = '0';
-                    }
-                  }}
-                  onPointerLeave={(e) => {
-                    clearTimeout(Number((e.currentTarget as HTMLElement).dataset.lpTimer));
+                    else onStartRecording();
                   }}
                   onContextMenu={(e) => e.preventDefault()}
-                  className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : isHandsFree ? 'bg-green-500/20 text-green-400' : ''}`}
-                  style={isRecording || isHandsFree ? {} : { color: 'var(--c-text-2)' }}
-                  title={
-                    isRecording
-                      ? 'Tap to stop'
-                      : isHandsFree
-                        ? 'Hands-free ON — tap to disable, say "shre shre" to start'
-                        : 'Tap for voice input, hold for hands-free'
-                  }
-                  aria-label={
-                    isRecording
-                      ? 'Stop recording'
-                      : isHandsFree
-                        ? 'Disable hands-free mode'
-                        : 'Voice input (hold for hands-free)'
-                  }
+                  className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : ''}`}
+                  style={isRecording ? {} : { color: 'var(--c-text-2)' }}
+                  title={isRecording ? 'Tap to stop' : 'Tap for voice input'}
+                  aria-label={isRecording ? 'Stop recording' : 'Voice input'}
                 >
                   {voicePhase === 'transcribing' ? (
                     <svg
@@ -819,22 +786,6 @@ export function ChatComposer(props: ChatComposerProps) {
                   ) : isRecording ? (
                     <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor">
                       <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                  ) : isHandsFree ? (
-                    <svg
-                      className="h-4 w-4 sm:h-4 sm:w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                      <line x1="12" y1="18" x2="12" y2="22" />
-                      <path d="M2 12a10 10 0 0 0 4 4" opacity="0.5" />
-                      <path d="M22 12a10 10 0 0 1-4 4" opacity="0.5" />
                     </svg>
                   ) : (
                     <svg

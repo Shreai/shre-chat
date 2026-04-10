@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { playVoiceCue, MAX_RECORDING_SECONDS } from '../chat-utils';
 import { getOrRequestStream, releaseCachedStream } from './useVoiceRecording';
 import type { TTSProvider } from '../preferences-store';
+import { getSpeechLocale } from '../i18n';
 
 export interface UseVoiceHandlersParams {
   setInput: (v: string) => void;
@@ -170,7 +171,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     const wakeRec = new SpeechRec();
     wakeRec.continuous = true;
     wakeRec.interimResults = true;
-    wakeRec.lang = 'en-US';
+    wakeRec.lang = getSpeechLocale();
     let wakeDetected = false;
 
     wakeRec.onresult = (e: SpeechRecognitionEvent) => {
@@ -320,7 +321,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         const rec = new SpeechRec();
         rec.continuous = true;
         rec.interimResults = true;
-        rec.lang = 'en-US';
+        rec.lang = getSpeechLocale();
         voiceFinalTranscriptRef.current = '';
         let hasStarted = false;
         let stopped = false;
@@ -427,9 +428,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       recognitionRef.current = null;
     }
 
-    // Stop MediaRecorder — no Whisper re-transcription needed since
-    // SpeechRecognition already put the text in the input box live.
+    // Stop MediaRecorder and collect audio chunks for Whisper fallback
     const recorder = mediaRecorderRef.current;
+    let audioChunks = [...audioChunksRef.current];
     if (recorder && recorder.state !== 'inactive') {
       try {
         recorder.stop();
@@ -437,25 +438,58 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         void _;
       }
       mediaRecorderRef.current = null;
-      audioChunksRef.current = [];
     }
 
     // Clean wake word artifacts from whatever text is already in the input
-    const currentText = voiceFinalTranscriptRef.current.trim();
+    let currentText = voiceFinalTranscriptRef.current.trim();
     if (currentText) {
-      const cleaned = currentText
+      currentText = currentText
         .replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, '')
         .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
         .trim();
-      setInput(cleaned);
+      setInput(currentText);
       setInterimTranscript('');
     }
+
+    // Whisper fallback: ONLY when SpeechRecognition produced NO text (e.g. iOS Safari).
+    // If SR already filled currentText, this block is skipped — no double-processing.
+    if (!currentText && audioChunks.length > 0) {
+      setVoicePhase('transcribing');
+      setInterimTranscript('Transcribing...');
+      try {
+        const mimeType = audioChunks[0]?.type || 'audio/webm';
+        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(audioChunks, { type: mimeType });
+        const formData = new FormData();
+        formData.append('file', blob, `voice.${ext}`);
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentText = (data.text || '').trim();
+          if (currentText) {
+            setInput(currentText);
+          }
+        }
+      } catch {
+        /* Whisper unavailable — no transcript */
+      }
+      setInterimTranscript('');
+    }
+    audioChunksRef.current = [];
 
     setIsRecording(false);
     setVoicePhase('idle');
     recordingInProgressRef.current = false;
     if (!currentText) {
       setInterimTranscript('');
+    }
+
+    // Auto-send: if we have text after recording, send it automatically
+    if (currentText) {
+      setVoicePendingSend(currentText);
     }
   }, [cleanupAudioLevel]);
 
@@ -519,7 +553,12 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       return;
     }
     const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRec) return;
+    if (!SpeechRec) {
+      // iOS Safari doesn't support SpeechRecognition — use silence-based auto-listen instead.
+      // Start recording immediately when hands-free is enabled (user taps to talk, silence auto-stops).
+      setInterimTranscript('Hands-free: tap mic or start speaking');
+      return;
+    }
     let active = true;
 
     function startWakeListener() {
@@ -528,7 +567,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       const w = new SpeechRec() as SpeechRecognition;
       w.continuous = false;
       w.interimResults = true;
-      w.lang = 'en-US';
+      w.lang = getSpeechLocale();
       w.onresult = (e: SpeechRecognitionEvent) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const text = e.results[i][0].transcript.toLowerCase().trim();
@@ -592,7 +631,13 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     if (lastSpokenMsgRef.current === msgKey) return;
     lastSpokenMsgRef.current = msgKey;
 
-    const plainText = lastMsg.content
+    // Extract spoken portion only (before --- separator, if voice mode added one)
+    let spokenContent = lastMsg.content;
+    const separatorIdx = spokenContent.indexOf('\n---\n');
+    if (separatorIdx !== -1) {
+      spokenContent = spokenContent.slice(0, separatorIdx);
+    }
+    const plainText = spokenContent
       .replace(/```[\s\S]*?```/g, ' code block omitted ')
       .replace(/`[^`]+`/g, (m: string) => m.slice(1, -1))
       .replace(/!\[[^\]]*\]\([^)]*\)/g, '')

@@ -3,6 +3,7 @@ import { voiceReducer, initialVoiceState } from './voiceStateMachine';
 import type { VoiceAction, VoicePhase } from './voiceStateMachine';
 import { useVAD } from './useVAD';
 import { useProactiveNotifications } from './hooks/useProactiveNotifications';
+import { getSpeechLocale } from './i18n';
 import { sendMessage as sendChatMessage, type ChatMessage, type StreamCallbacks } from './router-client';
 
 // ── Extracted modules ──
@@ -633,7 +634,7 @@ export default function VoiceAssistant({
         const rec = new SR();
         rec.continuous = true;
         rec.interimResults = true;
-        rec.lang = 'en-US';
+        rec.lang = getSpeechLocale();
         rec.maxAlternatives = 3;
         rec.onresult = (e: SpeechRecognitionEvent) => {
           let interim = '';

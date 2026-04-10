@@ -172,6 +172,31 @@ export function getLocale(): Locale {
   return currentLocale;
 }
 
+// ── Map locale to BCP-47 speech recognition tag ──
+const SPEECH_LOCALE_MAP: Record<Locale, string> = {
+  en: 'en-US',
+  es: 'es-ES',
+  de: 'de-DE',
+  fr: 'fr-FR',
+  'pt-BR': 'pt-BR',
+  'zh-CN': 'zh-CN',
+  'zh-TW': 'zh-TW',
+  hi: 'hi-IN',
+  gu: 'gu-IN',
+  ar: 'ar-SA',
+  ja: 'ja-JP',
+  ko: 'ko-KR',
+  ru: 'ru-RU',
+  it: 'it-IT',
+  nl: 'nl-NL',
+  tr: 'tr-TR',
+};
+
+/** Get BCP-47 tag for SpeechRecognition.lang */
+export function getSpeechLocale(): string {
+  return SPEECH_LOCALE_MAP[currentLocale] || 'en-US';
+}
+
 // ── Translate ──
 export function t(key: string, params?: Record<string, string | number>): string {
   let text = translations[key] || FALLBACK_EN[key] || key;
