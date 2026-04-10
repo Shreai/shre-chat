@@ -136,8 +136,8 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
   isHandsFreeRef.current = isHandsFree;
   const lastSpokenMsgRef = useRef<string>('');
 
-  const SILENCE_THRESHOLD = 0.02;
-  const SILENCE_TIMEOUT_MS = 5000;
+  const SILENCE_THRESHOLD = 0.06;
+  const SILENCE_TIMEOUT_MS = 8000;
 
   // Voice start/stop event listeners
   useEffect(() => {
