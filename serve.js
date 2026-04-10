@@ -31,6 +31,8 @@ import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerPushRoutes } from "./routes/push.js";
 import { initVoiceQualityMonitor, recordVoiceFailure, getVoiceQualityStats } from "./routes/voice-quality-monitor.js";
 import { createConversationEvaluator } from "./routes/conversation-evaluator.js";
+import { registerCliLedgerRoutes, getOrCreateActiveSession, appendUserMessage, appendCliResponse, appendToolEvent, buildSessionContext } from "./routes/cli-ledger.js";
+import { registerCliHandoffRoutes, extractStructuredPlan } from "./routes/cli-handoff.js";
 
 // ── Trust mkcert CA so Node verifies local TLS certs properly ──
 const _mkcertCA = join(homedir(), "Library", "Application Support", "mkcert", "rootCA.pem");
@@ -1461,6 +1463,8 @@ const handleReports = registerReportRoutes({ log, chatDb });
 const handleHandoff = registerHandoffRoutes({ log, chatDb });
 const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb });
 const { handlePushRoute, sendPushToAll } = registerPushRoutes({ log, chatDb });
+const handleCliLedger = registerCliLedgerRoutes({ log });
+const handleCliHandoff = registerCliHandoffRoutes({ log });
 
 // ── Request handler ──────────────────────────────────────────────────
 
@@ -1843,6 +1847,14 @@ async function requestHandler(req, res) {
   if (await handleNotifications(req, res, url, _routeUtils)) return;
   // Web Push routes (subscribe/unsubscribe/vapid-key)
   if (await handlePushRoute(req, res, url, _routeUtils)) return;
+  // CLI Ledger routes (session management, transcript, summary)
+  if (url.pathname.startsWith("/api/cli/sessions")) {
+    if (await handleCliLedger(req, res, url)) return;
+  }
+  // CLI Handoff routes (plan extraction, agent handoff, escalation)
+  if (url.pathname.startsWith("/api/cli/handoff") || url.pathname.startsWith("/api/cli/escalation") || url.pathname.startsWith("/api/cli/extract-plan")) {
+    if (await handleCliHandoff(req, res, url)) return;
+  }
 
   // ── Cost proxy helper: convert ?days=N to ?from=ISO&to=ISO for shre-meter ──
   // Uses calendar-day boundaries so "today" = midnight-to-now, "7d" = 7 days ago midnight-to-now
@@ -4271,7 +4283,7 @@ async function requestHandler(req, res) {
     let body;
     try { body = await collectBody(req, 5 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
-      const { message, continueConversation, agentId, autoMode } = JSON.parse(body);
+      const { message, continueConversation, agentId, autoMode, sessionType, sessionTitle, taskId, projectId, source } = JSON.parse(body);
       if (!message) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "message required" }));
@@ -4292,18 +4304,39 @@ async function requestHandler(req, res) {
 
         const agent = agentId || "main";
 
-        // Load conversation history and build context-aware prompt
+        // ── Session Ledger: get or create active session ──
+        const ledgerSession = getOrCreateActiveSession(agent, {
+          type: sessionType || "chat",
+          title: sessionTitle,
+          taskId,
+          projectId,
+        });
+        const ledgerSessionId = ledgerSession.sessionId;
+        if (!ledgerSession.resumed) {
+          log.info(`[cli-ledger] New session created: ${ledgerSessionId} (type=${sessionType || "chat"})`);
+        }
+
+        // Record user message in ledger
+        const ledgerMsgId = appendUserMessage(ledgerSessionId, message, { source: source || "text" });
+
+        // Track tool events for this request
+        const toolEvents = [];
+
+        // Load conversation history — use ledger context if available, fallback to JSONL
+        const ledgerContext = buildSessionContext(ledgerSessionId, 20);
         const history = loadCliHistory(agent, 20);
         let contextPrompt = message;
-        if (history.length > 0 && !continueConversation) {
-          // Build conversation context so LLM has memory of past CLI chats
+        if (ledgerContext && !continueConversation) {
+          contextPrompt = `${ledgerContext}\n\n${message}`;
+        } else if (history.length > 0 && !continueConversation) {
+          // Fallback: Build conversation context from legacy JSONL sessions
           const historyBlock = history.map((m) =>
             `[${m.role === "user" ? "User" : "Assistant"}]: ${m.content.length > 2000 ? m.content.slice(0, 2000) + "..." : m.content}`
           ).join("\n\n");
           contextPrompt = `<conversation_history>\n${historyBlock}\n</conversation_history>\n\n${message}`;
         }
 
-        // Save user message to session
+        // Save user message to legacy session (backward compat)
         const userMsgId = appendMessageToSession(agent, "user", message);
 
         res.writeHead(200, {
@@ -4354,7 +4387,7 @@ async function requestHandler(req, res) {
               // { type: "assistant", message: { content: [...] }, error: "..." } — response or error
               // { type: "result", result: "...", total_cost_usd: N, duration_ms: N } — final
               if (evt.type === "system") {
-                const initData = { type: "status", event: "init", model: evt.model };
+                const initData = { type: "status", event: "init", model: evt.model, ledgerSessionId };
                 if (autoMode) initData.autoMode = true;
                 res.write(`data: ${JSON.stringify(initData)}\n\n`);
               } else if (evt.type === "assistant") {
@@ -4376,15 +4409,20 @@ async function requestHandler(req, res) {
                           : JSON.stringify(block.input || {}).slice(0, 500),
                       };
                       res.write(`data: ${JSON.stringify(toolEvt)}\n\n`);
+                      // Record tool start in ledger
+                      toolEvents.push({ name: block.name, input: toolEvt.input });
                     } else if (block.type === "tool_result") {
+                      const toolOutput = typeof block.content === "string"
+                        ? block.content.slice(0, 2000)
+                        : JSON.stringify(block.content || "").slice(0, 2000);
                       res.write(`data: ${JSON.stringify({
                         type: "tool_result",
                         toolId: block.tool_use_id,
-                        output: typeof block.content === "string"
-                          ? block.content.slice(0, 2000)
-                          : JSON.stringify(block.content || "").slice(0, 2000),
+                        output: toolOutput,
                         isError: block.is_error || false,
                       })}\n\n`);
+                      // Record tool result in ledger
+                      appendToolEvent(ledgerSessionId, "tool_result", block.tool_use_id, toolOutput, { isError: block.is_error || false });
                     }
                   }
                 }
@@ -4394,7 +4432,7 @@ async function requestHandler(req, res) {
               } else if (evt.type === "result") {
                 // Use result text if we didn't accumulate from streaming
                 if (!fullResponseText && evt.result) fullResponseText = evt.result;
-                res.write(`data: ${JSON.stringify({ type: "done", text: evt.result || "", cost: evt.total_cost_usd, duration: evt.duration_ms, model: evt.model, sessionId: evt.session_id })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: "done", text: evt.result || "", cost: evt.total_cost_usd, duration: evt.duration_ms, model: evt.model, sessionId: evt.session_id, ledgerSessionId })}\n\n`);
               } else if (evt.type === "content_block_delta" && evt.delta?.text) {
                 fullResponseText += evt.delta.text;
                 res.write(`data: ${JSON.stringify({ type: "delta", text: evt.delta.text })}\n\n`);
@@ -4427,10 +4465,26 @@ async function requestHandler(req, res) {
             } catch { /* ignore */ }
           }
 
-          // Save assistant response to agent's session
+          // Save assistant response to agent's session + ledger
           if (fullResponseText) {
             appendMessageToSession(agent, "assistant", fullResponseText, "claude-cli", userMsgId);
             log.info(`[cli-session] Saved conversation to agent:${agent}:${CLI_SESSION_KEY} (${fullResponseText.length} chars)`);
+
+            // Record in session ledger with tool events and cost
+            try {
+              const resultCost = buffer.trim() ? (() => { try { const e = JSON.parse(buffer); return e.total_cost_usd || 0; } catch { return 0; } })() : 0;
+              const resultDuration = buffer.trim() ? (() => { try { const e = JSON.parse(buffer); return e.duration_ms || 0; } catch { return 0; } })() : 0;
+              const resultModel = buffer.trim() ? (() => { try { const e = JSON.parse(buffer); return e.model || "claude-cli"; } catch { return "claude-cli"; } })() : "claude-cli";
+              appendCliResponse(ledgerSessionId, ledgerMsgId, fullResponseText, {
+                model: resultModel,
+                cost: resultCost,
+                duration: resultDuration,
+                tools: toolEvents,
+              });
+              log.info(`[cli-ledger] Response recorded in session ${ledgerSessionId} (${fullResponseText.length} chars, ${toolEvents.length} tools)`);
+            } catch (ledgerErr) {
+              log.error("[cli-ledger] Failed to record response:", ledgerErr.message);
+            }
 
             // Skill learning pipeline — extract skills from conversation (non-blocking)
             const conversationForSkills = `User: ${message}\n\nAssistant: ${fullResponseText}`;
@@ -4448,6 +4502,25 @@ async function requestHandler(req, res) {
 
             // Feedback pipeline — report conversation to MIB + Shre + Ellie
             feedbackPipeline.reportKnowledgeLearned("conversation", fullResponseText.slice(0, 200), `chat:${agent}`).catch(() => {});
+
+            // Auto-detect plan in CLI output — notify frontend for handoff option
+            try {
+              const extractedPlan = extractStructuredPlan(fullResponseText);
+              if (extractedPlan.length >= 2) {
+                // CLI produced a plan with 2+ tasks — notify frontend
+                res.write(`data: ${JSON.stringify({
+                  type: "plan_detected",
+                  tasks: extractedPlan.slice(0, 20),
+                  taskCount: extractedPlan.length,
+                  ledgerSessionId: ledgerSessionId,
+                  message: `Plan detected with ${extractedPlan.length} tasks. Hand off to agents?`,
+                })}\n\n`);
+                log.info("[cli-handoff] Plan detected in CLI output", {
+                  taskCount: extractedPlan.length,
+                  ledgerSessionId,
+                });
+              }
+            } catch { /* plan extraction is optional */ }
           }
 
           releaseSlot();

@@ -30,7 +30,7 @@ export default defineConfig({
   fullyParallel: true,
   workers: 4,
   use: {
-    baseURL: 'https://localhost:5510',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5510',
     headless: true,
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',

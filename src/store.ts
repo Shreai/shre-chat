@@ -772,6 +772,8 @@ export interface AppState {
   replyToIndex: number | null;
   userProfile: UserProfile | null;
   claudeCliMode: boolean; // When true, coding messages auto-route to Claude CLI execution
+  cliLedgerSessionId: string | null; // Active CLI ledger session ID
+  cliSummaryMode: Record<string, 'full' | 'summary'>; // Per-message view mode toggle
   // drafts now live in a ref (App.tsx) — no re-render on keystrokes
 }
 
@@ -1313,6 +1315,9 @@ export interface AppActions {
   setReplyTo: (index: number | null) => void;
   getOrCreateVoiceSession: (agentId: string) => string;
   setClaudeCliMode: (on: boolean) => void;
+  setCliLedgerSessionId: (id: string | null) => void;
+  toggleCliSummaryMode: (messageId: string) => void;
+  getCliSummaryMode: (messageId: string) => 'full' | 'summary';
   logout?: () => void;
 }
 

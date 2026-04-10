@@ -30,8 +30,12 @@ test.describe('Voice Features', () => {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('#shre-chat-textarea', { timeout: 15_000 });
 
-      // Voice mode toggle button (continuous voice conversation)
-      const voiceModeBtn = page.locator('button[title*="voice mode" i], button[aria-label*="voice mode" i]');
+      // Voice mode/chat button — actual labels: "Voice chat", "Open voice chat", "Realtime voice"
+      const voiceModeBtn = page.locator(
+        'button[title*="voice mode" i], button[aria-label*="voice mode" i], ' +
+        'button[title*="Voice chat" i], button[aria-label*="voice chat" i], ' +
+        'button[title*="Realtime voice" i], button[aria-label*="Realtime voice" i]'
+      );
       await expect(voiceModeBtn.first()).toBeVisible({ timeout: 5000 });
     });
 
@@ -64,7 +68,11 @@ test.describe('Voice Features', () => {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('#shre-chat-textarea', { timeout: 15_000 });
 
-      const voiceModeBtn = page.locator('button[title*="voice mode" i], button[aria-label*="voice mode" i]');
+      const voiceModeBtn = page.locator(
+        'button[title*="voice mode" i], button[aria-label*="voice mode" i], ' +
+        'button[title*="Voice chat" i], button[aria-label*="voice chat" i], ' +
+        'button[title*="Realtime voice" i], button[aria-label*="Realtime voice" i]'
+      );
       if (await voiceModeBtn.count() === 0) {
         test.skip(true, 'Voice mode button not found');
         return;

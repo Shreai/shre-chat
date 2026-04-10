@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://localhost:5510';
+const BASE = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5510';
 const LIVE_SERVER = 'http://127.0.0.1:8899';
 
 test.describe('Agent 10: Write Operations — POS item create, price update, stock adjust', () => {

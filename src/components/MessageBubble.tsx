@@ -130,6 +130,51 @@ const MessageBubble = memo(function MessageBubble({
   const [routeExpanded, setRouteExpanded] = useState(false);
   const [annotationEditing, setAnnotationEditing] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState(message.annotation || '');
+
+  // CLI Ledger: summary/full toggle for CLI responses
+  const isCliResponse = !isUser && (message.meta?.route === 'cli' || message.meta?.route === 'claude-cli');
+  const [summaryViewMode, setSummaryViewMode] = useState<'full' | 'summary'>('full');
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  const loadSummary = useCallback(async () => {
+    if (summaryText) {
+      setSummaryViewMode('summary');
+      return;
+    }
+    setSummaryLoading(true);
+    try {
+      const ledgerSessionId = message.meta?.ledgerSessionId;
+      if (!ledgerSessionId) {
+        // Fallback: generate summary client-side (first 500 chars)
+        setSummaryText(displayContent.slice(0, 500) + (displayContent.length > 500 ? '...' : ''));
+        setSummaryViewMode('summary');
+        return;
+      }
+      const res = await fetch(`/api/cli/sessions/${ledgerSessionId}/summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ responseId: message.id || 'unknown', content: displayContent }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSummaryText(data.summary);
+        setSummaryViewMode('summary');
+      }
+    } catch {
+      setSummaryText(displayContent.slice(0, 500) + '...');
+      setSummaryViewMode('summary');
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [displayContent, message.meta?.ledgerSessionId, message.id, summaryText]);
+
+  // Use summary text when in summary mode, otherwise full content
+  const effectiveContent = isCliResponse && summaryViewMode === 'summary' && summaryText
+    ? summaryText
+    : displayContent;
+
   const meta = message.meta;
   const shortModel = meta?.model
     ? meta.model
@@ -267,7 +312,7 @@ const MessageBubble = memo(function MessageBubble({
             </div>
           ) : streaming ? (
             (() => {
-              const { stable, pending } = splitStableAndPending(displayContent);
+              const { stable, pending } = splitStableAndPending(effectiveContent);
               return (
                 <div className="prose-chat break-words">
                   <StableMarkdownBlock text={stable} />
@@ -286,7 +331,7 @@ const MessageBubble = memo(function MessageBubble({
           ) : (
             <div className="prose-chat break-words">
               <Suspense fallback={null}>
-                <DataCard content={displayContent} />
+                <DataCard content={effectiveContent} />
               </Suspense>
               <Markdown
                 remarkPlugins={[remarkGfm]}
@@ -442,7 +487,7 @@ const MessageBubble = memo(function MessageBubble({
                   },
                 }}
               >
-                {displayContent}
+                {effectiveContent}
               </Markdown>
               <ActionTagChips tags={actionTags} />
               {!isUser && meta?.taskId && (
@@ -486,6 +531,47 @@ const MessageBubble = memo(function MessageBubble({
             </div>
           )}
         </div>
+        {/* CLI Summary/Full toggle */}
+        {isCliResponse && !streaming && displayContent.length > 300 && (
+          <div className="flex items-center gap-1 mt-1 px-1">
+            <button
+              onClick={() => {
+                if (summaryViewMode === 'full') {
+                  loadSummary();
+                } else {
+                  setSummaryViewMode('full');
+                }
+              }}
+              disabled={summaryLoading}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-150 hover:brightness-110"
+              style={{
+                background: summaryViewMode === 'summary' ? 'rgba(139,92,246,0.15)' : 'rgba(107,114,128,0.1)',
+                color: summaryViewMode === 'summary' ? 'rgb(167,139,250)' : 'var(--c-text-2)',
+                border: `1px solid ${summaryViewMode === 'summary' ? 'rgba(139,92,246,0.25)' : 'rgba(107,114,128,0.15)'}`,
+              }}
+              title={summaryViewMode === 'full' ? 'Show summary' : 'Show full response'}
+            >
+              {summaryLoading ? (
+                <span>Summarizing...</span>
+              ) : summaryViewMode === 'full' ? (
+                <>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path d="M2 4h12v1H2V4zm0 3h8v1H2V7zm0 3h10v1H2v-1z" /></svg>
+                  Summary
+                </>
+              ) : (
+                <>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path d="M2 4h12v1H2V4zm0 3h12v1H2V7zm0 3h12v1H2v-1z" /></svg>
+                  Full Response
+                </>
+              )}
+            </button>
+            {message.meta?.ledgerSessionId && (
+              <span className="text-[9px]" style={{ color: 'var(--c-text-3)' }} title={`Session: ${message.meta.ledgerSessionId}`}>
+                Ledger
+              </span>
+            )}
+          </div>
+        )}
         {/* Agent routing metadata */}
         {!isUser && !streaming && meta && shortModel && (
           <div className="flex items-center gap-1 mt-0.5 px-1">
