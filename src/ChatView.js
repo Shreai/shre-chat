@@ -1,0 +1,688 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { ProcessBar, ProcessDetail, useProcessRun } from './components/process-bar';
+import { useApp, generateTitle, getAgent, AGENTS } from './store';
+const TerminalView = lazy(() => import('./TerminalView').then((m) => ({ default: m.TerminalView })));
+const VoiceAssistant = lazy(() => import('./VoiceAssistant'));
+const RealtimeVoiceOverlay = lazy(() => import('./components/RealtimeVoiceOverlay').then((m) => ({ default: m.RealtimeVoiceOverlay })));
+// ContentCard lazy import moved to PreviewPanel component
+// Extracted modules
+import { getModelOverride, setModelOverride } from './chat-utils';
+import { Lightbox } from './components/MessageBubble';
+import { ViewErrorBoundary } from './ViewErrorBoundary';
+import { useVoiceRecording } from './hooks/useVoiceRecording';
+import { useWakeWord } from './hooks/useWakeWord';
+import { useStreamState } from './hooks/useStreamState';
+import { useChatSearch } from './hooks/useChatSearch';
+import { useGatewayConnection } from './hooks/useGatewayConnection';
+// Extracted custom hooks
+import { useSlashCommands } from './hooks/useSlashCommands';
+import { useMentions } from './hooks/useMentions';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useVoiceHandlers } from './hooks/useVoiceHandlers';
+import { useChatEffects } from './hooks/useChatEffects';
+import { useMessageHandlers } from './hooks/useMessageHandlers';
+import { useTaskTracker } from './hooks/useTaskTracker';
+import { TaskPanel, TaskIndicatorButton } from './components/TaskPanel';
+import { useFileHandling } from './hooks/useFileHandling';
+import { useHeaderActions } from './hooks/useHeaderActions';
+import { useMessageListHandlers } from './hooks/useMessageListHandlers';
+import { useFilteredMessages } from './hooks/useFilteredMessages';
+import { useModelList } from './hooks/useModelList';
+import { useEscalationListener } from './hooks/useEscalationListener';
+// Extracted UI components
+import { ShortcutsOverlay } from './components/ShortcutsOverlay';
+import { MessageQueue } from './components/MessageQueue';
+import { MessageList } from './components/MessageList';
+import { ChatComposer } from './components/ChatComposer';
+import { CompareView } from './components/CompareView';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { ShareSnapshotView } from './components/ShareSnapshotView';
+import { SuggestionsBar } from './components/SuggestionsBar';
+import { ViewTabs } from './components/ViewTabs';
+import { PreviewPanel } from './components/PreviewPanel';
+import { DragOverlay } from './components/DragOverlay';
+import { ChatPanels } from './components/ChatPanels';
+import { TrialBanner } from './components/TrialBanner';
+import { useChatKeydown } from './hooks/useChatKeydown';
+// ── Helpers, sub-components, and constants moved to:
+//    ./chat-utils.ts, ./components/MessageBubble.tsx,
+//    ./components/WelcomeScreen.tsx, ./components/LinkPreview.tsx
+export function ChatView() {
+    const { state, actions } = useApp();
+    const { sessions, activeSessionId, activeAgentId, openTabs, streaming, streamText, statusLine, gatewayUp, syncing, view, } = state;
+    const [input, setInput] = useState(() => {
+        // Check for ?prompt= URL parameter (from MIB007 "Discuss with Shre" link)
+        try {
+            const urlPrompt = new URLSearchParams(window.location.search).get('prompt');
+            if (urlPrompt) {
+                // Clean the URL to prevent re-triggering
+                window.history.replaceState({}, '', window.location.pathname);
+                return urlPrompt;
+            }
+        }
+        catch (err) {
+            console.debug('URL prompt parse', err);
+        }
+        if (activeSessionId)
+            return actions.getDraft(activeSessionId);
+        return '';
+    });
+    const [showApps, setShowApps] = useState(false);
+    const [showHeaderMore, setShowHeaderMore] = useState(false);
+    const headerMoreRef = useRef(null);
+    const [lightboxSrc, setLightboxSrc] = useState(null);
+    const [editingTabId, setEditingTabId] = useState(null);
+    const [editingTabText, setEditingTabText] = useState('');
+    const [editingMsgIndex, setEditingMsgIndex] = useState(null);
+    const [editingMsgText, setEditingMsgText] = useState('');
+    const [selectedMsgIndex, setSelectedMsgIndex] = useState(null);
+    const [branchToast, setBranchToast] = useState(false);
+    // ── Keyboard shortcuts overlay (Cmd+?) ──────────────────────────────
+    const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const pendingEditSendRef = useRef(false);
+    const setCliContinueRef = useRef(() => { });
+    // ── Stream state (extracted hook) ──
+    const { streamStall, setStreamStall, stallCountdown, setStallCountdown, streamElapsed, setStreamElapsed, streamPhase, setStreamPhase, compacting, setCompacting, activeToolName, setActiveToolName, pendingApproval, setPendingApproval, streamStartRef, sendTimeRef, firstTokenTimeRef, subscribeStreamStall, } = useStreamState(streaming);
+    // Process bar
+    const { runs, activeRun, startRun, addStep, updateStep, completeRun } = useProcessRun();
+    const [processDetailOpen, setProcessDetailOpen] = useState(false);
+    const [highlightStepId, setHighlightStepId] = useState();
+    const processStepRef = useRef('');
+    const processRunIdRef = useRef('');
+    const [showEmoji, setShowEmoji] = useState(false);
+    // ── Voice recording (extracted hook) ──
+    const { isRecording, setIsRecording, voicePhase, setVoicePhase, interimTranscript, setInterimTranscript, audioLevel, setAudioLevel, recordingDuration, setRecordingDuration, isSpeaking, setIsSpeaking, voiceAnnouncement, setVoiceAnnouncement, voiceAssistantOpen, setVoiceAssistantOpen, isHandsFree, setIsHandsFree, voiceMode, setVoiceMode, ttsVoice, setTtsVoice, ttsProvider, setTtsProvider, speechSupported, analyserRef, audioCtxRef, levelRafRef, recordingTimerRef, interimTranscriptRef, audioLevelRawRef, voiceSessionIdRef, voiceFinalTranscriptRef, levelThrottleRef, silenceStartRef, isHandsFreeRef, lastSpokenMsgRef, SILENCE_THRESHOLD, SILENCE_TIMEOUT_MS, hasSpeechRecognition, clearInterimAfter, cleanupAudioLevel, } = useVoiceRecording();
+    // ── Wake word listener (extracted hook) ──
+    useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen);
+    // ── Realtime full-duplex voice overlay ──
+    const [realtimeVoiceOpen, setRealtimeVoiceOpen] = useState(false);
+    // ── Dedicated voice session (isolated from chat) ──
+    const [voiceSessionId, setVoiceSessionId] = useState(null);
+    useEffect(() => {
+        if (voiceAssistantOpen && !voiceSessionId) {
+            const id = actions.getOrCreateVoiceSession(activeAgentId);
+            setVoiceSessionId(id);
+        }
+    }, [voiceAssistantOpen, voiceSessionId, actions, activeAgentId]);
+    const voiceSession = sessions.find((s) => s.id === voiceSessionId);
+    const voiceMessages = voiceSession?.messages || [];
+    // ── Conversation task loop (unified: polling + WS real-time) ──
+    const { tasks: sessionTasks, activeTasks, latestTask, selectedTask, selectedTaskId, setSelectedTaskId, updateTask, fetchSubtasks, fetchTrace, } = useTaskTracker({ sessionId: activeSessionId });
+    // ── Escalation visibility (Ellie escalation WS events → chat) ──
+    useEscalationListener({ activeSessionId, addMessage: actions.addMessage });
+    const [showModelPicker, setShowModelPicker] = useState(false);
+    const [selectedModel, setSelectedModel] = useState(() => getModelOverride(activeAgentId));
+    // ── Dynamic model list from shre-router (extracted hook) ──
+    const { dynamicModels, setDynamicModels, routerUp, setRouterUp, AVAILABLE_MODELS, MODEL_CONTEXT_LIMITS, } = useModelList();
+    const [cliMode, setCliMode] = useState(() => {
+        const stored = localStorage.getItem('shre-cli-mode-default');
+        return stored === 'true'; // Default OFF — user enables via /cli or button
+    });
+    // ── Claude CLI mode (auto-route coding tasks to Claude CLI) ──
+    const [claudeCliMode, setClaudeCliMode] = useState(() => {
+        const stored = localStorage.getItem('shre-claude-cli-mode');
+        return stored === 'true';
+    });
+    // ── Identity verification gate ──────────────────────────────────────
+    const [identityVerified, setIdentityVerified] = useState(true); // Gate disabled — only enforce for CLI/sensitive ops
+    const [pendingMessage, setPendingMessage] = useState(null);
+    const [verifying, setVerifying] = useState(false);
+    const [showTerminal, setShowTerminal] = useState(false);
+    const [suggestions, setSuggestions] = useState([]);
+    const [termViewMode, setTermViewMode] = useState('split');
+    const [activeView, setActiveView] = useState('chat'); // "chat" | "terminal" | "preview"
+    const [previewContent, setPreviewContent] = useState(null);
+    // ── Shared view (read-only snapshot from /shared/:id) ─────────────
+    const [sharedSnapshot, setSharedSnapshot] = useState(null);
+    const [sharedLoading, setSharedLoading] = useState(false);
+    const [sharedError, setSharedError] = useState(null);
+    // ── Compare mode ──────────────────────────────────────────────────
+    const [compareModels, setCompareModels] = useState([]);
+    const [compareStreams, setCompareStreams] = useState({});
+    const [compareWinner, setCompareWinner] = useState(null);
+    const comparePickerRef = useRef(null);
+    const terminalRef = useRef(null);
+    const modelPickerRef = useRef(null);
+    const scrollRef = useRef(null);
+    const inputRef = useRef(null);
+    const importInputRef = useRef(null);
+    const abortRef = useRef(null);
+    const sendingRef = useRef(false); // true while handleSend is executing — prevents cleanup abort on ensureSession switch
+    const emojiRef = useRef(null);
+    // Streaming buffer — batch token updates to reduce re-renders
+    const streamBufferRef = useRef('');
+    const streamFlushRaf = useRef(null);
+    const flushStreamBuffer = useCallback(() => {
+        if (streamBufferRef.current) {
+            actions.setStreamText(streamBufferRef.current);
+        }
+        streamFlushRaf.current = null;
+    }, [actions]);
+    const bufferToken = useCallback((fullText) => {
+        streamBufferRef.current = fullText;
+        if (!streamFlushRaf.current) {
+            streamFlushRaf.current = requestAnimationFrame(flushStreamBuffer);
+        }
+    }, [flushStreamBuffer]);
+    // Cleanup buffer RAF on unmount
+    useEffect(() => {
+        return () => {
+            if (streamFlushRaf.current)
+                cancelAnimationFrame(streamFlushRaf.current);
+        };
+    }, []);
+    const currentAgent = getAgent(activeAgentId);
+    const activeSession = sessions.find((s) => s.id === activeSessionId);
+    const messages = activeSession?.messages ?? [];
+    const userName = state.userProfile?.name?.split(' ')[0] || 'You';
+    // ── File handling (extracted hook) ──
+    const { pendingFiles, setPendingFiles, isDragging, fileRef, MAX_FILE_SIZE, handleFileSelect, handleDragOver, handleDragEnter, handleDragLeave, handleDrop, removePendingFile, handlePaste, } = useFileHandling({
+        activeSessionId,
+        activeSessionTitle: activeSession?.title,
+        activeAgentId,
+        actions,
+    });
+    // ── Header actions (extracted hook) ──
+    const { routerMode, setRouterMode, gatewayMode, handleSetGatewayMode, compareMode, setCompareMode, comparePickerOpen, setComparePickerOpen, showSystemPrompt, setShowSystemPrompt, systemPromptDraft, setSystemPromptDraft, summarizing, showSummary, setShowSummary, summaryText, showAnalytics, setShowAnalytics, shareUrl, setShareUrl, shareLoading, shareCopied, setShareCopied, notifSound, setNotifSound, handleToggleRouterMode, handleToggleCompare, handleOpenSystemPrompt, handleToggleNotifSound, handleSummarize, handleShare, handleCopyMarkdown, handleDownloadMd, handleDownloadJson, handleSaveSystemPrompt, } = useHeaderActions({
+        activeSessionId,
+        activeSession,
+        messages,
+        userName,
+        currentAgentName: currentAgent.name,
+        currentAgentId: currentAgent.id,
+        actions,
+    });
+    // gatewayMode is now synced via Zustand preferences store — no localStorage listener needed
+    // ── Filtered messages + virtualizer (extracted hook) ──
+    const { filteredMessages, lastAssistantMessage, getRunForMessage, useVirtual, virtualizer } = useFilteredMessages({ messages, latestTask, runs, scrollRef });
+    // ── Chat search (extracted hook) ──
+    const { globalSearchOpen, setGlobalSearchOpen, globalSearchQuery, setGlobalSearchQuery, globalSearchResults, setGlobalSearchResults, globalSearching, setGlobalSearching, globalSearchRef, chatSearchOpen, setChatSearchOpen, chatSearch, setChatSearch, chatSearchIndex, setChatSearchIndex, chatSearchRef, chatSearchResults, chatSearchNavigate, closeChatSearch, } = useChatSearch(filteredMessages, virtualizer);
+    // ── Gateway connection (extracted hook) ──
+    const { wsConnected, setWsConnected, wsFailed, setWsFailed, wsStateInfo, setWsStateInfo, wsReconnecting, setWsReconnecting, wsBannerFlash, setWsBannerFlash, offlineQueue, setOfflineQueue, } = useGatewayConnection(subscribeStreamStall);
+    // ── Chat effects (extracted hook) ──
+    const { scrollPositionsRef, prevMsgCount, newMsgStartIndex, initialLoadDone, showJumpToLatest, setShowJumpToLatest, userNearBottomRef, handleScroll, jumpToLatest, pullRefreshing, pullDistance, handlePullStart, handlePullMove, handlePullEnd, PULL_THRESHOLD, sentHistoryRef, sentHistoryIdxRef, HISTORY_MAX, HISTORY_KEY, recentWSSendRef, } = useChatEffects({
+        activeSessionId,
+        activeAgentId,
+        streaming,
+        streamText,
+        sessions,
+        messages,
+        filteredMessages,
+        actions,
+        scrollRef,
+        inputRef,
+        streamFlushRaf,
+        streamBufferRef,
+        sendingRef,
+        abortRef,
+        setInput,
+        setSelectedModel,
+        setDynamicModels,
+        setRouterUp,
+        setCompareModels,
+        showEmoji,
+        setShowEmoji,
+        emojiRef,
+        showModelPicker,
+        setShowModelPicker,
+        modelPickerRef,
+        comparePickerOpen,
+        setComparePickerOpen,
+        comparePickerRef,
+        setShareUrl,
+        setSharedSnapshot,
+        setSharedLoading,
+        setSharedError,
+        generateTitle,
+        virtualizer,
+    });
+    const ensureSession = useCallback(() => {
+        if (activeSessionId)
+            return activeSessionId;
+        const id = actions.newSession();
+        actions.switchSession(id);
+        return id;
+    }, [activeSessionId, actions]);
+    // ── Slash commands (extracted hook) ──
+    const { SLASH_COMMANDS, slashOpen, setSlashOpen, slashIndex, setSlashIndex, slashRef, slashFiltered, executeSlashCommand, } = useSlashCommands({
+        input,
+        setInput,
+        activeSessionId,
+        activeAgentId,
+        activeSession,
+        messages,
+        actions,
+        stateCompact: state.compact,
+        cliMode,
+        setCliMode,
+        setCliContinue: (v) => {
+            setCliContinueRef.current(v);
+        },
+        ensureSession,
+        AVAILABLE_MODELS,
+        setSelectedModel,
+        setModelOverride,
+    });
+    // ── @@ Mentions (extracted hook) ──
+    const { mentionOpen, setMentionOpen, mentionIndex, setMentionIndex, mentionRef, mentionFiltered, mentionAgent, clearMention, onMentionSelect, extractMention, } = useMentions({
+        input,
+        setInput,
+        agents: AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, group: a.group })),
+        inputRef,
+    });
+    // ── Message handlers (extracted hook) ──
+    const { handleSend, handleSendRef, sendFeedbackToRapidRMS, queue, setQueue, editingQueueId, setEditingQueueId, editingQueueText, setEditingQueueText, setCliContinue, pendingSuggestionSendRef, } = useMessageHandlers({
+        input,
+        setInput,
+        streaming,
+        syncing,
+        writeEnabled: state.writeEnabled,
+        activeSessionId,
+        activeAgentId,
+        sessions,
+        messages,
+        filteredMessages,
+        actions,
+        replyToIndex: state.replyToIndex,
+        pendingFiles,
+        setPendingFiles,
+        selectedModel,
+        compareMode,
+        compareModels,
+        setCompareStreams,
+        setCompareWinner,
+        cliMode,
+        routerMode,
+        directMode: gatewayMode === 'direct',
+        claudeCliMode,
+        identityVerified,
+        setIdentityVerified,
+        pendingMessage,
+        setPendingMessage,
+        verifying,
+        setVerifying,
+        ensureSession,
+        executeSlashCommand,
+        extractMention,
+        clearMention,
+        setStreamPhase,
+        setActiveToolName,
+        setCompacting,
+        setPendingApproval,
+        streamStartRef,
+        sendTimeRef,
+        firstTokenTimeRef,
+        startRun,
+        addStep,
+        updateStep,
+        completeRun,
+        processStepRef,
+        processRunIdRef,
+        abortRef,
+        sendingRef,
+        streamBufferRef,
+        streamFlushRaf,
+        bufferToken,
+        flushStreamBuffer,
+        voiceFinalTranscriptRef,
+        pendingEditSendRef,
+        wsConnected,
+        wsReconnecting,
+        recentWSSendRef,
+        virtualizer,
+        userNearBottomRef,
+        setShowJumpToLatest,
+        setSuggestions,
+        setSelectedMsgIndex,
+        voiceMode,
+    });
+    // Wire the real setCliContinue into the ref so useSlashCommands can call it
+    setCliContinueRef.current = setCliContinue;
+    // ── Voice handlers (extracted hook) ──
+    const { startRecording, stopRecording, ttsAudioRef } = useVoiceHandlers({
+        setInput,
+        setIsRecording,
+        setVoicePhase,
+        setInterimTranscript,
+        setAudioLevel,
+        setRecordingDuration,
+        setIsSpeaking,
+        voiceSessionIdRef,
+        voiceFinalTranscriptRef,
+        audioCtxRef,
+        analyserRef,
+        levelRafRef,
+        recordingTimerRef,
+        interimTranscriptRef,
+        audioLevelRawRef,
+        levelThrottleRef,
+        silenceStartRef,
+        lastSpokenMsgRef,
+        isHandsFreeRef,
+        SILENCE_THRESHOLD,
+        SILENCE_TIMEOUT_MS,
+        clearInterimAfter,
+        cleanupAudioLevel,
+        isHandsFree,
+        isRecording,
+        voiceMode,
+        setVoiceMode,
+        ttsVoice,
+        ttsProvider,
+        streaming,
+        messages,
+        handleSendRef,
+    });
+    // ── Header mic → ChatComposer push-to-talk bridge ──
+    useEffect(() => {
+        const onMicStart = () => { startRecording(); };
+        const onMicStop = () => { stopRecording(); };
+        window.addEventListener('shre-mic-start', onMicStart);
+        window.addEventListener('shre-mic-stop', onMicStop);
+        return () => {
+            window.removeEventListener('shre-mic-start', onMicStart);
+            window.removeEventListener('shre-mic-stop', onMicStop);
+        };
+    }, [startRecording, stopRecording]);
+    // ── Keyboard shortcuts (extracted hook) ──
+    const { handleAbort } = useKeyboardShortcuts({
+        streaming,
+        wsConnected,
+        activeAgentId,
+        activeSessionId,
+        messages,
+        filteredMessages,
+        selectedMsgIndex,
+        setSelectedMsgIndex,
+        chatSearchOpen,
+        setChatSearchOpen,
+        chatSearchRef,
+        closeChatSearch,
+        globalSearchOpen,
+        setGlobalSearchOpen,
+        globalSearchRef,
+        shortcutsOpen,
+        setShortcutsOpen,
+        showModelPicker,
+        setShowModelPicker,
+        abortRef,
+        inputRef,
+        pendingEditSendRef,
+        setInput,
+        setEditingMsgIndex,
+        setEditingMsgText,
+        actions,
+        virtualizer,
+    });
+    // ── Textarea keydown handler (extracted hook) ──────────────────────
+    const handleKeyDown = useChatKeydown({
+        slashOpen,
+        slashFiltered,
+        slashIndex,
+        setSlashIndex,
+        setSlashOpen,
+        executeSlashCommand,
+        mentionOpen,
+        mentionFiltered,
+        mentionIndex,
+        setMentionIndex,
+        setMentionOpen,
+        onMentionSelect,
+        editingQueueId,
+        setEditingQueueId,
+        setEditingQueueText,
+        editingMsgIndex,
+        setEditingMsgIndex,
+        setEditingMsgText,
+        input,
+        setInput,
+        setQueue,
+        messages,
+        activeSessionId,
+        replaceSessionMessages: actions.replaceSessionMessages,
+        handleSend,
+        sentHistoryRef,
+        sentHistoryIdxRef,
+        HISTORY_KEY,
+    });
+    // Force tab mode on mobile — split mode is unusable on small screens
+    // Reactive: updates on viewport resize (fold/unfold, orientation change, reconnect)
+    const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+    useEffect(() => {
+        const onResize = () => {
+            const nowMobile = window.innerWidth <= 768;
+            setIsMobileLayout((wasMobile) => {
+                // Transitioning to mobile while terminal is open: switch activeView to terminal
+                // so the tab-mode display shows the terminal panel (not chat)
+                if (nowMobile && !wasMobile && showTerminal) {
+                    setActiveView('terminal');
+                }
+                return nowMobile;
+            });
+        };
+        window.addEventListener('resize', onResize);
+        const vv = window.visualViewport;
+        if (vv)
+            vv.addEventListener('resize', onResize);
+        return () => {
+            window.removeEventListener('resize', onResize);
+            if (vv)
+                vv.removeEventListener('resize', onResize);
+        };
+    }, [showTerminal]);
+    const isTabMode = (isMobileLayout || termViewMode === 'tabs') && (showTerminal || activeView === 'preview');
+    // When entering tab mode with terminal open, force activeView to 'terminal'.
+    // This catches the race between setShowTerminal(true) and setActiveView('terminal')
+    // that occurs on mobile toggle, fold/unfold, and orientation changes.
+    // Only fires on isTabMode transitions (not when user switches tabs).
+    const prevIsTabMode = useRef(false);
+    useEffect(() => {
+        if (isTabMode && !prevIsTabMode.current && showTerminal) {
+            setActiveView('terminal');
+        }
+        prevIsTabMode.current = isTabMode;
+    }, [isTabMode, showTerminal]);
+    const showChat = !isTabMode || activeView === 'chat';
+    const showTermPanel = showTerminal && (!isTabMode || activeView === 'terminal');
+    const showPreviewPanel = isTabMode && activeView === 'preview' && previewContent;
+    // Handler for content block expand (lego blocks)
+    const handleContentExpand = useCallback((content, type, title) => {
+        setPreviewContent({ content, type, title });
+        setActiveView('preview');
+        if (termViewMode !== 'tabs')
+            setTermViewMode('tabs');
+    }, [termViewMode]);
+    // ── MessageList handlers (extracted hook) ──
+    const messageListHandlers = useMessageListHandlers({
+        activeSessionId,
+        messages,
+        filteredMessages,
+        actions,
+        setInput,
+        setEditingMsgIndex,
+        setEditingMsgText,
+        setBranchToast,
+        setShowTerminal,
+        setPendingApproval,
+        pendingEditSendRef,
+        inputRef,
+        terminalRef,
+        setLightboxSrc,
+        sendFeedbackToRapidRMS,
+        handleContentExpand,
+    });
+    // ── Shared snapshot view (read-only) ──────────────────────────────
+    if (sharedSnapshot || sharedLoading || sharedError) {
+        return (_jsx(ShareSnapshotView, { snapshot: sharedSnapshot, loading: sharedLoading, error: sharedError }));
+    }
+    return (_jsxs("main", { className: "flex-1 flex flex-col min-h-0 min-w-0 relative", onDragOver: handleDragOver, onDragEnter: handleDragEnter, onDragLeave: handleDragLeave, onDrop: handleDrop, children: [lightboxSrc && _jsx(Lightbox, { src: lightboxSrc, onClose: () => setLightboxSrc(null) }), branchToast && (_jsx("div", { className: "fixed left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-xs font-medium shadow-lg", style: {
+                    bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+                    background: 'var(--c-bg-card)',
+                    color: 'var(--c-text-1)',
+                    border: '1px solid var(--c-accent)',
+                    animation: 'branchToastIn 0.2s ease-out',
+                }, children: "Conversation branched" })), _jsx("style", { children: `@keyframes branchToastIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }` }), isDragging && _jsx(DragOverlay, {}), _jsx("div", { className: "shre-drag shrink-0 titlebar-safe", style: { background: 'var(--c-bg-glass)' } }), isTabMode && (_jsx(ViewTabs, { activeView: activeView, setActiveView: setActiveView, setTermViewMode: setTermViewMode, previewContent: previewContent })), _jsx("div", { className: isTabMode ? 'flex-1 min-h-0' : 'shrink-0', style: {
+                    ...(isTabMode
+                        ? {}
+                        : { height: '40%', minHeight: isMobileLayout ? 140 : 200, borderBottom: '2px solid rgba(255,255,255,0.1)' }),
+                    display: (isTabMode ? showTermPanel : showTerminal)
+                        ? isTabMode
+                            ? 'flex'
+                            : 'block'
+                        : 'none',
+                    // In tab mode, flex column so TerminalView fills full width
+                    ...(isTabMode ? { flexDirection: 'column' } : {}),
+                }, children: _jsx(ViewErrorBoundary, { viewName: "Terminal", children: _jsx(Suspense, { fallback: _jsx("div", { className: "flex-1 flex items-center justify-center", style: { background: 'var(--c-bg-1)', color: 'var(--c-text-4)' }, children: "Loading terminal..." }), children: _jsx(TerminalView, { ref: terminalRef, visible: showTerminal, onClose: () => {
+                                setShowTerminal(false);
+                                setActiveView('chat');
+                            } }) }) }) }), showPreviewPanel && previewContent && (_jsx(PreviewPanel, { content: previewContent, onClose: () => {
+                    setPreviewContent(null);
+                    setActiveView('chat');
+                } })), showChat && (_jsxs("div", { className: "flex-1 flex min-h-0 min-w-0 overflow-hidden", children: [_jsxs("div", { className: "flex-1 flex flex-col min-h-0 min-w-0", children: [_jsx(TrialBanner, {}), activeTasks.length > 0 && (_jsxs("div", { className: "flex items-center px-4 py-1 shrink-0", style: { borderBottom: '1px solid var(--c-border-2)' }, children: [_jsx(TaskIndicatorButton, { activeTasks: activeTasks, onClick: () => setSelectedTaskId(activeTasks[0]?.id ?? null) }), _jsx("span", { className: "ml-2 text-[11px]", style: { color: 'var(--c-text-4)' }, children: activeTasks.filter(t => t.status === 'in_progress').length > 0
+                                            ? `${activeTasks.filter(t => t.status === 'in_progress').length} running`
+                                            : `${activeTasks.length} pending` })] })), _jsx(ChatPanels, { sessions: sessions, activeSessionId: activeSessionId, activeSession: activeSession, activeAgentId: activeAgentId, editingTabId: editingTabId, editingTabText: editingTabText, setEditingTabId: setEditingTabId, setEditingTabText: setEditingTabText, cliMode: cliMode, actions: actions, showModelPicker: showModelPicker, setShowModelPicker: setShowModelPicker, selectedModel: selectedModel, setSelectedModel: setSelectedModel, AVAILABLE_MODELS: AVAILABLE_MODELS, MODEL_CONTEXT_LIMITS: MODEL_CONTEXT_LIMITS, dynamicModelsCount: dynamicModels.length, currentAgent: currentAgent, modelPickerRef: modelPickerRef, ensureSession: ensureSession, ttsProvider: ttsProvider, setTtsProvider: setTtsProvider, onOpenVoiceChat: () => setVoiceAssistantOpen(true), onOpenRealtimeVoice: () => setRealtimeVoiceOpen(true), showHeaderMore: showHeaderMore, setShowHeaderMore: setShowHeaderMore, headerMoreRef: headerMoreRef, routerMode: routerMode, handleToggleRouterMode: handleToggleRouterMode, gatewayMode: gatewayMode, handleSetGatewayMode: handleSetGatewayMode, compareMode: compareMode, compareModels: compareModels, handleToggleCompare: handleToggleCompare, setCompareStreams: setCompareStreams, setCompareWinner: setCompareWinner, comparePickerRef: comparePickerRef, handleOpenSystemPrompt: handleOpenSystemPrompt, compact: state.compact, notifSound: notifSound, handleToggleNotifSound: handleToggleNotifSound, messages: messages, userName: userName, summarizing: summarizing, handleSummarize: handleSummarize, showAnalytics: showAnalytics, setShowAnalytics: setShowAnalytics, handleShare: handleShare, handleCopyMarkdown: handleCopyMarkdown, handleDownloadMd: handleDownloadMd, handleDownloadJson: handleDownloadJson, showApps: showApps, setShowApps: setShowApps, view: view, importInputRef: importInputRef, wsFailed: wsFailed, setWsFailed: setWsFailed, setWsConnected: setWsConnected, shareUrl: shareUrl, shareCopied: shareCopied, setShareCopied: setShareCopied, setShareUrl: setShareUrl, offlineQueue: offlineQueue, selectedModelForContext: selectedModel, chatSearchOpen: chatSearchOpen, chatSearchRef: chatSearchRef, chatSearch: chatSearch, setChatSearch: setChatSearch, closeChatSearch: closeChatSearch, chatSearchNavigate: chatSearchNavigate, chatSearchResults: chatSearchResults, chatSearchIndex: chatSearchIndex, showSystemPrompt: showSystemPrompt, setShowSystemPrompt: setShowSystemPrompt, systemPromptDraft: systemPromptDraft, setSystemPromptDraft: setSystemPromptDraft, handleSaveSystemPrompt: handleSaveSystemPrompt, showSummary: showSummary, setShowSummary: setShowSummary, summaryText: summaryText }), _jsx(MessageList, { filteredMessages: filteredMessages, messages: messages, streaming: streaming, streamText: streamText, syncing: syncing, compact: state.compact, currentAgent: currentAgent, activeAgentId: activeAgentId, userName: userName, activeSessionId: activeSessionId, chatSearchOpen: chatSearchOpen, chatSearch: chatSearch, chatSearchResults: chatSearchResults, chatSearchIndex: chatSearchIndex, selectedMsgIndex: selectedMsgIndex, editingMsgIndex: editingMsgIndex, editingMsgText: editingMsgText, scrollRef: scrollRef, showJumpToLatest: showJumpToLatest, newMsgStartIndex: newMsgStartIndex, pullDistance: pullDistance, pullRefreshing: pullRefreshing, PULL_THRESHOLD: PULL_THRESHOLD, streamStall: streamStall, stallCountdown: stallCountdown, streamElapsed: streamElapsed, streamPhase: streamPhase, activeToolName: activeToolName, compacting: compacting, pendingApproval: pendingApproval, runs: runs, getRunForMessage: getRunForMessage, userProfile: state.userProfile, onScroll: handleScroll, onPullStart: handlePullStart, onPullMove: handlePullMove, onPullEnd: handlePullEnd, onJumpToLatest: jumpToLatest, ...messageListHandlers, virtualizer: virtualizer, useVirtual: useVirtual }), compareMode && (_jsx(CompareView, { compareStreams: compareStreams, compareWinner: compareWinner, availableModels: AVAILABLE_MODELS, activeSessionId: activeSessionId, onPickWinner: (modelId, text) => {
+                                    setCompareWinner(modelId);
+                                    if (activeSessionId) {
+                                        const modelInfo = AVAILABLE_MODELS.find((m) => m.id === modelId);
+                                        actions.addMessage(activeSessionId, {
+                                            role: 'assistant',
+                                            content: text,
+                                            timestamp: Date.now(),
+                                        });
+                                        actions.addActivity(activeSessionId, 'done', `Compare winner: ${modelInfo?.name || modelId}`);
+                                        actions.addFeed(activeSessionId, 'received', `Winner: ${modelInfo?.name || modelId} (${text.length} chars)`, { compare: 'true', model: modelId });
+                                    }
+                                }, onDismiss: () => {
+                                    setCompareStreams({});
+                                    setCompareWinner(null);
+                                } })), processDetailOpen && (_jsx("div", { style: {
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    height: '50%',
+                                    zIndex: 30,
+                                    borderTop: '1px solid var(--c-border-1)',
+                                    background: 'var(--c-bg-main)',
+                                    boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                                }, children: _jsx(ProcessDetail, { run: activeRun ?? runs[runs.length - 1] ?? null, highlightStepId: highlightStepId, onClose: () => setProcessDetailOpen(false) }) })), _jsx(MessageQueue, { queue: queue, editingQueueId: editingQueueId, onReorder: (idx, dir) => setQueue((prev) => {
+                                    const next = [...prev];
+                                    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+                                    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+                                    return next;
+                                }), onEdit: (item) => {
+                                    setEditingQueueId(item.id);
+                                    setEditingQueueText(item.text);
+                                    setInput(item.text);
+                                    setTimeout(() => {
+                                        const ta = document.getElementById('shre-chat-textarea');
+                                        if (ta) {
+                                            ta.focus();
+                                            ta.setSelectionRange(item.text.length, item.text.length);
+                                        }
+                                    }, 50);
+                                }, onRemove: (id) => setQueue((prev) => prev.filter((q) => q.id !== id)) }), _jsx(ProcessBar, { runs: runs, activeRun: activeRun, onStepClick: (_runId, stepId) => {
+                                    setHighlightStepId(stepId);
+                                    setProcessDetailOpen(true);
+                                } }), _jsx(SuggestionsBar, { lastAssistantMessage: lastAssistantMessage, streaming: streaming, messageCount: messages.length, onSelect: (text) => {
+                                    setInput(text);
+                                    pendingSuggestionSendRef.current = true;
+                                } }), _jsx(ChatComposer, { input: input, setInput: setInput, onKeyDown: handleKeyDown, onSend: handleSend, onAbort: handleAbort, streaming: streaming, syncing: syncing, writeEnabled: state.writeEnabled, compareMode: compareMode, compareModelsCount: compareModels.length, cliMode: cliMode, claudeCliMode: claudeCliMode, setClaudeCliMode: (on) => {
+                                    setClaudeCliMode(on);
+                                    localStorage.setItem('shre-claude-cli-mode', String(on));
+                                    // When turning off Claude CLI, also turn off legacy cliMode so
+                                    // the placeholder returns to normal instead of cycling to "subscription mode"
+                                    if (!on && cliMode) {
+                                        setCliMode(false);
+                                        localStorage.setItem('shre-cli-mode-default', 'false');
+                                    }
+                                }, currentAgentName: currentAgent.name, activeSessionId: activeSessionId, messages: messages, inputRef: inputRef, fileRef: fileRef, emojiRef: emojiRef, pendingFiles: pendingFiles, onFileSelect: handleFileSelect, onRemovePendingFile: removePendingFile, onImageClick: setLightboxSrc, onPaste: handlePaste, showEmoji: showEmoji, setShowEmoji: setShowEmoji, isRecording: isRecording, voicePhase: voicePhase, audioLevel: audioLevel, recordingDuration: recordingDuration, isSpeaking: isSpeaking, interimTranscript: interimTranscript, isHandsFree: isHandsFree, voiceMode: voiceMode, ttsVoice: ttsVoice, ttsProvider: ttsProvider, speechSupported: speechSupported, hasSpeechRecognition: hasSpeechRecognition, onStartRecording: startRecording, onStopRecording: stopRecording, setIsHandsFree: setIsHandsFree, setVoiceMode: setVoiceMode, setTtsVoice: setTtsVoice, setTtsProvider: setTtsProvider, onStopTTS: () => {
+                                    if (ttsAudioRef.current) {
+                                        ttsAudioRef.current.pause();
+                                        ttsAudioRef.current = null;
+                                    }
+                                    window.speechSynthesis?.cancel();
+                                    setIsSpeaking(false);
+                                }, showTerminal: showTerminal, termViewMode: termViewMode, onToggleTerminal: () => {
+                                    if (!showTerminal) {
+                                        setShowTerminal(true);
+                                        // On mobile/tab mode, switch to terminal view so the panel is visible
+                                        if (isMobileLayout || termViewMode === 'tabs') {
+                                            setActiveView('terminal');
+                                        }
+                                    }
+                                    else {
+                                        setShowTerminal(false);
+                                        setActiveView('chat');
+                                    }
+                                }, onToggleTermViewMode: () => {
+                                    const next = termViewMode === 'split' ? 'tabs' : 'split';
+                                    setTermViewMode(next);
+                                    if (next === 'tabs')
+                                        setActiveView('chat');
+                                }, slashOpen: slashOpen, slashFiltered: slashFiltered, slashIndex: slashIndex, slashRef: slashRef, setSlashIndex: setSlashIndex, onSlashSelect: (cmd) => {
+                                    const hasArg = slashFiltered.find((c) => c.name === cmd)?.usage.includes('<');
+                                    if (hasArg && !input.includes(' ')) {
+                                        setInput(`/${cmd} `);
+                                    }
+                                    else {
+                                        executeSlashCommand(cmd.startsWith('model ') ? cmd : input.slice(1));
+                                    }
+                                }, mentionOpen: mentionOpen, mentionFiltered: mentionFiltered, mentionIndex: mentionIndex, mentionRef: mentionRef, setMentionIndex: setMentionIndex, onMentionSelect: onMentionSelect, mentionAgent: mentionAgent, replyToIndex: state.replyToIndex, replyToContent: state.replyToIndex !== null
+                                    ? (filteredMessages[state.replyToIndex]?.content ??
+                                        messages[state.replyToIndex]?.content ??
+                                        null)
+                                    : null, onCancelReply: () => actions.setReplyTo(null), editingMsgIndex: editingMsgIndex, editingQueueId: editingQueueId, onCancelEdit: () => {
+                                    if (editingQueueId) {
+                                        setEditingQueueId(null);
+                                        setEditingQueueText('');
+                                    }
+                                    else {
+                                        setEditingMsgIndex(null);
+                                        setEditingMsgText('');
+                                    }
+                                    setInput('');
+                                }, suggestions: suggestions, onSelectSuggestion: (s) => {
+                                    setSuggestions([]);
+                                    setInput(s);
+                                }, voiceAnnouncement: voiceAnnouncement, queueCount: state.queue.length, onInputChange: (val) => {
+                                    setInput(val);
+                                    if (activeSessionId)
+                                        actions.setDraft(activeSessionId, val);
+                                    if (val && suggestions.length)
+                                        setSuggestions([]);
+                                    if (selectedMsgIndex !== null)
+                                        setSelectedMsgIndex(null);
+                                }, filteredMessages: filteredMessages })] }), selectedTask && (_jsx(TaskPanel, { task: selectedTask, onClose: () => setSelectedTaskId(null), onUpdateTask: updateTask, fetchSubtasks: fetchSubtasks, fetchTrace: fetchTrace }))] })), _jsx(ViewErrorBoundary, { viewName: "Voice Assistant", children: _jsx(Suspense, { fallback: null, children: _jsx(VoiceAssistant, { open: voiceAssistantOpen, onClose: () => {
+                            setVoiceAssistantOpen(false);
+                            window.dispatchEvent(new CustomEvent('shre-voice-stop'));
+                        }, messages: voiceMessages, agentName: currentAgent.name, agentEmoji: currentAgent.emoji, agentId: activeAgentId, ttsVoice: ttsVoice, ttsProvider: ttsProvider, agents: AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji })), onSwitchAgent: (id) => actions.setActiveAgent(id), onVoiceTurn: (turn) => {
+                            if (voiceSessionId) {
+                                actions.addMessage(voiceSessionId, { role: turn.role, content: turn.content });
+                                // Auto-title on first user message
+                                if (turn.role === 'user' && voiceSession && voiceSession.messages.length === 0) {
+                                    const title = 'Voice: ' +
+                                        (turn.content.length > 35 ? turn.content.slice(0, 35) + '…' : turn.content);
+                                    actions.updateSessionTitle(voiceSessionId, title);
+                                }
+                            }
+                        }, routerMode: routerMode, models: AVAILABLE_MODELS, selectedModel: selectedModel, onSelectModel: setSelectedModel, onSetTtsProvider: (v) => setTtsProvider(v) }) }) }), realtimeVoiceOpen && (_jsx(ViewErrorBoundary, { viewName: "Realtime Voice", children: _jsx(Suspense, { fallback: null, children: _jsx(RealtimeVoiceOverlay, { onClose: () => setRealtimeVoiceOpen(false), defaultPersona: currentAgent.id === 'ellie' ? 'ellie' : 'shre' }) }) })), _jsx(ShortcutsOverlay, { open: shortcutsOpen, onClose: () => setShortcutsOpen(false) }), _jsx(GlobalSearchModal, { isOpen: globalSearchOpen, onClose: () => setGlobalSearchOpen(false), query: globalSearchQuery, onQueryChange: setGlobalSearchQuery, results: globalSearchResults, searching: globalSearching, onSearch: () => {
+                    setGlobalSearching(true);
+                    fetch(`/api/search?q=${encodeURIComponent(globalSearchQuery.trim())}`)
+                        .then((r) => r.json())
+                        .then((data) => {
+                        setGlobalSearchResults(data.results || []);
+                        setGlobalSearching(false);
+                    })
+                        .catch(() => setGlobalSearching(false));
+                }, onResultClick: (r) => {
+                    actions.setActiveAgent(r.agentId);
+                    const existing = sessions.find((s) => s.agentId === r.agentId);
+                    if (existing)
+                        actions.switchSession(existing.id);
+                    setGlobalSearchOpen(false);
+                    setChatSearchOpen(true);
+                    setChatSearch(globalSearchQuery);
+                }, inputRef: globalSearchRef })] }));
+}

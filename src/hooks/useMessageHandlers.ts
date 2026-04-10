@@ -134,6 +134,7 @@ export interface UseMessageHandlersParams {
   setShowJumpToLatest: (v: boolean) => void;
   setSuggestions: (v: string[]) => void;
   setSelectedMsgIndex: (v: number | null) => void;
+  voiceMode: boolean;
 }
 
 export interface UseMessageHandlersReturn {
@@ -218,6 +219,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     setShowJumpToLatest,
     setSuggestions,
     setSelectedMsgIndex,
+    voiceMode,
   } = params;
 
   const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
@@ -1520,6 +1522,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       contextHealth,
       claudeCliMode,
       directMode,
+      voiceMode,
     );
   }, [
     input,
@@ -1538,6 +1541,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     routerMode,
     directMode,
     claudeCliMode,
+    voiceMode,
     sendViaCLI,
     selectedModel,
     compareMode,

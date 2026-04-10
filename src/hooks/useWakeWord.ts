@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getSpeechLocale } from '../i18n';
 
 export interface UseWakeWordReturn {
   wakeListenerReady: boolean;
@@ -31,7 +32,12 @@ export function useWakeWord(
   useEffect(() => {
     if (!wakeListenerReady || voiceAssistantOpen || isRecording) return;
     const SR = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      // iOS Safari doesn't support SpeechRecognition — wake word unavailable.
+      // Users can still tap the mic button to start voice input.
+      setWakeListenerReady(false);
+      return;
+    }
     let active = true;
     let wake: SpeechRecognition | null = null;
     let retryCount = 0;
@@ -41,7 +47,7 @@ export function useWakeWord(
       const w = new SR();
       w.continuous = false;
       w.interimResults = true;
-      w.lang = 'en-US';
+      w.lang = getSpeechLocale();
       w.onresult = (e: SpeechRecognitionEvent) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const t = e.results[i][0].transcript.toLowerCase();
