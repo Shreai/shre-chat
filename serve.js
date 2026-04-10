@@ -6,7 +6,7 @@ import { createServer as createNetServer } from "node:net";
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, appendFileSync, mkdirSync, openSync, readSync, closeSync, renameSync } from "node:fs";
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { randomUUID, createHmac, createHash, timingSafeEqual } from "node:crypto";
-import { join, extname, resolve } from "node:path";
+import { join, extname, resolve, normalize, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 import { URL } from "node:url";
 import { spawn, execSync } from "node:child_process";
@@ -1150,7 +1150,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo", "/api/files/view", "/api/files/preview", "/api/files/recent"]);
 
 // ── CSRF token generation + validation ─────────────────────────────
 // Token = HMAC-SHA256(sessionSeed, authSigningKey || fallback). Validated on POST/PUT/DELETE.
@@ -2737,6 +2737,143 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Attachment download failed:", err.message);
       json(res, { error: "Attachment download failed" }, 502);
+    }
+    return;
+  }
+
+  // ── File Preview / Serving ──────────────────────────────────────────────
+  // Security: restricted to allowed directories, no traversal, no dotfiles
+  const FILE_ALLOWED_DIRS = [
+    resolve(homedir(), "Downloads"),
+    resolve(homedir(), "Desktop"),
+    resolve(homedir(), "Documents/Projects"),
+    "/tmp",
+  ];
+  const FILE_CONTENT_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".pdf": "application/pdf", ".txt": "text/plain", ".json": "application/json",
+    ".csv": "text/csv", ".html": "text/html", ".md": "text/markdown",
+    ".mp3": "audio/mpeg", ".mp4": "video/mp4", ".webm": "video/webm",
+  };
+  function fileContentType(fp) {
+    return FILE_CONTENT_TYPES[extname(fp).toLowerCase()] || "application/octet-stream";
+  }
+  function isFileAllowed(fp) {
+    const norm = normalize(resolve(fp));
+    if (norm.includes("..")) return false;
+    if (basename(norm).startsWith(".")) return false;
+    return FILE_ALLOWED_DIRS.some((d) => norm.startsWith(d + "/") || norm === d);
+  }
+
+  // GET /api/files/view?path= — serve file directly
+  if (url.pathname === "/api/files/view" && req.method === "GET") {
+    const filePath = url.searchParams.get("path");
+    if (!filePath) return json(res, { error: "Missing ?path= parameter" }, 400);
+    const resolved = normalize(resolve(filePath));
+    if (!isFileAllowed(resolved)) return json(res, { error: "Access denied" }, 403);
+    try {
+      const fileStat = await stat(resolved);
+      if (!fileStat.isFile()) return json(res, { error: "Not a file" }, 400);
+      const data = await readFile(resolved);
+      const ct = fileContentType(resolved);
+      res.writeHead(200, {
+        "Content-Type": ct,
+        "Content-Length": data.byteLength,
+        "Content-Disposition": `inline; filename="${basename(resolved)}"`,
+        "Cache-Control": "private, max-age=300",
+      });
+      res.end(data);
+    } catch (err) {
+      if (err.code === "ENOENT") return json(res, { error: "File not found" }, 404);
+      log.warn("File view error:", err.message);
+      json(res, { error: "Failed to read file" }, 500);
+    }
+    return;
+  }
+
+  // GET /api/files/preview?path=&width= — JSON metadata + base64 (optional resize)
+  if (url.pathname === "/api/files/preview" && req.method === "GET") {
+    const filePath = url.searchParams.get("path");
+    if (!filePath) return json(res, { error: "Missing ?path= parameter" }, 400);
+    const resolved = normalize(resolve(filePath));
+    if (!isFileAllowed(resolved)) return json(res, { error: "Access denied" }, 403);
+    try {
+      const fileStat = await stat(resolved);
+      if (!fileStat.isFile()) return json(res, { error: "Not a file" }, 400);
+      if (fileStat.size > 50 * 1024 * 1024) return json(res, { error: "File too large (max 50MB)" }, 413);
+
+      let data = await readFile(resolved);
+      const ct = fileContentType(resolved);
+      const ext2 = extname(resolved).toLowerCase();
+      const isImage = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext2);
+      const isText = [".txt", ".json", ".csv", ".html", ".md", ".svg", ".xml", ".yaml", ".yml"].includes(ext2);
+      const width = parseInt(url.searchParams.get("width") || "0", 10);
+
+      // Optional thumbnail resize for images via sharp
+      if (isImage && width > 0) {
+        try {
+          const sharp = (await import("sharp")).default;
+          data = await sharp(data).resize({ width, withoutEnlargement: true }).toBuffer();
+        } catch {
+          // sharp not available — serve original
+        }
+      }
+
+      json(res, {
+        path: resolved,
+        name: basename(resolved),
+        size: fileStat.size,
+        contentType: ct,
+        modified: fileStat.mtime.toISOString(),
+        created: fileStat.birthtime.toISOString(),
+        isText,
+        isImage,
+        content: isText ? data.toString("utf-8") : undefined,
+        base64: isText ? undefined : data.toString("base64"),
+      });
+    } catch (err) {
+      if (err.code === "ENOENT") return json(res, { error: "File not found" }, 404);
+      json(res, { error: "Failed to read file" }, 500);
+    }
+    return;
+  }
+
+  // GET /api/files/recent?dir=Downloads&count=10 — list recent files from common dirs
+  if (url.pathname === "/api/files/recent" && req.method === "GET") {
+    const dirName = url.searchParams.get("dir") || "Downloads";
+    const count = Math.min(parseInt(url.searchParams.get("count") || "20", 10), 100);
+    const dirPath = resolve(homedir(), dirName);
+    if (!FILE_ALLOWED_DIRS.some((d) => dirPath.startsWith(d) || dirPath === d)) {
+      return json(res, { error: "Access denied — directory not allowed" }, 403);
+    }
+    try {
+      const dirStat = await stat(dirPath);
+      if (!dirStat.isDirectory()) return json(res, { error: "Not a directory" }, 400);
+      const entries = await readdir(dirPath, { withFileTypes: true });
+      const files = [];
+      for (const entry of entries) {
+        if (entry.name.startsWith(".")) continue;
+        if (!entry.isFile()) continue;
+        try {
+          const fullPath = resolve(dirPath, entry.name);
+          const entryStat = await stat(fullPath);
+          const ext3 = extname(entry.name).toLowerCase();
+          files.push({
+            name: entry.name,
+            path: fullPath,
+            size: entryStat.size,
+            modified: entryStat.mtime.toISOString(),
+            contentType: fileContentType(entry.name),
+            isMedia: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp4", ".webm", ".mp3"].includes(ext3),
+          });
+        } catch { /* skip unstatable entries */ }
+      }
+      files.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+      json(res, { dir: dirPath, count: files.length, files: files.slice(0, count) });
+    } catch (err) {
+      if (err.code === "ENOENT") return json(res, { error: "Directory not found" }, 404);
+      json(res, { error: "Failed to list directory" }, 500);
     }
     return;
   }

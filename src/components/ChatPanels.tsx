@@ -554,7 +554,7 @@ export function ChatPanels(props: ChatPanelsProps) {
           <input
             ref={importInputRef}
             type="file"
-            accept=".json"
+            accept=".json,.txt,.csv,.md,.pdf,.png,.jpg,.jpeg,.gif,.webp,.svg,.html,.xml,.yaml,.yml"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
