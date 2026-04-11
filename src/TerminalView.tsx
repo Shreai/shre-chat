@@ -18,36 +18,48 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
 
   const toggleVoice = useCallback(() => {
     if (listening && recRef.current) {
-      recRef.current.stop();
+      try { recRef.current.stop(); } catch (_) { void _; }
       recRef.current = null;
       setListening(false);
       return;
     }
     if (!SpeechRec) return;
     const rec = new SpeechRec();
-    rec.continuous = true;
+    rec.continuous = false;
     rec.interimResults = true;
     rec.lang = getSpeechLocale();
-    let finalText = '';
+    let stopped = false;
     rec.onresult = (e: SpeechRecognitionEvent) => {
+      let final = '';
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalText += e.results[i][0].transcript + ' ';
+        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
         else interim += e.results[i][0].transcript;
       }
-      setText((finalText + interim).trim());
+      setText((prev) => {
+        const base = final ? prev + final : prev;
+        return (base + interim).trim();
+      });
     };
     rec.onend = () => {
-      setListening(false);
+      if (stopped) return;
+      stopped = true;
       recRef.current = null;
+      setListening(false);
     };
     rec.onerror = () => {
-      setListening(false);
+      if (stopped) return;
+      stopped = true;
       recRef.current = null;
+      setListening(false);
     };
-    rec.start();
-    recRef.current = rec;
-    setListening(true);
+    try {
+      rec.start();
+      recRef.current = rec;
+      setListening(true);
+    } catch (_) {
+      void _;
+    }
   }, [listening]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -143,6 +155,7 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
 interface TerminalViewProps {
   visible: boolean;
   onClose: () => void;
+  onBackToChat?: () => void;
 }
 
 export interface TerminalHandle {
@@ -278,7 +291,7 @@ function DaemonControls({ isMobile }: { isMobile: boolean }) {
 }
 
 export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(function TerminalView(
-  { visible, onClose },
+  { visible, onClose, onBackToChat },
   ref,
 ) {
   const [tabs, setTabs] = useState<TabState[]>([]);
@@ -584,26 +597,51 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
       style={{
         background: 'var(--c-bg-1, #0a1628)',
         height: '100%',
-        // On mobile, use dvh to account for browser chrome and virtual keyboard
-        ...(isMobileView ? { height: '100dvh', maxHeight: '100dvh' } : {}),
+        minHeight: 0,
+        overflow: 'hidden',
       }}
     >
-      {/* Tab bar — compact on mobile */}
+      {/* Tab bar — compact on mobile, sticky so it never scrolls behind xterm */}
       <div
         className="flex items-center shrink-0"
         style={{
           background: 'rgba(255,255,255,0.03)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
           minHeight: isMobileView ? 32 : 36,
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
         }}
       >
+        {/* Back to Chat — visible on mobile */}
+        {isMobileView && onBackToChat && (
+          <button
+            onClick={onBackToChat}
+            className="flex items-center gap-1 shrink-0 px-2 py-2"
+            style={{
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: 11,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              borderRight: '1px solid rgba(255,255,255,0.08)',
+              minHeight: 32,
+            }}
+            title="Back to Chat"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Chat
+          </button>
+        )}
         {/* Tabs */}
         <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-none">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`flex items-center gap-1 shrink-0 transition-colors ${isMobileView ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-[11px]'}`}
+              className={`flex items-center gap-1 shrink-0 transition-colors ${isMobileView ? 'px-2 py-1.5 text-[10px]' : 'px-3 py-1.5 text-[11px]'}`}
               style={{
                 color: tab.id === activeTabId ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)',
                 background: tab.id === activeTabId ? 'rgba(255,255,255,0.06)' : 'transparent',

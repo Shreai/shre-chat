@@ -111,6 +111,9 @@ const DemoView = lazy(() => import('./DemoView').then((m) => ({ default: m.DemoV
 const InvestorView = lazy(() =>
   import('./InvestorView').then((m) => ({ default: m.InvestorView })),
 );
+const AgentTraceView = lazy(() =>
+  import('./AgentTraceView').then((m) => ({ default: m.AgentTraceView })),
+);
 
 const LazyFallback = () => (
   <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--c-text-3)' }}>
@@ -120,28 +123,29 @@ const LazyFallback = () => (
 
 /** Router Gateway Control UI embed — auto-injects gateway token + WS URL */
 function RouterGatewayEmbed() {
-  const [iframeSrc, setIframeSrc] = useState('/openclaw/');
+  const [status, setStatus] = useState<{ ok?: boolean; models?: string[]; agents?: number; uptime?: number; error?: string } | null>(null);
   useEffect(() => {
-    fetch('/api/gateway-token')
+    fetch('/api/router/health')
       .then((r) => r.json())
-      .then((d) => {
-        if (d.token) {
-          // Control UI reads token from URL hash fragment
-          setIframeSrc(`/openclaw/#token=${encodeURIComponent(d.token)}`); // URL path kept for backward compat
-        }
-      })
-      .catch(() => {
-        // Fall back to plain URL — user will need to enter token manually
-      });
+      .then((d) => setStatus(d))
+      .catch(() => setStatus({ error: 'Cannot reach shre-router' }));
   }, []);
   return (
-    <div className="flex-1 w-full h-full flex flex-col" style={{ background: 'var(--c-bg-1)' }}>
-      <iframe
-        src={iframeSrc}
-        className="flex-1 w-full border-0"
-        title="Router Gateway"
-        style={{ background: '#1a1a2e', minHeight: 0 }}
-      />
+    <div className="flex-1 w-full h-full flex flex-col items-center justify-center gap-4 p-6" style={{ background: 'var(--c-bg-1)' }}>
+      <div style={{ fontSize: 14, color: 'var(--c-text-2)', maxWidth: 480, textAlign: 'center' }}>
+        <h2 style={{ fontSize: 18, color: 'var(--c-text-1)', marginBottom: 12 }}>Router Gateway</h2>
+        {!status && <p>Loading...</p>}
+        {status?.error && <p style={{ color: '#ef4444' }}>{status.error}</p>}
+        {status?.ok && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
+            <p><span style={{ color: '#22c55e' }}>&#9679;</span> shre-router is online (uptime: {Math.round((status.uptime || 0) / 60)}m)</p>
+            {status.agents != null && <p>Active agents: {status.agents}</p>}
+          </div>
+        )}
+        <p style={{ marginTop: 16, fontSize: 12, color: 'var(--c-text-3)' }}>
+          Gateway management available via MIB007 dashboard or CLI.
+        </p>
+      </div>
     </div>
   );
 }
@@ -749,6 +753,11 @@ function MainApp({
                   {view === 'investor' && (
                     <ViewErrorBoundary viewName="Investor Dashboard">
                       <InvestorView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'agent-trace' && (
+                    <ViewErrorBoundary viewName="Agent Trace">
+                      <AgentTraceView />
                     </ViewErrorBoundary>
                   )}
                   {view === 'router-gateway' && (

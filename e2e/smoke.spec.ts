@@ -71,17 +71,23 @@ test.describe('Shre Chat — smoke tests', () => {
   });
 
   test('can open system prompt modal', async ({ page }) => {
-    // Click the system prompt settings button
-    const systemPromptBtn = page.locator('button[aria-label="System prompt"]');
-
-    const isVisible = await systemPromptBtn.isVisible().catch(() => false);
-    if (!isVisible) {
-      // On narrow viewports the button is hidden (hidden sm:flex)
+    // Open via "More options" menu → "System Prompt" item
+    const moreBtn = page.locator('button[aria-label="More options"]');
+    const moreVisible = await moreBtn.isVisible().catch(() => false);
+    if (!moreVisible) {
       test.skip();
       return;
     }
 
-    await systemPromptBtn.click();
+    await moreBtn.click();
+    const spItem = page.locator('button:has-text("System Prompt")');
+    const spVisible = await spItem.isVisible({ timeout: 3000 }).catch(() => false);
+    if (!spVisible) {
+      test.skip();
+      return;
+    }
+
+    await spItem.click();
 
     // The modal should appear with the "System Prompt" heading
     const modalHeading = page.getByText('System Prompt', { exact: true });

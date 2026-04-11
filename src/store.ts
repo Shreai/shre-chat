@@ -631,7 +631,8 @@ export type View =
   | 'cortexdb'
   | 'storepulse'
   | 'app-marketplace'
-  | 'investor';
+  | 'investor'
+  | 'agent-trace';
 
 // ── Bookmarks ─────────────────────────────────────────────────────
 

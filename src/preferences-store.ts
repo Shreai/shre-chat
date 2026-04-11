@@ -207,7 +207,7 @@ export const usePreferences = create<PreferencesState>()(
       partialize: (state) => ({
         notifSound: state.notifSound,
         voiceMode: state.voiceMode,
-        micEnabled: state.micEnabled,
+        // micEnabled intentionally excluded — mic must always start off on page load
         ttsVoice: state.ttsVoice,
         ttsProvider: state.ttsProvider,
         modelOverrides: state.modelOverrides,

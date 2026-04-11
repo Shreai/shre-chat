@@ -1,4 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment } from "react/jsx-runtime";
 import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
 import { AppContext, createSession, loadSessions, loadActivity, loadFeed, loadFiles, loadTabs, loadActiveSession, loadQueue, loadThemeCustom, loadDrafts, } from './store';
 import { Sidebar } from './Sidebar';
@@ -47,21 +47,23 @@ const InvestorView = lazy(() => import('./InvestorView').then((m) => ({ default:
 const LazyFallback = () => (_jsx("div", { className: "flex-1 flex items-center justify-center", style: { color: 'var(--c-text-3)' }, children: "Loading\u2026" }));
 /** Router Gateway Control UI embed — auto-injects gateway token + WS URL */
 function RouterGatewayEmbed() {
-    const [iframeSrc, setIframeSrc] = useState('/openclaw/');
+    const [status, setStatus] = useState(null);
     useEffect(() => {
-        fetch('/api/gateway-token')
+        fetch('/api/router/health')
             .then((r) => r.json())
-            .then((d) => {
-            if (d.token) {
-                // Control UI reads token from URL hash fragment
-                setIframeSrc(`/openclaw/#token=${encodeURIComponent(d.token)}`); // URL path kept for backward compat
-            }
-        })
-            .catch(() => {
-            // Fall back to plain URL — user will need to enter token manually
-        });
+            .then((d) => setStatus(d))
+            .catch(() => setStatus({ error: 'Cannot reach shre-router' }));
     }, []);
-    return (_jsx("div", { className: "flex-1 w-full h-full flex flex-col", style: { background: 'var(--c-bg-1)' }, children: _jsx("iframe", { src: iframeSrc, className: "flex-1 w-full border-0", title: "Router Gateway", style: { background: '#1a1a2e', minHeight: 0 } }) }));
+    return (_jsx("div", { className: "flex-1 w-full h-full flex flex-col items-center justify-center gap-4 p-6", style: { background: 'var(--c-bg-1)' }, children: _jsx("div", { style: { fontSize: 14, color: 'var(--c-text-2)', maxWidth: 480, textAlign: 'center' }, children: _jsxs(Fragment, { children: [
+        _jsx("h2", { style: { fontSize: 18, color: 'var(--c-text-1)', marginBottom: 12 }, children: "Router Gateway" }),
+        !status && _jsx("p", { children: "Loading..." }),
+        status?.error && _jsx("p", { style: { color: '#ef4444' }, children: status.error }),
+        status?.ok && _jsxs("div", { style: { display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }, children: [
+            _jsxs("p", { children: [_jsx("span", { style: { color: '#22c55e' }, children: "\u25CF" }), ` shre-router is online (uptime: ${Math.round((status.uptime || 0) / 60)}m)`] }),
+            status.agents != null && _jsxs("p", { children: [`Active agents: ${status.agents}`] })
+        ] }),
+        _jsx("p", { style: { marginTop: 16, fontSize: 12, color: 'var(--c-text-3)' }, children: "Gateway management available via MIB007 dashboard or CLI." })
+    ] }) }) }));
 }
 const AGENT_KEY = 'shre-active-agent';
 const THEME_KEY = 'shre-theme';

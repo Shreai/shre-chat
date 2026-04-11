@@ -932,6 +932,29 @@ export function Sidebar() {
                 </svg>
               }
             />
+            <NavIconBtn
+              active={view === 'agent-trace'}
+              onClick={() => actions.setView('agent-trace')}
+              title="Agent Trace"
+              icon={
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="5" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                  <circle cx="12" cy="19" r="2" />
+                  <line x1="7" y1="12" x2="10" y2="7" />
+                  <line x1="14" y1="7" x2="17" y2="12" />
+                  <line x1="17" y1="14" x2="14" y2="17" />
+                  <line x1="10" y1="17" x2="7" y2="14" />
+                </svg>
+              }
+            />
             {features['marketplace'] && (
             <NavIconBtn
               active={view === 'marketplace'}
@@ -1033,6 +1056,7 @@ export function Sidebar() {
                   e.currentTarget.style.background = 'transparent';
                 }}
                 title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {theme === 'dark' ? (
                   <svg

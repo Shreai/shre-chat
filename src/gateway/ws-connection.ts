@@ -33,7 +33,7 @@ import {
 import { flushMessageQueue } from './ws-queue';
 
 // Connect via same-origin proxy (serve.js proxies WS to gateway)
-const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/notifications`;
 
 function startHeartbeat() {
   stopHeartbeat();

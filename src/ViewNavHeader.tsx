@@ -24,6 +24,7 @@ export const VIEW_LABELS: Record<string, string> = {
   'employee-activity': 'Employee Activity',
   email: 'Email',
   investor: 'Investor Dashboard',
+  'agent-trace': 'Agent Trace',
 };
 
 export const NAV_VIEWS: { key: View; label: string; section: string }[] = [
@@ -40,6 +41,7 @@ export const NAV_VIEWS: { key: View; label: string; section: string }[] = [
   { key: 'admin', label: 'Admin', section: 'Tools' },
   { key: 'finetune', label: 'Fine-Tuning', section: 'Tools' },
   { key: 'investor', label: 'Investor Dashboard', section: 'Views' },
+  { key: 'agent-trace', label: 'Agent Trace', section: 'Tools' },
 ];
 
 export function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: View) => void }) {

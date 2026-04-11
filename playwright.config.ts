@@ -156,6 +156,14 @@ export default defineConfig({
       use: { browserName: 'chromium', storageState: AUTH_FILE },
       dependencies: ['setup'],
     },
+
+    // ── Agent 12: EDI Import (extraction, mapping, chat routing) ──
+    {
+      name: 'edi-import',
+      testMatch: /edi-import\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
   ],
   // Don't start a web server — assume shre-chat is already running on port 5510
 });

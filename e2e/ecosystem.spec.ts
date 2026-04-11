@@ -103,16 +103,16 @@ test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => 
 
   // ═══════════ Iframe View Loading ═══════════
 
-  test('Router Gateway view loads in iframe', async ({ page }) => {
+  test('Router Gateway view loads status panel', async ({ page }) => {
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'router-gateway' }));
     });
     await page.waitForTimeout(1500);
 
-    const iframe = page.locator('iframe').first();
-    const hasIframe = await iframe.isVisible({ timeout: 5000 }).catch(() => false);
-    if (!hasIframe) {
-      console.log('GAP: Router Gateway view did not render an iframe');
+    const heading = page.locator('h2:has-text("Router Gateway")').first();
+    const hasPanel = await heading.isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasPanel) {
+      console.log('GAP: Router Gateway view did not render status panel');
     }
   });
 

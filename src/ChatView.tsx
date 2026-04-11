@@ -236,7 +236,16 @@ export function ChatView() {
   const [identityVerified, setIdentityVerified] = useState(true); // Gate disabled — only enforce for CLI/sensitive ops
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
-  const [showTerminal, setShowTerminal] = useState(false);
+  const [showTerminal, setShowTerminalRaw] = useState(() => {
+    return localStorage.getItem('shre-terminal-open') === 'true';
+  });
+  const setShowTerminal = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    setShowTerminalRaw((prev) => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      localStorage.setItem('shre-terminal-open', String(next));
+      return next;
+    });
+  }, []);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [termViewMode, setTermViewMode] = useState<'split' | 'tabs'>('split');
   const [activeView, setActiveView] = useState<string>('chat'); // "chat" | "terminal" | "preview"
@@ -768,6 +777,13 @@ export function ChatView() {
   const showTermPanel = showTerminal && (!isTabMode || activeView === 'terminal');
   const showPreviewPanel = isTabMode && activeView === 'preview' && previewContent;
 
+  // Re-focus the chat textarea whenever chat view becomes visible
+  useEffect(() => {
+    if (showChat) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [showChat]);
+
   // Handler for content block expand (lego blocks)
   const handleContentExpand = useCallback(
     (content: string, type: string, title?: string) => {
@@ -885,6 +901,7 @@ export function ChatView() {
                 setShowTerminal(false);
                 setActiveView('chat');
               }}
+              onBackToChat={() => setActiveView('chat')}
             />
           </Suspense>
         </ViewErrorBoundary>
@@ -1186,6 +1203,16 @@ export function ChatView() {
                   localStorage.setItem('shre-cli-mode-default', 'false');
                 }
               }
+            }}
+            onOpenClaudeCli={() => {
+              setShowTerminal(true);
+              if (isMobileLayout || termViewMode === 'tabs') {
+                setActiveView('terminal');
+              }
+              // Open a Claude CLI tab via the terminal ref
+              setTimeout(() => {
+                terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' });
+              }, 100);
             }}
             currentAgentName={currentAgent.name}
             activeSessionId={activeSessionId}

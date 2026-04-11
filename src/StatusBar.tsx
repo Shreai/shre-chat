@@ -867,6 +867,40 @@ export function StatusBar() {
         </div>
       )}
 
+      {/* Execution pipeline — visible when streaming/processing */}
+      {agentBusy && (
+        <div
+          className="status-bar-item hidden md:flex"
+          style={{ ...styles.item, gap: 4 }}
+          title="Processing — agent is executing"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {['route', 'model', 'exec', 'score'].map((step, i) => (
+              <div
+                key={step}
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: i === 0 ? '#22c55e' : i === 1 ? 'var(--c-accent)' : 'var(--c-border-2)',
+                  animation: i <= 1 ? 'statusPulse 1.5s ease-in-out infinite' : 'none',
+                  animationDelay: `${i * 200}ms`,
+                }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: 10, color: 'var(--c-accent)', fontWeight: 600 }}>
+            Processing
+          </span>
+          <style>{`
+            @keyframes statusPulse {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.4; transform: scale(0.8); }
+            }
+          `}</style>
+        </div>
+      )}
+
       {/* Next event countdown */}
       {data.nextEvent && (
         <div className="status-bar-item hidden md:flex" style={styles.item}>

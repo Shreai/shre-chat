@@ -117,6 +117,9 @@ interface ChatComposerProps {
   // Claude CLI mode — auto-routes coding tasks to Claude Code CLI
   claudeCliMode: boolean;
   setClaudeCliMode: (on: boolean) => void;
+
+  // Open Claude CLI as terminal tab
+  onOpenClaudeCli?: () => void;
 }
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -195,6 +198,7 @@ export function ChatComposer(props: ChatComposerProps) {
     filteredMessages,
     claudeCliMode,
     setClaudeCliMode,
+    onOpenClaudeCli,
   } = props;
 
   const features = usePreferences((s) => s.features);
@@ -656,6 +660,7 @@ export function ChatComposer(props: ChatComposerProps) {
             }
             disabled={(syncing && messages.length === 0) || !writeEnabled}
             rows={1}
+            autoFocus
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
@@ -818,19 +823,17 @@ export function ChatComposer(props: ChatComposerProps) {
 
               {/* Voice mode + TTS voice selector — hidden pending proper implementation */}
 
-              {/* Claude CLI mode toggle — auto-routes coding tasks to Claude Code CLI */}
+              {/* Claude CLI — opens as terminal tab */}
               {features['claudeCli'] && (
               <button
                 tabIndex={-1}
-                onClick={() => setClaudeCliMode(!claudeCliMode)}
-                className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${claudeCliMode ? 'bg-purple-500/20 text-purple-400' : ''}`}
-                style={claudeCliMode ? {} : { color: 'var(--c-text-2)' }}
-                title={
-                  claudeCliMode
-                    ? 'Claude CLI mode ON — coding tasks auto-execute via Claude Code'
-                    : 'Enable Claude CLI mode for coding tasks'
-                }
-                aria-label={claudeCliMode ? 'Disable Claude CLI mode' : 'Enable Claude CLI mode'}
+                onClick={() => {
+                  if (onOpenClaudeCli) onOpenClaudeCli();
+                }}
+                className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                style={{ color: 'var(--c-text-2)' }}
+                title="Open Claude CLI in terminal tab"
+                aria-label="Open Claude CLI in terminal tab"
               >
                 <svg
                   className="h-4 w-4 sm:h-4 sm:w-4"
@@ -842,9 +845,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   <polyline points="16 18 22 12 16 6" />
                   <polyline points="8 6 2 12 8 18" />
                 </svg>
-                {claudeCliMode && (
-                  <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
-                )}
+                <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
               </button>
               )}
 

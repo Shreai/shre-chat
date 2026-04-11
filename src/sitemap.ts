@@ -142,6 +142,18 @@ export const SITEMAP: SitemapEntry[] = [
 
   // ── Tools ──
   {
+    id: 'agent-trace',
+    label: 'Agent Trace',
+    description:
+      'Live agent execution traceroute — see what each agent is doing, timing per step, errors, queued tasks, routing decisions',
+    category: 'tools',
+    type: 'view',
+    keywords: [
+      'trace', 'traceroute', 'agent', 'execution', 'live', 'monitor',
+      'pipeline', 'debug', 'orchestration', 'fleet', 'status', 'timing',
+    ],
+  },
+  {
     id: 'command-center',
     label: 'Command Center',
     description: 'Compute mesh dashboard — physical node health, Tailscale topology, service distribution, failover chain',

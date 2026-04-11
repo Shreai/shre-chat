@@ -1495,7 +1495,9 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  // Only send HSTS when TLS is active — sending it over HTTP poisons Chrome's
+  // HSTS cache, forcing all future requests to HTTPS even if TLS certs are disabled
+  ...(tlsOpts ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
   "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
   "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate",
 };

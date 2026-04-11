@@ -79,14 +79,23 @@ test.describe('Agent 1: Chat Core — messaging, sessions, tabs', () => {
   // ═══════════ System Prompt Modal ═══════════
 
   test('system prompt modal opens and closes', async ({ page }) => {
-    const btn = page.locator('button[aria-label="System prompt"]');
-    const isVisible = await btn.isVisible().catch(() => false);
-    if (!isVisible) {
+    // Open via "More options" menu → "System Prompt" item
+    const moreBtn = page.locator('button[aria-label="More options"]');
+    const moreVisible = await moreBtn.isVisible().catch(() => false);
+    if (!moreVisible) {
       test.skip();
       return;
     }
 
-    await btn.click();
+    await moreBtn.click();
+    const spItem = page.locator('button:has-text("System Prompt")');
+    const spVisible = await spItem.isVisible({ timeout: 3000 }).catch(() => false);
+    if (!spVisible) {
+      test.skip();
+      return;
+    }
+
+    await spItem.click();
     await expect(page.getByText('System Prompt', { exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByText('System Prompt', { exact: true })).not.toBeVisible();

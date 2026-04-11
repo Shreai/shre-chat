@@ -55,6 +55,7 @@ const AGENTS = [
   { name: 'preview', domain: 'Preview', owner: 'Agent 7', file: 'preview.spec.ts' },
   { name: 'responsive', domain: 'Responsive', owner: 'Agent 8', file: 'responsive.spec.ts' },
   { name: 'smoke', domain: 'Smoke', owner: 'Smoke', file: 'smoke.spec.ts' },
+  { name: 'edi-import', domain: 'EDI Import', owner: 'Agent 12', file: 'edi-import.spec.ts' },
 ];
 
 // ── Step 1: Run Playwright ──
