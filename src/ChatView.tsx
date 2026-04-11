@@ -1175,11 +1175,16 @@ export function ChatView() {
             setClaudeCliMode={(on: boolean) => {
               setClaudeCliMode(on);
               localStorage.setItem('shre-claude-cli-mode', String(on));
-              // When turning off Claude CLI, also turn off legacy cliMode so
-              // the placeholder returns to normal instead of cycling to "subscription mode"
-              if (!on && cliMode) {
-                setCliMode(false);
-                localStorage.setItem('shre-cli-mode-default', 'false');
+              if (on) {
+                setShowTerminal(true);
+                if (isMobileLayout || termViewMode === 'tabs') {
+                  setActiveView('terminal');
+                }
+              } else {
+                if (cliMode) {
+                  setCliMode(false);
+                  localStorage.setItem('shre-cli-mode-default', 'false');
+                }
               }
             }}
             currentAgentName={currentAgent.name}

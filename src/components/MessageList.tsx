@@ -9,6 +9,8 @@ import type { ToolExecStep } from './MessageBubble';
 import { WelcomeScreen } from './WelcomeScreen';
 import { formatTime } from '../chat-utils';
 import StreamTimeoutIndicator from './StreamTimeoutIndicator';
+import { MessageProgressTrail, messageToStep } from './MessageProgressTrail';
+import type { ProgressStep } from './MessageProgressTrail';
 
 interface Agent {
   id: string;
@@ -38,6 +40,17 @@ function toToolExecStep(msg: ChatMessage): ToolExecStep {
     iteration: m.iteration ? parseInt(m.iteration, 10) : 1,
     timestamp: msg.timestamp || Date.now(),
   };
+}
+
+function isStatusMessage(msg: ChatMessage): boolean {
+  if (msg.meta?.type === 'tool_exec') return true;
+  if ((msg as any)._system || msg.meta?.system) return true;
+  if (msg.role === 'assistant' && msg.content?.startsWith('[system]')) return true;
+  return false;
+}
+
+function isBrowserApproval(msg: ChatMessage): boolean {
+  return isStatusMessage(msg) && !!msg.content?.includes('[browser_approval]');
 }
 
 export interface MessageListProps {
@@ -258,6 +271,26 @@ export function MessageList(props: MessageListProps) {
     ],
   );
 
+  const { trailMap, groupedIndices } = useMemo(() => {
+    const trailMap = new Map<number, ProgressStep[]>();
+    const groupedIndices = new Set<number>();
+    let anchorIdx = -1;
+
+    for (let i = 0; i < filteredMessages.length; i++) {
+      const msg = filteredMessages[i];
+      if (isStatusMessage(msg) && !isBrowserApproval(msg)) {
+        if (anchorIdx >= 0) {
+          if (!trailMap.has(anchorIdx)) trailMap.set(anchorIdx, []);
+          trailMap.get(anchorIdx)!.push(messageToStep(msg));
+          groupedIndices.add(i);
+        }
+      } else {
+        anchorIdx = i;
+      }
+    }
+    return { trailMap, groupedIndices };
+  }, [filteredMessages]);
+
   return (
     <>
       <section
@@ -365,6 +398,8 @@ export function MessageList(props: MessageListProps) {
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const msg = filteredMessages[virtualRow.index];
               const i = virtualRow.index;
+              const isGrouped = groupedIndices.has(i);
+              const trail = trailMap.get(i);
               return (
                 <div
                   key={virtualRow.key}
@@ -382,31 +417,33 @@ export function MessageList(props: MessageListProps) {
                     left: 0,
                     width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
-                    paddingBottom: compact ? '4px' : '12px',
+                    paddingBottom: isGrouped ? '0px' : compact ? '4px' : '12px',
+                    ...(isGrouped ? { height: 0, overflow: 'hidden' } : {}),
                   }}
                 >
-                  {msg.meta?.type === 'tool_exec' ? (
+                  {isGrouped ? null : msg.content?.includes('[browser_approval]') && isStatusMessage(msg) ? (
+                    <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
+                  ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
-                  ) : (msg as ChatMessage & { _system?: boolean })._system ||
-                    msg.meta?.system ||
-                    (msg.role === 'assistant' && msg.content?.startsWith('[system]')) ? (
-                    msg.content?.includes('[browser_approval]') ? (
-                      <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
-                    ) : (
-                      <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
-                    )
+                  ) : isStatusMessage(msg) ? (
+                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : (
-                    <MessageBubble
-                      {...renderMessageProps(msg, i)}
-                      onReplyClick={
-                        msg.replyTo != null
-                          ? () => {
-                              if (msg.replyTo != null)
-                                virtualizer.scrollToIndex(msg.replyTo, { align: 'center' });
-                            }
-                          : undefined
-                      }
-                    />
+                    <>
+                      <MessageBubble
+                        {...renderMessageProps(msg, i)}
+                        onReplyClick={
+                          msg.replyTo != null
+                            ? () => {
+                                if (msg.replyTo != null)
+                                  virtualizer.scrollToIndex(msg.replyTo, { align: 'center' });
+                              }
+                            : undefined
+                        }
+                      />
+                      {trail && trail.length > 0 && (
+                        <MessageProgressTrail steps={trail} />
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -414,42 +451,52 @@ export function MessageList(props: MessageListProps) {
           </div>
         ) : (
           <div>
-            {filteredMessages.map((msg, i) => (
-              <div
-                key={msg.timestamp || i}
-                data-msg-index={i}
-                className={
-                  newMsgStartIndex.current !== null && i >= newMsgStartIndex.current
-                    ? 'msg-enter'
-                    : undefined
-                }
-                style={{ paddingBottom: compact ? '4px' : '12px' }}
-              >
-                {msg.meta?.type === 'tool_exec' ? (
-                  <ToolExecutionChip step={toToolExecStep(msg)} />
-                ) : (msg as ChatMessage & { _system?: boolean })._system ||
-                  msg.meta?.system ||
-                  (msg.role === 'assistant' && msg.content?.startsWith('[system]')) ? (
-                  <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
-                ) : (
-                  <MessageBubble
-                    {...renderMessageProps(msg, i)}
-                    onReplyClick={
-                      msg.replyTo != null
-                        ? () => {
-                            if (msg.replyTo != null) {
-                              const el = scrollRef.current?.querySelector(
-                                `[data-msg-index="${msg.replyTo}"]`,
-                              );
-                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }
-                          }
-                        : undefined
-                    }
-                  />
-                )}
-              </div>
-            ))}
+            {filteredMessages.map((msg, i) => {
+              const isGrouped = groupedIndices.has(i);
+              const trail = trailMap.get(i);
+              if (isGrouped) return null;
+              return (
+                <div
+                  key={msg.timestamp || i}
+                  data-msg-index={i}
+                  className={
+                    newMsgStartIndex.current !== null && i >= newMsgStartIndex.current
+                      ? 'msg-enter'
+                      : undefined
+                  }
+                  style={{ paddingBottom: compact ? '4px' : '12px' }}
+                >
+                  {msg.content?.includes('[browser_approval]') && isStatusMessage(msg) ? (
+                    <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
+                  ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
+                    <ToolExecutionChip step={toToolExecStep(msg)} />
+                  ) : isStatusMessage(msg) ? (
+                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
+                  ) : (
+                    <>
+                      <MessageBubble
+                        {...renderMessageProps(msg, i)}
+                        onReplyClick={
+                          msg.replyTo != null
+                            ? () => {
+                                if (msg.replyTo != null) {
+                                  const el = scrollRef.current?.querySelector(
+                                    `[data-msg-index="${msg.replyTo}"]`,
+                                  );
+                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              }
+                            : undefined
+                        }
+                      />
+                      {trail && trail.length > 0 && (
+                        <MessageProgressTrail steps={trail} />
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

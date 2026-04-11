@@ -26,11 +26,16 @@ Web-based AI-powered chat interface for the Shre platform. Built with React + Vi
 - `src/components/SuggestionsBar.tsx` — Horizontal suggestion chips (starter + contextual)
 - `src/components/ChatComposer.tsx` — Message input composer with toolbar
 - `src/components/MessageBubble.tsx` — Chat message bubbles with actions
+- `src/components/MessageList.tsx` — Message list with progress trail grouping
+- `src/components/MessageProgressTrail.tsx` — Collapsible progress trail for status/tool messages
 - `src/gateway-ws.ts` — WebSocket client (terminal/notifications)
 - `src/router-client.ts` — HTTP SSE streaming chat client
 - `src/StatusBar.tsx` — Status bar with connection/agent info
 - `src/store.ts` — Zustand state management
 - `serve.js` — Production backend server
+
+### Message Progress Trail
+System events (tool execution, escalation, thinking, etc.) are grouped into a collapsible progress trail attached below the user message they relate to, rather than displayed as separate inline items. This gives a Replit-like task progress UX. Standalone status messages (not following a user/assistant message) still render individually. Browser approval cards are excluded from grouping.
 
 ### Design System
 - **Dark palette**: Layered charcoal (#0d0d0f / #161618 / #1e1e22), not true black
