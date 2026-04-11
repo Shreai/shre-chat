@@ -148,11 +148,13 @@ interface TerminalViewProps {
 export interface TerminalHandle {
   sendCommand: (cmd: string) => void;
   isConnected: () => boolean;
+  openTab: (opts?: { title?: string; cmd?: string }) => void;
 }
 
 interface TabState {
   id: string;
   title: string;
+  initialCmd?: string;
   term: Terminal | null;
   ws: WebSocket | null;
   fit: FitAddon | null;
@@ -160,6 +162,120 @@ interface TabState {
 }
 
 let tabCounter = 0;
+
+// ── Daemon Process Controls ─────────────────────────────────────────────────
+
+const DAEMON_URL = '/api/daemon';
+
+type DaemonStatus = 'online' | 'offline' | 'busy' | 'loading';
+
+function DaemonControls({ isMobile }: { isMobile: boolean }) {
+  const [status, setStatus] = useState<DaemonStatus>('loading');
+  const [sessions, setSessions] = useState(0);
+  const [queue, setQueue] = useState(0);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${DAEMON_URL}/health`, { signal: AbortSignal.timeout(3000) });
+      if (!res.ok) { setStatus('offline'); return; }
+      const data = await res.json();
+      setStatus(data.sessions?.busy > 0 ? 'busy' : 'online');
+      setSessions(data.sessions?.active || 0);
+      setQueue(data.queue || 0);
+    } catch {
+      setStatus('offline');
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    const iv = setInterval(fetchStatus, 10_000);
+    return () => clearInterval(iv);
+  }, [fetchStatus]);
+
+  const killAllSessions = async () => {
+    if (!confirm('Kill all daemon sessions?')) return;
+    try {
+      const listRes = await fetch(`${DAEMON_URL}/v1/sessions`);
+      const listData = await listRes.json();
+      for (const s of listData.sessions || []) {
+        await fetch(`${DAEMON_URL}/v1/sessions/${s.id}`, { method: 'DELETE' });
+      }
+      fetchStatus();
+    } catch { /* best effort */ }
+  };
+
+  const restartDaemon = async () => {
+    // Create a new default session (effectively restart)
+    try {
+      await fetch(`${DAEMON_URL}/v1/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'default' }),
+      });
+      fetchStatus();
+    } catch { /* best effort */ }
+  };
+
+  const statusColor = {
+    online: '#22c55e',
+    busy: '#eab308',
+    offline: '#ef4444',
+    loading: '#6b7280',
+  }[status];
+
+  const btnStyle = {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: isMobile ? '1px 4px' : '2px 6px',
+    fontSize: isMobile ? 9 : 10,
+    fontFamily: "'SF Mono', Menlo, monospace",
+    borderRadius: 4,
+    transition: 'background 0.15s',
+  };
+
+  return (
+    <div className="flex items-center gap-1" title={`Daemon: ${status} | ${sessions} sessions | ${queue} queued`}>
+      {/* Status dot */}
+      <span
+        style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: statusColor,
+          boxShadow: status === 'online' ? `0 0 4px ${statusColor}` : 'none',
+          display: 'inline-block',
+        }}
+      />
+      {!isMobile && (
+        <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+          {status === 'busy' ? `${sessions}s ${queue}q` : status}
+        </span>
+      )}
+      {status !== 'offline' && (
+        <button
+          onClick={killAllSessions}
+          style={{ ...btnStyle, color: '#ef4444' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          title="Kill all daemon sessions"
+        >
+          Stop
+        </button>
+      )}
+      {status === 'offline' && (
+        <button
+          onClick={restartDaemon}
+          style={{ ...btnStyle, color: '#22c55e' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(34,197,94,0.15)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          title="Start daemon session"
+        >
+          Start
+        </button>
+      )}
+    </div>
+  );
+}
 
 export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(function TerminalView(
   { visible, onClose },
@@ -175,7 +291,16 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || null;
 
-  // Expose sendCommand to parent — sends to active tab
+  const createTab = useCallback((opts?: { title?: string; cmd?: string }) => {
+    const id = `term-${++tabCounter}`;
+    const title = opts?.title || `Terminal ${tabCounter}`;
+    const newTab: TabState = { id, title, initialCmd: opts?.cmd, term: null, ws: null, fit: null, observer: null };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(id);
+    return id;
+  }, []);
+
+  // Expose sendCommand and openTab to parent
   useImperativeHandle(
     ref,
     () => ({
@@ -189,18 +314,12 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
         const tab = tabsRef.current.find((t) => t.id === activeTabId);
         return tab?.ws?.readyState === WebSocket.OPEN;
       },
+      openTab(opts?: { title?: string; cmd?: string }) {
+        createTab(opts);
+      },
     }),
-    [activeTabId],
+    [activeTabId, createTab],
   );
-
-  const createTab = useCallback(() => {
-    const id = `term-${++tabCounter}`;
-    const title = `Terminal ${tabCounter}`;
-    const newTab: TabState = { id, title, term: null, ws: null, fit: null, observer: null };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(id);
-    return id;
-  }, []);
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -285,17 +404,20 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
     fit.fit();
 
     // ── Auto-reconnecting WebSocket for terminal ──────────────
-    // Use a stable session ID so reconnects reattach to the same server-side PTY
-    // (survives screen changes, tab switches, foldable phone fold/unfold)
-    const termSessionId =
-      sessionStorage.getItem('shre-term-session') ||
-      (() => {
-        const id = `t-${Date.now().toString(36)}`;
-        sessionStorage.setItem('shre-term-session', id);
-        return id;
-      })();
+    // For tabs with initialCmd (e.g. Claude CLI), use a unique session per tab
+    const termSessionId = activeTab.initialCmd
+      ? `cli-${activeTab.id}`
+      : sessionStorage.getItem('shre-term-session') ||
+        (() => {
+          const id = `t-${Date.now().toString(36)}`;
+          sessionStorage.setItem('shre-term-session', id);
+          return id;
+        })();
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${location.host}/ws/terminal?session=${termSessionId}`;
+    let wsUrl = `${proto}//${location.host}/ws/terminal?session=${termSessionId}`;
+    if (activeTab.initialCmd) {
+      wsUrl += `&cmd=${encodeURIComponent(activeTab.initialCmd)}`;
+    }
     let currentWs: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempt = 0;
@@ -516,10 +638,12 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
           ))}
         </div>
 
-        {/* New tab + close */}
+        {/* Daemon controls + New tab + close */}
         <div className="flex items-center gap-1 px-2 shrink-0">
+          <DaemonControls isMobile={isMobileView} />
+          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
           <button
-            onClick={createTab}
+            onClick={() => createTab()}
             style={{
               color: 'rgba(255,255,255,0.3)',
               fontSize: isMobileView ? 14 : 16,

@@ -4166,6 +4166,99 @@ async function requestHandler(req, res) {
     }
   }
 
+  // ── Agent Trace — proxy fleet, trace, routing & pulse data for AgentTraceView ──
+  if (url.pathname.startsWith("/api/agent-trace/") && req.method === "GET") {
+    const routerBase = serviceUrl("shre-router");
+    const fleetBase = serviceUrl("shre-fleet");
+    const to = (ms) => AbortSignal.timeout(ms);
+
+    // GET /api/agent-trace/status — fleet active assignments
+    if (url.pathname === "/api/agent-trace/status") {
+      try {
+        const resp = await fetch(`${fleetBase}/v1/fleet/status`, { signal: to(5000) });
+        if (!resp.ok) return json(res, { error: `fleet returned ${resp.status}` }, resp.status);
+        return json(res, await resp.json());
+      } catch (err) {
+        log.error("[agent-trace] fleet status failed:", err.message);
+        return json(res, { error: "Fleet unreachable", active_assignments: [], queue_depth: 0 }, 503);
+      }
+    }
+
+    // GET /api/agent-trace/traces — recent traces from shre-router
+    if (url.pathname === "/api/agent-trace/traces") {
+      try {
+        const resp = await fetch(`${routerBase}/v1/traces?limit=50`, { signal: to(5000) });
+        if (!resp.ok) return json(res, { error: `router returned ${resp.status}` }, resp.status);
+        return json(res, await resp.json());
+      } catch (err) {
+        log.error("[agent-trace] traces failed:", err.message);
+        return json(res, { error: "Router unreachable", traces: [] }, 503);
+      }
+    }
+
+    // GET /api/agent-trace/routing — recent routing decisions
+    if (url.pathname === "/api/agent-trace/routing") {
+      try {
+        const resp = await fetch(`${routerBase}/v1/routing-history`, { signal: to(5000) });
+        if (!resp.ok) return json(res, { error: `router returned ${resp.status}` }, resp.status);
+        return json(res, await resp.json());
+      } catch (err) {
+        log.error("[agent-trace] routing failed:", err.message);
+        return json(res, { error: "Router unreachable", decisions: [] }, 503);
+      }
+    }
+
+    // GET /api/agent-trace/metrics — per-agent metrics from shre-router
+    if (url.pathname === "/api/agent-trace/metrics") {
+      try {
+        const resp = await fetch(`${routerBase}/v1/metrics/agents`, { signal: to(5000) });
+        if (!resp.ok) return json(res, { error: `router returned ${resp.status}` }, resp.status);
+        return json(res, await resp.json());
+      } catch (err) {
+        log.error("[agent-trace] metrics failed:", err.message);
+        return json(res, { error: "Router unreachable", agents: {} }, 503);
+      }
+    }
+
+    // GET /api/agent-trace/pulse — SSE proxy to shre-router /v1/pulse
+    if (url.pathname === "/api/agent-trace/pulse") {
+      try {
+        const upstream = await fetch(`${routerBase}/v1/pulse`, {
+          signal: to(300_000), // 5min — long-lived SSE
+          headers: { Accept: "text/event-stream" },
+        });
+        if (!upstream.ok) {
+          return json(res, { error: `pulse returned ${upstream.status}` }, upstream.status);
+        }
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+        // Pipe upstream SSE to client
+        const reader = upstream.body.getReader();
+        const decoder = new TextDecoder();
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(decoder.decode(value, { stream: true }));
+            }
+          } catch { /* client disconnect or upstream close */ }
+          res.end();
+        };
+        pump();
+        req.on("close", () => { try { reader.cancel(); } catch {} });
+        return;
+      } catch (err) {
+        log.error("[agent-trace] pulse SSE failed:", err.message);
+        return json(res, { error: "Pulse unreachable" }, 503);
+      }
+    }
+  }
+
   // ── Claude CLI Tool Execution — proxy to shre-router /v1/execute/claude ──
   // This is the preferred path for tool-based Claude CLI execution from the chat UI.
   // It goes through shre-router's budget guards, permissions, and monitoring.
@@ -5077,6 +5170,36 @@ async function requestHandler(req, res) {
       log.error("[direct] Error", { error: err.message });
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // ── Proxy /api/daemon/* to claude-daemon (port 5471) ──────
+  if (url.pathname.startsWith("/api/daemon/")) {
+    const daemonPath = url.pathname.replace("/api/daemon", "");
+    const daemonPort = 5471;
+    const daemonUrl = `http://127.0.0.1:${daemonPort}${daemonPath}${url.search}`;
+    try {
+      let body = "";
+      if (req.method === "POST" || req.method === "DELETE") {
+        body = await new Promise((resolve) => {
+          let d = "";
+          req.on("data", (c) => (d += c));
+          req.on("end", () => resolve(d));
+        });
+      }
+      const upstream = await fetch(daemonUrl, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        ...(body ? { body } : {}),
+        signal: AbortSignal.timeout(300_000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(data);
+    } catch (err) {
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "claude-daemon unreachable", detail: err.message }));
     }
     return;
   }
@@ -6661,9 +6784,10 @@ termWss.on("connection", (ws, req) => {
   ws._shreAlive = true;
   ws.on("pong", () => { ws._shreAlive = true; });
 
-  // Parse session ID from query string (allows reconnecting to same PTY)
+  // Parse session ID and optional initial command from query string
   const url = new URL(req.url, `${SCHEME}://${req.headers.host}`);
   const sessionId = url.searchParams.get("session") || "default";
+  const initialCmd = url.searchParams.get("cmd") || null;
 
   const session = getOrCreatePtySession(sessionId);
   if (!session) {
@@ -6674,6 +6798,13 @@ termWss.on("connection", (ws, req) => {
 
   // Add this client to the session
   session.clients.add(ws);
+
+  // If initial command provided AND this is a fresh session (no scrollback), auto-send it
+  if (initialCmd && !session.scrollback) {
+    setTimeout(() => {
+      try { session.shellHandle.write(initialCmd + "\n"); } catch {}
+    }, 500);
+  }
   log.info("[terminal] Client connected", { sessionId, clients: session.clients.size });
 
   // Replay scrollback so reconnecting clients see previous output
