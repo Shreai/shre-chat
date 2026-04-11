@@ -1,1 +1,20 @@
-{"api": 3001, "ws": 3002}
+{
+  "services": {
+    "shre-auth": { "port": 5490, "protocol": "https" },
+    "shre-chat": { "port": 5000, "protocol": "https" },
+    "shre-chronicle": { "port": 5491, "protocol": "https" },
+    "shre-contacts": { "port": 5492, "protocol": "https" },
+    "shre-cortex-bridge": { "port": 5493, "protocol": "https" },
+    "shre-meter": { "port": 5494, "protocol": "https" },
+    "shre-monitor": { "port": 5495, "protocol": "https" },
+    "shre-router": { "port": 5497, "protocol": "https" },
+    "shre-scorer": { "port": 5496, "protocol": "https" },
+    "shre-skills": { "port": 5499, "protocol": "https" },
+    "shre-doctor": { "port": 5500, "protocol": "https" },
+    "shre-tasks": { "port": 5460, "protocol": "https" },
+    "shre-traffic": { "port": 5501, "protocol": "https" },
+    "mib007": { "port": 5520, "protocol": "https" },
+    "shre-fleet": { "port": 5498, "protocol": "https" }
+  },
+  "infrastructure": {}
+}
