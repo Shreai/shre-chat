@@ -1,10 +1,1 @@
-{
-  "services": {
-    "mib007": { "port": 5520 },
-    "mib-desktop": { "port": 5500 }
-  },
-  "infrastructure": {
-    "openclaw-gateway": { "port": 18789 },
-    "cortexdb-dashboard": { "port": 3400 }
-  }
-}
+{"api": 3001, "ws": 3002}
