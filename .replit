@@ -48,3 +48,7 @@ publicDir = "dist"
 
 [userenv.shared]
 VITE_API_TARGET = "https://chat.nirtek.net"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
