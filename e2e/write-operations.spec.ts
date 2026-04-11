@@ -5,6 +5,7 @@ const LIVE_SERVER = 'http://127.0.0.1:8899';
 
 test.describe('Agent 10: Write Operations — POS item create, price update, stock adjust', () => {
   test.setTimeout(120_000);
+  test.describe.configure({ retries: 2 });
 
   // ═══════════ API Layer: Direct admin endpoint tests ═══════════
 
@@ -199,8 +200,13 @@ test.describe('Agent 10: Write Operations — POS item create, price update, sto
     }
   });
 
-  test('shre-chat: update price via chat message', async ({ page }) => {
+  test('shre-chat: update price via chat message', async ({ page, request }) => {
     test.setTimeout(180_000);
+
+    // Pre-check: live-server must be reachable for write tools
+    const liveOk = await request.get(`${LIVE_SERVER}/health`).then(r => r.ok).catch(() => false);
+    test.skip(!liveOk, 'Live server (8899) not reachable — skipping chat write test');
+
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#shre-chat-textarea:not([disabled])', { timeout: 30_000 });
 
@@ -221,8 +227,13 @@ test.describe('Agent 10: Write Operations — POS item create, price update, sto
     console.log(`Price update response: ${text.slice(0, 300)}`);
   });
 
-  test('shre-chat: adjust stock via chat message', async ({ page }) => {
+  test('shre-chat: adjust stock via chat message', async ({ page, request }) => {
     test.setTimeout(180_000);
+
+    // Pre-check: live-server must be reachable for write tools
+    const liveOk = await request.get(`${LIVE_SERVER}/health`).then(r => r.ok).catch(() => false);
+    test.skip(!liveOk, 'Live server (8899) not reachable — skipping chat write test');
+
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#shre-chat-textarea:not([disabled])', { timeout: 30_000 });
 

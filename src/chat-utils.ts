@@ -596,11 +596,11 @@ export const MARKETPLACE_EMBED_APPS: Record<
 > = {
   erp: {
     id: 'centrix',
-    name: 'Centrix',
+    name: 'Centrix ERP',
     icon: 'X',
     url: 'https://nexusailab.io',
     color: 'from-violet-500 to-indigo-500',
-    description: 'ERP System',
+    description: 'ERP Platform — contacts, tasks, projects, deals, invoices',
     embed: true,
   },
 };

@@ -467,8 +467,8 @@ export function ChatPanels(props: ChatPanelsProps) {
           {/* Voice chat — opens dedicated voice screen */}
           <button
             onClick={onOpenVoiceChat}
-            className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-            style={{ color: 'var(--c-text-3)' }}
+            className="h-8 w-8 shrink-0 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+            style={{ color: 'var(--c-text-3)', minHeight: 32, minWidth: 32 }}
             aria-label="Open voice chat"
             title="Voice chat"
           >

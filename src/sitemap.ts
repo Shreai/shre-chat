@@ -142,6 +142,14 @@ export const SITEMAP: SitemapEntry[] = [
 
   // ── Tools ──
   {
+    id: 'command-center',
+    label: 'Command Center',
+    description: 'Compute mesh dashboard — physical node health, Tailscale topology, service distribution, failover chain',
+    category: 'tools',
+    type: 'view',
+    keywords: ['command center', 'mesh', 'nodes', 'compute', 'tailscale', 'hardware', 'topology', 'infrastructure', 'failover'],
+  },
+  {
     id: 'admin',
     label: 'Admin',
     description: 'System administration — agent roster, stats, quality, cost overview',

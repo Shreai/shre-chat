@@ -132,7 +132,7 @@ function StatusBarGatewayPill() {
             display: 'inline-flex',
             alignItems: 'center',
             gap: 3,
-            padding: '1px 7px',
+            padding: '4px 8px', minHeight: 32,
             borderRadius: 6,
             fontSize: 11,
             fontWeight: 600,

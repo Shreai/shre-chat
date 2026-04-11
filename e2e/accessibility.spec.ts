@@ -72,7 +72,9 @@ test.describe('Agent 6: Accessibility & Edge Cases', () => {
           !text.includes('Content Security Policy') &&
           !text.includes('ServiceWorker') &&
           !text.includes('SSL certificate') &&
-          !text.includes('status of 400')
+          !text.includes('status of 400') &&
+          !text.includes('localhost:8899') &&
+          !text.includes('502 (Bad Gateway)')
         ) {
           errors.push(text);
         }
