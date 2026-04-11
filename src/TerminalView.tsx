@@ -50,6 +50,8 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
     setListening(true);
   }, [listening]);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const handleSubmit = () => {
     if (!text.trim()) return;
     if (recRef.current) {
@@ -59,11 +61,12 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
     }
     onSubmit(text.trim());
     setText('');
+    if (textareaRef.current) textareaRef.current.style.height = '36px';
   };
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 shrink-0"
+      className="flex items-end gap-2 px-3 py-2 shrink-0"
       style={{
         background: 'var(--c-bg-2, rgba(255,255,255,0.03))',
         borderTop: '1px solid var(--c-border, rgba(255,255,255,0.08))',
@@ -72,7 +75,7 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
       {SpeechRec && (
         <button
           onClick={toggleVoice}
-          className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all ${listening ? 'bg-red-500/20' : ''}`}
+          className={`h-8 w-8 mb-0.5 rounded-lg flex items-center justify-center shrink-0 transition-all ${listening ? 'bg-red-500/20' : ''}`}
           style={{
             color: listening ? '#f87171' : 'var(--c-text-3, rgba(255,255,255,0.4))',
             animation: listening ? 'pulse-ring 1.2s ease-out infinite' : 'none',
@@ -93,24 +96,36 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
           </svg>
         </button>
       )}
-      <input
-        type="text"
+      <textarea
+        ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSubmit();
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        onInput={(e) => {
+          const el = e.currentTarget;
+          el.style.height = '36px';
+          const maxH = window.innerWidth <= 768 ? 120 : 160;
+          el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
         }}
         placeholder={listening ? 'Listening...' : 'Type or speak a command...'}
-        className="flex-1 bg-transparent text-[13px] outline-none"
+        rows={1}
+        className="flex-1 bg-transparent text-[13px] outline-none resize-none overflow-y-auto"
         autoCapitalize="off"
         style={{
           color: 'var(--c-text-1, rgba(255,255,255,0.8))',
           fontFamily: "'SF Mono', 'Fira Code', Menlo, monospace",
+          minHeight: '36px',
+          maxHeight: window.innerWidth <= 768 ? '120px' : '160px',
         }}
       />
       <button
         onClick={handleSubmit}
-        className="h-8 px-3 rounded-lg text-[11px] font-medium transition-all"
+        className="h-8 mb-0.5 px-3 rounded-lg text-[11px] font-medium transition-all shrink-0"
         style={{
           background: text.trim() ? 'rgba(59,130,246,0.2)' : 'transparent',
           color: text.trim() ? '#60a5fa' : 'var(--c-text-3, rgba(255,255,255,0.2))',

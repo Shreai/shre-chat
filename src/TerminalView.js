@@ -49,6 +49,7 @@ function TerminalVoiceInput({ onSubmit }) {
         recRef.current = rec;
         setListening(true);
     }, [listening]);
+    const textareaRef = useRef(null);
     const handleSubmit = () => {
         if (!text.trim())
             return;
@@ -59,20 +60,30 @@ function TerminalVoiceInput({ onSubmit }) {
         }
         onSubmit(text.trim());
         setText('');
+        if (textareaRef.current) textareaRef.current.style.height = '36px';
     };
-    return (_jsxs("div", { className: "flex items-center gap-2 px-3 py-2 shrink-0", style: {
+    return (_jsxs("div", { className: "flex items-end gap-2 px-3 py-2 shrink-0", style: {
             background: 'var(--c-bg-2, rgba(255,255,255,0.03))',
             borderTop: '1px solid var(--c-border, rgba(255,255,255,0.08))',
-        }, children: [SpeechRec && (_jsx("button", { onClick: toggleVoice, className: `h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all ${listening ? 'bg-red-500/20' : ''}`, style: {
+        }, children: [SpeechRec && (_jsx("button", { onClick: toggleVoice, className: `h-8 w-8 mb-0.5 rounded-lg flex items-center justify-center shrink-0 transition-all ${listening ? 'bg-red-500/20' : ''}`, style: {
                     color: listening ? '#f87171' : 'var(--c-text-3, rgba(255,255,255,0.4))',
                     animation: listening ? 'pulse-ring 1.2s ease-out infinite' : 'none',
-                }, title: listening ? 'Stop listening' : 'Voice input', children: _jsxs("svg", { className: "h-4 w-4", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [_jsx("path", { d: "M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" }), _jsx("path", { d: "M19 10v2a7 7 0 0 1-14 0v-2" }), _jsx("line", { x1: "12", y1: "19", x2: "12", y2: "23" }), _jsx("line", { x1: "8", y1: "23", x2: "16", y2: "23" })] }) })), _jsx("input", { type: "text", value: text, onChange: (e) => setText(e.target.value), onKeyDown: (e) => {
-                    if (e.key === 'Enter')
+                }, title: listening ? 'Stop listening' : 'Voice input', children: _jsxs("svg", { className: "h-4 w-4", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [_jsx("path", { d: "M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" }), _jsx("path", { d: "M19 10v2a7 7 0 0 1-14 0v-2" }), _jsx("line", { x1: "12", y1: "19", x2: "12", y2: "23" }), _jsx("line", { x1: "8", y1: "23", x2: "16", y2: "23" })] }) })), _jsx("textarea", { ref: textareaRef, value: text, onChange: (e) => setText(e.target.value), onKeyDown: (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
                         handleSubmit();
-                }, placeholder: listening ? 'Listening...' : 'Type or speak a command...', className: "flex-1 bg-transparent text-[13px] outline-none", autoCapitalize: "off", style: {
+                    }
+                }, onInput: (e) => {
+                    const el = e.currentTarget;
+                    el.style.height = '36px';
+                    const maxH = window.innerWidth <= 768 ? 120 : 160;
+                    el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
+                }, placeholder: listening ? 'Listening...' : 'Type or speak a command...', rows: 1, className: "flex-1 bg-transparent text-[13px] outline-none resize-none overflow-y-auto", autoCapitalize: "off", style: {
                     color: 'var(--c-text-1, rgba(255,255,255,0.8))',
                     fontFamily: "'SF Mono', 'Fira Code', Menlo, monospace",
-                } }), _jsx("button", { onClick: handleSubmit, className: "h-8 px-3 rounded-lg text-[11px] font-medium transition-all", style: {
+                    minHeight: '36px',
+                    maxHeight: window.innerWidth <= 768 ? '120px' : '160px',
+                } }), _jsx("button", { onClick: handleSubmit, className: "h-8 mb-0.5 px-3 rounded-lg text-[11px] font-medium transition-all shrink-0", style: {
                     background: text.trim() ? 'rgba(59,130,246,0.2)' : 'transparent',
                     color: text.trim() ? '#60a5fa' : 'var(--c-text-3, rgba(255,255,255,0.2))',
                     border: '1px solid ' +
