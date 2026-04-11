@@ -92,9 +92,10 @@ export function useChatKeydown(params) {
                 return;
             }
         }
-        if (e.key === 'Enter' && !e.shiftKey) {
+        // Enter inserts newline (default textarea behavior) — only Send button sends
+        // Ctrl+Enter or Cmd+Enter: save queue edit or send
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
-            // Enter (or Ctrl+Enter): save queue edit or send
             if (editingQueueId !== null) {
                 const newText = input.trim();
                 if (newText) {
