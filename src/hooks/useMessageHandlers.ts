@@ -695,6 +695,13 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       content: text,
       timestamp: Date.now(),
       ...(replyToIndex !== null ? { replyTo: replyToIndex } : {}),
+      ...(attachedFiles.length > 0
+        ? {
+            attachments: attachedFiles
+              .filter((f) => f.dataUrl)
+              .map((f) => ({ name: f.name, type: f.type, dataUrl: f.dataUrl, size: f.size })),
+          }
+        : {}),
     };
     actions.addMessage(sessionId, userMsg);
     actions.setReplyTo(null);
@@ -917,13 +924,22 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
                 wsMeta.ttft_ms = String(firstTokenTimeRef.current - sendTimeRef.current);
               if (sendTimeRef.current > 0)
                 wsMeta.total_ms = String(Date.now() - sendTimeRef.current);
-              if (full.trim())
+              const finalContent = full.trim() ? full : fullResponse.trim() ? fullResponse : '';
+              if (finalContent) {
                 actions.addMessage(sessionId, {
                   role: 'assistant',
-                  content: full,
+                  content: finalContent,
                   timestamp: Date.now(),
                   meta: wsMeta,
                 });
+              } else {
+                actions.addMessage(sessionId, {
+                  role: 'assistant',
+                  content: '[system] Received empty response from the AI. Please try again.',
+                  timestamp: Date.now(),
+                  meta: { system: 'true', type: 'system', event: 'empty-response' },
+                });
+              }
               actions.setStreamText('');
               actions.setStreaming(false);
               actions.setStatusLine(null);
@@ -1154,8 +1170,17 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             if (claudeToolEvents.length > 0)
               httpMeta.claudeToolEvents = JSON.stringify(claudeToolEvents);
           }
-          if (full.trim())
-            actions.addMessage(sessionId, { role: 'assistant', content: full, meta: httpMeta });
+          const finalContent = full.trim() ? full : fullResponse.trim() ? fullResponse : '';
+          if (finalContent) {
+            actions.addMessage(sessionId, { role: 'assistant', content: finalContent, meta: httpMeta });
+          } else {
+            actions.addMessage(sessionId, {
+              role: 'assistant',
+              content: '[system] Received empty response from the AI. Please try again.',
+              timestamp: Date.now(),
+              meta: { system: 'true', type: 'system', event: 'empty-response' },
+            });
+          }
           actions.setStreamText('');
           actions.setStreaming(false);
           actions.setStatusLine(null);

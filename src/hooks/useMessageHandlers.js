@@ -637,13 +637,22 @@ export function useMessageHandlers(params) {
                             wsMeta.ttft_ms = String(firstTokenTimeRef.current - sendTimeRef.current);
                         if (sendTimeRef.current > 0)
                             wsMeta.total_ms = String(Date.now() - sendTimeRef.current);
-                        if (full.trim())
+                        const finalContent = full.trim() ? full : fullResponse.trim() ? fullResponse : '';
+                        if (finalContent) {
                             actions.addMessage(sessionId, {
                                 role: 'assistant',
-                                content: full,
+                                content: finalContent,
                                 timestamp: Date.now(),
                                 meta: wsMeta,
                             });
+                        } else {
+                            actions.addMessage(sessionId, {
+                                role: 'assistant',
+                                content: '[system] Received empty response from the AI. Please try again.',
+                                timestamp: Date.now(),
+                                meta: { system: 'true', type: 'system', event: 'empty-response' },
+                            });
+                        }
                         actions.setStreamText('');
                         actions.setStreaming(false);
                         actions.setStatusLine(null);
@@ -865,8 +874,17 @@ export function useMessageHandlers(params) {
                     if (claudeToolEvents.length > 0)
                         httpMeta.claudeToolEvents = JSON.stringify(claudeToolEvents);
                 }
-                if (full.trim())
-                    actions.addMessage(sessionId, { role: 'assistant', content: full, meta: httpMeta });
+                const finalContent = full.trim() ? full : fullResponse.trim() ? fullResponse : '';
+                if (finalContent) {
+                    actions.addMessage(sessionId, { role: 'assistant', content: finalContent, meta: httpMeta });
+                } else {
+                    actions.addMessage(sessionId, {
+                        role: 'assistant',
+                        content: '[system] Received empty response from the AI. Please try again.',
+                        timestamp: Date.now(),
+                        meta: { system: 'true', type: 'system', event: 'empty-response' },
+                    });
+                }
                 actions.setStreamText('');
                 actions.setStreaming(false);
                 actions.setStatusLine(null);

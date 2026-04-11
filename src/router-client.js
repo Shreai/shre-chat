@@ -529,9 +529,10 @@ async function streamViaFallback(message, history, systemPrompt, callbacks, sign
                     else if (evt.type === 'status') {
                         callbacks.onStatus?.('thinking', `${evt.model || routedModel} via ${evt.provider || '...'}`);
                     }
-                    else if (evt.type === 'delta' && evt.text) {
-                        fullText += evt.text;
-                        callbacks.onToken(evt.text);
+                    else if (evt.type === 'delta' && (evt.text || evt.content)) {
+                        const chunk = evt.text || evt.content;
+                        fullText += chunk;
+                        callbacks.onToken(chunk);
                         callbacks.onStatus?.('writing');
                     }
                     else if (evt.type === 'response.output_text.delta' && evt.delta) {

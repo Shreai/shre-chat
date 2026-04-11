@@ -97,7 +97,7 @@ export function ChatComposer(props) {
                                                     ? 'Claude Code CLI — describe what to build...'
                                                     : cliMode
                                                         ? 'Claude CLI (subscription mode)...'
-                                                        : `Message ${currentAgentName}...`, disabled: (syncing && messages.length === 0) || !writeEnabled, rows: 1, autoCapitalize: "off", "aria-label": "Message input", className: "w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent", style: { color: 'var(--c-text-1)', minHeight: '44px' }, onFocus: () => {
+                                                        : `Message ${currentAgentName}...`, disabled: (syncing && messages.length === 0) || !writeEnabled, rows: 1, autoCapitalize: "off", autoCorrect: "off", spellCheck: false, "aria-label": "Message input", className: "w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent", style: { color: 'var(--c-text-1)', minHeight: '44px' }, onFocus: () => {
                                     // On mobile, scroll textarea into view when keyboard opens
                                     setTimeout(() => {
                                         inputRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });

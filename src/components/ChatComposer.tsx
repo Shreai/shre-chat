@@ -657,6 +657,8 @@ export function ChatComposer(props: ChatComposerProps) {
             disabled={(syncing && messages.length === 0) || !writeEnabled}
             rows={1}
             autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             aria-label="Message input"
             className="w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
             style={{ color: 'var(--c-text-1)', minHeight: '44px' }}

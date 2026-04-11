@@ -14,6 +14,7 @@ import { TaskBadge } from './message-parts/TaskBadge';
 import { HtmlCodeBlock, TableWithExport } from './message-parts/CodeBlocks';
 import { CopyButton, MessageActions, ActionTagChips } from './message-parts/MessageActions';
 import { StableMarkdownBlock } from './message-parts/SystemEventChip';
+import { FileAttachmentPreview } from './message-parts/FileAttachmentPreview';
 // Re-export extracted components so existing imports from MessageBubble still work
 export { Lightbox, StableMarkdownBlock, SystemEventChip } from './message-parts/SystemEventChip';
 export { ToolExecutionChip, ToolExecutionGroup } from './message-parts/ToolExecutionChip';
@@ -106,7 +107,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming, agentNam
                         transition: 'border-color 0.2s, box-shadow 0.2s',
                         WebkitUserSelect: 'text',
                         userSelect: 'text',
-                    }, children: [isUser ? (_jsxs("div", { className: "whitespace-pre-wrap break-words", style: editing ? { opacity: 0.5 } : undefined, children: [editing && (_jsx("div", { className: "text-[10px] mb-1", style: { color: 'var(--c-accent)', opacity: 1 }, children: "Editing below \u2193" })), searchHighlight
+                    }, children: [isUser ? (_jsxs("div", { className: "whitespace-pre-wrap break-words", style: editing ? { opacity: 0.5 } : undefined, children: [editing && (_jsx("div", { className: "text-[10px] mb-1", style: { color: 'var(--c-accent)', opacity: 1 }, children: "Editing below \u2193" })), message.attachments && message.attachments.length > 0 && (_jsx(FileAttachmentPreview, { attachments: message.attachments, onImageClick: onImageClick })), searchHighlight
                                     ? highlightSearchText(displayContent, searchHighlight)
                                     : displayContent] })) : streaming ? ((() => {
                             const { stable, pending } = splitStableAndPending(displayContent);

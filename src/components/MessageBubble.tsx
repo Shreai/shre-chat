@@ -36,6 +36,7 @@ import { TaskBadge } from './message-parts/TaskBadge';
 import { HtmlCodeBlock, TableWithExport } from './message-parts/CodeBlocks';
 import { CopyButton, MessageActions, ActionTagChips } from './message-parts/MessageActions';
 import { StableMarkdownBlock } from './message-parts/SystemEventChip';
+import { FileAttachmentPreview } from './message-parts/FileAttachmentPreview';
 
 // Re-export extracted components so existing imports from MessageBubble still work
 export { Lightbox, StableMarkdownBlock, SystemEventChip } from './message-parts/SystemEventChip';
@@ -306,6 +307,12 @@ const MessageBubble = memo(function MessageBubble({
                   Editing below ↓
                 </div>
               )}
+              {message.attachments && message.attachments.length > 0 && (
+                <FileAttachmentPreview
+                  attachments={message.attachments}
+                  onImageClick={onImageClick}
+                />
+              )}
               {searchHighlight
                 ? highlightSearchText(displayContent, searchHighlight)
                 : displayContent}
@@ -417,7 +424,7 @@ const MessageBubble = memo(function MessageBubble({
                       }
                     }
 
-                    const contentTypes: Record<string, 'html' | 'json' | 'chart' | 'table'> = {
+                    const contentTypes: Record<string, 'html' | 'json' | 'chart' | 'table' | 'pdf'> = {
                       'html:preview': 'html',
                       'html:embed': 'html',
                       'json:viewer': 'json',
@@ -430,6 +437,8 @@ const MessageBubble = memo(function MessageBubble({
                       'table:preview': 'table',
                       'table:viewer': 'table',
                       'csv:preview': 'table',
+                      csv: 'table',
+                      'pdf:preview': 'pdf',
                     };
                     const contentType = contentTypes[lang];
                     if (contentType) {

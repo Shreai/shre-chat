@@ -19,6 +19,7 @@ const TYPE_ICONS: Record<string, string> = {
   json: '{}',
   chart: '\u{1F4CA}',
   table: '\u{1F4CB}',
+  pdf: '\u{1F4C4}',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ const TYPE_LABELS: Record<string, string> = {
   json: 'JSON',
   chart: 'Chart',
   table: 'Table',
+  pdf: 'PDF',
 };
 
 const INLINE_MAX_ROWS = 20;
@@ -282,6 +284,39 @@ function ChartPreview({ content, chartType }: { content: string; chartType?: str
   );
 }
 
+function PdfPreview({ content }: { content: string }) {
+  // content can be a base64 data URL or a URL to a PDF
+  const src = content.trim().startsWith('data:') ? content.trim() : content.trim();
+  const isDataUrl = src.startsWith('data:');
+  const isUrl = src.startsWith('http://') || src.startsWith('https://') || isDataUrl;
+
+  if (!isUrl) {
+    return (
+      <div style={{ padding: 16, textAlign: 'center', color: 'var(--c-text-4)' }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u{1F4C4}'}</div>
+        <div style={{ fontSize: 12, marginBottom: 8 }}>PDF content detected</div>
+        <div style={{ fontSize: 11, color: 'var(--c-text-5)' }}>
+          Use the Preview tab for full viewing
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={src}
+      title="PDF preview"
+      style={{
+        width: '100%',
+        height: 280,
+        border: 'none',
+        borderRadius: 6,
+        background: '#525659',
+      }}
+    />
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────
 
 export default function ContentCard({
@@ -374,6 +409,7 @@ export default function ContentCard({
           {type === 'json' && <JsonPreview content={content} />}
           {type === 'chart' && <ChartPreview content={content} chartType={chartType} />}
           {type === 'table' && <TablePreview content={content} />}
+          {type === 'pdf' && <PdfPreview content={content} />}
         </div>
         {/* Fade gradient at bottom */}
         <div
