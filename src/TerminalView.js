@@ -201,14 +201,10 @@ export const TerminalView = forwardRef(function TerminalView({ visible, onClose 
         term.open(el);
         fit.fit();
         // ── Auto-reconnecting WebSocket for terminal ──────────────
-        // Use a stable session ID so reconnects reattach to the same server-side PTY
-        // (survives screen changes, tab switches, foldable phone fold/unfold)
-        const termSessionId = sessionStorage.getItem('shre-term-session') ||
-            (() => {
-                const id = `t-${Date.now().toString(36)}`;
-                sessionStorage.setItem('shre-term-session', id);
-                return id;
-            })();
+        // Each tab gets its own unique PTY session — no session sharing between tabs
+        const termSessionId = activeTab.initialCmd
+            ? `cli-${activeTab.id}`
+            : `tab-${activeTab.id}`;
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${proto}//${location.host}/ws/terminal?session=${termSessionId}`;
         let currentWs = null;

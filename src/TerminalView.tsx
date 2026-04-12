@@ -590,15 +590,10 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
     fit.fit();
 
     // ── Auto-reconnecting WebSocket for terminal ──────────────
-    // For tabs with initialCmd (e.g. Claude CLI), use a unique session per tab
+    // Each tab gets its own unique PTY session — no session sharing between tabs
     const termSessionId = activeTab.initialCmd
       ? `cli-${activeTab.id}`
-      : sessionStorage.getItem('shre-term-session') ||
-        (() => {
-          const id = `t-${Date.now().toString(36)}`;
-          sessionStorage.setItem('shre-term-session', id);
-          return id;
-        })();
+      : `tab-${activeTab.id}`;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let wsUrl = `${proto}//${location.host}/ws/terminal?session=${termSessionId}`;
     if (activeTab.initialCmd) {
