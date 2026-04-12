@@ -928,13 +928,19 @@ function checkAuth(req) {
   // Check Authorization header first
   const authHeader = req.headers["authorization"];
   if (authHeader?.startsWith("Bearer ")) {
-    return verifyAuthToken(authHeader.slice(7));
+    const claims = verifyAuthToken(authHeader.slice(7));
+    if (claims) return claims;
   }
   // Check cookie fallback
   const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
   const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
   if (tokenCookie) {
-    return verifyAuthToken(tokenCookie.split("=")[1]);
+    const claims = verifyAuthToken(tokenCookie.split("=")[1]);
+    if (claims) return claims;
+  }
+  // DEV_BYPASS_AUTH: allow unauthenticated access in dev/test with demo claims
+  if (process.env.DEV_BYPASS_AUTH === "true") {
+    return { sub: "dev-user", username: "dev", name: "Developer", activeWorkspaceId: "dev-workspace", role: "owner", scopes: ["*"] };
   }
   return null;
 }
@@ -1498,7 +1504,7 @@ const SECURITY_HEADERS = {
   // Only send HSTS when TLS is active — sending it over HTTP poisons Chrome's
   // HSTS cache, forcing all future requests to HTTPS even if TLS certs are disabled
   ...(tlsOpts ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
-  "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+  "Permissions-Policy": "camera=(self), microphone=*, geolocation=()",
   "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate",
 };
 
@@ -5220,17 +5226,53 @@ async function requestHandler(req, res) {
       // Strip client-supplied trust headers to prevent spoofing, then set from validated JWT
       delete routerHeaders["x-tenant-id"];
       delete routerHeaders["x-user-id"];
+      delete routerHeaders["x-store-id"];
+      delete routerHeaders["x-reseller-id"];
       delete routerHeaders["x-channel"];
       if (authClaims?.activeWorkspaceId) {
         routerHeaders["x-tenant-id"] = authClaims.activeWorkspaceId;
         routerHeaders["x-user-id"] = authClaims.sub;
       }
+      // Store and reseller IDs from workspace claims (if available)
+      if (authClaims?.storeId) routerHeaders["x-store-id"] = authClaims.storeId;
+      if (authClaims?.resellerId) routerHeaders["x-reseller-id"] = authClaims.resellerId;
       routerHeaders["x-channel"] = "shre-chat";
+      // Timeout: 120s for streaming (SSE can be long), 30s for non-streaming
+      const isStreaming = (routerHeaders["accept"] || "").includes("text/event-stream") || reqBody.includes('"stream":true') || reqBody.includes('"stream": true');
+      const proxyTimeoutMs = isStreaming ? 120_000 : 30_000;
       const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
         routerUrl,
-        { method: req.method, headers: routerHeaders, rejectUnauthorized: false },
+        { method: req.method, headers: routerHeaders, rejectUnauthorized: false, timeout: proxyTimeoutMs },
         (routerRes) => {
           // Debug: log.info("[router-proxy] response", { status: routerRes.statusCode, ct: routerRes.headers["content-type"]?.slice(0, 40) });
+
+          // ── Budget/billing blocks: convert to SSE so frontend doesn't hang ──
+          if (routerRes.statusCode === 402 || routerRes.statusCode === 429) {
+            let errorBody = "";
+            routerRes.on("data", (chunk) => { errorBody += chunk; });
+            routerRes.on("end", () => {
+              let errorMsg = routerRes.statusCode === 402
+                ? "Billing limit reached — please upgrade your plan or wait for the next cycle."
+                : "Rate limit exceeded — please wait a moment and try again.";
+              try {
+                const parsed = JSON.parse(errorBody);
+                if (parsed.error) errorMsg = typeof parsed.error === "string" ? parsed.error : parsed.error.message || errorMsg;
+              } catch { /* use default message */ }
+              if (!res.headersSent) {
+                res.writeHead(200, {
+                  "Content-Type": "text/event-stream",
+                  "Cache-Control": "no-cache",
+                  "X-Accel-Buffering": "no",
+                  Connection: "keep-alive",
+                });
+              }
+              res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, code: routerRes.statusCode })}\n\n`);
+              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+              res.end();
+            });
+            return;
+          }
+
           const rHeaders = { ...routerRes.headers };
           rHeaders["cache-control"] = "no-cache";
           rHeaders["x-accel-buffering"] = "no";
@@ -5355,6 +5397,10 @@ async function requestHandler(req, res) {
           });
         },
       );
+      routerReq.on("timeout", () => {
+        log.warn("[router-proxy] Request timed out", { timeout: proxyTimeoutMs });
+        routerReq.destroy(new Error(`Router proxy timeout after ${proxyTimeoutMs / 1000}s`));
+      });
       routerReq.on("error", (err) => {
         log.error("[router-proxy] shre-router error:", err.message);
         if (!res.headersSent) {
@@ -6897,6 +6943,7 @@ if (tlsOpts && httpsServer) {
     feedbackPipeline.start();
     heartbeat.start();
     startWALReplay(60_000); // Retry failed training writes every 60s
+    checkStartupDeps();
   });
 } else {
   _listenServer = server;
@@ -6909,6 +6956,7 @@ if (tlsOpts && httpsServer) {
     feedbackPipeline.start();
     heartbeat.start();
     startWALReplay(60_000); // Retry failed training writes every 60s
+    checkStartupDeps();
   });
 }
 
@@ -7211,6 +7259,36 @@ setInterval(async () => {
   }
 }, 60000); // check every 60 seconds
 
+// ─── Startup dependency health check (non-blocking) ─────────────────────────
+function checkStartupDeps() {
+  setTimeout(async () => {
+    const deps = [
+      { name: "shre-router", url: `${serviceUrl("shre-router")}/health`, critical: true },
+      { name: "shre-auth", url: `${serviceUrl("shre-auth")}/health`, critical: true },
+      { name: "shre-tasks", url: `${serviceUrl("shre-tasks")}/health`, critical: false },
+      { name: "shre-fleet", url: `${serviceUrl("shre-fleet")}/health`, critical: false },
+    ];
+    const results = [];
+    for (const dep of deps) {
+      try {
+        const r = await fetch(dep.url, { signal: AbortSignal.timeout(3000) });
+        results.push({ ...dep, ok: r.ok });
+      } catch {
+        results.push({ ...dep, ok: false });
+      }
+    }
+    const up = results.filter(r => r.ok).map(r => r.name);
+    const critDown = results.filter(r => !r.ok && r.critical).map(r => r.name);
+    const optDown = results.filter(r => !r.ok && !r.critical).map(r => r.name);
+    if (up.length > 0) log.info(`[startup] UP: ${up.join(", ")}`);
+    if (critDown.length > 0) log.warn(`[startup] CRITICAL DOWN: ${critDown.join(", ")} — chat will not work until started`);
+    if (optDown.length > 0) log.info(`[startup] Optional DOWN: ${optDown.join(", ")} — degraded features`);
+    if (critDown.length === 0 && optDown.length === 0) log.info("[startup] All dependencies healthy");
+    if (process.env.DEV_BYPASS_AUTH === "true") log.warn("[startup] DEV_BYPASS_AUTH=true — auth bypassed, do not use in production");
+    if (!authSigningKey) log.warn("[startup] JWT signing key not found at ~/.shre/auth/signing-key.hex — auth will fail");
+  }, 2000);
+}
+
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal) {
   log.info(`${signal} received — shutting down gracefully`);
@@ -7236,10 +7314,15 @@ process.on("uncaughtException", (err) => {
     log.error(`[shre-chat] Port ${PORT} already in use`);
     process.exit(1);
   }
-  // Stream race conditions are non-fatal — log and continue
-  if (err.code === "ERR_STREAM_WRITE_AFTER_END" || err.code === "ERR_STREAM_DESTROYED") {
-    log.warn("[shre-chat] Non-fatal stream error (suppressed)", { code: err.code });
-    return; // do NOT shutdown — these are benign SSE proxy races
+  // Network/stream race conditions are non-fatal — log and continue
+  const nonFatalCodes = new Set([
+    "ERR_STREAM_WRITE_AFTER_END", "ERR_STREAM_DESTROYED",
+    "ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT",
+    "ERR_HTTP2_INVALID_SESSION", "ENOTFOUND",
+  ]);
+  if (nonFatalCodes.has(err.code)) {
+    log.warn("[shre-chat] Non-fatal error (suppressed)", { code: err.code, message: err.message });
+    return; // do NOT shutdown — these are benign proxy/network races
   }
   log.error("[shre-chat] Uncaught exception", {}, err);
   // Graceful shutdown — flush sessions before exiting

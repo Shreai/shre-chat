@@ -682,12 +682,16 @@ async function streamViaFallback(
   let routedModel = '';
   const fallbackStart = Date.now();
 
-  // Stream silence timeout — if no data for 60s, assume connection died
-  const STREAM_SILENCE_TIMEOUT = 60_000;
+  // Stream silence timeout — backend handles model-level timeouts and fallbacks
+  // Frontend only kills on genuinely dead connections (5min)
+  const STREAM_SILENCE_TIMEOUT = 300_000;
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
   const resetSilenceTimer = () => {
     if (silenceTimer) clearTimeout(silenceTimer);
     silenceTimer = setTimeout(() => {
+      if (fullText && fullText.trim().length > 0) {
+        callbacks.onStatus?.('warning', 'Stream timed out — response may be incomplete');
+      }
       try { reader.cancel(); } catch {}
     }, STREAM_SILENCE_TIMEOUT);
   };
@@ -835,6 +839,21 @@ async function streamViaFallback(
           } else if (evt.type === 'billing_warning') {
             callbacks.onStatus?.('warning', evt.message || 'Low balance');
             callbacks.onBillingWarning?.(evt.message, evt.balanceCents);
+          } else if (evt.type === 'context_loaded') {
+            const layers = (evt.layers || []).map((l: { layer: string }) => l.layer).join(', ');
+            callbacks.onStatus?.('thinking', `Context: ${layers}`);
+          } else if (evt.type === 'hallucination_detected') {
+            callbacks.onStatus?.('warning', 'Verifying response accuracy...');
+          } else if (evt.type === 'dtg') {
+            // Internal routing guidance — ignore silently
+          } else if (evt.type === 'reflection') {
+            callbacks.onStatus?.('thinking', 'Reflecting on approach...');
+          } else if (evt.type === 'dedup_warning') {
+            callbacks.onStatus?.('warning', 'Similar request detected');
+          } else if (evt.type === 'tool.timeout') {
+            callbacks.onStatus?.('warning', `Tool timed out: ${evt.tool || 'unknown'}`);
+          } else if (evt.type === 'verification_warning') {
+            callbacks.onStatus?.('warning', 'Quality check flagged issues');
           } else if (evt.type === 'error') {
             const errMsg = evt.error || 'Gateway error';
             // Tool loop exhaustion is not a gateway failure — surface it accurately
