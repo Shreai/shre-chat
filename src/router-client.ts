@@ -629,6 +629,7 @@ async function streamViaFallback(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
       'X-App-Version': APP_VERSION,
       'x-channel': 'shre-chat',
     },

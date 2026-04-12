@@ -5217,249 +5217,175 @@ async function requestHandler(req, res) {
     const routerPath = url.pathname.replace("/api/router", "");
     const routerUrl = `${serviceUrl("shre-router")}${routerPath}${url.search}`;
 
-    // Capture request body for post-stream learning pipeline
+    // Capture request body for post-stream persistence
     let reqBody = "";
-    try {
-      const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
-      delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
-      delete routerHeaders["content-length"]; // body may be modified (memory injection) — let Node use chunked encoding
-      // Strip client-supplied trust headers to prevent spoofing, then set from validated JWT
-      delete routerHeaders["x-tenant-id"];
-      delete routerHeaders["x-user-id"];
-      delete routerHeaders["x-store-id"];
-      delete routerHeaders["x-reseller-id"];
-      delete routerHeaders["x-channel"];
-      if (authClaims?.activeWorkspaceId) {
-        routerHeaders["x-tenant-id"] = authClaims.activeWorkspaceId;
-        routerHeaders["x-user-id"] = authClaims.sub;
-      }
-      // Store and reseller IDs from workspace claims (if available)
-      if (authClaims?.storeId) routerHeaders["x-store-id"] = authClaims.storeId;
-      if (authClaims?.resellerId) routerHeaders["x-reseller-id"] = authClaims.resellerId;
-      routerHeaders["x-channel"] = "shre-chat";
-      // Timeout: 120s for streaming (SSE can be long), 30s for non-streaming
-      const isStreaming = (routerHeaders["accept"] || "").includes("text/event-stream") || reqBody.includes('"stream":true') || reqBody.includes('"stream": true');
-      const proxyTimeoutMs = isStreaming ? 120_000 : 30_000;
-      const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
-        routerUrl,
-        { method: req.method, headers: routerHeaders, rejectUnauthorized: false, timeout: proxyTimeoutMs },
-        (routerRes) => {
-          // Debug: log.info("[router-proxy] response", { status: routerRes.statusCode, ct: routerRes.headers["content-type"]?.slice(0, 40) });
+    const reqChunks = [];
+    req.on("data", (chunk) => {
+      reqChunks.push(chunk);
+      reqBody += chunk;
+    });
 
-          // ── Budget/billing blocks: convert to SSE so frontend doesn't hang ──
-          if (routerRes.statusCode === 402 || routerRes.statusCode === 429) {
-            let errorBody = "";
-            routerRes.on("data", (chunk) => { errorBody += chunk; });
-            routerRes.on("end", () => {
-              let errorMsg = routerRes.statusCode === 402
-                ? "Billing limit reached — please upgrade your plan or wait for the next cycle."
-                : "Rate limit exceeded — please wait a moment and try again.";
-              try {
-                const parsed = JSON.parse(errorBody);
-                if (parsed.error) errorMsg = typeof parsed.error === "string" ? parsed.error : parsed.error.message || errorMsg;
-              } catch { /* use default message */ }
-              if (!res.headersSent) {
-                res.writeHead(200, {
-                  "Content-Type": "text/event-stream",
-                  "Cache-Control": "no-cache",
-                  "X-Accel-Buffering": "no",
-                  Connection: "keep-alive",
-                });
-              }
-              res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, code: routerRes.statusCode })}\n\n`);
-              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-              res.end();
-            });
-            return;
-          }
+    req.on("end", async () => {
+      try {
+        const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
+        delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
+        delete routerHeaders["content-length"]; // body may be modified — let Node use chunked encoding
+        // Strip client-supplied trust headers to prevent spoofing, then set from validated JWT
+        delete routerHeaders["x-tenant-id"];
+        delete routerHeaders["x-user-id"];
+        delete routerHeaders["x-store-id"];
+        delete routerHeaders["x-reseller-id"];
+        delete routerHeaders["x-channel"];
+        
+        if (authClaims?.activeWorkspaceId) {
+          routerHeaders["x-tenant-id"] = authClaims.activeWorkspaceId;
+          routerHeaders["x-user-id"] = authClaims.sub;
+        }
+        if (authClaims?.storeId) routerHeaders["x-store-id"] = authClaims.storeId;
+        if (authClaims?.resellerId) routerHeaders["x-reseller-id"] = authClaims.resellerId;
+        routerHeaders["x-channel"] = "shre-chat";
 
-          const rHeaders = { ...routerRes.headers };
-          rHeaders["cache-control"] = "no-cache";
-          rHeaders["x-accel-buffering"] = "no";
-          res.writeHead(routerRes.statusCode ?? 502, rHeaders);
+        // streaming detection now works because reqBody is populated
+        const isStreaming = (routerHeaders["accept"] || "").includes("text/event-stream") || 
+                           reqBody.includes('"stream":true') || 
+                           reqBody.includes('"stream": true');
+        const proxyTimeoutMs = isStreaming ? 300_000 : 60_000;
 
-          // Buffer SSE chunks for post-stream learning (cap at 50KB to avoid memory pressure)
-          const chunks = [];
-          let totalLen = 0;
-          const MAX_CAPTURE = 50 * 1024;
-          let ended = false;
-
-          // Guard: if client disconnects early, stop forwarding
-          res.on("close", () => { ended = true; });
-
-          routerRes.on("data", (chunk) => {
-            if (ended) return; // client gone or stream ended — discard
-            try { res.write(chunk); } catch { ended = true; /* client disconnected */ }
-            if (totalLen < MAX_CAPTURE) {
-              chunks.push(chunk);
-              totalLen += chunk.length;
+        const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
+          routerUrl,
+          { method: req.method, headers: routerHeaders, rejectUnauthorized: false, timeout: proxyTimeoutMs },
+          (routerRes) => {
+            // ── Budget/billing blocks: convert to SSE so frontend doesn't hang ──
+            if (routerRes.statusCode === 402 || routerRes.statusCode === 429) {
+              let errorBody = "";
+              routerRes.on("data", (chunk) => { errorBody += chunk; });
+              routerRes.on("end", () => {
+                let errorMsg = routerRes.statusCode === 402
+                  ? "Billing limit reached — please upgrade your plan or wait for the next cycle."
+                  : "Rate limit exceeded — please wait a moment and try again.";
+                try {
+                  const parsed = JSON.parse(errorBody);
+                  if (parsed.error) errorMsg = typeof parsed.error === "string" ? parsed.error : parsed.error.message || errorMsg;
+                } catch { /* use default message */ }
+                if (!res.headersSent) {
+                  res.writeHead(200, {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    Connection: "keep-alive",
+                  });
+                }
+                res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, code: routerRes.statusCode })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+                res.end();
+              });
+              return;
             }
-          });
-          routerRes.on("end", () => {
-            // Debug: log.info("[router-proxy] stream ended", { totalLen });
-            ended = true;
-            try { res.end(); } catch { /* client disconnected */ }
-            // Fire-and-forget: extract agent response from SSE and run learning pipeline
-            try {
-              const sseText = Buffer.concat(chunks).toString("utf8");
-              const parsed = JSON.parse(reqBody || "{}");
-              const agentId = parsed.agentId || "shre";
-              const userMessage = Array.isArray(parsed.messages)
-                ? (parsed.messages.filter(m => m.role === "user").pop()?.content || "").slice(0, 5000)
-                : "";
-              // Extract assistant text from SSE delta events OR plain JSON response
-              let assistantResponse = "";
-              if (sseText.includes("data: ")) {
-                // SSE streaming response
-                for (const line of sseText.split("\n")) {
-                  if (!line.startsWith("data: ")) continue;
+
+            const rHeaders = { ...routerRes.headers };
+            rHeaders["cache-control"] = "no-cache";
+            rHeaders["x-accel-buffering"] = "no";
+            res.writeHead(routerRes.statusCode ?? 502, rHeaders);
+
+            const chunks = [];
+            let totalLen = 0;
+            const MAX_CAPTURE = 100 * 1024; // 100KB buffer for persistence extraction
+            let ended = false;
+
+            res.on("close", () => { ended = true; });
+
+            routerRes.on("data", (chunk) => {
+              if (ended) return;
+              try { res.write(chunk); } catch { ended = true; }
+              if (totalLen < MAX_CAPTURE) {
+                chunks.push(chunk);
+                totalLen += chunk.length;
+              }
+            });
+
+            routerRes.on("end", () => {
+              ended = true;
+              try { res.end(); } catch { }
+              
+              // Local Persistence Logic (SQLite only)
+              // We keep this in shre-chat so history loads instantly without shre-router overhead.
+              // All learning/RAG/logic is delegated to shre-router.
+              try {
+                const sseText = Buffer.concat(chunks).toString("utf8");
+                const parsed = JSON.parse(reqBody || "{}");
+                const agentId = parsed.agentId || "shre";
+                const userMessage = Array.isArray(parsed.messages)
+                  ? (parsed.messages.filter(m => m.role === "user").pop()?.content || "").slice(0, 10000)
+                  : "";
+                
+                let assistantResponse = "";
+                if (sseText.includes("data: ")) {
+                  for (const line of sseText.split("\n")) {
+                    if (!line.startsWith("data: ")) continue;
+                    try {
+                      const evt = JSON.parse(line.slice(6));
+                      if (evt.type === "delta" && evt.content) assistantResponse += evt.content;
+                      else if (evt.type === "content_block_delta" && evt.delta?.text) assistantResponse += evt.delta.text;
+                    } catch { }
+                  }
+                } else {
                   try {
-                    const evt = JSON.parse(line.slice(6));
-                    if (evt.type === "delta" && evt.content) assistantResponse += evt.content;
-                    else if (evt.type === "content_block_delta" && evt.delta?.text) assistantResponse += evt.delta.text;
-                  } catch { /* not JSON or not a delta */ }
+                    const jsonRes = JSON.parse(sseText);
+                    if (typeof jsonRes.content === "string") assistantResponse = jsonRes.content;
+                    else if (Array.isArray(jsonRes.content)) assistantResponse = jsonRes.content.filter(b => b.type === "text").map(b => b.text).join("");
+                  } catch { }
                 }
-              } else {
-                // Non-streaming JSON response (stream: false)
-                try {
-                  const jsonRes = JSON.parse(sseText);
-                  if (typeof jsonRes.content === "string") assistantResponse = jsonRes.content;
-                  else if (Array.isArray(jsonRes.content)) assistantResponse = jsonRes.content.filter(b => b.type === "text").map(b => b.text).join("");
-                } catch { /* not valid JSON */ }
-              }
 
-              // ── Persist user message to chat_messages ──
-              const sessionId = parsed.sessionId || parsed.session_id || req.headers["x-session-id"];
-              if (sessionId && userMessage) {
-                try {
-                  stmtInsertMessage.run(
-                    `msg-${Date.now()}-u-${Math.random().toString(36).slice(2, 8)}`,
-                    sessionId, "user", userMessage.slice(0, 50000),
-                    parsed.model || null, agentId, parsed.userId || "system", "{}", Date.now()
-                  );
-                } catch { /* best-effort */ }
-              }
-
-              if (userMessage && assistantResponse.length >= 80) {
-                const model = parsed.model || "unknown";
-                const proxyTenantId = authClaims?.activeWorkspaceId || parsed.tenantId || "default";
-                logConversationToCortex(agentId, userMessage, assistantResponse, "router-proxy", model, proxyTenantId).catch(() => {});
-                emitConversationComplete(agentId, userMessage, assistantResponse, "router-proxy", model).catch(() => {});
-                conversationLearner.learn(userMessage, assistantResponse, proxyTenantId, agentId).catch(() => {});
-                extractAndLogSkills(agentId, `User: ${userMessage}\n\nAssistant: ${assistantResponse}`).catch(() => {});
-                // Post-conversation quality evaluation — auto-scores, flags issues, writes training data
-                conversationEvaluator.evaluate(sessionId, userMessage, assistantResponse, agentId, model).catch(() => {});
-                // Push agent-summary to MIB007 comms for store-facing agents
-                if (agentId !== "shre" && agentId !== "main") {
-                  postAgentSummaryToComms(agentId, assistantResponse.slice(0, 500)).catch(() => {});
+                const sessionId = parsed.sessionId || parsed.session_id || req.headers["x-session-id"];
+                if (sessionId && userMessage) {
+                  try {
+                    stmtInsertMessage.run(
+                      `msg-${Date.now()}-u-${Math.random().toString(36).slice(2, 8)}`,
+                      sessionId, "user", userMessage,
+                      parsed.model || null, agentId, authClaims?.sub || "system", "{}", Date.now()
+                    );
+                  } catch (err) { log.debug("[persistence] user message failed:", err.message); }
                 }
-                // ── Persist assistant message to chat_messages ──
-                if (sessionId) {
+
+                if (sessionId && assistantResponse) {
                   try {
                     stmtInsertMessage.run(
                       `msg-${Date.now()}-a-${Math.random().toString(36).slice(2, 8)}`,
-                      sessionId, "assistant", assistantResponse.slice(0, 50000),
+                      sessionId, "assistant", assistantResponse,
                       parsed.model || null, agentId, "system", "{}", Date.now()
                     );
-                  } catch { /* best-effort */ }
+                  } catch (err) { log.debug("[persistence] assistant message failed:", err.message); }
                 }
-                // ── Auto-summarize every 10 messages → agent memory in CortexDB ──
-                if (sessionId) {
-                  try {
-                    const msgCount = stmtCountMessages.get(sessionId)?.count || 0;
-                    if (msgCount > 0 && msgCount % 10 === 0) {
-                      const recentMsgs = stmtGetMessages.all(sessionId, 10, Math.max(0, msgCount - 10));
-                      const convoText = recentMsgs.map(m => `${m.role}: ${m.content.slice(0, 500)}`).join("\n");
-                      const memorySummary = {
-                        data_type: "agent_memory",
-                        payload: {
-                          agentId,
-                          category: "relationship",
-                          summary: `Session ${sessionId} (msgs ${msgCount - 9}-${msgCount}): ${convoText.slice(0, 1000)}`,
-                          importance: 0.5,
-                          sessionId,
-                          messageCount: msgCount,
-                          timestamp: new Date().toISOString(),
-                        },
-                        actor: "shre-chat",
-                      };
-                      fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/write`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(memorySummary),
-                        signal: AbortSignal.timeout(5000),
-                      }).catch(() => {});
-                    }
-                  } catch { /* auto-summarize is best-effort */ }
-                }
+              } catch (pErr) {
+                log.debug("[persistence] extraction failed:", pErr.message);
               }
-            } catch { /* learning pipeline is best-effort */ }
-          });
-        },
-      );
-      routerReq.on("timeout", () => {
-        log.warn("[router-proxy] Request timed out", { timeout: proxyTimeoutMs });
-        routerReq.destroy(new Error(`Router proxy timeout after ${proxyTimeoutMs / 1000}s`));
-      });
-      routerReq.on("error", (err) => {
-        log.error("[router-proxy] shre-router error:", err.message);
-        if (!res.headersSent) {
-          // Emergency fallback: search local message history for similar Q&A
-          try {
-            const parsed = JSON.parse(reqBody || "{}");
-            const lastUserMsg = [...(parsed.messages || [])].reverse().find(m => m.role === "user")?.content || "";
-            const cached = emergencyResponseLookup(lastUserMsg);
-            if (cached) {
-              log.info("[router-proxy] Serving cached response (router unavailable)");
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({
-                content: cached.content,
-                model: "cached-local",
-                agent: cached.agent_id,
-                _cached: true,
-                _notice: "AI router is temporarily unavailable. This is a cached response from a similar previous conversation.",
-              }));
-              return;
-            }
-          } catch { /* fallback lookup failed */ }
-          res.writeHead(502);
-          res.end(JSON.stringify({ error: "shre-router unreachable", _notice: "AI is temporarily unavailable. Please try again in a moment." }));
-        }
-      });
-      // Buffer request body for memory injection
-      const reqChunks = [];
-      req.on("data", (chunk) => { reqChunks.push(chunk); reqBody += chunk; });
-      req.on("end", async () => {
-        try {
-          const parsed = JSON.parse(reqBody || "{}");
-          const agentId = parsed.agentId || "shre";
-          const lastUserMsg = [...(parsed.messages || [])].reverse().find(m => m.role === "user")?.content || "";
-          const tenantId = authClaims?.activeWorkspaceId || parsed.tenantId || "default";
-
-          // ── Context + Memory injection (parallel) ──
-          const [contextBlock, memoryBlock] = await Promise.all([
-            fetchContextInjection(agentId, lastUserMsg, tenantId).catch(() => null),
-            buildAgentMemory(agentId).catch(() => null),
-          ]);
-
-          // Assemble: context first (soul/platform/RAG/data), then agent memories
-          const injections = [contextBlock, memoryBlock].filter(Boolean);
-          if (injections.length > 0) {
-            const combined = injections.join("\n\n---\n\n");
-            parsed.systemPrompt = combined + "\n\n" + (parsed.systemPrompt || "");
+            });
           }
+        );
 
-          routerReq.end(JSON.stringify(parsed));
-        } catch {
-          // If JSON parse fails, forward raw body
-          for (const chunk of reqChunks) routerReq.write(chunk);
-          routerReq.end();
-        }
-      });
-    } catch (err) {
-      log.error("[router-proxy] proxy failed:", err.message);
-      if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: "Proxy error" })); }
-    }
+        routerReq.on("timeout", () => {
+          log.warn("[router-proxy] Request timed out", { timeout: proxyTimeoutMs });
+          routerReq.destroy(new Error(`Router proxy timeout after ${proxyTimeoutMs / 1000}s`));
+        });
+
+        routerReq.on("error", (err) => {
+          log.error("[router-proxy] shre-router error:", err.message);
+          if (!res.headersSent) {
+            res.writeHead(502);
+            res.end(JSON.stringify({ error: "shre-router unreachable" }));
+          }
+        });
+
+        // Forward body to shre-router — NO MODIFICATION!
+        // We let shre-router handle context/memory injection.
+        routerReq.end(reqBody);
+
+      } catch (err) {
+        log.error("[router-proxy] setup failed:", err.message);
+        if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: "Proxy internal error" })); }
+      }
+    });
+
     return;
   }
 
