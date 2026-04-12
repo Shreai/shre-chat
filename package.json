@@ -1,6 +1,6 @@
 {
   "name": "shre-chat",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "AROS — AI-powered retail chat assistant",
   "main": "electron/dist/main.cjs",
@@ -19,7 +19,10 @@
     "qa:rerun": "node scripts/qa-orchestrator.mjs --rerun-failed",
     "qa:agent": "node scripts/qa-orchestrator.mjs --agent",
     "qa:report": "node scripts/qa-orchestrator.mjs --report-only",
-    "qa:dry": "node scripts/qa-orchestrator.mjs --dry-run"
+    "qa:dry": "node scripts/qa-orchestrator.mjs --dry-run",
+    "test:android": "node scripts/test-android.mjs",
+    "test:android:smoke": "node scripts/test-android.mjs --agent smoke",
+    "test:android:manual": "node scripts/test-android.mjs --manual"
   },
   "build": {
     "appId": "ai.shre.chat",

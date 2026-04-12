@@ -165,9 +165,8 @@ export function useChatKeydown(params: UseChatKeydownParams) {
         }
       }
 
-      // Enter inserts newline (default textarea behavior) — only Send button sends
-      // Ctrl+Enter or Cmd+Enter: save queue edit or send
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Enter sends message, Shift+Enter inserts newline
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (editingQueueId !== null) {
           const newText = input.trim();

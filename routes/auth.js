@@ -434,7 +434,16 @@ export function registerAuthRoutes({ log }) {
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
       // @ts-ignore — x-forwarded-for is always a string in practice
       const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-      const rl = rateLimit(clientIp, "login", 5, 15 * 60_000);
+      // Higher rate limit for localhost / tunnel-proxied (QA/dev) vs external
+      const isLocal = clientIp === "127.0.0.1" || clientIp === "::1" || clientIp === "::ffff:127.0.0.1";
+      const isTunnelProxied = !isLocal && (
+        !!req.headers["cf-connecting-ip"] ||            // Cloudflare Tunnel
+        !!req.headers["cf-ray"] ||                      // Cloudflare edge
+        req.headers["x-forwarded-for"]?.includes("127.0.0.1") ||  // auth-gate at :5431
+        req.headers["x-forwarded-for"]?.includes("::1")
+      );
+      const loginLimit = isLocal ? 30 : isTunnelProxied ? 30 : 15;
+      const rl = rateLimit(clientIp, "login", loginLimit, 15 * 60_000);
       if (!rl.allowed) {
         auditLog("login_rate_limited", { ip: clientIp });
         return json(res, { error: "Too many login attempts. Try again later.", retryAfter: rl.retryAfter }, 429);
@@ -445,7 +454,7 @@ export function registerAuthRoutes({ log }) {
         try {
           const { username, password } = JSON.parse(body);
           if (!username || !password) return json(res, { error: "Username and password required" }, 400);
-          const ulr = rateLimit(username, "login-user", 5, 15 * 60_000);
+          const ulr = rateLimit(username, "login-user", loginLimit, 5 * 60_000);
           if (!ulr.allowed) {
             auditLog("login_rate_limited", { ip: clientIp, username });
             return json(res, { error: "Too many login attempts for this account. Try again later.", retryAfter: ulr.retryAfter }, 429);
