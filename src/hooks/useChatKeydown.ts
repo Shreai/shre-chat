@@ -33,6 +33,8 @@ export interface UseChatKeydownParams {
   replaceSessionMessages: (sessionId: string, messages: any[]) => void;
   // Send
   handleSend: () => void;
+  // Streaming state
+  streaming: boolean;
   // Sent history
   sentHistoryRef: React.MutableRefObject<string[]>;
   sentHistoryIdxRef: React.MutableRefObject<number>;
@@ -177,6 +179,12 @@ export function useChatKeydown(params: UseChatKeydownParams) {
           }
           setEditingQueueId(null);
           setEditingQueueText('');
+          setInput('');
+          return;
+        }
+        // If streaming, queue the message instead of sending
+        if (streaming && input.trim()) {
+          setQueue((prev) => [...prev, { id: `q-${Date.now()}`, text: input.trim() }]);
           setInput('');
           return;
         }

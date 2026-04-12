@@ -105,6 +105,12 @@ export function useChatKeydown(params) {
                 setInput('');
                 return;
             }
+            // If streaming, queue the message instead of sending
+            if (streaming && input.trim()) {
+                setQueue((prev) => [...prev, { id: `q-${Date.now()}`, text: input.trim() }]);
+                setInput('');
+                return;
+            }
             // If editing a message, truncate history and resend
             if (editingMsgIndex !== null && activeSessionId && input.trim()) {
                 const truncated = messages.slice(0, editingMsgIndex);

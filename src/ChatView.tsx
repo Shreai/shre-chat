@@ -728,6 +728,7 @@ export function ChatView() {
     activeSessionId,
     replaceSessionMessages: actions.replaceSessionMessages,
     handleSend,
+    streaming,
     sentHistoryRef,
     sentHistoryIdxRef,
     HISTORY_KEY,
