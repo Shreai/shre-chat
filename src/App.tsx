@@ -13,6 +13,8 @@ import {
   uid,
   createSession,
   loadSessions,
+  saveSessions,
+  syncWithServer,
   loadActivity,
   loadFeed,
   loadFiles,
@@ -313,6 +315,16 @@ function MainApp({
     if (saved && sessions.some((s) => s.id === saved)) return saved;
     return sessions[0]?.id ?? null;
   });
+
+  // Sync sessions with server on mount — merges server data with local
+  useEffect(() => {
+    syncWithServer(sessions).then((merged) => {
+      if (merged !== sessions && merged.length > 0) {
+        setSessions(merged);
+        saveSessions(merged);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [openTabs, setOpenTabs] = useState<string[]>(() => {
     const saved = loadTabs();

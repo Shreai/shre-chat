@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment } from "react/jsx-runtime";
 import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
-import { AppContext, createSession, loadSessions, loadActivity, loadFeed, loadFiles, loadTabs, loadActiveSession, loadQueue, loadThemeCustom, loadDrafts, } from './store';
+import { AppContext, createSession, loadSessions, saveSessions, syncWithServer, loadActivity, loadFeed, loadFiles, loadTabs, loadActiveSession, loadQueue, loadThemeCustom, loadDrafts, } from './store';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
@@ -138,6 +138,15 @@ function MainApp({ authUser, onLogout, userProfile, setUserProfile, activeWorksp
             return saved;
         return sessions[0]?.id ?? null;
     });
+    // Sync sessions with server on mount — merges server data with local
+    useEffect(() => {
+        syncWithServer(sessions).then((merged) => {
+            if (merged !== sessions && merged.length > 0) {
+                setSessions(merged);
+                saveSessions(merged);
+            }
+        });
+    }, []);
     const [openTabs, setOpenTabs] = useState(() => {
         const saved = loadTabs();
         if (saved.length > 0)
