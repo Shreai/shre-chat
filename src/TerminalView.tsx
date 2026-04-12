@@ -6,75 +6,235 @@ import 'xterm/css/xterm.css';
 import { getSpeechLocale } from './i18n';
 
 // ── Voice-to-text input for terminal (mobile-friendly) ────────────
+// Dual-path STT: browser SpeechRecognition (live interim) + MediaRecorder→Whisper (fallback)
 const SpeechRec =
   typeof window !== 'undefined'
     ? window.SpeechRecognition || (window as any).webkitSpeechRecognition
     : null;
 
+const PREFERRED_MIME = (() => {
+  if (typeof MediaRecorder === 'undefined') return '';
+  for (const mime of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return '';
+})();
+
+type VoicePhase = 'idle' | 'recording' | 'transcribing' | 'error';
+
 function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) {
   const [text, setText] = useState('');
-  const [listening, setListening] = useState(false);
+  const [phase, setPhase] = useState<VoicePhase>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
   const recRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const liveTextRef = useRef('');
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 
-  const toggleVoice = useCallback(() => {
-    if (listening && recRef.current) {
+  const cleanup = useCallback(() => {
+    if (recRef.current) {
+      try { recRef.current.abort(); } catch (_) { void _; }
+      recRef.current = null;
+    }
+    if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') {
+      try { mediaRecRef.current.stop(); } catch (_) { void _; }
+    }
+    mediaRecRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    chunksRef.current = [];
+    liveTextRef.current = '';
+  }, []);
+
+  const transcribeViaWhisper = useCallback(async (blob: Blob): Promise<string> => {
+    const form = new FormData();
+    form.append('file', blob, 'recording.webm');
+    form.append('model', 'whisper-1');
+    const res = await fetch('/api/transcribe', {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = await res.json();
+    return (data.text || '').trim();
+  }, []);
+
+  const stopAndTranscribe = useCallback(async () => {
+    const hadLiveText = liveTextRef.current.trim();
+    const recorder = mediaRecRef.current;
+
+    // Stop browser SpeechRecognition
+    if (recRef.current) {
       try { recRef.current.stop(); } catch (_) { void _; }
       recRef.current = null;
-      setListening(false);
+    }
+
+    // If we got good live text from SpeechRecognition, use it directly
+    if (hadLiveText && !isAndroid) {
+      cleanup();
+      setPhase('idle');
       return;
     }
-    if (!SpeechRec) return;
-    const rec = new SpeechRec();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = getSpeechLocale();
-    let stopped = false;
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      let final = '';
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
-        else interim += e.results[i][0].transcript;
-      }
-      setText((prev) => {
-        const base = final ? prev + final : prev;
-        return (base + interim).trim();
-      });
-    };
-    rec.onend = () => {
-      if (stopped) return;
-      stopped = true;
-      recRef.current = null;
-      setListening(false);
-    };
-    rec.onerror = () => {
-      if (stopped) return;
-      stopped = true;
-      recRef.current = null;
-      setListening(false);
-    };
-    try {
-      rec.start();
-      recRef.current = rec;
-      setListening(true);
-    } catch (_) {
-      void _;
+
+    // Otherwise fall back to Whisper via MediaRecorder
+    if (!recorder || recorder.state === 'inactive') {
+      cleanup();
+      setPhase('idle');
+      return;
     }
-  }, [listening]);
+
+    setPhase('transcribing');
+
+    // Wait for MediaRecorder to flush its final chunk
+    const blob = await new Promise<Blob>((resolve) => {
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        resolve(new Blob(chunksRef.current, { type: PREFERRED_MIME || 'audio/webm' }));
+      };
+      recorder.stop();
+    });
+
+    // Stop mic
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    if (blob.size < 1000) {
+      // Too short — no audio captured
+      setPhase('idle');
+      chunksRef.current = [];
+      return;
+    }
+
+    try {
+      const whisperText = await transcribeViaWhisper(blob);
+      if (whisperText) {
+        setText((prev) => (prev ? prev + ' ' + whisperText : whisperText));
+      }
+      setPhase('idle');
+    } catch (err) {
+      console.error('[terminal-voice] Whisper fallback failed:', err);
+      setErrorMsg('Transcription failed');
+      setPhase('error');
+      setTimeout(() => setPhase('idle'), 2000);
+    }
+    chunksRef.current = [];
+  }, [cleanup, isAndroid, transcribeViaWhisper]);
+
+  const startRecording = useCallback(async () => {
+    setErrorMsg('');
+    setPhase('recording');
+    liveTextRef.current = '';
+    chunksRef.current = [];
+
+    // Acquire microphone
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch (err: any) {
+      // Fallback to basic constraints (Android OverconstrainedError)
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err2: any) {
+        const msg = err2.name === 'NotAllowedError' ? 'Microphone blocked'
+          : err2.name === 'NotFoundError' ? 'No microphone found'
+          : 'Mic access failed';
+        setErrorMsg(msg);
+        setPhase('error');
+        setTimeout(() => setPhase('idle'), 3000);
+        return;
+      }
+    }
+    streamRef.current = stream;
+
+    // Start MediaRecorder (Whisper fallback path)
+    if (PREFERRED_MIME) {
+      try {
+        const mr = new MediaRecorder(stream, { mimeType: PREFERRED_MIME });
+        mr.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        mr.start(500); // collect chunks every 500ms
+        mediaRecRef.current = mr;
+      } catch (_) { void _; }
+    }
+
+    // Start browser SpeechRecognition for live interim text (skip on Android — unreliable)
+    if (SpeechRec && !isAndroid) {
+      try {
+        const rec = new SpeechRec();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = getSpeechLocale();
+        rec.onresult = (e: SpeechRecognitionEvent) => {
+          let final = '';
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+            else interim += e.results[i][0].transcript;
+          }
+          liveTextRef.current = (liveTextRef.current + final).trim();
+          setText(() => (liveTextRef.current + (interim ? ' ' + interim : '')).trim());
+        };
+        rec.onerror = () => { /* Whisper fallback will handle it */ };
+        rec.onend = () => { recRef.current = null; };
+        rec.start();
+        recRef.current = rec;
+      } catch (_) { void _; }
+    }
+  }, [isAndroid]);
+
+  const toggleVoice = useCallback(() => {
+    if (phase === 'recording') {
+      stopAndTranscribe();
+    } else if (phase === 'idle' || phase === 'error') {
+      startRecording();
+    }
+    // ignore clicks during 'transcribing'
+  }, [phase, stopAndTranscribe, startRecording]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const submitGuardRef = useRef(0);
   const handleSubmit = () => {
     if (!text.trim()) return;
-    if (recRef.current) {
-      recRef.current.stop();
-      recRef.current = null;
-      setListening(false);
+    // Debounce: prevent duplicate sends from Android keyboard firing Enter twice
+    const now = Date.now();
+    if (now - submitGuardRef.current < 300) return;
+    submitGuardRef.current = now;
+
+    if (phase === 'recording') {
+      cleanup();
+      setPhase('idle');
     }
     onSubmit(text.trim());
     setText('');
     if (textareaRef.current) textareaRef.current.style.height = '36px';
   };
+
+  // Cleanup on unmount
+  useEffect(() => () => cleanup(), [cleanup]);
+
+  const hasMic = !!(SpeechRec || PREFERRED_MIME);
+
+  const micColor = phase === 'recording' ? '#f87171'
+    : phase === 'transcribing' ? '#facc15'
+    : phase === 'error' ? '#ef4444'
+    : 'var(--c-text-3, rgba(255,255,255,0.4))';
+
+  const placeholder = phase === 'recording' ? 'Listening... tap mic to stop'
+    : phase === 'transcribing' ? 'Transcribing...'
+    : phase === 'error' ? errorMsg || 'Voice error'
+    : 'Type or speak a command...';
 
   return (
     <div
@@ -84,28 +244,41 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
         borderTop: '1px solid var(--c-border, rgba(255,255,255,0.08))',
       }}
     >
-      {SpeechRec && (
+      {hasMic && (
         <button
           onClick={toggleVoice}
-          className={`h-8 w-8 mb-0.5 rounded-lg flex items-center justify-center shrink-0 transition-all ${listening ? 'bg-red-500/20' : ''}`}
+          disabled={phase === 'transcribing'}
+          className={`h-8 w-8 mb-0.5 rounded-lg flex items-center justify-center shrink-0 transition-all ${phase === 'recording' ? 'bg-red-500/20' : ''}`}
           style={{
-            color: listening ? '#f87171' : 'var(--c-text-3, rgba(255,255,255,0.4))',
-            animation: listening ? 'pulse-ring 1.2s ease-out infinite' : 'none',
+            color: micColor,
+            animation: phase === 'recording' ? 'pulse-ring 1.2s ease-out infinite' : 'none',
+            opacity: phase === 'transcribing' ? 0.5 : 1,
+            cursor: phase === 'transcribing' ? 'wait' : 'pointer',
           }}
-          title={listening ? 'Stop listening' : 'Voice input'}
+          title={
+            phase === 'recording' ? 'Stop & transcribe'
+            : phase === 'transcribing' ? 'Transcribing...'
+            : 'Voice input'
+          }
         >
-          <svg
-            className="h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-            <line x1="8" y1="23" x2="16" y2="23" />
-          </svg>
+          {phase === 'transcribing' ? (
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+          ) : (
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          )}
         </button>
       )}
       <textarea
@@ -124,7 +297,7 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
           const maxH = window.innerWidth <= 768 ? 120 : 160;
           el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
         }}
-        placeholder={listening ? 'Listening...' : 'Type or speak a command...'}
+        placeholder={placeholder}
         rows={1}
         className="flex-1 bg-transparent text-[13px] outline-none resize-none overflow-y-auto"
         autoCapitalize="off"
@@ -368,7 +541,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
   useEffect(() => {
     if (!visible || !containerRef.current || !activeTab) return;
     if (activeTab.term) {
-      // Tab already initialized — re-attach
+      // Tab already initialized — re-attach (no new WS or onData)
       containerRef.current.innerHTML = '';
       activeTab.term.open(containerRef.current);
       setTimeout(() => activeTab.fit?.fit(), 20);
@@ -474,7 +647,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
 
     connectWs();
 
-    term.onData((data) => {
+    const dataDisposable = term.onData((data) => {
       if (currentWs?.readyState === WebSocket.OPEN) {
         currentWs.send(data);
       }
@@ -517,9 +690,15 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
     const cleanup = () => {
       intentionallyClosed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (currentWs) {
+        currentWs.onclose = null; // prevent reconnect on intentional close
+        currentWs.close();
+      }
+      dataDisposable.dispose();
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('resize', onResize);
       if (vv) vv.removeEventListener('resize', onResize);
+      observer.disconnect();
     };
 
     // Update tab state
@@ -530,6 +709,9 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
           : t,
       ),
     );
+
+    // Return cleanup so React can tear down on unmount/re-run (fixes StrictMode double-mount)
+    return cleanup;
   }, [visible, activeTab?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fit on tab switch

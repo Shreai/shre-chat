@@ -50,9 +50,14 @@ function TerminalVoiceInput({ onSubmit }) {
         setListening(true);
     }, [listening]);
     const textareaRef = useRef(null);
+    const submitGuardRef = useRef(0);
     const handleSubmit = () => {
         if (!text.trim())
             return;
+        // Debounce: prevent duplicate sends from Android keyboard firing Enter twice
+        const now = Date.now();
+        if (now - submitGuardRef.current < 300) return;
+        submitGuardRef.current = now;
         if (recRef.current) {
             recRef.current.stop();
             recRef.current = null;
