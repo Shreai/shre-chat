@@ -196,6 +196,21 @@ function AttachmentCard({
   const isPdf = attachment.type === 'application/pdf' || ext === 'pdf';
   const isCsv = attachment.type === 'text/csv' || ext === 'csv';
   const isImage = attachment.type.startsWith('image/');
+  const isVideo = attachment.type.startsWith('video/');
+  const isDocx =
+    attachment.type ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    ext === 'docx';
+  const isXlsx =
+    attachment.type ===
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    ext === 'xlsx' ||
+    ext === 'xls';
+  const isPptx =
+    attachment.type ===
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    ext === 'pptx';
+  const isOfficeDoc = isDocx || isXlsx || isPptx;
   const [expanded, setExpanded] = useState(isPdf || isCsv);
 
   // Decode base64 text content for CSV
@@ -224,7 +239,91 @@ function AttachmentCard({
       ? { icon: '\u{1F4CB}', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'CSV' }
       : isImage
         ? { icon: '\u{1F5BC}', color: '#a855f7', bg: 'rgba(168,85,247,0.12)', label: 'IMG' }
-        : { icon: '\u{1F4CE}', color: 'var(--c-text-3)', bg: 'var(--c-bg-3)', label: ext.toUpperCase() || 'FILE' };
+        : isVideo
+          ? { icon: '\u{1F3AC}', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'VIDEO' }
+          : isDocx
+            ? { icon: '\u{1F4DD}', color: '#2563eb', bg: 'rgba(37,99,235,0.12)', label: 'DOCX' }
+            : isXlsx
+              ? { icon: '\u{1F4CA}', color: '#16a34a', bg: 'rgba(22,163,74,0.12)', label: 'XLSX' }
+              : isPptx
+                ? { icon: '\u{1F4FD}', color: '#ea580c', bg: 'rgba(234,88,12,0.12)', label: 'PPTX' }
+                : { icon: '\u{1F4CE}', color: 'var(--c-text-3)', bg: 'var(--c-bg-3)', label: ext.toUpperCase() || 'FILE' };
+
+  // Video: inline player
+  if (isVideo) {
+    return (
+      <div
+        style={{
+          borderRadius: 10,
+          border: '1px solid var(--c-border-2)',
+          background: 'var(--c-bg-card, rgba(255,255,255,0.03))',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 10px',
+            background: typeConfig.bg,
+            borderBottom: '1px solid var(--c-border-2)',
+          }}
+        >
+          <span style={{ fontSize: 14 }}>{typeConfig.icon}</span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: 'var(--c-text-2)',
+              flex: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {attachment.name}
+          </span>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              padding: '1px 5px',
+              borderRadius: 4,
+              background: 'rgba(245,158,11,0.2)',
+              color: '#f59e0b',
+            }}
+          >
+            Gemini Vision
+          </span>
+          {attachment.size && (
+            <span style={{ fontSize: 10, color: 'var(--c-text-5)' }}>
+              {formatFileSize(attachment.size)}
+            </span>
+          )}
+          <button
+            onClick={handleDownload}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--c-text-4)',
+              cursor: 'pointer',
+              fontSize: 12,
+              padding: '2px 4px',
+            }}
+            title="Download"
+          >
+            &#8681;
+          </button>
+        </div>
+        <video
+          src={attachment.dataUrl}
+          controls
+          style={{ maxWidth: 320, width: '100%', display: 'block' }}
+        />
+      </div>
+    );
+  }
 
   // Images render as thumbnails only (existing behavior handles full display)
   if (isImage) {
@@ -352,6 +451,32 @@ function AttachmentCard({
       {expanded && isCsv && textContent && (
         <div style={{ maxHeight: 320, overflow: 'auto' }}>
           <CsvTable content={textContent} />
+        </div>
+      )}
+      {isOfficeDoc && (
+        <div
+          style={{
+            padding: '6px 10px',
+            fontSize: 11,
+            color: 'var(--c-text-4)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              padding: '1px 5px',
+              borderRadius: 4,
+              background: 'rgba(34,197,94,0.15)',
+              color: '#22c55e',
+            }}
+          >
+            Parsed for AI
+          </span>
+          Content extracted and sent to the model
         </div>
       )}
     </div>

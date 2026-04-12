@@ -20,14 +20,17 @@ export function useFileHandling({
   const dragCounter = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (matches server limit)
+  const MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25MB for video (Gemini inline limit)
 
   const processFiles = useCallback(
     (files: File[]) => {
       for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
+        const limit = file.type.startsWith('video/') ? MAX_VIDEO_SIZE : MAX_FILE_SIZE;
+        const limitLabel = file.type.startsWith('video/') ? '25MB' : '10MB';
+        if (file.size > limit) {
           actions.setStatusLine(
-            `File "${file.name}" too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 5MB)`,
+            `File "${file.name}" too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max ${limitLabel})`,
           );
           setTimeout(() => actions.setStatusLine(null), 4000);
           continue;
@@ -115,7 +118,7 @@ export function useFileHandling({
         if (!file) continue;
         if (file.size > MAX_FILE_SIZE) {
           actions.setStatusLine(
-            `Pasted image too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 5MB)`,
+            `Pasted image too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 10MB)`,
           );
           setTimeout(() => actions.setStatusLine(null), 4000);
           continue;

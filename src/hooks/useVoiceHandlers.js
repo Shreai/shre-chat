@@ -59,7 +59,12 @@ export function useVoiceHandlers(params) {
         setInterimTranscript('');
         setVoicePendingSend('');
         setIsRecording(true);
-        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        // On Android, SpeechRecognition is unreliable (garbled results, cuts off early).
+        // Skip it entirely and use Whisper via MediaRecorder for clean transcription.
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const SpeechRec = isAndroid
+            ? null
+            : window.SpeechRecognition || window.webkitSpeechRecognition;
         // Haptic feedback
         if (navigator.vibrate)
             navigator.vibrate(50);

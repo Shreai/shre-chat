@@ -370,6 +370,49 @@ const MessageBubble = memo(function MessageBubble({
                     );
                   },
                   a({ href, children, node, ...props }) {
+                    // Document download card for agent-generated documents
+                    if (href?.includes('/v1/documents/download')) {
+                      const label = String(children || 'Download Document');
+                      return (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            border: '1px solid var(--c-border-2)',
+                            background: 'var(--c-bg-card, rgba(255,255,255,0.03))',
+                            cursor: 'pointer',
+                            margin: '4px 0',
+                          }}
+                          onClick={() => window.open(href, '_blank')}
+                        >
+                          <span style={{ fontSize: 16 }}>{'\u{1F4C4}'}</span>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: 'var(--c-text-2)',
+                            }}
+                          >
+                            {label}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 600,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              background: 'rgba(37,99,235,0.15)',
+                              color: '#3b82f6',
+                            }}
+                          >
+                            Download
+                          </span>
+                        </div>
+                      );
+                    }
                     return (
                       <>
                         <a

@@ -852,7 +852,7 @@ async function postAgentSummaryToComms(agentId, summary) {
     if (!companyId) return;
 
     // Discover first comms channel
-    const channelsRes = await mib007Fetch(`/api/companies/${companyId}/comms/channels`, {
+    const channelsRes = await mib007Fetch(`/api/workspaces/${companyId}/comms/channels`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!channelsRes.ok) return;
@@ -861,7 +861,7 @@ async function postAgentSummaryToComms(agentId, summary) {
     if (!channelId) return;
 
     const chatBaseUrl = process.env.SHRE_CHAT_URL || `https://localhost:${PORT}`;
-    await mib007Fetch(`/api/companies/${companyId}/comms/agent-summary`, {
+    await mib007Fetch(`/api/workspaces/${companyId}/comms/agent-summary`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2504,13 +2504,13 @@ async function requestHandler(req, res) {
       const ctxHeaders = userContextHeaders(req);
 
       if (req.method === "GET") {
-        const upstream = await mib007Fetch(`/api/companies/${companyId}/issues${url.search || ""}`, { signal: AbortSignal.timeout(8000), headers: ctxHeaders });
+        const upstream = await mib007Fetch(`/api/workspaces/${companyId}/issues${url.search || ""}`, { signal: AbortSignal.timeout(8000), headers: ctxHeaders });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
       } else {
         const body = await collectBody(req);
-        const upstream = await mib007Fetch(`/api/companies/${companyId}/issues`, {
+        const upstream = await mib007Fetch(`/api/workspaces/${companyId}/issues`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
@@ -2535,13 +2535,13 @@ async function requestHandler(req, res) {
       const ctxHeaders = userContextHeaders(req);
 
       if (req.method === "GET") {
-        const upstream = await mib007Fetch(`/api/companies/${companyId}/goals${url.search || ""}`, { signal: AbortSignal.timeout(8000), headers: ctxHeaders });
+        const upstream = await mib007Fetch(`/api/workspaces/${companyId}/goals${url.search || ""}`, { signal: AbortSignal.timeout(8000), headers: ctxHeaders });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
       } else {
         const body = await collectBody(req);
-        const upstream = await mib007Fetch(`/api/companies/${companyId}/goals`, {
+        const upstream = await mib007Fetch(`/api/workspaces/${companyId}/goals`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...ctxHeaders },
           body: JSON.stringify(body),
@@ -2659,14 +2659,14 @@ async function requestHandler(req, res) {
       const label = url.searchParams.get("label") || "INBOX";
       const params = new URLSearchParams({ maxResults: max, folder: label });
       if (query) params.set("q", query);
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/messages?${params}`, { signal: AbortSignal.timeout(15000) });
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/email/messages?${params}`, { signal: AbortSignal.timeout(15000) });
       if (!upstream.ok) throw new Error(`MIB007 email list failed: ${upstream.status}`);
       const data = await upstream.json();
       const messages = data.messages || data || [];
       // Get myEmail from accounts endpoint
       let myEmail = "";
       try {
-        const acctRes = await mib007Fetch(`/api/companies/${companyId}/email/accounts`, { signal: AbortSignal.timeout(5000) });
+        const acctRes = await mib007Fetch(`/api/workspaces/${companyId}/email/accounts`, { signal: AbortSignal.timeout(5000) });
         if (acctRes.ok) {
           const accts = await acctRes.json();
           myEmail = accts?.accounts?.[0]?.email || accts?.[0]?.email || "";
@@ -2686,13 +2686,13 @@ async function requestHandler(req, res) {
     try {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/messages/${threadMatch[1]}`, { signal: AbortSignal.timeout(15000) });
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/email/messages/${threadMatch[1]}`, { signal: AbortSignal.timeout(15000) });
       if (!upstream.ok) throw new Error(`MIB007 email get failed: ${upstream.status}`);
       const detail = await upstream.json();
       // Get myEmail
       let myEmail = "";
       try {
-        const acctRes = await mib007Fetch(`/api/companies/${companyId}/email/accounts`, { signal: AbortSignal.timeout(5000) });
+        const acctRes = await mib007Fetch(`/api/workspaces/${companyId}/email/accounts`, { signal: AbortSignal.timeout(5000) });
         if (acctRes.ok) {
           const accts = await acctRes.json();
           myEmail = accts?.accounts?.[0]?.email || accts?.[0]?.email || "";
@@ -2722,7 +2722,7 @@ async function requestHandler(req, res) {
       };
       if (body.cc) sendBody.cc = body.cc;
       if (body.add) sendBody.cc = [body.cc, body.add].filter(Boolean).join(",");
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/send`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/email/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sendBody),
@@ -2745,7 +2745,7 @@ async function requestHandler(req, res) {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
       const upstream = await mib007Fetch(
-        `/api/companies/${companyId}/email/messages/${attachMatch[1]}/attachments/${attachMatch[2]}`,
+        `/api/workspaces/${companyId}/email/messages/${attachMatch[1]}/attachments/${attachMatch[2]}`,
         { signal: AbortSignal.timeout(15000) },
       );
       if (!upstream.ok) throw new Error(`Attachment download failed: ${upstream.status}`);
@@ -2905,7 +2905,7 @@ async function requestHandler(req, res) {
       if (!body.to || !body.subject) return json(res, { error: "to and subject required" }, 400);
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/ai-compose`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/email/ai-compose`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2943,7 +2943,7 @@ async function requestHandler(req, res) {
       if (!body.to) return json(res, { error: "Missing 'to' field" }, 400);
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/email/send`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/email/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: body.to, subject: body.subject || "(no subject)", body: body.body || "", attachments: body.attachments }),
@@ -2965,7 +2965,7 @@ async function requestHandler(req, res) {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
       const subpath = url.pathname.replace("/api/crm", "");
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/crm${subpath}${url.search || ""}`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/crm${subpath}${url.search || ""}`, {
         method: req.method,
         headers: { "Content-Type": "application/json" },
         ...(["POST", "PUT", "PATCH"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
@@ -2986,7 +2986,7 @@ async function requestHandler(req, res) {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
       const subpath = url.pathname.replace("/api/calendar", "");
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/calendar${subpath}${url.search || ""}`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/calendar${subpath}${url.search || ""}`, {
         method: req.method,
         headers: { "Content-Type": "application/json" },
         ...(["POST", "PUT", "PATCH"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
@@ -3007,7 +3007,7 @@ async function requestHandler(req, res) {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
       const subpath = url.pathname.replace("/api/dashboards", "");
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/dashboards${subpath}${url.search || ""}`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/dashboards${subpath}${url.search || ""}`, {
         method: req.method,
         headers: { "Content-Type": "application/json" },
         ...(["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
@@ -3028,7 +3028,7 @@ async function requestHandler(req, res) {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
       const subpath = url.pathname.replace("/api/support", "");
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/support${subpath}${url.search || ""}`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/support${subpath}${url.search || ""}`, {
         method: req.method,
         headers: { "Content-Type": "application/json" },
         ...(["POST", "PUT", "PATCH"].includes(req.method) ? { body: JSON.stringify(await collectBody(req)) } : {}),
@@ -3049,7 +3049,7 @@ async function requestHandler(req, res) {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, { error: "No company" }, 400);
       const subpath = url.pathname.replace("/api/network", "");
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/network${subpath}${url.search || ""}`, {
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/network${subpath}${url.search || ""}`, {
         method: req.method,
         headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(15000),
@@ -3068,7 +3068,7 @@ async function requestHandler(req, res) {
     try {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, []);
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/nodes${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/nodes${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
       const data = await upstream.json().catch(() => []);
       json(res, data);
     } catch (err) {
@@ -3096,7 +3096,7 @@ async function requestHandler(req, res) {
     try {
       const companyId = await mib007CompanyId();
       if (!companyId) return json(res, []);
-      const upstream = await mib007Fetch(`/api/companies/${companyId}/vault/tool-permissions${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      const upstream = await mib007Fetch(`/api/workspaces/${companyId}/vault/tool-permissions${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
       const data = await upstream.json().catch(() => []);
       json(res, data);
     } catch (err) {
@@ -4072,7 +4072,7 @@ async function requestHandler(req, res) {
       if (global.__mib007CompanyId) {
         const channelsResp = await new Promise((resolve, reject) => {
           const cid = global.__mib007CompanyId;
-          const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: `/api/companies/${cid}/comms/channels`, method: "GET" }, (resp) => {
+          const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: `/api/workspaces/${cid}/comms/channels`, method: "GET" }, (resp) => {
             let d = "";
             resp.on("data", (c) => (d += c));
             resp.on("end", () => resolve({ status: resp.statusCode, body: d }));
@@ -4089,7 +4089,7 @@ async function requestHandler(req, res) {
             const msgsResp = await new Promise((resolve, reject) => {
               const cid = global.__mib007CompanyId;
               const qs = since > 0 ? `?after=${since}&limit=50` : "?limit=20";
-              const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: `/api/companies/${cid}/comms/channels/${ch.id}/messages${qs}`, method: "GET" }, (resp) => {
+              const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: `/api/workspaces/${cid}/comms/channels/${ch.id}/messages${qs}`, method: "GET" }, (resp) => {
                 let d = "";
                 resp.on("data", (c) => (d += c));
                 resp.on("end", () => resolve({ status: resp.statusCode, body: d }));
@@ -4904,7 +4904,7 @@ async function requestHandler(req, res) {
   // ── Proxy /api/comms/* to MIB007 comms API ─────────────────────────
 
   if (url.pathname.startsWith("/api/comms/")) {
-    // Strip /api/comms prefix → forward as /api/companies/... to MIB007
+    // Strip /api/comms prefix → forward as /api/workspaces/... to MIB007
     // Expected format: /api/comms/channels, /api/comms/channels/:id/messages
     // We need a company ID — fetch it once from MIB007
     if (!global.__mib007CompanyId) {
@@ -4937,13 +4937,13 @@ async function requestHandler(req, res) {
       return json(res, { error: "Invalid company ID" }, 500);
     }
 
-    // Map: /api/comms/channels → /api/companies/{id}/comms/channels
+    // Map: /api/comms/channels → /api/workspaces/{id}/comms/channels
     const commsPath = url.pathname.replace("/api/comms/", "");
     // Prevent path traversal — only allow alphanumeric, hyphens, slashes, and query params
     if (/\.\./.test(commsPath) || /[^a-zA-Z0-9/_?&=\-%]/.test(commsPath)) {
       return json(res, { error: "Invalid path" }, 400);
     }
-    const mibPath = `/api/companies/${global.__mib007CompanyId}/comms/${commsPath}${url.search || ""}`;
+    const mibPath = `/api/workspaces/${global.__mib007CompanyId}/comms/${commsPath}${url.search || ""}`;
 
     const fwdHeaders = { ...req.headers, host: `127.0.0.1:${MIB007_PORT}` };
     delete fwdHeaders["accept-encoding"];

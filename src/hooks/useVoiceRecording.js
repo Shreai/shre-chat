@@ -12,9 +12,23 @@ export async function getOrRequestStream() {
         _cachedStream.getTracks().forEach((t) => t.stop());
         _cachedStream = null;
     }
-    const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
+    // Try with preferred constraints first, fall back to basic { audio: true }
+    // Some Android devices reject echoCancellation/noiseSuppression constraints
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+    }
+    catch (constraintErr) {
+        if (constraintErr?.name === 'OverconstrainedError' || constraintErr?.name === 'NotReadableError') {
+            console.warn('[mic] Constraint error, retrying with basic audio:', constraintErr.message);
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+        else {
+            throw constraintErr;
+        }
+    }
     _cachedStream = stream;
     return stream;
 }

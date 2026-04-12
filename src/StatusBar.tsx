@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, getAgent } from './store';
 import { usePreferences, type GatewayMode } from './preferences-store';
-import { getOrRequestStream } from './hooks/useVoiceRecording';
+import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
 
 // ── Notification types ──────────────────────────────────────────────
 
@@ -691,24 +691,16 @@ export function StatusBar() {
       setRecording(false);
       setMicEnabled(false);
       window.dispatchEvent(new CustomEvent('shre-mic-stop'));
+      // Release mic hardware so Android/iOS stops showing the mic indicator
+      releaseCachedStream();
       return;
     }
 
-    // Check microphone permission before starting
+    // Request mic access — always attempt getUserMedia directly.
+    // The Permissions API (navigator.permissions.query) is unreliable on Android:
+    // it can return 'denied' for site-level state even when the OS permission is granted,
+    // so we skip the pre-check and let getUserMedia be the source of truth.
     try {
-      const permResult = await navigator.permissions?.query({ name: 'microphone' as any }).catch(() => null);
-      const currentPerm = permResult?.state;
-
-      if (currentPerm === 'denied') {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
-        const msg = isIOS
-          ? 'Microphone is blocked. Open Settings \u2192 Safari \u2192 Microphone and allow for this site.'
-          : 'Microphone is blocked. Click the lock icon in the address bar \u2192 Site settings \u2192 Microphone \u2192 Allow.';
-        alert(msg);
-        return;
-      }
-
-      // Request mic access via shared cached stream (avoids repeated permission prompts)
       await getOrRequestStream();
 
       // Persist on state + trigger ChatComposer mic recording (push-to-talk → textarea)
@@ -716,18 +708,34 @@ export function StatusBar() {
       setMicEnabled(true);
       window.dispatchEvent(new CustomEvent('shre-mic-start'));
     } catch (err: any) {
+      console.error('[StatusBar] Mic error:', err?.name, err?.message, err);
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      let msg: string;
+
       if (err?.name === 'NotAllowedError') {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
-        const msg = isIOS
-          ? 'Microphone access denied. Go to Settings \u2192 Safari \u2192 Microphone to enable.'
-          : 'Microphone access denied. Click the lock/info icon in the address bar to allow microphone.';
-        alert(msg);
+        msg = isIOS
+          ? 'Mic blocked. Go to Settings \u2192 Safari \u2192 Microphone to enable.'
+          : isAndroid
+            ? 'Mic blocked by browser. Tap \u22ee (3 dots) \u2192 Settings \u2192 Site settings \u2192 Microphone \u2192 find this site \u2192 Allow. Then reload.'
+            : 'Mic blocked. Click the lock icon in the address bar \u2192 Site settings \u2192 Microphone \u2192 Allow.';
       } else if (err?.name === 'NotFoundError') {
-        alert('No microphone found on this device.');
+        msg = 'No microphone found on this device.';
+      } else if (err?.name === 'NotReadableError') {
+        msg = 'Mic is in use by another app. Close other apps using the mic and try again.';
       } else {
-        console.warn('[StatusBar] Mic error:', err);
-        alert('Could not access microphone: ' + (err?.message || 'Unknown error'));
+        msg = `Mic error: ${err?.name || 'Unknown'} \u2014 ${err?.message || ''}`;
       }
+
+      // Show in both status line (visible in-app) and as a system message in chat
+      actions.setStatusLine(msg);
+      setTimeout(() => actions.setStatusLine(null), 8000);
+
+      // Also dispatch as system message so it persists in chat history
+      window.dispatchEvent(new CustomEvent('shre-system-message', {
+        detail: { text: msg, type: 'error' },
+      }));
     }
   }, [recording, micEnabled, setMicEnabled]);
 
