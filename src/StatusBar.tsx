@@ -248,6 +248,8 @@ export function StatusBar() {
   const setMicEnabled = usePreferences((s) => s.setMicEnabled);
   const focusMode = usePreferences((s) => s.focusMode);
   const setFocusMode = usePreferences((s) => s.setFocusMode);
+  const traceEnabled = usePreferences((s) => s.traceEnabled);
+  const setTraceEnabled = usePreferences((s) => s.setTraceEnabled);
   const [recording, setRecording] = useState(false);
   const [now, setNow] = useState(Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1111,6 +1113,33 @@ export function StatusBar() {
               <path d="M12 5v-2M12 21v-2M7.05 7.05L5.64 5.64M18.36 18.36l-1.41-1.41M5 12H3M21 12h-2M7.05 16.95l-1.41 1.41M18.36 5.64l-1.41 1.41" />
             </>
           )}
+        </svg>
+      </button>
+
+      {/* Trace toggle — conversation traceroute */}
+      <button
+        onClick={() => setTraceEnabled(!traceEnabled)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          background: traceEnabled
+            ? 'rgba(245, 158, 11, 0.25)'
+            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
+          color: traceEnabled ? '#f59e0b' : 'var(--c-text-3)',
+          transition: 'all 0.2s ease',
+          flexShrink: 0,
+        }}
+        title={traceEnabled ? 'Trace ON — showing request pipeline per message' : 'Trace OFF — enable to see request flow details'}
+        aria-label={traceEnabled ? 'Disable trace mode' : 'Enable trace mode'}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
       </button>
 

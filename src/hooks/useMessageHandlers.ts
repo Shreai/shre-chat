@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { usePreferences } from '../preferences-store';
 import {
   sendMessage,
   generateAITitle,
@@ -222,6 +223,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     voiceMode,
   } = params;
 
+  const traceEnabled = usePreferences((s) => s.traceEnabled);
   const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [editingQueueText, setEditingQueueText] = useState('');
@@ -1104,6 +1106,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const controller = new AbortController();
     abortRef.current = controller;
     let fullResponse = '';
+    let capturedTraceId = '';
+    let capturedTraceRecord: Record<string, unknown> | null = null;
     let streamStarted = false;
     // Claude CLI state tracking
     let isClaudeCliResponse = false;
@@ -1158,6 +1162,9 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           if (firstTokenTimeRef.current > 0 && sendTimeRef.current > 0)
             httpMeta.ttft_ms = String(firstTokenTimeRef.current - sendTimeRef.current);
           if (sendTimeRef.current > 0) httpMeta.total_ms = String(Date.now() - sendTimeRef.current);
+          // Attach trace data if trace mode is on
+          if (capturedTraceId) httpMeta.traceId = capturedTraceId;
+          if (capturedTraceRecord) httpMeta.traceRecord = JSON.stringify(capturedTraceRecord);
           // Attach Claude CLI metadata if this was a Claude CLI response
           if (isClaudeCliResponse) {
             httpMeta.type = 'claude_cli_response';
@@ -1551,6 +1558,12 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         onClaudeSystem: (message: string) => {
           claudeToolEvents.push({ type: 'status', text: message });
         },
+        onTrace: (traceId: string) => {
+          capturedTraceId = traceId;
+        },
+        onTraceComplete: (traceRecord: Record<string, unknown>) => {
+          capturedTraceRecord = traceRecord;
+        },
       },
       controller.signal,
       sessionId,
@@ -1569,6 +1582,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       claudeCliMode,
       directMode,
       voiceMode,
+      traceEnabled,
     );
   }, [
     input,

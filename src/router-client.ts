@@ -495,6 +495,10 @@ export interface StreamCallbacks {
   onFileDiff?: (data: { file: string; diff?: string; action?: string }) => void;
   /** Fired for Claude CLI system messages */
   onClaudeSystem?: (message: string) => void;
+  /** Fired when trace ID is received from shre-router */
+  onTrace?: (traceId: string) => void;
+  /** Fired when full trace record is received (when trace mode is on) */
+  onTraceComplete?: (traceRecord: Record<string, unknown>) => void;
 }
 
 /**
@@ -521,6 +525,7 @@ export async function sendMessage(
   claudeCliMode?: boolean,
   directMode?: boolean,
   voiceMode?: boolean,
+  traceEnabled?: boolean,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -644,6 +649,7 @@ async function streamViaFallback(
       ...(voiceMode ? { voiceMode: true } : {}),
       ...(threadContext ? { threadContext } : {}),
       ...(contextHealth ? { contextHealth } : {}),
+      ...(traceEnabled ? { trace: true } : {}),
     }),
     signal,
   });
@@ -854,6 +860,10 @@ async function streamViaFallback(
             callbacks.onStatus?.('warning', `Tool timed out: ${evt.tool || 'unknown'}`);
           } else if (evt.type === 'verification_warning') {
             callbacks.onStatus?.('warning', 'Quality check flagged issues');
+          } else if (evt.type === 'trace') {
+            callbacks.onTrace?.(evt.traceId);
+          } else if (evt.type === 'trace_complete') {
+            callbacks.onTraceComplete?.(evt.trace);
           } else if (evt.type === 'error') {
             const errMsg = evt.error || 'Gateway error';
             // Tool loop exhaustion is not a gateway failure — surface it accurately

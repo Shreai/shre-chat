@@ -37,6 +37,8 @@ import { HtmlCodeBlock, TableWithExport } from './message-parts/CodeBlocks';
 import { CopyButton, MessageActions, ActionTagChips } from './message-parts/MessageActions';
 import { StableMarkdownBlock } from './message-parts/SystemEventChip';
 import { FileAttachmentPreview } from './message-parts/FileAttachmentPreview';
+import { MessageTraceDrawer } from './message-parts/MessageTraceDrawer';
+import { usePreferences } from '../preferences-store';
 
 // Re-export extracted components so existing imports from MessageBubble still work
 export { Lightbox, StableMarkdownBlock, SystemEventChip } from './message-parts/SystemEventChip';
@@ -131,6 +133,8 @@ const MessageBubble = memo(function MessageBubble({
   const [routeExpanded, setRouteExpanded] = useState(false);
   const [annotationEditing, setAnnotationEditing] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState(message.annotation || '');
+
+  const traceEnabled = usePreferences((s) => s.traceEnabled);
 
   // CLI Ledger: summary/full toggle for CLI responses
   const isCliResponse = !isUser && (message.meta?.route === 'cli' || message.meta?.route === 'claude-cli');
@@ -722,6 +726,15 @@ const MessageBubble = memo(function MessageBubble({
               </span>
             )}
           </div>
+        )}
+        {/* Conversation trace drawer — shows request pipeline per message */}
+        {!isUser && !streaming && traceEnabled && meta?.traceId && (
+          <MessageTraceDrawer
+            traceId={meta.traceId}
+            traceRecord={meta.traceRecord}
+            model={meta.model}
+            totalMs={meta.total_ms}
+          />
         )}
         {/* Message actions */}
         {!streaming &&

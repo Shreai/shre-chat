@@ -89,6 +89,7 @@ export interface PreferencesState {
   gatewayMode: GatewayMode; // router | direct (Ollama)
   features: Record<FeatureKey, boolean>; // Feature toggles
   focusMode: boolean; // Hide system/cron/automated messages from chat
+  traceEnabled: boolean; // Show per-message trace pipeline (conversation traceroute)
 
   // Actions
   setNotifSound: (v: boolean) => void;
@@ -102,6 +103,7 @@ export interface PreferencesState {
   setFeature: (key: FeatureKey, enabled: boolean) => void;
   isFeatureEnabled: (key: FeatureKey) => boolean;
   setFocusMode: (v: boolean) => void;
+  setTraceEnabled: (v: boolean) => void;
 }
 
 /**
@@ -169,6 +171,7 @@ export const usePreferences = create<PreferencesState>()(
         gatewayMode: legacy.gatewayMode ?? 'router',
         features: { ...DEFAULT_FEATURES },
         focusMode: false,
+        traceEnabled: false,
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
@@ -177,6 +180,7 @@ export const usePreferences = create<PreferencesState>()(
         setTtsProvider: (v) => set({ ttsProvider: v }),
         setGatewayMode: (v) => set({ gatewayMode: v }),
         setFocusMode: (v) => set({ focusMode: v }),
+        setTraceEnabled: (v) => set({ traceEnabled: v }),
 
         setFeature: (key, enabled) =>
           set((state) => ({
@@ -214,6 +218,7 @@ export const usePreferences = create<PreferencesState>()(
         gatewayMode: state.gatewayMode,
         features: state.features,
         focusMode: state.focusMode,
+        traceEnabled: state.traceEnabled,
       }),
       // After rehydration, clean up legacy keys (one-time)
       onRehydrateStorage: () => {
