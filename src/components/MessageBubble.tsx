@@ -672,6 +672,14 @@ const MessageBubble = memo(function MessageBubble({
                 }}
               >
                 <span title="Route">{meta.route?.toUpperCase()}</span>
+                {meta.mode && (
+                  <span
+                    title="Conversation mode"
+                    style={{ color: 'var(--c-accent)', fontWeight: 600 }}
+                  >
+                    {meta.mode.toUpperCase()}
+                  </span>
+                )}
                 {meta.ttft_ms && <span title="Time to first token">TTFT {meta.ttft_ms}ms</span>}
                 {meta.total_ms && (
                   <span title="Total response time">

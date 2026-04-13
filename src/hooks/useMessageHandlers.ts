@@ -110,6 +110,7 @@ export interface UseMessageHandlersParams {
   setActiveToolName: (v: string | null) => void;
   setCompacting: (v: boolean) => void;
   setPendingApproval: (v: any) => void;
+  setFirstTokenReceived: (v: boolean) => void;
   streamStartRef: React.MutableRefObject<number>;
   sendTimeRef: React.MutableRefObject<number>;
   firstTokenTimeRef: React.MutableRefObject<number>;
@@ -195,6 +196,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     setActiveToolName,
     setCompacting,
     setPendingApproval,
+    setFirstTokenReceived,
     streamStartRef,
     sendTimeRef,
     firstTokenTimeRef,
@@ -725,6 +727,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     streamStartRef.current = Date.now();
     sendTimeRef.current = Date.now();
     firstTokenTimeRef.current = 0;
+    setFirstTokenReceived(false);
     actions.addActivity(sessionId, 'connecting', 'Sending message');
     actions.addFeed(sessionId, 'sent', text.length > 80 ? text.slice(0, 80) + '\u2026' : text);
 
@@ -897,7 +900,10 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           {
             onToken: (token) => {
               if (!token) return;
-              if (firstTokenTimeRef.current === 0) firstTokenTimeRef.current = Date.now();
+              if (firstTokenTimeRef.current === 0) {
+                firstTokenTimeRef.current = Date.now();
+                setFirstTokenReceived(true);
+              }
               fullResponse += token;
               bufferToken(fullResponse);
               actions.setStatusLine(`${currentAgent.name} is writing...`);
@@ -1138,7 +1144,10 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       systemPrompt,
       {
         onToken: (token) => {
-          if (firstTokenTimeRef.current === 0) firstTokenTimeRef.current = Date.now();
+          if (firstTokenTimeRef.current === 0) {
+            firstTokenTimeRef.current = Date.now();
+            setFirstTokenReceived(true);
+          }
           fullResponse += token;
           streamBufferRef.current = fullResponse;
           actions.setStreamText(fullResponse);
@@ -1160,6 +1169,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           const httpMeta: Record<string, string> = {
             route: 'http',
             model: selectedModel ? selectedModel.split('/').pop() || selectedModel : 'auto',
+            ...(conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
           };
           if (firstTokenTimeRef.current > 0 && sendTimeRef.current > 0)
             httpMeta.ttft_ms = String(firstTokenTimeRef.current - sendTimeRef.current);
@@ -1523,6 +1533,25 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           setStreamPhase('thinking');
           const stepId = addStep(runId, { kind: 'thinking', label: `Retrying \u2192 ${shortTo}` });
           processStepRef.current = stepId;
+        },
+        // ── Mode suggestion ──
+        onModeSuggestion: (suggestion: {
+          suggestedMode: string;
+          reason: string;
+          confidence: number;
+        }) => {
+          actions.addMessage(sessionId, {
+            role: 'assistant',
+            content: `[system] ${suggestion.reason}`,
+            timestamp: Date.now(),
+            meta: {
+              system: 'true',
+              type: 'system',
+              event: 'mode-suggestion',
+              suggestedMode: suggestion.suggestedMode,
+              confidence: String(suggestion.confidence),
+            },
+          });
         },
         // ── Claude CLI callbacks ──
         onClaudeCliRoute: (_mode: string) => {

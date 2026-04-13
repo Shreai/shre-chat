@@ -46,7 +46,8 @@ export function useHeaderActions({
   const notifSound = usePreferences((s) => s.notifSound);
   const setNotifSound = usePreferences((s) => s.setNotifSound);
   const conversationMode = usePreferences((s) => s.conversationMode);
-  const setConversationMode = usePreferences((s) => s.setConversationMode);
+  const activeAppId = usePreferences((s) => s.activeAppId);
+  const _setConversationMode = usePreferences((s) => s.setConversationMode);
   const agentModeOverrides = usePreferences((s) => s.agentModeOverrides);
   const setAgentModeOverride = usePreferences((s) => s.setAgentModeOverride);
 
@@ -55,7 +56,7 @@ export function useHeaderActions({
     if (!currentAgentId) return;
     const agentMode = agentModeOverrides[currentAgentId];
     if (agentMode && agentMode !== conversationMode) {
-      setConversationMode(agentMode);
+      _setConversationMode(agentMode);
     }
   }, [currentAgentId]); // intentionally only depend on agentId change
 
@@ -251,8 +252,9 @@ export function useHeaderActions({
     handleDownloadJson,
     handleSaveSystemPrompt,
     conversationMode,
-    setConversationMode: (mode: ConversationModeId) => {
-      setConversationMode(mode);
+    activeAppId,
+    setConversationMode: (mode: ConversationModeId, appId?: string | null) => {
+      _setConversationMode(mode, appId);
       // Also save as per-agent default so it auto-applies next time
       if (currentAgentId) {
         setAgentModeOverride(currentAgentId, mode);

@@ -84,12 +84,49 @@ export const StableMarkdownBlock = memo(function StableMarkdownBlock({ text }: {
 export function SystemEventChip({
   message,
   timestamp,
+  onModeSwitchRequest,
 }: {
   message: ChatMessage;
   timestamp?: string;
+  onModeSwitchRequest?: (mode: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const content = message.content.trim().replace(/^\[system\]\s*/i, '');
+
+  // Mode suggestion — render as actionable chip
+  if (message.meta?.event === 'mode-suggestion' && message.meta?.suggestedMode) {
+    const suggestedMode = message.meta.suggestedMode;
+    const modeLabels: Record<string, string> = {
+      assistant: 'Assistant', code: 'Code', apps: 'Apps',
+      ops: 'Ops', strategy: 'Strategy', business: 'Business',
+    };
+    const label = modeLabels[suggestedMode] || suggestedMode;
+    return (
+      <div className="max-w-3xl mx-auto tool-chip-stable">
+        <div className="flex items-center gap-1.5 py-1 px-2">
+          <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
+          <button
+            onClick={() => onModeSwitchRequest?.(suggestedMode)}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-medium transition-all hover:scale-[1.02]"
+            style={{
+              background: 'var(--c-accent-soft)',
+              color: 'var(--c-accent)',
+              border: '1px solid var(--c-accent)',
+              cursor: 'pointer',
+            }}
+            title={`Switch to ${label} mode`}
+          >
+            <span style={{ fontSize: '11px' }}>&#x2192;</span>
+            <span>Switch to {label} mode</span>
+          </button>
+          {timestamp && (
+            <span className="text-[9px]" style={{ color: 'var(--c-text-5)' }}>{timestamp}</span>
+          )}
+          <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
+        </div>
+      </div>
+    );
+  }
 
   // If this is a project_pending message, render the interactive PlanChecklist instead
   if (content.includes('[project_pending]')) {

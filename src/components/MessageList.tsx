@@ -102,6 +102,11 @@ export interface MessageListProps {
     input?: Record<string, unknown>;
   } | null;
 
+  /** True once the first content token has been received */
+  firstTokenReceived: boolean;
+  /** Cancel the current stream */
+  onCancelStream: () => void;
+
   // Process runs
   runs: ProcessRun[];
   getRunForMessage: (msg: ChatMessage, idx: number) => ProcessRun | null;
@@ -132,6 +137,7 @@ export interface MessageListProps {
   onContentExpand: (content: string, type: string, title?: string) => void;
   onApprove: (approvalId: string) => void;
   onDeny: (approvalId: string) => void;
+  onModeSwitchRequest?: (mode: string) => void;
 
   // Virtualizer (passed from parent so it's shared for search navigation)
   virtualizer: Virtualizer<HTMLDivElement, Element>;
@@ -170,6 +176,8 @@ export function MessageList(props: MessageListProps) {
     activeToolName,
     compacting,
     pendingApproval,
+    firstTokenReceived,
+    onCancelStream,
     runs,
     getRunForMessage,
     userProfile,
@@ -426,7 +434,7 @@ export function MessageList(props: MessageListProps) {
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : isStatusMessage(msg) ? (
-                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
+                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} onModeSwitchRequest={props.onModeSwitchRequest} />
                   ) : (
                     <>
                       <MessageBubble
@@ -471,7 +479,7 @@ export function MessageList(props: MessageListProps) {
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : isStatusMessage(msg) ? (
-                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} />
+                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} onModeSwitchRequest={props.onModeSwitchRequest} />
                   ) : (
                     <>
                       <MessageBubble
@@ -500,10 +508,50 @@ export function MessageList(props: MessageListProps) {
           </div>
         )}
 
-        {/* Streaming indicator */}
+        {/* Streaming indicator — TTFT timer + timeout warnings */}
         {streaming && (
           <div className="max-w-3xl mx-auto w-full stream-indicator-zone">
-            {streamElapsed >= 3 && !streamStall && (
+            {/* Pre-first-token: show elapsed TTFT timer immediately */}
+            {!firstTokenReceived && !streamStall && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1 mb-0.5 text-[11px] select-none"
+                style={{ color: 'var(--c-text-2)' }}
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
+                  style={{ background: streamElapsed >= 30 ? 'var(--c-warning)' : 'var(--c-text-2)' }}
+                />
+                <span>
+                  {streamElapsed < 30
+                    ? `Thinking\u2026 ${streamElapsed}s`
+                    : streamElapsed < 60
+                      ? `Taking longer than usual\u2026 ${streamElapsed}s`
+                      : `Still waiting\u2026 ${streamElapsed}s`}
+                </span>
+                {streamElapsed >= 60 && (
+                  <button
+                    onClick={onCancelStream}
+                    className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium transition-colors"
+                    style={{
+                      background: 'rgba(248, 113, 113, 0.15)',
+                      color: 'var(--c-danger-soft)',
+                      border: '1px solid rgba(248, 113, 113, 0.3)',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.target as HTMLButtonElement).style.background = 'rgba(248, 113, 113, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.target as HTMLButtonElement).style.background = 'rgba(248, 113, 113, 0.15)';
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Post-first-token: subtle elapsed counter (only after 5s of streaming) */}
+            {firstTokenReceived && streamElapsed >= 5 && !streamStall && (
               <div
                 className="flex items-center gap-1.5 px-3 py-0.5 mb-0.5 text-[10px] select-none"
                 style={{ color: 'var(--c-text-2)' }}
@@ -512,7 +560,7 @@ export function MessageList(props: MessageListProps) {
                   className="inline-block h-1 w-1 rounded-full animate-pulse"
                   style={{ background: 'var(--c-text-2)' }}
                 />
-                {streamElapsed < 10 ? `Thinking\u2026 ${streamElapsed}s` : `${streamElapsed}s`}
+                {streamElapsed}s
               </div>
             )}
 

@@ -495,6 +495,12 @@ export interface StreamCallbacks {
   onFileDiff?: (data: { file: string; diff?: string; action?: string }) => void;
   /** Fired for Claude CLI system messages */
   onClaudeSystem?: (message: string) => void;
+  /** Fired when shre-router suggests switching conversation mode */
+  onModeSuggestion?: (suggestion: {
+    suggestedMode: string;
+    reason: string;
+    confidence: number;
+  }) => void;
   /** Fired when trace ID is received from shre-router */
   onTrace?: (traceId: string) => void;
   /** Fired when full trace record is received (when trace mode is on) */
@@ -731,6 +737,10 @@ async function streamViaFallback(
             // Detect Claude CLI auto-routing
             if (evt.mode === 'claude-cli-auto' || evt.route === 'claude-cli') {
               callbacks.onClaudeCliRoute?.(evt.mode || evt.route);
+            }
+            // Mode suggestion from shre-router (mismatch detection)
+            if (evt.modeSuggestion && callbacks.onModeSuggestion) {
+              callbacks.onModeSuggestion(evt.modeSuggestion);
             }
             callbacks.onStatus?.('thinking', `Routed → ${routedModel}`);
           } else if (evt.type === 'session_start') {

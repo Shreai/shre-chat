@@ -36,7 +36,8 @@ interface ChatPanelsProps {
   actions: any;
   // Conversation mode picker
   conversationMode: ConversationModeId;
-  setConversationMode: (mode: ConversationModeId) => void;
+  activeAppId: string | null;
+  setConversationMode: (mode: ConversationModeId, appId?: string | null) => void;
   // Model picker
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
@@ -139,6 +140,7 @@ export function ChatPanels(props: ChatPanelsProps) {
     cliMode,
     actions,
     conversationMode,
+    activeAppId,
     setConversationMode,
     showModelPicker,
     setShowModelPicker,
@@ -303,6 +305,7 @@ export function ChatPanels(props: ChatPanelsProps) {
             onToggle={() => setModePickerOpen((v) => !v)}
             onClose={() => setModePickerOpen(false)}
             selectedMode={conversationMode}
+            activeAppId={activeAppId}
             onSelectMode={setConversationMode}
             pickerRef={modePickerRef}
           />

@@ -120,6 +120,8 @@ export function ChatView() {
     setActiveToolName,
     pendingApproval,
     setPendingApproval,
+    firstTokenReceived,
+    setFirstTokenReceived,
     streamStartRef,
     sendTimeRef,
     firstTokenTimeRef,
@@ -371,6 +373,7 @@ export function ChatView() {
     handleDownloadJson,
     handleSaveSystemPrompt,
     conversationMode,
+    activeAppId,
     setConversationMode,
   } = useHeaderActions({
     activeSessionId,
@@ -593,6 +596,7 @@ export function ChatView() {
     setActiveToolName,
     setCompacting,
     setPendingApproval,
+    setFirstTokenReceived,
     streamStartRef,
     sendTimeRef,
     firstTokenTimeRef,
@@ -956,6 +960,7 @@ export function ChatView() {
             cliMode={cliMode}
             actions={actions}
             conversationMode={conversationMode}
+            activeAppId={activeAppId}
             setConversationMode={setConversationMode}
             showModelPicker={showModelPicker}
             setShowModelPicker={setShowModelPicker}
@@ -1061,6 +1066,13 @@ export function ChatView() {
             activeToolName={activeToolName}
             compacting={compacting}
             pendingApproval={pendingApproval}
+            firstTokenReceived={firstTokenReceived}
+            onCancelStream={() => {
+              abortRef.current?.abort();
+              actions.setStreaming(false);
+              actions.setStreamText('');
+              actions.setStatusLine('');
+            }}
             runs={runs}
             getRunForMessage={getRunForMessage}
             userProfile={state.userProfile}
@@ -1070,6 +1082,7 @@ export function ChatView() {
             onPullEnd={handlePullEnd}
             onJumpToLatest={jumpToLatest}
             {...messageListHandlers}
+            onModeSwitchRequest={setConversationMode}
             virtualizer={virtualizer}
             useVirtual={useVirtual}
           />
