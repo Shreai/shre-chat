@@ -62,8 +62,9 @@ test.describe('Router Connection Test', () => {
     await textarea.click();
     await textarea.fill('Say hello in one word');
 
-    // Send via Enter
-    await page.keyboard.press('Enter');
+    // Send via Ctrl+Enter (Cmd+Enter on macOS)
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${modifier}+Enter`);
 
     // Wait for a response bubble — use broader selectors and longer timeout
     // Messages appear in .group/msg containers; assistant-side messages are in .justify-start
@@ -102,7 +103,8 @@ test.describe('Router Connection Test', () => {
     const textarea = page.locator('#shre-chat-textarea');
     await textarea.click();
     await textarea.fill('Hello from QA test');
-    await page.keyboard.press('Enter');
+    const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${mod}+Enter`);
 
     // Wait for response — should not show critical connection errors
     await page.waitForTimeout(10_000);

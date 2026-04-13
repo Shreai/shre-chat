@@ -1,0 +1,525 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - button "Close sidebar" [ref=e5] [cursor=pointer]:
+        - img [ref=e6]
+      - generic [ref=e7]:
+        - generic "Connected" [ref=e8]
+        - generic [ref=e9]: Shre
+        - img [ref=e10]
+      - button "Router" [ref=e12] [cursor=pointer]:
+        - generic [ref=e14]: Router
+      - generic "28 pending tasks" [ref=e15]:
+        - img [ref=e16]
+        - generic [ref=e19]: "28"
+      - generic "Agent idle" [ref=e20]:
+        - generic [ref=e22]: idle
+      - button "R" [ref=e23] [cursor=pointer]: R
+      - combobox "Chat language preference" [ref=e25] [cursor=pointer]:
+        - option "EN" [selected]
+        - option "ES"
+        - option "HI"
+        - option "GU"
+        - option "ZH"
+        - option "FR"
+        - option "PT"
+        - option "DE"
+        - option "AR"
+        - option "JA"
+      - button "Notifications" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+        - generic [ref=e31]: "79"
+      - button "Enable focus mode" [ref=e32] [cursor=pointer]:
+        - img [ref=e33]
+      - button "Start voice input" [ref=e36] [cursor=pointer]:
+        - img [ref=e37]
+    - generic [ref=e40]:
+      - generic [ref=e42]:
+        - button "🤖 Shre shre" [ref=e44] [cursor=pointer]:
+          - generic [ref=e45]: 🤖
+          - generic [ref=e46]:
+            - generic [ref=e47]: Shre
+            - generic [ref=e48]: shre
+          - img [ref=e49]
+        - button "New chat" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+          - text: New chat
+        - generic [ref=e54]:
+          - button "voice" [ref=e56] [cursor=pointer]
+          - textbox "Search sessions..." [ref=e58]
+          - generic [ref=e59]:
+            - generic [ref=e60]: Today
+            - generic [ref=e61]:
+              - generic [ref=e62]:
+                - button "Pin" [ref=e63] [cursor=pointer]
+                - button "Delete" [ref=e64] [cursor=pointer]
+              - generic [ref=e67] [cursor=pointer]:
+                - generic [ref=e68]: 🤖
+                - generic [ref=e69]:
+                  - generic [ref=e70]:
+                    - generic [ref=e71]: Shre
+                    - generic [ref=e72]: 5:30 PM
+                  - generic [ref=e73]: Hi!
+                  - generic [ref=e74]: "[system] Routing via shre-router (auto)"
+          - generic [ref=e75]:
+            - generic [ref=e76]: Yesterday
+            - generic [ref=e77]:
+              - generic [ref=e78]:
+                - button "Pin" [ref=e79] [cursor=pointer]
+                - button "Delete" [ref=e80] [cursor=pointer]
+              - generic [ref=e83] [cursor=pointer]:
+                - generic [ref=e84]: ✨
+                - generic [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: Ellie
+                    - generic [ref=e88]: 2:05 PM
+                  - generic [ref=e89]: identify issues with gateway it seems to…
+                  - generic [ref=e90]: "[system] Routing via shre-router (auto)"
+            - generic [ref=e91]:
+              - generic [ref=e92]:
+                - button "Pin" [ref=e93] [cursor=pointer]
+                - button "Delete" [ref=e94] [cursor=pointer]
+              - generic [ref=e97] [cursor=pointer]:
+                - generic [ref=e98]: 🤖
+                - generic [ref=e99]:
+                  - generic [ref=e100]:
+                    - generic [ref=e101]: Shre
+                    - generic [ref=e102]: 7:02 AM
+                  - generic [ref=e103]: what are my partyliquor sales today
+                  - generic [ref=e104]: Here are the sales figures for Party Liquor yester
+          - generic [ref=e105]:
+            - generic [ref=e106]: Last 7 days
+            - generic [ref=e107]:
+              - generic [ref=e108]:
+                - button "Pin" [ref=e109] [cursor=pointer]
+                - button "Delete" [ref=e110] [cursor=pointer]
+              - generic [ref=e113] [cursor=pointer]:
+                - generic [ref=e114]: 🤖
+                - generic [ref=e115]:
+                  - generic [ref=e116]:
+                    - generic [ref=e117]: Shre
+                    - generic [ref=e118]: 10:01 PM
+                  - generic [ref=e119]: "[system] Routing via shre-router (auto)"
+            - generic [ref=e120]:
+              - generic [ref=e121]:
+                - button "Pin" [ref=e122] [cursor=pointer]
+                - button "Delete" [ref=e123] [cursor=pointer]
+              - generic [ref=e126] [cursor=pointer]:
+                - generic [ref=e127]: 🤖
+                - generic [ref=e128]:
+                  - generic [ref=e129]:
+                    - generic [ref=e130]: Shre
+                    - generic [ref=e131]: 7:53 PM
+                  - generic [ref=e132]: Voice session
+                  - generic [ref=e133]: "[system] Routing via shre-router (auto)"
+                  - generic [ref=e135]: voice
+            - generic [ref=e136]:
+              - generic [ref=e137]:
+                - button "Pin" [ref=e138] [cursor=pointer]
+                - button "Delete" [ref=e139] [cursor=pointer]
+              - generic [ref=e142] [cursor=pointer]:
+                - generic [ref=e143]: 🤖
+                - generic [ref=e144]:
+                  - generic [ref=e145]:
+                    - generic [ref=e146]: Shre
+                    - generic [ref=e147]: 7:47 PM
+                  - generic [ref=e148]: "[tool_exec] ✅ sales today completed (8.3s)"
+            - generic [ref=e149]:
+              - generic [ref=e150]:
+                - button "Pin" [ref=e151] [cursor=pointer]
+                - button "Delete" [ref=e152] [cursor=pointer]
+              - generic [ref=e155] [cursor=pointer]:
+                - generic [ref=e156]: 🤖
+                - generic [ref=e157]:
+                  - generic [ref=e158]:
+                    - generic [ref=e159]: Shre
+                    - generic [ref=e160]: 7:39 PM
+                  - generic [ref=e161]: "~~gemini-2.5-flash: Failed~~ — Empty response — sw"
+            - generic [ref=e162]:
+              - generic [ref=e163]:
+                - button "Pin" [ref=e164] [cursor=pointer]
+                - button "Delete" [ref=e165] [cursor=pointer]
+              - generic [ref=e168] [cursor=pointer]:
+                - generic [ref=e169]: 🤖
+                - generic [ref=e170]:
+                  - generic [ref=e171]:
+                    - generic [ref=e172]: Shre
+                    - generic [ref=e173]: 7:35 PM
+                  - generic [ref=e174]: "[system] Routing via shre-router (auto)"
+            - generic [ref=e175]:
+              - generic [ref=e176]:
+                - button "Pin" [ref=e177] [cursor=pointer]
+                - button "Delete" [ref=e178] [cursor=pointer]
+              - generic [ref=e181] [cursor=pointer]:
+                - generic [ref=e182]: 🤖
+                - generic [ref=e183]:
+                  - generic [ref=e184]:
+                    - generic [ref=e185]: Shre
+                    - generic [ref=e186]: 7:15 PM
+                  - generic [ref=e187]: "[tool_exec] ❌ describe schema failed: Error: Comma"
+          - generic [ref=e188]:
+            - generic [ref=e189]: Older
+            - generic [ref=e190]:
+              - generic [ref=e191]:
+                - button "Pin" [ref=e192] [cursor=pointer]
+                - button "Delete" [ref=e193] [cursor=pointer]
+              - generic [ref=e196] [cursor=pointer]:
+                - generic [ref=e197]: ✨
+                - generic [ref=e198]:
+                  - generic [ref=e199]:
+                    - generic [ref=e200]: Ellie
+                    - generic [ref=e201]: 11:17 PM
+                  - generic [ref=e202]: hi
+                  - generic [ref=e203]: Now add the Wirebump and MBA entries to the Master
+        - generic [ref=e204]:
+          - button "Chat" [ref=e205] [cursor=pointer]:
+            - img [ref=e206]
+          - button "Activity" [ref=e208] [cursor=pointer]:
+            - img [ref=e209]
+          - button "Bookmarks" [ref=e212] [cursor=pointer]:
+            - img [ref=e213]
+          - button "Employee Activity" [ref=e215] [cursor=pointer]:
+            - img [ref=e216]
+          - button "Briefing" [ref=e221] [cursor=pointer]:
+            - img [ref=e222]
+          - button "Marketplace" [ref=e225] [cursor=pointer]:
+            - img [ref=e226]
+          - button "Billing" [ref=e228] [cursor=pointer]:
+            - img [ref=e229]
+        - generic [ref=e231]:
+          - generic [ref=e232]:
+            - button "Write mode ON (click to go read-only)" [ref=e233] [cursor=pointer]:
+              - img [ref=e234]
+            - button "Verify identity" [ref=e237] [cursor=pointer]:
+              - img [ref=e238]
+            - button "Customize theme" [ref=e241] [cursor=pointer]:
+              - img [ref=e242]
+            - button "Switch to light mode" [ref=e248] [cursor=pointer]:
+              - img [ref=e249]
+          - generic [ref=e255]:
+            - generic [ref=e257]: Nirlab
+            - button "Sign out" [ref=e258] [cursor=pointer]:
+              - img [ref=e259]
+      - main [ref=e263]:
+        - generic [ref=e265]:
+          - generic [ref=e266]:
+            - button "► Terminal 1" [ref=e268] [cursor=pointer]:
+              - generic [ref=e269]: ►
+              - generic [ref=e270]: Terminal 1
+            - generic [ref=e271]:
+              - button "+" [ref=e272] [cursor=pointer]
+              - button "✕" [ref=e273] [cursor=pointer]
+          - generic [ref=e277]:
+            - textbox "Terminal input" [ref=e278]
+            - generic [ref=e279]:
+              - generic [ref=e281]: raise OSError('out of pty dev
+              - generic [ref=e283]: ices')
+              - generic [ref=e285]: "OSError: out of pty devices"
+              - generic [ref=e288]: "[Process exited]"
+              - generic [ref=e291]: "[Connection lost — reconnecting in 1s...]"
+          - generic [ref=e294]:
+            - button "Esc" [ref=e295] [cursor=pointer]
+            - button "Tab" [ref=e296] [cursor=pointer]
+            - button "⇧Tab" [ref=e297] [cursor=pointer]
+            - button "Ctrl+C" [ref=e298] [cursor=pointer]
+            - button "Ctrl+D" [ref=e299] [cursor=pointer]
+            - button "Ctrl+Z" [ref=e300] [cursor=pointer]
+            - button "Ctrl+L" [ref=e301] [cursor=pointer]
+            - button "Ctrl+A" [ref=e302] [cursor=pointer]
+            - button "Ctrl+E" [ref=e303] [cursor=pointer]
+            - button "↑" [ref=e304] [cursor=pointer]
+            - button "↓" [ref=e305] [cursor=pointer]
+          - generic [ref=e306]:
+            - button "Voice input" [ref=e307] [cursor=pointer]:
+              - img [ref=e308]
+            - textbox "Type or speak a command..." [ref=e311]
+            - button "Run" [ref=e312] [cursor=pointer]
+        - generic [ref=e314]:
+          - generic [ref=e315]:
+            - button "49" [ref=e316] [cursor=pointer]:
+              - img [ref=e318]
+              - generic [ref=e321]: "49"
+            - generic [ref=e322]: 49 pending
+          - generic [ref=e323]:
+            - generic "Double-click to rename" [ref=e325]: Hi!
+            - generic [ref=e326]:
+              - button "Switch AI provider" [ref=e328] [cursor=pointer]:
+                - img [ref=e329]
+                - generic [ref=e333]: Auto
+                - img [ref=e334]
+              - button "Select voice engine" [ref=e337] [cursor=pointer]:
+                - img [ref=e338]
+              - button "Select language" [ref=e343] [cursor=pointer]:
+                - img [ref=e344]
+              - button "Open voice chat" [ref=e347] [cursor=pointer]:
+                - img [ref=e348]
+              - button "Realtime voice call" [ref=e351] [cursor=pointer]:
+                - img [ref=e352]
+              - button "More options" [ref=e355] [cursor=pointer]:
+                - img [ref=e356]
+          - 'generic "Context usage: ~~30.4k tokens / 128k limit (23.7%)" [ref=e360]'
+          - log "Message history" [ref=e362]:
+            - generic [ref=e363]:
+              - button "❌ web search failed ▼" [ref=e368] [cursor=pointer]:
+                - generic [ref=e369]: ❌
+                - generic [ref=e370]: web search failed
+                - generic [ref=e371]: ▼
+              - generic [ref=e375]:
+                - generic [ref=e376]:
+                  - generic [ref=e377]: Nir
+                  - generic [ref=e378]: 05:29 PM
+                  - generic [ref=e379]: ~27 tokens
+                - generic [ref=e381]: I want to know about the rapidlab store. How many products do they carry and what are the main departments?
+                - generic [ref=e382]:
+                  - button "Copy message" [ref=e384] [cursor=pointer]:
+                    - img [ref=e385]
+                  - button "Add annotation" [ref=e388] [cursor=pointer]:
+                    - img [ref=e389]
+                  - button "Edit message" [ref=e391] [cursor=pointer]:
+                    - img [ref=e392]
+                  - button "Branch conversation here" [ref=e394] [cursor=pointer]:
+                    - img [ref=e395]
+                  - button "Add reaction" [ref=e401] [cursor=pointer]:
+                    - img [ref=e402]
+                  - button "Reply to this message" [ref=e405] [cursor=pointer]:
+                    - img [ref=e406]
+                  - button "Copy message" [ref=e409] [cursor=pointer]:
+                    - img [ref=e410]
+              - generic [ref=e415]:
+                - button "⚙ System" [ref=e417] [cursor=pointer]:
+                  - generic [ref=e418]: ⚙
+                  - generic [ref=e419]: System
+                - generic [ref=e420]: 05:29 PM
+              - generic [ref=e424]:
+                - generic [ref=e425]:
+                  - generic [ref=e426]: Nir
+                  - generic [ref=e427]: 05:29 PM
+                  - generic [ref=e428]: ~26 tokens
+                - generic [ref=e430]: Create a new item called "QA Shre Chat Item" with price $11.50 and quantity 15 in the rapidlab store.
+                - generic [ref=e431]:
+                  - button "Copy message" [ref=e433] [cursor=pointer]:
+                    - img [ref=e434]
+                  - button "Add annotation" [ref=e437] [cursor=pointer]:
+                    - img [ref=e438]
+                  - button "Edit message" [ref=e440] [cursor=pointer]:
+                    - img [ref=e441]
+                  - button "Branch conversation here" [ref=e443] [cursor=pointer]:
+                    - img [ref=e444]
+                  - button "Add reaction" [ref=e450] [cursor=pointer]:
+                    - img [ref=e451]
+                  - button "Reply to this message" [ref=e454] [cursor=pointer]:
+                    - img [ref=e455]
+                  - button "Copy message" [ref=e458] [cursor=pointer]:
+                    - img [ref=e459]
+              - generic [ref=e464]:
+                - button "⚙ System" [ref=e466] [cursor=pointer]:
+                  - generic [ref=e467]: ⚙
+                  - generic [ref=e468]: System
+                - generic [ref=e469]: 05:29 PM
+              - generic [ref=e473]:
+                - generic [ref=e474]:
+                  - generic [ref=e475]: Nir
+                  - generic [ref=e476]: 05:29 PM
+                  - generic [ref=e477]: ~17 tokens
+                - generic [ref=e479]: Update the price of QATESTWIDGET to $19.99 in the rapidlab store.
+                - generic [ref=e480]:
+                  - button "Copy message" [ref=e482] [cursor=pointer]:
+                    - img [ref=e483]
+                  - button "Add annotation" [ref=e486] [cursor=pointer]:
+                    - img [ref=e487]
+                  - button "Edit message" [ref=e489] [cursor=pointer]:
+                    - img [ref=e490]
+                  - button "Branch conversation here" [ref=e492] [cursor=pointer]:
+                    - img [ref=e493]
+                  - button "Add reaction" [ref=e499] [cursor=pointer]:
+                    - img [ref=e500]
+                  - button "Reply to this message" [ref=e503] [cursor=pointer]:
+                    - img [ref=e504]
+                  - button "Copy message" [ref=e507] [cursor=pointer]:
+                    - img [ref=e508]
+              - generic [ref=e513]:
+                - button "⚙ System" [ref=e515] [cursor=pointer]:
+                  - generic [ref=e516]: ⚙
+                  - generic [ref=e517]: System
+                - generic [ref=e518]: 05:29 PM
+              - generic [ref=e522]:
+                - generic [ref=e523]:
+                  - generic [ref=e524]: Nir
+                  - generic [ref=e525]: 05:29 PM
+                  - generic [ref=e526]: ~22 tokens
+                - generic [ref=e528]: "Add 100 units of stock to QATESTWIDGET in the rapidlab store. Reason: received shipment."
+                - generic [ref=e529]:
+                  - button "Copy message" [ref=e531] [cursor=pointer]:
+                    - img [ref=e532]
+                  - button "Add annotation" [ref=e535] [cursor=pointer]:
+                    - img [ref=e536]
+                  - button "Edit message" [ref=e538] [cursor=pointer]:
+                    - img [ref=e539]
+                  - button "Branch conversation here" [ref=e541] [cursor=pointer]:
+                    - img [ref=e542]
+                  - button "Add reaction" [ref=e548] [cursor=pointer]:
+                    - img [ref=e549]
+                  - button "Reply to this message" [ref=e552] [cursor=pointer]:
+                    - img [ref=e553]
+                  - button "Copy message" [ref=e556] [cursor=pointer]:
+                    - img [ref=e557]
+              - generic [ref=e562]:
+                - button "⚙ System" [ref=e564] [cursor=pointer]:
+                  - generic [ref=e565]: ⚙
+                  - generic [ref=e566]: System
+                - generic [ref=e567]: 05:29 PM
+              - 'button "🔧 Running rapidrms api endpoint: Item ● ▼" [ref=e573] [cursor=pointer]':
+                - generic [ref=e574]: 🔧
+                - generic [ref=e575]: Running rapidrms api
+                - generic [ref=e576]: "endpoint: Item"
+                - generic [ref=e577]: ●
+                - generic [ref=e578]: ▼
+              - button "❌ rapidrms api failed ▼" [ref=e584] [cursor=pointer]:
+                - generic [ref=e585]: ❌
+                - generic [ref=e586]: rapidrms api failed
+                - generic [ref=e587]: ▼
+              - 'button "🔧 Running rapidrms api endpoint: Department ● ▼" [ref=e593] [cursor=pointer]':
+                - generic [ref=e594]: 🔧
+                - generic [ref=e595]: Running rapidrms api
+                - generic [ref=e596]: "endpoint: Department"
+                - generic [ref=e597]: ●
+                - generic [ref=e598]: ▼
+              - button "❌ rapidrms api failed ▼" [ref=e604] [cursor=pointer]:
+                - generic [ref=e605]: ❌
+                - generic [ref=e606]: rapidrms api failed
+                - generic [ref=e607]: ▼
+              - 'button "🔧 Running item search search: QATESTWIDGET ● ▼" [ref=e613] [cursor=pointer]':
+                - generic [ref=e614]: 🔧
+                - generic [ref=e615]: Running item search
+                - generic [ref=e616]: "search: QATESTWIDGET"
+                - generic [ref=e617]: ●
+                - generic [ref=e618]: ▼
+              - button "❌ item search failed ▼" [ref=e624] [cursor=pointer]:
+                - generic [ref=e625]: ❌
+                - generic [ref=e626]: item search failed
+                - generic [ref=e627]: ▼
+              - button "🔧 Running low inventory ● ▼" [ref=e633] [cursor=pointer]:
+                - generic [ref=e634]: 🔧
+                - generic [ref=e635]: Running low inventory
+                - generic [ref=e636]: ●
+                - generic [ref=e637]: ▼
+              - button "✅ low inventory completed (62ms) ▼" [ref=e643] [cursor=pointer]:
+                - generic [ref=e644]: ✅
+                - generic [ref=e645]: low inventory completed (62ms)
+                - generic [ref=e646]: ▼
+              - generic [ref=e650]:
+                - generic [ref=e651]:
+                  - generic [ref=e652]: 🤖
+                  - generic [ref=e653]: Shre
+                  - generic [ref=e654]: auto
+                  - generic [ref=e655]: ~125 tokens
+                - generic [ref=e657]:
+                  - paragraph [ref=e658]: "I encountered the following issues while trying to retrieve information for the RapidLab store:"
+                  - list [ref=e659]:
+                    - listitem [ref=e660]:
+                      - strong [ref=e661]: RapidRMS API
+                      - text: ": The request timed out after 15 seconds, and I received a"
+                      - strong [ref=e662]: 500 Internal Server Error
+                      - text: .
+                    - listitem [ref=e663]:
+                      - strong [ref=e664]: MIB007
+                      - text: ": The item search for \"QATESTWIDGET\" also resulted in a"
+                      - strong [ref=e665]: 500 Internal Server Error
+                      - text: .
+                  - paragraph [ref=e666]: Unfortunately, this means I cannot access the data about the products and departments at this time. Please try again later, or if there’s anything else you need assistance with, let me know!
+                - button "auto" [ref=e668] [cursor=pointer]:
+                  - generic [ref=e669]: auto
+                  - img [ref=e670]
+                - generic [ref=e673]:
+                  - generic [ref=e674]:
+                    - button "Copy message" [ref=e675] [cursor=pointer]:
+                      - img [ref=e676]
+                    - button "Read aloud" [ref=e679] [cursor=pointer]:
+                      - img [ref=e680]
+                    - button "Helpful" [ref=e684] [cursor=pointer]:
+                      - img [ref=e685]
+                    - button "Not helpful" [ref=e687] [cursor=pointer]:
+                      - img [ref=e688]
+                    - button "Add reaction" [ref=e691] [cursor=pointer]:
+                      - img [ref=e692]
+                    - button "Branch" [ref=e695] [cursor=pointer]:
+                      - img [ref=e696]
+                      - generic [ref=e701]: Branch
+                    - button "Export" [ref=e703] [cursor=pointer]:
+                      - img [ref=e704]
+                  - button "Reply to this message" [ref=e707] [cursor=pointer]:
+                    - img [ref=e708]
+                  - button "Add annotation" [ref=e711] [cursor=pointer]:
+                    - img [ref=e712]
+              - generic [ref=e716]:
+                - generic [ref=e717]:
+                  - generic [ref=e718]: Nir
+                  - generic [ref=e719]: 05:30 PM
+                  - generic [ref=e720]: ~23 tokens
+                - generic [ref=e722]: How do I save a vendor mapping for EagleRock invoices so I dont have to remap every time?
+                - generic [ref=e723]:
+                  - button "Copy message" [ref=e725] [cursor=pointer]:
+                    - img [ref=e726]
+                  - button "Add annotation" [ref=e729] [cursor=pointer]:
+                    - img [ref=e730]
+                  - button "Edit message" [ref=e732] [cursor=pointer]:
+                    - img [ref=e733]
+                  - button "Branch conversation here" [ref=e735] [cursor=pointer]:
+                    - img [ref=e736]
+                  - button "Add reaction" [ref=e742] [cursor=pointer]:
+                    - img [ref=e743]
+                  - button "Reply to this message" [ref=e746] [cursor=pointer]:
+                    - img [ref=e747]
+                  - button "Copy message" [ref=e750] [cursor=pointer]:
+                    - img [ref=e751]
+              - generic [ref=e756]:
+                - button "⚙ System" [ref=e758] [cursor=pointer]:
+                  - generic [ref=e759]: ⚙
+                  - generic [ref=e760]: System
+                - generic [ref=e761]: 05:30 PM
+          - generic [ref=e763]:
+            - button "Tell me more" [ref=e764] [cursor=pointer]
+            - button "What else can you help with?" [ref=e765] [cursor=pointer]
+            - button "Summarize this conversation" [ref=e766] [cursor=pointer]
+          - generic [ref=e769]:
+            - textbox "Message input" [ref=e770]:
+              - /placeholder: Message Shre...
+            - generic [ref=e771]:
+              - generic [ref=e772]:
+                - button "Attach file" [ref=e773] [cursor=pointer]:
+                  - img [ref=e774]
+                - button "Insert emoji" [ref=e777] [cursor=pointer]:
+                  - img [ref=e778]
+                - button "Voice input" [ref=e781] [cursor=pointer]:
+                  - img [ref=e782]
+                - button "Enable Claude CLI mode" [ref=e785] [cursor=pointer]:
+                  - img [ref=e786]
+                - button "Close terminal" [active] [ref=e789] [cursor=pointer]:
+                  - img [ref=e790]
+                - button "Switch to tab view" [ref=e792] [cursor=pointer]:
+                  - img [ref=e793]
+              - button "Send message" [disabled] [ref=e797] [cursor=pointer]:
+                - img [ref=e798]
+  - generic [ref=e801]:
+    - generic [ref=e802]:
+      - generic [ref=e803]:
+        - generic [ref=e804]: Notifications
+        - button "Close notifications" [ref=e806] [cursor=pointer]:
+          - img [ref=e807]
+      - generic [ref=e810]:
+        - button "All" [ref=e811] [cursor=pointer]
+        - button "Tasks" [ref=e812] [cursor=pointer]
+        - button "Agents" [ref=e813] [cursor=pointer]
+        - button "Services" [ref=e814] [cursor=pointer]
+    - generic [ref=e815]:
+      - generic [ref=e817]:
+        - img [ref=e818]
+        - textbox "Search notifications..." [ref=e821]
+      - generic [ref=e822]:
+        - img [ref=e823]
+        - generic [ref=e826]: No notifications yet
+  - generic [ref=e827]: mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+```

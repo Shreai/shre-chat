@@ -11,7 +11,7 @@ test.describe('Agent 12: EDI Import — chat-driven EDI extraction & mapping', (
 
   test.beforeAll(async ({ request }) => {
     try {
-      const r = await request.get('https://127.0.0.1:5497/health', { timeout: 5000, ignoreHTTPSErrors: true });
+      const r = await request.get('http://127.0.0.1:5497/health', { timeout: 5000, ignoreHTTPSErrors: true });
       routerAlive = [200, 204].includes(r.status());
     } catch { routerAlive = false; }
     try {

@@ -68,6 +68,7 @@ export function useChatKeydown(params: UseChatKeydownParams) {
     activeSessionId,
     replaceSessionMessages,
     handleSend,
+    streaming,
     sentHistoryRef,
     sentHistoryIdxRef,
     HISTORY_KEY,
@@ -167,8 +168,9 @@ export function useChatKeydown(params: UseChatKeydownParams) {
         }
       }
 
-      // Enter sends message, Shift+Enter inserts newline
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Meta+Enter (Mac) or Ctrl+Enter sends message, Enter inserts newline
+      const isCmdEnter = (e.metaKey || e.ctrlKey) && e.key === 'Enter';
+      if (isCmdEnter) {
         e.preventDefault();
         if (editingQueueId !== null) {
           const newText = input.trim();

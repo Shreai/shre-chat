@@ -460,7 +460,7 @@ async function streamViaFallback(message, history, systemPrompt, callbacks, sign
     let routedModel = '';
     const fallbackStart = Date.now();
     // Stream silence timeout — if no data for 60s, assume connection died
-    const STREAM_SILENCE_TIMEOUT = 60_000;
+    const STREAM_SILENCE_TIMEOUT = 300_000;
     let silenceTimer = null;
     const resetSilenceTimer = () => {
         if (silenceTimer)

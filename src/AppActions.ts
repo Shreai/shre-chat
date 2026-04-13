@@ -66,6 +66,9 @@ export interface ActionDeps {
   setCompact: Dispatch<SetStateAction<boolean>>;
   setWriteEnabled: Dispatch<SetStateAction<boolean>>;
   setClaudeCliMode: Dispatch<SetStateAction<boolean>>;
+  setCliLedgerSessionId: Dispatch<SetStateAction<string | null>>;
+  cliSummaryMode: Record<string, 'full' | 'summary'>;
+  setCliSummaryMode: Dispatch<SetStateAction<Record<string, 'full' | 'summary'>>>;
   setReplyToIndex: Dispatch<SetStateAction<number | null>>;
   setThemeCustomState: Dispatch<SetStateAction<ThemeCustom>>;
 
@@ -99,6 +102,9 @@ export function buildActions(deps: ActionDeps): AppActions {
     setCompact,
     setWriteEnabled,
     setClaudeCliMode,
+    setCliLedgerSessionId,
+    cliSummaryMode,
+    setCliSummaryMode,
     setReplyToIndex,
     setThemeCustomState,
     updateSessions,
@@ -471,6 +477,21 @@ export function buildActions(deps: ActionDeps): AppActions {
 
     setReplyTo: (index: number | null) => {
       setReplyToIndex(index);
+    },
+
+    setCliLedgerSessionId: (id: string | null) => {
+      setCliLedgerSessionId(id);
+    },
+
+    toggleCliSummaryMode: (messageId: string) => {
+      setCliSummaryMode((prev) => {
+        const current = prev[messageId] || 'full';
+        return { ...prev, [messageId]: current === 'full' ? 'summary' : 'full' };
+      });
+    },
+
+    getCliSummaryMode: (messageId: string) => {
+      return cliSummaryMode[messageId] || 'full';
     },
 
     logout: onLogout,

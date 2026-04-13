@@ -372,6 +372,8 @@ function MainApp({
   );
   const [replyToIndex, setReplyToIndex] = useState<number | null>(null);
   const [themeCustom, setThemeCustomState] = useState<ThemeCustom>(() => loadThemeCustom());
+  const [cliLedgerSessionId, setCliLedgerSessionId] = useState<string | null>(null);
+  const [cliSummaryMode, setCliSummaryMode] = useState<Record<string, 'full' | 'summary'>>({});
   const queueRef = useRef<QueuedMessage[]>(loadQueue());
   const draftsRef = useRef<Record<string, string>>(loadDrafts());
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -436,6 +438,9 @@ function MainApp({
     setReplyToIndex,
     setThemeCustomState,
     setClaudeCliMode,
+    setCliLedgerSessionId,
+    cliSummaryMode,
+    setCliSummaryMode,
     updateSessions,
     onLogout,
   });
@@ -467,6 +472,8 @@ function MainApp({
       replyToIndex,
       userProfile,
       claudeCliMode,
+      cliLedgerSessionId,
+      cliSummaryMode,
     }),
     [
       sessions,
@@ -490,6 +497,8 @@ function MainApp({
       replyToIndex,
       userProfile,
       claudeCliMode,
+      cliLedgerSessionId,
+      cliSummaryMode,
     ],
   );
 

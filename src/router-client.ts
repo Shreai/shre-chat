@@ -568,6 +568,9 @@ export async function sendMessage(
       claudeCliMode,
       directMode,
       voiceMode,
+      traceEnabled,
+      conversationMode,
+      activeAppId,
     );
   } catch (err) {
     if (done) return;
@@ -612,6 +615,9 @@ async function streamViaFallback(
   claudeCliMode?: boolean,
   directMode?: boolean,
   voiceMode?: boolean,
+  traceEnabled?: boolean,
+  conversationMode?: string,
+  activeAppId?: string | null,
   _emptyRetry?: boolean,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
@@ -914,7 +920,7 @@ async function streamViaFallback(
       return streamViaFallback(
         message, history, systemPrompt, callbacks, signal, modelOverride,
         attachments, routerMode, threadContext, contextHealth, claudeCliMode, directMode,
-        true,
+        voiceMode, traceEnabled, conversationMode, activeAppId, true,
       );
     }
 

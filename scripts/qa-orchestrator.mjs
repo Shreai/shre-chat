@@ -29,6 +29,25 @@ const REPORT_FILE = join(PROJECT_ROOT, 'e2e/results/qa-report.md');
 const FAILED_CACHE = join(PROJECT_ROOT, 'e2e/results/failed-tests.json');
 const TASKS_URL = 'http://localhost:5460';
 
+// ── Step 0: Load environment variables from bridge if available ──
+function loadEnv() {
+  const bridgeEnv = join(PROJECT_ROOT, '../shre-cortex-bridge/.env');
+  if (existsSync(bridgeEnv)) {
+    const env = readFileSync(bridgeEnv, 'utf-8');
+    const bridgeMatch = env.match(/MEMO_BRIDGE_TOKEN=([^\s\n]+)/);
+    if (bridgeMatch && !process.env.MEMO_BRIDGE_TOKEN) {
+      process.env.MEMO_BRIDGE_TOKEN = bridgeMatch[1].trim();
+      console.log('  Loaded MEMO_BRIDGE_TOKEN from shre-cortex-bridge/.env');
+    }
+    const cortexMatch = env.match(/CORTEX_API_KEY=([^\s\n]+)/);
+    if (cortexMatch && !process.env.CORTEX_API_KEY) {
+      process.env.CORTEX_API_KEY = cortexMatch[1].trim();
+      console.log('  Loaded CORTEX_API_KEY from shre-cortex-bridge/.env');
+    }
+  }
+}
+loadEnv();
+
 // ── Argument parsing ──
 const args = process.argv.slice(2);
 const flags = {
@@ -55,8 +74,62 @@ const AGENTS = [
   { name: 'preview', domain: 'Preview', owner: 'Agent 7', file: 'preview.spec.ts' },
   { name: 'responsive', domain: 'Responsive', owner: 'Agent 8', file: 'responsive.spec.ts' },
   { name: 'smoke', domain: 'Smoke', owner: 'Smoke', file: 'smoke.spec.ts' },
+  {
+    name: 'data-integration',
+    domain: 'Data Integration',
+    owner: 'Agent 9',
+    file: 'data-integration.spec.ts',
+  },
   { name: 'edi-import', domain: 'EDI Import', owner: 'Agent 12', file: 'edi-import.spec.ts' },
 ];
+
+// ── Step 0: Ensure test fixtures exist ──
+function ensureFixtures() {
+  const fixtureDir = '/tmp/preview-test';
+  if (!existsSync(fixtureDir)) mkdirSync(fixtureDir, { recursive: true });
+
+  // Minimal valid JPEG (1x1 pixel JFIF)
+  const jpegPath = join(fixtureDir, 'test.jpg');
+  if (!existsSync(jpegPath)) {
+    const jpegHex = 'ffd8ffe000104a46494600010100000100010000ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434271f3d38323c2e333434ffc0000b08000100010101110 0ffc4001f0000010501010101010100000000000000000102030405060708090a0bffda00080101003f0054db9ea7a3ffd9';
+    writeFileSync(jpegPath, Buffer.from(jpegHex, 'hex'));
+  }
+
+  // Minimal valid PNG (1x1 red pixel)
+  const pngPath = join(fixtureDir, 'test.png');
+  if (!existsSync(pngPath)) {
+    execSync(`python3 -c "
+import struct, zlib
+sig = b'\\x89PNG\\r\\n\\x1a\\n'
+def chunk(t, d):
+    c = struct.pack('>I', len(d)) + t + d
+    return c + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+raw = zlib.compress(b'\\x00\\xff\\x00\\x00')
+with open('${pngPath}','wb') as f:
+    f.write(sig + chunk(b'IHDR', ihdr) + chunk(b'IDAT', raw) + chunk(b'IEND', b''))
+"`, { stdio: 'pipe' });
+  }
+
+  // Minimal valid PDF
+  const pdfPath = join(fixtureDir, 'test.pdf');
+  if (!existsSync(pdfPath)) {
+    writeFileSync(pdfPath, `%PDF-1.0
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj
+xref
+0 4
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+trailer<</Size 4/Root 1 0 R>>
+startxref
+190
+%%EOF`);
+  }
+}
 
 // ── Step 1: Run Playwright ──
 function runTests() {
@@ -95,7 +168,7 @@ function runTests() {
     execSync(cmd, {
       cwd: PROJECT_ROOT,
       stdio: flags.verbose ? 'inherit' : 'pipe',
-      timeout: 300_000, // 5 min max
+      timeout: 600_000, // 10 min max
     });
     console.log('  All tests PASSED\n');
     return true;
@@ -380,6 +453,7 @@ function printSummary(results) {
 // ── Main ──
 async function main() {
   if (!flags.reportOnly) {
+    ensureFixtures();
     runTests();
   }
 

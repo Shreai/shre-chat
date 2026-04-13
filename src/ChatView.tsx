@@ -34,6 +34,7 @@ import { useTaskTracker } from './hooks/useTaskTracker';
 import { TaskPanel, TaskIndicatorButton } from './components/TaskPanel';
 import { useFileHandling } from './hooks/useFileHandling';
 import { useHeaderActions } from './hooks/useHeaderActions';
+import type { ConversationModeId } from './preferences-store';
 import { useMessageListHandlers } from './hooks/useMessageListHandlers';
 import { useFilteredMessages } from './hooks/useFilteredMessages';
 import { useModelList } from './hooks/useModelList';
@@ -1082,7 +1083,7 @@ export function ChatView() {
             onPullEnd={handlePullEnd}
             onJumpToLatest={jumpToLatest}
             {...messageListHandlers}
-            onModeSwitchRequest={setConversationMode}
+            onModeSwitchRequest={(mode: string) => setConversationMode(mode as ConversationModeId)}
             virtualizer={virtualizer}
             useVirtual={useVirtual}
           />

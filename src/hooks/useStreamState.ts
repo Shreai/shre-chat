@@ -39,6 +39,9 @@ export interface UseStreamStateReturn {
   setPendingApproval: React.Dispatch<
     React.SetStateAction<{ approvalId: string; tool: string; input: any; reason: string } | null>
   >;
+  /** True once the first content token has been received (TTFT boundary) */
+  firstTokenReceived: boolean;
+  setFirstTokenReceived: React.Dispatch<React.SetStateAction<boolean>>;
   streamStartRef: React.MutableRefObject<number>;
   sendTimeRef: React.MutableRefObject<number>;
   firstTokenTimeRef: React.MutableRefObject<number>;
@@ -68,15 +71,17 @@ export function useStreamState(streaming: boolean): UseStreamStateReturn {
     input: any;
     reason: string;
   } | null>(null);
+  const [firstTokenReceived, setFirstTokenReceived] = useState(false);
   const streamStartRef = useRef(0);
   const sendTimeRef = useRef(0);
   const firstTokenTimeRef = useRef(0);
 
-  // Clear stream stall indicator when streaming ends
+  // Clear stream stall indicator and first-token flag when streaming ends
   useEffect(() => {
     if (!streaming) {
       setStreamStall(null);
       setStallCountdown(0);
+      setFirstTokenReceived(false);
     }
   }, [streaming]);
 
@@ -119,6 +124,8 @@ export function useStreamState(streaming: boolean): UseStreamStateReturn {
     setActiveToolName,
     pendingApproval,
     setPendingApproval,
+    firstTokenReceived,
+    setFirstTokenReceived,
     streamStartRef,
     sendTimeRef,
     firstTokenTimeRef,

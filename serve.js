@@ -5249,7 +5249,7 @@ async function requestHandler(req, res) {
         const isStreaming = (routerHeaders["accept"] || "").includes("text/event-stream") || 
                            reqBody.includes('"stream":true') || 
                            reqBody.includes('"stream": true');
-        const proxyTimeoutMs = isStreaming ? 300_000 : 60_000;
+        const proxyTimeoutMs = 300_000;
 
         const routerReq = (serviceUrl("shre-router").startsWith("https") ? (await import("https")).default : (await import("http")).default).request(
           routerUrl,

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5510';
-const BRIDGE = 'https://127.0.0.1:5450';
+const BRIDGE = 'http://127.0.0.1:5450';
 
 // Track external service availability — checked once in beforeAll
 let cortexAlive = false;
@@ -18,7 +18,7 @@ test.describe('Agent 9: Data Integration — POS ↔ RapidRMS ↔ Agent flow', (
       cortexAlive = r.status() === 200;
     } catch { cortexAlive = false; }
     try {
-      const r = await request.get('https://127.0.0.1:5497/health', { timeout: 5000, ignoreHTTPSErrors: true });
+      const r = await request.get('http://127.0.0.1:5497/health', { timeout: 5000, ignoreHTTPSErrors: true });
       routerAlive = [200, 204].includes(r.status());
     } catch { routerAlive = false; }
     try {
@@ -47,7 +47,7 @@ test.describe('Agent 9: Data Integration — POS ↔ RapidRMS ↔ Agent flow', (
 
   test('shre-router is healthy', async ({ request }) => {
     test.skip(!routerAlive, 'shre-router not reachable — skipping');
-    const res = await request.get('https://127.0.0.1:5497/health', {
+    const res = await request.get('http://127.0.0.1:5497/health', {
       ignoreHTTPSErrors: true,
     });
     expect([200, 204]).toContain(res.status());
@@ -165,11 +165,14 @@ test.describe('Agent 9: Data Integration — POS ↔ RapidRMS ↔ Agent flow', (
   // ═══════════ Sync Pipeline: data exists in CortexDB ═══════════
 
   test('rapidlab items are synced to CortexDB', async ({ request }) => {
-    test.skip(!bridgeAlive, 'cortex-bridge not reachable — skipping');
-    const res = await request.post(`${BRIDGE}/v1/query`, {
+    test.skip(!cortexAlive, 'CortexDB not reachable — skipping');
+    const res = await request.post('http://127.0.0.1:5400/v1/query', {
       ignoreHTTPSErrors: true,
+      headers: {
+        'Authorization': `Bearer ${process.env.CORTEX_API_KEY || ''}`,
+      },
       data: {
-        query: "SELECT count(*) as cnt FROM rapidrms.item WHERE company_id = 'client-181155'",
+        cortexql: "SELECT count(*) as cnt FROM rapidrms.item WHERE company_id = 'client-181155'",
       },
     });
 
@@ -181,16 +184,19 @@ test.describe('Agent 9: Data Integration — POS ↔ RapidRMS ↔ Agent flow', (
         expect(count).toBeGreaterThan(0);
       }
     } else {
-      console.log(`GAP: cortex-bridge query returned ${res.status()} — check bridge access`);
+      console.log(`GAP: CortexDB query returned ${res.status()} — check access`);
     }
   });
 
   test('rapidlab customers are synced to CortexDB', async ({ request }) => {
-    test.skip(!bridgeAlive, 'cortex-bridge not reachable — skipping');
-    const res = await request.post(`${BRIDGE}/v1/query`, {
+    test.skip(!cortexAlive, 'CortexDB not reachable — skipping');
+    const res = await request.post('http://127.0.0.1:5400/v1/query', {
       ignoreHTTPSErrors: true,
+      headers: {
+        'Authorization': `Bearer ${process.env.CORTEX_API_KEY || ''}`,
+      },
       data: {
-        query: "SELECT count(*) as cnt FROM rapidrms.customer WHERE company_id = 'client-181155'",
+        cortexql: "SELECT count(*) as cnt FROM rapidrms.customer WHERE company_id = 'client-181155'",
       },
     });
 
@@ -202,16 +208,19 @@ test.describe('Agent 9: Data Integration — POS ↔ RapidRMS ↔ Agent flow', (
         expect(count).toBeGreaterThan(0);
       }
     } else {
-      console.log(`GAP: cortex-bridge query returned ${res.status()} for customers`);
+      console.log(`GAP: CortexDB query returned ${res.status()} for customers`);
     }
   });
 
   test('rapidlab departments are synced to CortexDB', async ({ request }) => {
-    test.skip(!bridgeAlive, 'cortex-bridge not reachable — skipping');
-    const res = await request.post(`${BRIDGE}/v1/query`, {
+    test.skip(!cortexAlive, 'CortexDB not reachable — skipping');
+    const res = await request.post('http://127.0.0.1:5400/v1/query', {
       ignoreHTTPSErrors: true,
+      headers: {
+        'Authorization': `Bearer ${process.env.CORTEX_API_KEY || ''}`,
+      },
       data: {
-        query: "SELECT count(*) as cnt FROM rapidrms.department WHERE company_id = 'client-181155'",
+        cortexql: "SELECT count(*) as cnt FROM rapidrms.department WHERE company_id = 'client-181155'",
       },
     });
 
@@ -223,7 +232,7 @@ test.describe('Agent 9: Data Integration — POS ↔ RapidRMS ↔ Agent flow', (
         expect(count).toBeGreaterThan(0);
       }
     } else {
-      console.log(`GAP: cortex-bridge query returned ${res.status()} for departments`);
+      console.log(`GAP: CortexDB query returned ${res.status()} for departments`);
     }
   });
 
