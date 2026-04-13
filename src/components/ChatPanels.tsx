@@ -11,7 +11,8 @@ import { useI18n } from '../useI18n';
 import { LOCALE_LABELS, type Locale } from '../i18n';
 
 import { ModelPicker } from './ModelPicker';
-import type { TTSProvider, GatewayMode } from '../preferences-store';
+import ModePicker from './ModePicker';
+import type { TTSProvider, GatewayMode, ConversationModeId } from '../preferences-store';
 import { HeaderMoreMenu } from './HeaderMoreMenu';
 import { ShareBar } from './ShareBar';
 import { ContextBar } from './ContextBar';
@@ -33,6 +34,9 @@ interface ChatPanelsProps {
   setEditingTabText: (text: string) => void;
   cliMode: boolean;
   actions: any;
+  // Conversation mode picker
+  conversationMode: ConversationModeId;
+  setConversationMode: (mode: ConversationModeId) => void;
   // Model picker
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
@@ -134,6 +138,8 @@ export function ChatPanels(props: ChatPanelsProps) {
     setEditingTabText,
     cliMode,
     actions,
+    conversationMode,
+    setConversationMode,
     showModelPicker,
     setShowModelPicker,
     selectedModel,
@@ -205,6 +211,8 @@ export function ChatPanels(props: ChatPanelsProps) {
     summaryText,
   } = props;
 
+  const [modePickerOpen, setModePickerOpen] = useState(false);
+  const modePickerRef = useRef<HTMLDivElement>(null);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const voicePickerRef = useRef<HTMLDivElement>(null);
   const [langPickerOpen, setLangPickerOpen] = useState(false);
@@ -290,6 +298,14 @@ export function ChatPanels(props: ChatPanelsProps) {
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <ModePicker
+            open={modePickerOpen}
+            onToggle={() => setModePickerOpen((v) => !v)}
+            onClose={() => setModePickerOpen(false)}
+            selectedMode={conversationMode}
+            onSelectMode={setConversationMode}
+            pickerRef={modePickerRef}
+          />
           <ModelPicker
             open={showModelPicker}
             onToggle={() => setShowModelPicker(!showModelPicker)}

@@ -370,6 +370,8 @@ export function ChatView() {
     handleDownloadMd,
     handleDownloadJson,
     handleSaveSystemPrompt,
+    conversationMode,
+    setConversationMode,
   } = useHeaderActions({
     activeSessionId,
     activeSession,
@@ -953,6 +955,8 @@ export function ChatView() {
             setEditingTabText={setEditingTabText}
             cliMode={cliMode}
             actions={actions}
+            conversationMode={conversationMode}
+            setConversationMode={setConversationMode}
             showModelPicker={showModelPicker}
             setShowModelPicker={setShowModelPicker}
             selectedModel={selectedModel}

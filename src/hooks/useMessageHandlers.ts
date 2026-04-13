@@ -224,6 +224,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
   } = params;
 
   const traceEnabled = usePreferences((s) => s.traceEnabled);
+  const conversationMode = usePreferences((s) => s.conversationMode);
+  const activeAppId = usePreferences((s) => s.activeAppId);
   const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [editingQueueText, setEditingQueueText] = useState('');
@@ -1583,6 +1585,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       directMode,
       voiceMode,
       traceEnabled,
+      conversationMode,
+      activeAppId,
     );
   }, [
     input,
@@ -1602,6 +1606,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     directMode,
     claudeCliMode,
     voiceMode,
+    conversationMode,
+    activeAppId,
     sendViaCLI,
     selectedModel,
     compareMode,

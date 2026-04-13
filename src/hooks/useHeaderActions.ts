@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { ChatMessage } from '../router-client';
 import { shareSession } from '../store';
 import { playNotifSound, formatTime } from '../chat-utils';
-import { usePreferences, type GatewayMode } from '../preferences-store';
+import { usePreferences, type GatewayMode, type ConversationModeId } from '../preferences-store';
 
 interface UseHeaderActionsOptions {
   activeSessionId: string | null;
@@ -45,6 +45,19 @@ export function useHeaderActions({
 
   const notifSound = usePreferences((s) => s.notifSound);
   const setNotifSound = usePreferences((s) => s.setNotifSound);
+  const conversationMode = usePreferences((s) => s.conversationMode);
+  const setConversationMode = usePreferences((s) => s.setConversationMode);
+  const agentModeOverrides = usePreferences((s) => s.agentModeOverrides);
+  const setAgentModeOverride = usePreferences((s) => s.setAgentModeOverride);
+
+  // Auto-apply agent's default mode when switching agents
+  useEffect(() => {
+    if (!currentAgentId) return;
+    const agentMode = agentModeOverrides[currentAgentId];
+    if (agentMode && agentMode !== conversationMode) {
+      setConversationMode(agentMode);
+    }
+  }, [currentAgentId]); // intentionally only depend on agentId change
 
   const handleToggleRouterMode = useCallback(() => {
     // Legacy toggle — now just ensures router mode
@@ -237,5 +250,13 @@ export function useHeaderActions({
     handleDownloadMd,
     handleDownloadJson,
     handleSaveSystemPrompt,
+    conversationMode,
+    setConversationMode: (mode: ConversationModeId) => {
+      setConversationMode(mode);
+      // Also save as per-agent default so it auto-applies next time
+      if (currentAgentId) {
+        setAgentModeOverride(currentAgentId, mode);
+      }
+    },
   };
 }

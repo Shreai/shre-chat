@@ -79,6 +79,8 @@ export const DEFAULT_FEATURES: Record<FeatureKey, boolean> = {
   externalApps: _isLocal,
 };
 
+export type ConversationModeId = 'assistant' | 'code' | 'apps' | 'ops' | 'strategy' | 'business';
+
 export interface PreferencesState {
   notifSound: boolean;
   voiceMode: boolean;
@@ -90,6 +92,9 @@ export interface PreferencesState {
   features: Record<FeatureKey, boolean>; // Feature toggles
   focusMode: boolean; // Hide system/cron/automated messages from chat
   traceEnabled: boolean; // Show per-message trace pipeline (conversation traceroute)
+  conversationMode: ConversationModeId; // Active conversation mode
+  activeAppId: string | null; // App ID when conversationMode === 'apps'
+  agentModeOverrides: Record<string, ConversationModeId>; // agentId → default mode
 
   // Actions
   setNotifSound: (v: boolean) => void;
@@ -104,6 +109,9 @@ export interface PreferencesState {
   isFeatureEnabled: (key: FeatureKey) => boolean;
   setFocusMode: (v: boolean) => void;
   setTraceEnabled: (v: boolean) => void;
+  setConversationMode: (mode: ConversationModeId, appId?: string | null) => void;
+  setAgentModeOverride: (agentId: string, mode: ConversationModeId | null) => void;
+  getAgentModeOverride: (agentId: string) => ConversationModeId | null;
 }
 
 /**
@@ -172,6 +180,9 @@ export const usePreferences = create<PreferencesState>()(
         features: { ...DEFAULT_FEATURES },
         focusMode: false,
         traceEnabled: false,
+        conversationMode: 'assistant',
+        activeAppId: null,
+        agentModeOverrides: {},
 
         setNotifSound: (v) => set({ notifSound: v }),
         setVoiceMode: (v) => set({ voiceMode: v }),
@@ -181,6 +192,20 @@ export const usePreferences = create<PreferencesState>()(
         setGatewayMode: (v) => set({ gatewayMode: v }),
         setFocusMode: (v) => set({ focusMode: v }),
         setTraceEnabled: (v) => set({ traceEnabled: v }),
+        setConversationMode: (mode, appId) =>
+          set({ conversationMode: mode, activeAppId: appId ?? null }),
+
+        setAgentModeOverride: (agentId, mode) =>
+          set((state) => {
+            const next = { ...state.agentModeOverrides };
+            if (mode) next[agentId] = mode;
+            else delete next[agentId];
+            return { agentModeOverrides: next };
+          }),
+
+        getAgentModeOverride: (agentId) => {
+          return get().agentModeOverrides[agentId] ?? null;
+        },
 
         setFeature: (key, enabled) =>
           set((state) => ({
@@ -219,6 +244,9 @@ export const usePreferences = create<PreferencesState>()(
         features: state.features,
         focusMode: state.focusMode,
         traceEnabled: state.traceEnabled,
+        conversationMode: state.conversationMode,
+        activeAppId: state.activeAppId,
+        agentModeOverrides: state.agentModeOverrides,
       }),
       // After rehydration, clean up legacy keys (one-time)
       onRehydrateStorage: () => {

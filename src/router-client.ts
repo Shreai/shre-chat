@@ -526,6 +526,8 @@ export async function sendMessage(
   directMode?: boolean,
   voiceMode?: boolean,
   traceEnabled?: boolean,
+  conversationMode?: string,
+  activeAppId?: string | null,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -651,6 +653,8 @@ async function streamViaFallback(
       ...(threadContext ? { threadContext } : {}),
       ...(contextHealth ? { contextHealth } : {}),
       ...(traceEnabled ? { trace: true } : {}),
+      ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
+      ...(activeAppId ? { appId: activeAppId } : {}),
     }),
     signal,
   });
