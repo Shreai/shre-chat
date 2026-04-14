@@ -325,31 +325,69 @@ function AttachmentCard({
     );
   }
 
-  // Images render as thumbnails only (existing behavior handles full display)
+  // Images render as thumbnails with vision indicator
   if (isImage) {
     return (
-      <img
-        src={attachment.dataUrl}
-        alt={attachment.name}
-        onClick={() => onImageClick?.(attachment.dataUrl)}
-        style={{
-          maxWidth: 240,
-          maxHeight: 180,
-          borderRadius: 8,
-          cursor: 'pointer',
-          display: 'block',
-          objectFit: 'cover',
-          transition: 'opacity 0.15s, box-shadow 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.opacity = '0.85';
-          e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-accent)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.opacity = '1';
-          e.currentTarget.style.boxShadow = 'none';
-        }}
-      />
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <img
+          src={attachment.dataUrl}
+          alt={attachment.name}
+          onClick={() => onImageClick?.(attachment.dataUrl)}
+          style={{
+            maxWidth: 240,
+            maxHeight: 180,
+            borderRadius: 8,
+            cursor: 'pointer',
+            display: 'block',
+            objectFit: 'cover',
+            transition: 'opacity 0.15s, box-shadow 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = '0.85';
+            e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-accent)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '1';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        />
+        {/* Vision indicator badge */}
+        <span style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          fontSize: 9,
+          fontWeight: 700,
+          padding: '2px 6px',
+          borderRadius: 4,
+          background: 'rgba(139, 92, 246, 0.85)',
+          color: '#fff',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+        }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Vision
+        </span>
+        {/* File name + size below image */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '4px 2px',
+          fontSize: 10,
+          color: 'var(--c-text-3)',
+        }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+            {attachment.name}
+          </span>
+          {attachment.size && <span>{formatFileSize(attachment.size)}</span>}
+        </div>
+      </div>
     );
   }
 

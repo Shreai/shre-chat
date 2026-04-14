@@ -38,6 +38,7 @@ import { CopyButton, MessageActions, ActionTagChips } from './message-parts/Mess
 import { StableMarkdownBlock } from './message-parts/SystemEventChip';
 import { FileAttachmentPreview } from './message-parts/FileAttachmentPreview';
 import { MessageTraceDrawer } from './message-parts/MessageTraceDrawer';
+import { CitationLinks } from './message-parts/CitationLinks';
 import { usePreferences } from '../preferences-store';
 
 // Re-export extracted components so existing imports from MessageBubble still work
@@ -734,6 +735,10 @@ const MessageBubble = memo(function MessageBubble({
               </span>
             )}
           </div>
+        )}
+        {/* Citations — extracted URLs and source references */}
+        {!isUser && !streaming && message.content && (
+          <CitationLinks content={message.content} />
         )}
         {/* Conversation trace drawer — shows request pipeline per message */}
         {!isUser && !streaming && traceEnabled && meta?.traceId && (

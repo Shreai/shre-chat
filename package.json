@@ -1,6 +1,6 @@
 {
   "name": "shre-chat",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "description": "AROS — AI-powered retail chat assistant",
   "main": "electron/dist/main.cjs",
@@ -87,7 +87,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "shre-sdk": "file:./stubs/shre-sdk",
+    "shre-sdk": "file:../shre-sdk",
     "tailwind-merge": "^3.5.0",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5",

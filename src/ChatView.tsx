@@ -52,6 +52,7 @@ import { SuggestionsBar } from './components/SuggestionsBar';
 import { ViewTabs } from './components/ViewTabs';
 import { AppsDrawer } from './components/AppsDrawer';
 import { PreviewPanel } from './components/PreviewPanel';
+import { ArtifactCanvas, extractArtifacts, type Artifact } from './components/ArtifactCanvas';
 import { DragOverlay } from './components/DragOverlay';
 import { ChatPanels } from './components/ChatPanels';
 import { TrialBanner } from './components/TrialBanner';
@@ -257,6 +258,7 @@ export function ChatView() {
     type: string;
     title?: string;
   } | null>(null);
+  const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   // ── Shared view (read-only snapshot from /shared/:id) ─────────────
   const [sharedSnapshot, setSharedSnapshot] = useState<{
     title: string;
@@ -795,6 +797,19 @@ export function ChatView() {
   // Handler for content block expand (lego blocks)
   const handleContentExpand = useCallback(
     (content: string, type: string, title?: string) => {
+      // Route artifact-worthy types to ArtifactCanvas
+      const artifactTypes = ['html', 'svg', 'mermaid', 'json', 'code', 'table', 'csv'];
+      if (artifactTypes.includes(type)) {
+        setActiveArtifact({
+          id: `expand-${Date.now()}`,
+          type: type as Artifact['type'],
+          title: title ?? `${type.toUpperCase()} Preview`,
+          content,
+          language: type,
+        });
+        return;
+      }
+      // Chart and others → legacy PreviewPanel
       setPreviewContent({ content, type, title });
       setActiveView('preview');
       if (termViewMode !== 'tabs') setTermViewMode('tabs');
@@ -923,6 +938,14 @@ export function ChatView() {
             setPreviewContent(null);
             setActiveView('chat');
           }}
+        />
+      )}
+
+      {/* Artifact canvas — side panel for code, HTML, diagrams, tables */}
+      {activeArtifact && (
+        <ArtifactCanvas
+          artifact={activeArtifact}
+          onClose={() => setActiveArtifact(null)}
         />
       )}
 

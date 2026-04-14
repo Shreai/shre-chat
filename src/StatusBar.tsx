@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useApp, getAgent } from './store';
 import { usePreferences, type GatewayMode } from './preferences-store';
 import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
+import { MemoryPanel } from './components/MemoryPanel';
 
 // ── Notification types ──────────────────────────────────────────────
 
@@ -258,6 +259,7 @@ export function StatusBar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [notifFilter, setNotifFilter] = useState<NotifFilter>('all');
   const [liveTasks, setLiveTasks] = useState<LiveTask[]>([]);
   const [liveTasksLoading, setLiveTasksLoading] = useState(false);
@@ -1115,6 +1117,35 @@ export function StatusBar() {
           )}
         </svg>
       </button>
+
+      {/* Memory panel toggle */}
+      <button
+        onClick={() => setMemoryOpen(!memoryOpen)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          background: memoryOpen
+            ? 'rgba(139, 92, 246, 0.25)'
+            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
+          color: memoryOpen ? '#8b5cf6' : 'var(--c-text-3)',
+          transition: 'all 0.2s ease',
+          flexShrink: 0,
+        }}
+        title="Memory — view learned facts and patterns"
+        aria-label="Toggle memory panel"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2a9 9 0 0 0-9 9c0 3.9 2.5 7.1 6 8.3V21h6v-1.7c3.5-1.2 6-4.4 6-8.3a9 9 0 0 0-9-9z" />
+          <path d="M9 21h6" />
+        </svg>
+      </button>
+      <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
 
       {/* Trace toggle — conversation traceroute */}
       <button

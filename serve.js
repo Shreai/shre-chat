@@ -1598,7 +1598,6 @@ async function requestHandler(req, res) {
       || url.pathname.startsWith("/api/auth/")
       || url.pathname.startsWith("/api/router/")
       || url.pathname.startsWith("/api/oauth/")
-      || url.pathname.startsWith("/api/direct/")
       || url.pathname.startsWith("/v1/")
       || req.headers["authorization"]?.startsWith("Bearer ");
     if (!csrfExempt) {
@@ -1629,8 +1628,7 @@ async function requestHandler(req, res) {
     migrateSessionUserId(authClaims.sub, authClaims.username, authClaims.activeWorkspaceId);
   }
   const isRouterProxy = url.pathname.startsWith("/api/router/");
-  const isDirectProxy = url.pathname.startsWith("/api/direct/");
-  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isDirectProxy) {
+  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy) {
     if (!authClaims) {
       // Emit structured auth failure event for security dashboard
       try {
@@ -5084,105 +5082,20 @@ async function requestHandler(req, res) {
     }
   }
 
-  // ── Direct Ollama proxy — /api/direct/v1/chat ──────────────────────
-  // Bypasses shre-router entirely — sends directly to local Ollama for fast local inference
+  // ── Direct mode — /api/direct/v1/chat ──────────────────────────────
+  // Routes through shre-router with forced local model — preserves trust gate, budget, and audit.
+  // Previously bypassed router entirely (security finding: trust boundary violation).
   if (url.pathname === "/api/direct/v1/chat" && req.method === "POST") {
-    try {
-      const bodyBuf = await new Promise((resolve, reject) => {
-        const chunks = [];
-        req.on("data", (c) => chunks.push(c));
-        req.on("end", () => resolve(Buffer.concat(chunks)));
-        req.on("error", reject);
-      });
-      const body = JSON.parse(bodyBuf.toString());
-      const ollamaUrl = "http://127.0.0.1:11434/api/chat";
-      const ollamaBody = {
-        model: body.model && body.model !== "auto" ? body.model.replace(/^.*\//, "") : "shre:latest",
-        messages: [
-          ...(body.systemPrompt ? [{ role: "system", content: body.systemPrompt }] : []),
-          ...(body.messages || []),
-        ],
-        stream: body.stream !== false,
-      };
-
-      const ollamaReq = httpRequest(ollamaUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      }, (ollamaRes) => {
-        if (!body.stream) {
-          // Non-streaming — collect and return
-          const chunks = [];
-          ollamaRes.on("data", (c) => chunks.push(c));
-          ollamaRes.on("end", () => {
-            try {
-              const result = JSON.parse(Buffer.concat(chunks).toString());
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({
-                choices: [{ message: { role: "assistant", content: result.message?.content || "" } }],
-              }));
-            } catch { res.writeHead(502).end("Ollama parse error"); }
-          });
-          return;
-        }
-
-        // Streaming — convert Ollama NDJSON to shre-router SSE format
-        res.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
-          "X-Accel-Buffering": "no",
-        });
-
-        // Send route event so UI knows which model is being used
-        res.write(`data: ${JSON.stringify({ type: "route", model: ollamaBody.model, provider: "ollama-direct" })}\n\n`);
-
-        let buffer = "";
-        ollamaRes.on("data", (chunk) => {
-          buffer += chunk.toString();
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const parsed = JSON.parse(line);
-              const content = parsed.message?.content || "";
-              if (content) {
-                // Use shre-router delta format so the existing SSE parser works
-                res.write(`data: ${JSON.stringify({ type: "delta", text: content })}\n\n`);
-              }
-              if (parsed.done) {
-                res.write("data: [DONE]\n\n");
-              }
-            } catch { /* skip malformed lines */ }
-          }
-        });
-        ollamaRes.on("end", () => {
-          if (buffer.trim()) {
-            try {
-              const parsed = JSON.parse(buffer);
-              const content = parsed.message?.content || "";
-              if (content) res.write(`data: ${JSON.stringify({ type: "delta", text: content })}\n\n`);
-            } catch { /* skip */ }
-          }
-          res.write("data: [DONE]\n\n");
-          res.end();
-        });
-        ollamaRes.on("error", () => { try { res.end(); } catch {} });
-      });
-
-      ollamaReq.on("error", (err) => {
-        log.warn("[direct] Ollama unreachable", { error: err.message });
-        res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: `Ollama unreachable: ${err.message}` }));
-      });
-      ollamaReq.write(JSON.stringify(ollamaBody));
-      ollamaReq.end();
-    } catch (err) {
-      log.error("[direct] Error", { error: err.message });
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
+    // Rewrite to router proxy with forced local model — enforces trust gate + audit
+    // The "direct" label is preserved for the UI but traffic goes through shre-router.
+    log.info("[direct] Rewriting /api/direct to /api/router with provider:ollama lock");
+    // Rewrite URL to go through the standard router proxy
+    url.pathname = "/api/router/v1/chat";
+    // Fall through to the /api/router/* handler below — the request body is
+    // intercepted there. We inject model="provider:ollama" so the router
+    // constrains to local models only (same latency, full trust enforcement).
+    req._directModeRewrite = true;
+    // Don't return — fall through to the router proxy handler
   }
 
   // ── Proxy /api/daemon/* to claude-daemon (port 5471) ──────
@@ -5230,6 +5143,17 @@ async function requestHandler(req, res) {
 
     req.on("end", async () => {
       try {
+        // Direct mode rewrite: force local-only model via provider lock
+        if (req._directModeRewrite && reqBody) {
+          try {
+            const parsed = JSON.parse(reqBody);
+            parsed.model = "provider:ollama";
+            reqBody = JSON.stringify(parsed);
+            reqChunks.length = 0;
+            reqChunks.push(Buffer.from(reqBody));
+          } catch { /* leave body as-is if unparseable */ }
+        }
+
         const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
         delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
         delete routerHeaders["content-length"]; // body may be modified — let Node use chunked encoding
