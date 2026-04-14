@@ -1272,15 +1272,87 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
                 `Gateway hiccup \u2014 retrying (${autoRetryCountRef.current}/2)...`,
               );
               actions.setStreamText('');
-              actions.setStreaming(false);
               addStep(runId, {
                 kind: 'error',
                 label: `Transient error \u2014 auto-retry ${autoRetryCountRef.current}`,
               });
-              completeRun(runId);
-              setTimeout(() => {
-                setInput(messageText);
-                pendingEditSendRef.current = true;
+              // Retry by re-calling sendMessage directly — do NOT re-trigger
+              // handleSend which would add a duplicate user message bubble.
+              setTimeout(async () => {
+                try {
+                  actions.setStreaming(true);
+                  actions.setStreamText('');
+                  actions.setStatusLine('Retrying...');
+                  const retryController = new AbortController();
+                  abortRef.current = retryController;
+                  let retryResponse = '';
+                  await sendMessage(
+                    messageText,
+                    currentMessages,
+                    systemPrompt,
+                    {
+                      onToken: (token) => {
+                        retryResponse += token;
+                        streamBufferRef.current = retryResponse;
+                        actions.setStreamText(retryResponse);
+                        actions.setStatusLine(`${currentAgent.name} is writing...`);
+                      },
+                      onDone: (full) => {
+                        const retryMeta: Record<string, string> = {
+                          route: 'http',
+                          model: selectedModel ? selectedModel.split('/').pop() || selectedModel : 'auto',
+                          retry: String(autoRetryCountRef.current),
+                        };
+                        const finalContent = full.trim() ? full : retryResponse.trim() ? retryResponse : '';
+                        if (finalContent) {
+                          actions.addMessage(sessionId, { role: 'assistant', content: finalContent, meta: retryMeta });
+                        } else {
+                          actions.addMessage(sessionId, {
+                            role: 'assistant',
+                            content: '[system] Received empty response from the AI. Please try again.',
+                            timestamp: Date.now(),
+                            meta: { system: 'true', type: 'system', event: 'empty-response' },
+                          });
+                        }
+                        actions.setStreamText('');
+                        actions.setStreaming(false);
+                        actions.setStatusLine(null);
+                        autoRetryCountRef.current = 0;
+                        addStep(runId, { kind: 'done', label: 'Done (retry)' });
+                        completeRun(runId);
+                        playNotifSound();
+                      },
+                      onError: (retryErr) => {
+                        actions.addMessage(sessionId, {
+                          role: 'assistant',
+                          content: `Error: Gateway unavailable after retries. Please try again in a moment.`,
+                        });
+                        actions.setStreamText('');
+                        actions.setStreaming(false);
+                        actions.setStatusLine(null);
+                        autoRetryCountRef.current = 0;
+                        addStep(runId, { kind: 'error', label: 'Retry failed' });
+                        completeRun(runId);
+                      },
+                    },
+                    retryController.signal,
+                    sessionId,
+                    selectedModel || undefined,
+                    undefined, // attachments already sent
+                    routerMode,
+                    undefined, // threadContext — same thread
+                    contextHealth,
+                    claudeCliMode,
+                    directMode,
+                    voiceMode,
+                    traceEnabled,
+                    conversationMode,
+                    activeAppId,
+                  );
+                } catch {
+                  actions.setStreaming(false);
+                  actions.setStatusLine(null);
+                }
               }, 2000);
               return;
             }

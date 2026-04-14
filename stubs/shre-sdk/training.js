@@ -8,3 +8,7 @@ export async function writeConversation(opts) {
 export function startWALReplay(intervalMs) {
   // No-op stub — WAL replay not needed in browser-first shre-chat
 }
+
+export function enableBufferedTraining(opts) {
+  // No-op stub — buffered training handled by shre-router
+}

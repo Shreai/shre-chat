@@ -54,6 +54,38 @@ export function createLifecycleEmitter(eventBus, name, opts) {
 // Import from discovery.js (reads ports.json — single source of truth)
 export { serviceUrl, infraUrl } from "./discovery.js";
 
+import { serviceUrl as _svcUrl } from "./discovery.js";
+
+export function createServiceClient(caller) {
+  return {
+    async call(service, path, opts = {}) {
+      const url = `${_svcUrl(service)}${path}`;
+      const res = await fetch(url, {
+        method: opts.method || "GET",
+        headers: { "Content-Type": "application/json", "x-caller": caller, ...(opts.headers || {}) },
+        ...(opts.body ? { body: typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body) } : {}),
+        signal: opts.signal || AbortSignal.timeout(opts.timeoutMs || 10000),
+      });
+      return res.json();
+    },
+    async fetch(service, path, opts = {}) {
+      const url = `${_svcUrl(service)}${path}`;
+      return globalThis.fetch(url, {
+        method: opts.method || "GET",
+        headers: { "x-caller": caller, ...(opts.headers || {}) },
+        ...(opts.body ? { body: typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body) } : {}),
+        signal: opts.signal || AbortSignal.timeout(opts.timeoutMs || 300000),
+      });
+    },
+    async healthy(service) {
+      try {
+        const res = await globalThis.fetch(`${_svcUrl(service)}/health`, { signal: AbortSignal.timeout(3000) });
+        return res.ok;
+      } catch { return false; }
+    },
+  };
+}
+
 export function createFeedbackPipeline(opts) {
   return {
     submit: async (feedback) => {},

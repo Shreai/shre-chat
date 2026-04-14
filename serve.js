@@ -13,9 +13,12 @@ import { spawn, execSync } from "node:child_process";
 import pg from "pg";
 import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
-import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline } from "shre-sdk";
+import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline, createServiceClient } from "shre-sdk";
+
+/** Universal service client — retry + circuit breaker for inter-service calls */
+const svc = createServiceClient("shre-chat");
 import { createConversationLearner } from "shre-sdk/rag";
-import { writeConversation, startWALReplay } from "shre-sdk/training";
+import { writeConversation, startWALReplay, enableBufferedTraining } from "shre-sdk/training";
 import { createHeartbeatMonitor } from "shre-sdk/heartbeat";
 import { createTraceMiddleware, getRecentTraces, getRecentFailures, getTraceStats } from "shre-sdk/trace";
 import { registerAuthRoutes } from "./routes/auth.js";
@@ -6868,6 +6871,7 @@ if (tlsOpts && httpsServer) {
     lifecycle.started();
     feedbackPipeline.start();
     heartbeat.start();
+    enableBufferedTraining({ flushIntervalMs: 5_000, maxBufferSize: 50 });
     startWALReplay(60_000); // Retry failed training writes every 60s
     checkStartupDeps();
   });
@@ -6881,6 +6885,7 @@ if (tlsOpts && httpsServer) {
     lifecycle.started();
     feedbackPipeline.start();
     heartbeat.start();
+    enableBufferedTraining({ flushIntervalMs: 5_000, maxBufferSize: 50 });
     startWALReplay(60_000); // Retry failed training writes every 60s
     checkStartupDeps();
   });
