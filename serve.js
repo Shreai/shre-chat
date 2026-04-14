@@ -44,6 +44,7 @@ if (existsSync(_mkcertCA) && !process.env.NODE_EXTRA_CA_CERTS) {
 }
 
 const PORT = Number(process.env.PORT) || 5510;
+const ALLOW_DIRECT_MODE = process.env.SHRE_CHAT_ALLOW_DIRECT_MODE === "true";
 const _serverStartedAt = new Date().toISOString();
 let _investorCache = null;
 let _investorCacheAt = 0;
@@ -410,6 +411,12 @@ const stmtUpsert = chatDb.prepare(`
 `);
 const stmtGetAll = chatDb.prepare(`SELECT id, title, agent_id, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id FROM chat_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY updated_at DESC LIMIT 100`);
 const stmtGetOne = chatDb.prepare(`SELECT * FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
+const stmtGetSessionById = chatDb.prepare(`SELECT * FROM chat_sessions WHERE id = ?`);
+const stmtUpdateSessionMessages = chatDb.prepare(`
+  UPDATE chat_sessions
+  SET messages = ?, updated_at = ?
+  WHERE id = ? AND user_id = ? AND tenant_id = ?
+`);
 const stmtDelete = chatDb.prepare(`DELETE FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
 const stmtSoftDelete = chatDb.prepare(`
   INSERT OR REPLACE INTO deleted_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, deleted_at, deleted_by, user_id, tenant_id)
@@ -468,12 +475,26 @@ const stmtInsertMessage = chatDb.prepare(`
   INSERT OR IGNORE INTO chat_messages (id, session_id, role, content, model, agent_id, user_id, metadata, created_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
+const stmtFindRecentDuplicateMessage = chatDb.prepare(`
+  SELECT id
+  FROM chat_messages
+  WHERE session_id = ? AND role = ? AND content = ? AND user_id = ? AND created_at >= ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`);
 const stmtGetMessages = chatDb.prepare(`
-  SELECT id, session_id, role, content, model, agent_id, user_id, metadata, created_at
-  FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?
+  SELECT m.id, m.session_id, m.role, m.content, m.model, m.agent_id, m.user_id, m.metadata, m.created_at
+  FROM chat_messages m
+  JOIN chat_sessions s ON s.id = m.session_id
+  WHERE m.session_id = ? AND s.user_id = ? AND s.tenant_id = ?
+  ORDER BY m.created_at ASC
+  LIMIT ? OFFSET ?
 `);
 const stmtCountMessages = chatDb.prepare(`
-  SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?
+  SELECT COUNT(*) as count
+  FROM chat_messages m
+  JOIN chat_sessions s ON s.id = m.session_id
+  WHERE m.session_id = ? AND s.user_id = ? AND s.tenant_id = ?
 `);
 
 // ── Emergency response cache — FTS5 search for similar past Q&A when router is down ──
@@ -560,6 +581,62 @@ function dbSessionToClient(row) {
     userId: row.user_id,
     tenantId: row.tenant_id,
   };
+}
+
+function parseSessionMessages(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendMessageToCanonicalSession(sessionId, message, userId, tenantId) {
+  const row = stmtGetOne.get(sessionId, userId, tenantId);
+  if (!row) return false;
+  const messages = parseSessionMessages(row.messages);
+  messages.push(message);
+  stmtUpdateSessionMessages.run(JSON.stringify(messages), Date.now(), sessionId, userId, tenantId);
+  return true;
+}
+
+function insertProjectedMessage({
+  sessionId,
+  role,
+  content,
+  model = null,
+  agentId = null,
+  userId = 'system',
+  metadata = {},
+  dedupeWindowMs = 15_000,
+}) {
+  const normalizedContent = (content || '').slice(0, 50000);
+  if (!sessionId || !role || !normalizedContent) return null;
+
+  const now = Date.now();
+  const duplicate = stmtFindRecentDuplicateMessage.get(
+    sessionId,
+    role,
+    normalizedContent,
+    userId,
+    now - dedupeWindowMs,
+  );
+  if (duplicate?.id) return duplicate.id;
+
+  const id = `msg-${now}-${role[0] || 'm'}-${Math.random().toString(36).slice(2, 8)}`;
+  stmtInsertMessage.run(
+    id,
+    sessionId,
+    role,
+    normalizedContent,
+    model,
+    agentId,
+    userId,
+    JSON.stringify(metadata || {}),
+    now,
+  );
+  return id;
 }
 
 // ── Skill Learning Pipeline — extract skills from conversations and propagate ──
@@ -1598,8 +1675,10 @@ async function requestHandler(req, res) {
       || url.pathname.startsWith("/api/auth/")
       || url.pathname.startsWith("/api/router/")
       || url.pathname.startsWith("/api/oauth/")
+      || url.pathname.startsWith("/api/cli/")
       || url.pathname.startsWith("/v1/")
-      || req.headers["authorization"]?.startsWith("Bearer ");
+      || req.headers["authorization"]?.startsWith("Bearer ")
+      || req.headers["x-channel"] === "cli";
     if (!csrfExempt) {
       const csrfToken = req.headers["x-csrf-token"] || "";
       if (!validateCsrfToken(req, csrfToken)) {
@@ -1628,7 +1707,8 @@ async function requestHandler(req, res) {
     migrateSessionUserId(authClaims.sub, authClaims.username, authClaims.activeWorkspaceId);
   }
   const isRouterProxy = url.pathname.startsWith("/api/router/");
-  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy) {
+  const isCliLocal = url.pathname.startsWith("/api/cli/") && req.headers["x-channel"] === "cli";
+  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isCliLocal) {
     if (!authClaims) {
       // Emit structured auth failure event for security dashboard
       try {
@@ -1836,12 +1916,35 @@ async function requestHandler(req, res) {
   const msgMatch = url.pathname.match(/^\/api\/chat-sessions\/([^/]+)\/messages$/);
   if (msgMatch && req.method === "GET") {
     const sessionId = decodeURIComponent(msgMatch[1]);
-    const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+    const limitParam = url.searchParams.get("limit");
+    const limit = limitParam == null ? null : Math.min(parseInt(limitParam || "50", 10), 200);
     const offset = parseInt(url.searchParams.get("offset") || "0", 10);
     try {
-      const messages = stmtGetMessages.all(sessionId, limit, offset);
-      const total = stmtCountMessages.get(sessionId)?.count || 0;
-      return json(res, { messages, total, limit, offset });
+      const userId = authClaims?.sub || "system";
+      const tenantId = authClaims?.activeWorkspaceId || "default";
+      const session = stmtGetOne.get(sessionId, userId, tenantId);
+      if (!session) return json(res, { error: "not found" }, 404);
+
+      const canonicalMessages = parseSessionMessages(session.messages);
+      const extractedTotal = stmtCountMessages.get(sessionId, userId, tenantId)?.count || 0;
+
+      if (canonicalMessages.length >= extractedTotal || extractedTotal === 0) {
+        const pagedMessages =
+          limit == null
+            ? canonicalMessages.slice(offset)
+            : canonicalMessages.slice(offset, offset + limit);
+        return json(res, {
+          messages: pagedMessages,
+          total: canonicalMessages.length,
+          limit,
+          offset,
+          source: "chat_sessions",
+        });
+      }
+
+      const effectiveLimit = limit == null ? 5000 : limit;
+      const messages = stmtGetMessages.all(sessionId, userId, tenantId, effectiveLimit, offset);
+      return json(res, { messages, total: extractedTotal, limit, offset, source: "chat_messages" });
     } catch (err) {
       log.error("[chat-sessions] Message query failed", { error: err.message });
       return json(res, { error: "Internal server error" }, 500);
@@ -5086,6 +5189,12 @@ async function requestHandler(req, res) {
   // Routes through shre-router with forced local model — preserves trust gate, budget, and audit.
   // Previously bypassed router entirely (security finding: trust boundary violation).
   if (url.pathname === "/api/direct/v1/chat" && req.method === "POST") {
+    if (!ALLOW_DIRECT_MODE) {
+      return json(res, {
+        error: "Direct mode is disabled. Route through shre-router instead.",
+        code: "DIRECT_MODE_DISABLED",
+      }, 403);
+    }
     // Rewrite to router proxy with forced local model — enforces trust gate + audit
     // The "direct" label is preserved for the UI but traffic goes through shre-router.
     log.info("[direct] Rewriting /api/direct to /api/router with provider:ollama lock");
@@ -5251,7 +5360,9 @@ async function requestHandler(req, res) {
                     if (!line.startsWith("data: ")) continue;
                     try {
                       const evt = JSON.parse(line.slice(6));
-                      if (evt.type === "delta" && evt.content) assistantResponse += evt.content;
+                    if (evt.type === "delta" && (evt.text || evt.content)) {
+                      assistantResponse += evt.text || evt.content;
+                    }
                       else if (evt.type === "content_block_delta" && evt.delta?.text) assistantResponse += evt.delta.text;
                     } catch { }
                   }
@@ -5266,21 +5377,27 @@ async function requestHandler(req, res) {
                 const sessionId = parsed.sessionId || parsed.session_id || req.headers["x-session-id"];
                 if (sessionId && userMessage) {
                   try {
-                    stmtInsertMessage.run(
-                      `msg-${Date.now()}-u-${Math.random().toString(36).slice(2, 8)}`,
-                      sessionId, "user", userMessage,
-                      parsed.model || null, agentId, authClaims?.sub || "system", "{}", Date.now()
-                    );
+                    insertProjectedMessage({
+                      sessionId,
+                      role: "user",
+                      content: userMessage,
+                      model: parsed.model || null,
+                      agentId,
+                      userId: authClaims?.sub || "system",
+                    });
                   } catch (err) { log.debug("[persistence] user message failed:", err.message); }
                 }
 
                 if (sessionId && assistantResponse) {
                   try {
-                    stmtInsertMessage.run(
-                      `msg-${Date.now()}-a-${Math.random().toString(36).slice(2, 8)}`,
-                      sessionId, "assistant", assistantResponse,
-                      parsed.model || null, agentId, "system", "{}", Date.now()
-                    );
+                    insertProjectedMessage({
+                      sessionId,
+                      role: "assistant",
+                      content: assistantResponse,
+                      model: parsed.model || null,
+                      agentId,
+                      userId: "system",
+                    });
                   } catch (err) { log.debug("[persistence] assistant message failed:", err.message); }
                 }
               } catch (pErr) {
@@ -5508,24 +5625,37 @@ async function requestHandler(req, res) {
       }
 
       // Verify session exists
-      const session = chatDb.prepare("SELECT id, user_id FROM chat_sessions WHERE id = ?").get(sessionId);
+      const session = stmtGetSessionById.get(sessionId);
       if (!session) {
         return json(res, { error: "Session not found" }, 404);
       }
 
       // Insert message into chat_messages table
-      const msgId = `msg-${Date.now()}-${source || "svc"}-${Math.random().toString(36).slice(2, 8)}`;
       const now = Date.now();
-      stmtInsertMessage.run(
-        msgId,
+      const msgId = insertProjectedMessage({
         sessionId,
         role,
-        content.slice(0, 50000),
-        null,               // model
-        source || "system",  // agent_id
+        content,
+        model: null,
+        agentId: source || "system",
+        userId: session.user_id || "system",
+        metadata: metadata || {},
+      }) || `msg-${now}-${source || "svc"}-${Math.random().toString(36).slice(2, 8)}`;
+
+      appendMessageToCanonicalSession(
+        sessionId,
+        {
+          id: msgId,
+          role,
+          content,
+          timestamp: now,
+          meta: {
+            ...(metadata || {}),
+            ...(source ? { source } : {}),
+          },
+        },
         session.user_id || "system",
-        JSON.stringify(metadata || {}),
-        now
+        session.tenant_id || "default",
       );
 
       // Update session's updated_at so it surfaces in recents
@@ -6830,8 +6960,6 @@ eventBus.subscribe("briefing.daily", async (event) => {
     _briefingCache = null;
     _briefingCacheTs = 0;
   }
-}).catch((err) => {
-  log.warn("[briefing] Failed to subscribe to briefing.daily events", {}, err);
 });
 
 // ─── Invalidate briefing cache on service recovery events ─────────────────────
@@ -6839,16 +6967,12 @@ eventBus.subscribe("service.recovered", () => {
   _briefingCache = null;
   _briefingCacheTs = 0;
   log.info("[briefing] Cache invalidated — service recovered");
-}).catch((err) => {
-  log.warn("[briefing] Failed to subscribe to service.recovered events", {}, err);
 });
 
 eventBus.subscribe("service.crash_loop.resolved", () => {
   _briefingCache = null;
   _briefingCacheTs = 0;
   log.info("[briefing] Cache invalidated — crash loop resolved");
-}).catch((err) => {
-  log.warn("[briefing] Failed to subscribe to service.crash_loop.resolved events", {}, err);
 });
 
 // ─── Subscribe to browser approval events ────────────────────────────────────
@@ -6863,8 +6987,6 @@ eventBus.subscribe("approval.requested", async (event) => {
     risk: data.risk || "medium",
   });
   log.debug("[approval] Browser approval request forwarded to chat clients", { approvalId: data.approvalId || data.id });
-}).catch((err) => {
-  log.warn("[approval] Failed to subscribe to approval.requested events", {}, err);
 });
 
 eventBus.subscribe("approval.approved", async (event) => {
@@ -6878,8 +7000,6 @@ eventBus.subscribe("approval.approved", async (event) => {
     resolvedBy: data.resolvedBy || "user",
   });
   log.debug("[approval] Browser action approved, forwarded to chat clients", { approvalId: data.id });
-}).catch((err) => {
-  log.warn("[approval] Failed to subscribe to approval.approved events", {}, err);
 });
 
 eventBus.subscribe("approval.denied", async (event) => {
@@ -6893,8 +7013,6 @@ eventBus.subscribe("approval.denied", async (event) => {
     resolvedBy: data.resolvedBy || "user",
   });
   log.debug("[approval] Browser action denied, forwarded to chat clients", { approvalId: data.id });
-}).catch((err) => {
-  log.warn("[approval] Failed to subscribe to approval.denied events", {}, err);
 });
 
 // ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
@@ -6915,8 +7033,6 @@ eventBus.subscribe("diff.file_changed", async (event) => {
     projectId: data.projectId || "",
     sessionId: data.sessionId || "",
   });
-}).catch((err) => {
-  log.warn("[file-diff] Failed to subscribe to diff.file_changed", {}, err);
 });
 for (const eventType of PROGRESS_EVENT_TYPES) {
   eventBus.subscribe(eventType, async (event) => {
@@ -6948,8 +7064,6 @@ for (const eventType of PROGRESS_EVENT_TYPES) {
       reason: data.reason || data.error || "",
     });
     log.debug(`[project-progress] ${eventType} forwarded to chat clients`, { subtype });
-  }).catch((err) => {
-    log.warn(`[project-progress] Failed to subscribe to ${eventType}`, {}, err);
   });
 }
 
@@ -7188,4 +7302,3 @@ process.on("unhandledRejection", (reason) => {
   log.error("[shre-chat] Unhandled rejection", { reason: String(reason) });
   // Don't exit on unhandled rejections — log and continue
 });
-
