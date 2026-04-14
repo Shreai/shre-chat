@@ -28,20 +28,28 @@ function loadPorts() {
 
 export function serviceUrl(name) {
   const ports = loadPorts();
-  const entry = ports.services?.[name];
-  if (!entry) return `http://127.0.0.1:8000`;
-  const protocol = entry.protocol === "https" ? "https" : "http";
+  let entry = ports.services?.[name];
+  let isInfra = false;
+
+  if (!entry) {
+    entry = ports.infrastructure?.[name];
+    isInfra = true;
+  }
+
+  if (!entry) {
+    return `http://127.0.0.1:8000`; // unknown fallback
+  }
+
+  const forceHttp = process.env.SHRE_FORCE_HTTP !== '0'; // default: true
+  const protocol = forceHttp ? 'http' : (entry.protocol || 'http');
+
   const host = process.env[`SHRE_HOST_${name.toUpperCase().replace(/-/g, "_")}`]
     || process.env.SHRE_NODE_HOST || entry.host || "127.0.0.1";
   return `${protocol}://${host}:${entry.port}`;
 }
 
 export function infraUrl(name) {
-  const ports = loadPorts();
-  const entry = ports.infrastructure?.[name];
-  if (!entry) return `http://127.0.0.1:8000`;
-  const host = process.env.SHRE_NODE_HOST || "127.0.0.1";
-  return `http://${host}:${entry.port}`;
+  return serviceUrl(name);
 }
 
 export default { serviceUrl, infraUrl };

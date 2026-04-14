@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
-const apiTarget = process.env.VITE_API_TARGET || 'https://127.0.0.1:5510';
+const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:5510';
 
 /**
  * Stamps __BUILD_TS__ in public/sw.js at build time so each deploy
