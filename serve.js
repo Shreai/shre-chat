@@ -3351,6 +3351,79 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── App Model Registry ───────────────────────────────���──────────
+  if (url.pathname.startsWith("/api/model-registry") && req.method === "GET") {
+    try {
+      const { readFileSync } = await import("node:fs");
+      const registryPath = join(import.meta.dirname || process.cwd(), "..", "shre-model-config", "app-model-registry.json");
+      const registry = JSON.parse(readFileSync(registryPath, "utf-8"));
+      const apps = registry.apps || {};
+      const defaults = registry.defaults || {};
+      const sub = url.pathname.replace("/api/model-registry", "");
+
+      // GET /api/model-registry/apps?domain=retail
+      if (sub === "/apps" || sub === "/apps/") {
+        const domain = url.searchParams.get("domain");
+        let list = Object.values(apps);
+        if (domain) list = list.filter(a => a.domains?.includes(domain));
+        return json(res, { version: registry.version, count: list.length, apps: list });
+      }
+
+      // GET /api/model-registry/apps/:appId
+      const appMatch = sub.match(/^\/apps\/([a-z0-9-]+)$/);
+      if (appMatch) {
+        const appId = appMatch[1];
+        const profile = apps[appId];
+        if (!profile) return json(res, { error: `App not found: ${appId}` }, 404);
+        return json(res, { ...profile, defaults });
+      }
+
+      // GET /api/model-registry/resolve/:appId?local=true
+      const resolveMatch = sub.match(/^\/resolve\/([a-z0-9-]+)$/);
+      if (resolveMatch) {
+        const appId = resolveMatch[1];
+        const localReady = url.searchParams.get("local") === "true";
+        const profile = apps[appId];
+        if (!profile) {
+          return json(res, {
+            appId, model: localReady ? defaults.localModel : defaults.cloudModel,
+            source: localReady ? "local" : "default",
+            chain: [defaults.localModel, defaults.cloudModel],
+          });
+        }
+        const seen = new Set();
+        const chain = [profile.localModel, profile.cloudModel, ...(profile.fallbackChain || [])].filter(m => { if (seen.has(m)) return false; seen.add(m); return true; });
+        return json(res, {
+          appId, model: localReady ? profile.localModel : profile.cloudModel,
+          source: localReady ? "local" : "cloud", chain,
+        });
+      }
+
+      // GET /api/model-registry/domains
+      if (sub === "/domains" || sub === "/domains/") {
+        const domainMap = {};
+        for (const app of Object.values(apps)) {
+          for (const d of (app.domains || [])) {
+            if (!domainMap[d]) domainMap[d] = [];
+            domainMap[d].push(app.appId);
+          }
+        }
+        return json(res, { domains: domainMap });
+      }
+
+      // GET /api/model-registry — overview
+      return json(res, {
+        version: registry.version,
+        totalApps: Object.keys(apps).length,
+        defaults,
+        appIds: Object.keys(apps),
+      });
+    } catch (err) {
+      log.error("[model-registry] Error:", err.message);
+      return json(res, { error: "Model registry unavailable" }, 500);
+    }
+  }
+
   // ── Platform status (aggregated health — full service list) ──
   if (url.pathname === "/api/platform-status" && req.method === "GET") {
     try {
@@ -4503,6 +4576,7 @@ async function requestHandler(req, res) {
         }
         activeCLICount++;
         let decremented = false;
+        let spawnFailed = false; // Set by proc.on("error") to prevent close handler from ending response
         function releaseSlot() {
           if (!decremented) { decremented = true; activeCLICount--; }
         }
@@ -4596,6 +4670,19 @@ async function requestHandler(req, res) {
                 if (autoMode) initData.autoMode = true;
                 res.write(`data: ${JSON.stringify(initData)}\n\n`);
               } else if (evt.type === "assistant") {
+                // Detect billing errors from Claude CLI — suppress and let close handler fallback
+                const evtErrorStr = evt.error || "";
+                const evtTextStr = Array.isArray(evt.message?.content)
+                  ? evt.message.content.map(b => b.text || "").join(" ")
+                  : "";
+                if (/billing_error|billing.error|payment.required/i.test(evtErrorStr) ||
+                    /credit.balance.is.too.low|balance.is.too.low/i.test(evtTextStr)) {
+                  stderrText += `billing_error: ${evtErrorStr} ${evtTextStr}\n`;
+                  log.warn("[cli] Billing error intercepted in assistant event — suppressing, will fallback", { error: evtErrorStr, text: evtTextStr.slice(0, 100) });
+                  // Don't forward to client — close handler will trigger local fallback
+                  continue;
+                }
+
                 // Extract text from content blocks
                 const content = evt.message?.content;
                 if (Array.isArray(content)) {
@@ -4635,6 +4722,11 @@ async function requestHandler(req, res) {
                   res.write(`data: ${JSON.stringify({ type: "error", error: evt.error })}\n\n`);
                 }
               } else if (evt.type === "result") {
+                // If billing error was detected, suppress the result event — close handler will fallback
+                if (/billing_error|billing.error/i.test(stderrText)) {
+                  log.debug("[cli] Suppressing result event after billing error detection");
+                  continue;
+                }
                 // Use result text if we didn't accumulate from streaming
                 if (!fullResponseText && evt.result) fullResponseText = evt.result;
                 res.write(`data: ${JSON.stringify({ type: "done", text: evt.result || "", cost: evt.total_cost_usd, duration: evt.duration_ms, model: evt.model, sessionId: evt.session_id, ledgerSessionId })}\n\n`);
@@ -4645,21 +4737,29 @@ async function requestHandler(req, res) {
                 res.write(`data: ${JSON.stringify({ type: "status", event: evt.type, subtype: evt.subtype })}\n\n`);
               }
             } catch {
-              // Non-JSON output — treat as plain text
-              res.write(`data: ${JSON.stringify({ type: "delta", text: line })}\n\n`);
+              // Non-JSON output — check for billing errors before forwarding as text
+              if (/billing.error|credit.balance|balance.is.too.low|billing_error|payment.required/i.test(line)) {
+                // Don't forward billing errors as delta text — they'll be handled in close handler fallback
+                stderrText += line + "\n"; // Capture for billing detection in close handler
+                log.warn("[cli] Billing error detected in stdout:", line.slice(0, 100));
+              } else {
+                res.write(`data: ${JSON.stringify({ type: "delta", text: line })}\n\n`);
+              }
             }
           }
         });
 
+        let stderrText = "";
         proc.stderr.on("data", (data) => {
           const text = data.toString().trim();
           if (text) {
+            stderrText += text + "\n";
             log.error("[cli]", text);
             res.write(`data: ${JSON.stringify({ type: "status", event: "stderr", text })}\n\n`);
           }
         });
 
-        proc.on("close", (code) => {
+        proc.on("close", (code) => { if (spawnFailed) return; (async () => {
           if (buffer.trim()) {
             try {
               const evt = JSON.parse(buffer);
@@ -4668,6 +4768,71 @@ async function requestHandler(req, res) {
                 res.write(`data: ${JSON.stringify({ type: "done", text: evt.result || "", cost: evt.cost_usd, duration: evt.duration_ms, model: evt.model })}\n\n`);
               }
             } catch { /* ignore */ }
+          }
+
+          // ── Billing/auth error fallback: retry through shre-router with local models ──
+          // Billing errors may arrive via stderr OR as stdout text (claude CLI outputs
+          // "Credit balance is too low" as plain text, which gets captured in fullResponseText)
+          const billingPattern = /billing.error|payment.required|credit.balance|balance.is.too.low|quota.exceeded|billing_error/i;
+          const isBillingError = code !== 0 && (
+            billingPattern.test(stderrText) ||
+            (fullResponseText.length < 200 && billingPattern.test(fullResponseText))
+          );
+          if (isBillingError) {
+            log.warn("[cli] Claude CLI billing/auth error — falling back to shre-router local models", { code, stderr: stderrText.slice(0, 200), stdout: fullResponseText.slice(0, 200) });
+            // Clear the billing error text — it's not a real response
+            fullResponseText = "";
+            res.write(`data: ${JSON.stringify({ type: "status", event: "fallback", text: "Billing error — routing to local model..." })}\n\n`);
+
+            try {
+              const routerUrl = serviceUrl("shre-router");
+              const fallbackRes = await fetch(`${routerUrl}/v1/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-channel": "cli" },
+                body: JSON.stringify({
+                  messages: [{ role: "user", content: message }],
+                  model: "ollama/qwen3:8b",
+                  agentId: agent,
+                  stream: true,
+                  fallbackToLocal: true,
+                }),
+                signal: AbortSignal.timeout(60_000),
+              });
+
+              if (fallbackRes.ok && fallbackRes.body) {
+                const dec = new TextDecoder();
+                let fbBuf = "";
+                for await (const chunk of fallbackRes.body) {
+                  fbBuf += dec.decode(chunk, { stream: true });
+                  const fbLines = fbBuf.split("\n");
+                  fbBuf = fbLines.pop() ?? "";
+                  for (const fbLine of fbLines) {
+                    const trimFb = fbLine.trim();
+                    if (!trimFb || !trimFb.startsWith("data: ")) continue;
+                    try {
+                      const fbEvt = JSON.parse(trimFb.slice(6));
+                      if (fbEvt.type === "delta" && fbEvt.text) {
+                        fullResponseText += fbEvt.text;
+                        res.write(`data: ${JSON.stringify({ type: "delta", text: fbEvt.text })}\n\n`);
+                      } else if (fbEvt.type === "done" || fbEvt.type === "route") {
+                        res.write(`data: ${JSON.stringify(fbEvt)}\n\n`);
+                      }
+                    } catch { /* skip malformed SSE */ }
+                  }
+                }
+                if (fullResponseText) {
+                  res.write(`data: ${JSON.stringify({ type: "done", text: fullResponseText, model: "local-fallback" })}\n\n`);
+                }
+                log.info("[cli] Fallback to shre-router succeeded", { responseLen: fullResponseText.length });
+              } else {
+                const errText = await fallbackRes.text().catch(() => "");
+                log.error("[cli] shre-router fallback also failed", { status: fallbackRes.status, body: errText.slice(0, 200) });
+                res.write(`data: ${JSON.stringify({ type: "error", error: `Billing error and local fallback failed (${fallbackRes.status})` })}\n\n`);
+              }
+            } catch (fbErr) {
+              log.error("[cli] shre-router fallback error", { error: fbErr.message });
+              res.write(`data: ${JSON.stringify({ type: "error", error: `Billing error — local fallback unavailable: ${fbErr.message}` })}\n\n`);
+            }
           }
 
           // Save assistant response to agent's session + ledger
@@ -4731,14 +4896,68 @@ async function requestHandler(req, res) {
           releaseSlot();
           res.write(`data: ${JSON.stringify({ type: "end", code })}\n\n`);
           res.end();
-        });
-
-        proc.on("error", (err) => {
+        })().catch((err) => {
+          log.error("[cli] Async close handler error", { error: err.message });
           releaseSlot();
-          log.error("[run] Process error", { error: err.message });
-          res.write(`data: ${JSON.stringify({ type: "error", error: "Command execution failed" })}\n\n`);
+          try { res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`); res.end(); } catch { /* already ended */ }
+        }); });
+
+        proc.on("error", (err) => { spawnFailed = true; (async () => {
+          releaseSlot();
+          log.error("[run] Process error — falling back to shre-router", { error: err.message });
+          res.write(`data: ${JSON.stringify({ type: "status", event: "fallback", text: "CLI unavailable — routing to local model..." })}\n\n`);
+
+          try {
+            const routerUrl = serviceUrl("shre-router");
+            const fallbackRes = await fetch(`${routerUrl}/v1/chat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-channel": "cli" },
+              body: JSON.stringify({
+                messages: [{ role: "user", content: message }],
+                model: "ollama/qwen3:8b",
+                agentId: agent,
+                stream: true,
+              }),
+              signal: AbortSignal.timeout(60_000),
+            });
+
+            if (fallbackRes.ok && fallbackRes.body) {
+              const dec = new TextDecoder();
+              let fbBuf = "";
+              let fbText = "";
+              for await (const chunk of fallbackRes.body) {
+                fbBuf += dec.decode(chunk, { stream: true });
+                const fbLines = fbBuf.split("\n");
+                fbBuf = fbLines.pop() ?? "";
+                for (const fbLine of fbLines) {
+                  const trimFb = fbLine.trim();
+                  if (!trimFb || !trimFb.startsWith("data: ")) continue;
+                  try {
+                    const fbEvt = JSON.parse(trimFb.slice(6));
+                    if (fbEvt.type === "delta" && fbEvt.text) {
+                      fbText += fbEvt.text;
+                      res.write(`data: ${JSON.stringify({ type: "delta", text: fbEvt.text })}\n\n`);
+                    } else if (fbEvt.type === "done" || fbEvt.type === "route") {
+                      res.write(`data: ${JSON.stringify(fbEvt)}\n\n`);
+                    }
+                  } catch { /* skip */ }
+                }
+              }
+              if (fbText) {
+                res.write(`data: ${JSON.stringify({ type: "done", text: fbText, model: "local-fallback" })}\n\n`);
+              }
+            } else {
+              res.write(`data: ${JSON.stringify({ type: "error", error: "CLI unavailable and local fallback failed" })}\n\n`);
+            }
+          } catch (fbErr) {
+            res.write(`data: ${JSON.stringify({ type: "error", error: `CLI unavailable — fallback error: ${fbErr.message}` })}\n\n`);
+          }
+          res.write(`data: ${JSON.stringify({ type: "end", code: 1 })}\n\n`);
           res.end();
-        });
+        })().catch((fbFatal) => {
+          log.error("[cli] Async error handler failed", { error: fbFatal.message });
+          try { res.write(`data: ${JSON.stringify({ type: "error", error: fbFatal.message })}\n\n`); res.end(); } catch { /* already ended */ }
+        }); });
 
         // Handle client disconnect
         req.on("close", () => {
