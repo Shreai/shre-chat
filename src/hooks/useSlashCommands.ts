@@ -219,6 +219,26 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
         usage: '/status',
         category: 'platform',
       },
+      {
+        name: 'apps',
+        description: 'List app model profiles or inspect one',
+        usage: '/apps [appId|--domain <domain>]',
+        hasArg: true,
+        category: 'platform',
+      },
+      {
+        name: 'resolve',
+        description: 'Show model chain for an app',
+        usage: '/resolve <appId> [--local]',
+        hasArg: true,
+        category: 'platform',
+      },
+      {
+        name: 'pricing',
+        description: 'Show model pricing overview',
+        usage: '/pricing',
+        category: 'platform',
+      },
     ],
     [],
   );
@@ -1120,6 +1140,202 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               actions.addMessage(statusSid, {
                 role: 'assistant',
                 content: '**Error:** Could not fetch status',
+                timestamp: Date.now(),
+              });
+              actions.setStatusLine(null);
+            });
+          break;
+        }
+
+        case 'apps': {
+          const appsSid = ensureSession();
+          actions.addMessage(appsSid, {
+            role: 'user',
+            content: `/apps ${arg}`.trim(),
+            timestamp: Date.now(),
+          });
+          actions.setStatusLine('Loading app registry...');
+
+          // Parse arg: /apps pos | /apps --domain retail | /apps
+          const appArgs = arg.trim().split(/\s+/);
+          const domainIdx = appArgs.indexOf('--domain');
+          let fetchUrl = '/api/model-registry/apps';
+          if (domainIdx !== -1 && appArgs[domainIdx + 1]) {
+            fetchUrl = `/api/model-registry/apps?domain=${encodeURIComponent(appArgs[domainIdx + 1])}`;
+          } else if (appArgs[0] && appArgs[0] !== '--domain') {
+            fetchUrl = `/api/model-registry/apps/${encodeURIComponent(appArgs[0])}`;
+          }
+
+          fetch(fetchUrl)
+            .then(async (r) => (r.ok ? r.json() : { error: 'Not found' }))
+            .then((data: any) => {
+              let lines: string[];
+              if (data.error) {
+                lines = [`**Error:** ${data.error}`];
+              } else if (data.apps) {
+                // List view
+                const appList = data.apps as any[];
+                lines = [
+                  `**App Model Registry** v${data.version} — ${data.count} apps`,
+                  '',
+                  '| App | Name | Domains | Local Model | LoRA |',
+                  '|-----|------|---------|-------------|------|',
+                  ...appList.map(
+                    (a: any) =>
+                      `| ${a.appId} | ${a.name} | ${(a.domains || []).slice(0, 3).join(', ')} | ${(a.localModel || '').replace('ollama-remote/', '')} | ${a.training?.loraAdapter || '-'} |`,
+                  ),
+                ];
+              } else {
+                // Detail view (single app)
+                const a = data;
+                lines = [
+                  `**${a.name}** (\`${a.appId}\`)`,
+                  '',
+                  `| Property | Value |`,
+                  `|----------|-------|`,
+                  `| Domains | ${(a.domains || []).join(', ')} |`,
+                  `| Local Model | \`${a.localModel}\` |`,
+                  `| Cloud Model | \`${a.cloudModel}\` |`,
+                  `| Fallback | ${(a.fallbackChain || []).map((m: string) => `\`${m}\``).join(' → ')} |`,
+                  `| Tool Prefixes | ${(a.toolPrefixes || []).join(', ')} |`,
+                  `| Agents | ${(a.defaultAgents || []).length ? a.defaultAgents.join(', ') : '(none)'} |`,
+                  `| Local-Ready | ${a.localReadyThreshold} hits @ ${a.localReadyMinQuality} quality |`,
+                  '',
+                  '**Training:**',
+                  '',
+                  `| Setting | Value |`,
+                  `|---------|-------|`,
+                  `| Sources | ${a.training?.sources?.length ? a.training.sources.join(', ') : '(none)'} |`,
+                  `| Boost Domains | ${a.training?.boostDomains?.join(', ') || '(none)'} |`,
+                  `| LoRA Adapter | ${a.training?.loraAdapter || '(not yet fine-tuned)'} |`,
+                  `| Min Quality | ${a.training?.minQuality} |`,
+                ];
+              }
+              actions.addMessage(appsSid, {
+                role: 'assistant',
+                content: lines.join('\n'),
+                timestamp: Date.now(),
+              });
+              actions.setStatusLine(null);
+            })
+            .catch(() => {
+              actions.addMessage(appsSid, {
+                role: 'assistant',
+                content: '**Error:** Could not fetch app registry',
+                timestamp: Date.now(),
+              });
+              actions.setStatusLine(null);
+            });
+          break;
+        }
+
+        case 'resolve': {
+          const resolveSid = ensureSession();
+          actions.addMessage(resolveSid, {
+            role: 'user',
+            content: `/resolve ${arg}`.trim(),
+            timestamp: Date.now(),
+          });
+          actions.setStatusLine('Resolving app model...');
+
+          const resolveArgs = arg.trim().split(/\s+/);
+          const resolveAppId = resolveArgs[0];
+          if (!resolveAppId) {
+            actions.addMessage(resolveSid, {
+              role: 'assistant',
+              content: '**Usage:** `/resolve <appId> [--local]`',
+              timestamp: Date.now(),
+            });
+            actions.setStatusLine(null);
+            break;
+          }
+          const isLocal = resolveArgs.includes('--local');
+          const resolveUrl = `/api/model-registry/resolve/${encodeURIComponent(resolveAppId)}${isLocal ? '?local=true' : ''}`;
+
+          fetch(resolveUrl)
+            .then(async (r) => (r.ok ? r.json() : { error: 'Not found' }))
+            .then((data: any) => {
+              if (data.error) {
+                actions.addMessage(resolveSid, {
+                  role: 'assistant',
+                  content: `**Error:** ${data.error}`,
+                  timestamp: Date.now(),
+                });
+              } else {
+                const chain = (data.chain || []).map((m: string) => `\`${m}\``).join(' → ');
+                actions.addMessage(resolveSid, {
+                  role: 'assistant',
+                  content: [
+                    `**Model Resolution** for \`${data.appId}\``,
+                    '',
+                    `| Property | Value |`,
+                    `|----------|-------|`,
+                    `| Model | \`${data.model}\` |`,
+                    `| Source | ${data.source} |`,
+                    `| Chain | ${chain} |`,
+                  ].join('\n'),
+                  timestamp: Date.now(),
+                });
+              }
+              actions.setStatusLine(null);
+            })
+            .catch(() => {
+              actions.addMessage(resolveSid, {
+                role: 'assistant',
+                content: '**Error:** Could not resolve model',
+                timestamp: Date.now(),
+              });
+              actions.setStatusLine(null);
+            });
+          break;
+        }
+
+        case 'pricing': {
+          const pricingSid = ensureSession();
+          actions.addMessage(pricingSid, {
+            role: 'user',
+            content: '/pricing',
+            timestamp: Date.now(),
+          });
+          actions.setStatusLine('Loading pricing...');
+
+          // Fetch app list + build pricing summary from profiles
+          fetch('/api/model-registry/apps')
+            .then(async (r) => (r.ok ? r.json() : { apps: [] }))
+            .then((data: any) => {
+              const appList = (data.apps || []) as any[];
+              // Group by local model
+              const modelGroups: Record<string, string[]> = {};
+              for (const a of appList) {
+                const local = (a.localModel || '').replace('ollama-remote/', '');
+                if (!modelGroups[local]) modelGroups[local] = [];
+                modelGroups[local].push(a.appId);
+              }
+              const lines = [
+                `**App Model Pricing Overview** — ${appList.length} apps`,
+                '',
+                '| Local Model | Apps | Cloud Escalation | LoRA |',
+                '|-------------|------|------------------|------|',
+                ...Object.entries(modelGroups).map(([model, appIds]) => {
+                  const sample = appList.find((a: any) => (a.localModel || '').replace('ollama-remote/', '') === model);
+                  const cloud = sample?.cloudModel?.replace('anthropic/', '') || '-';
+                  const lora = sample?.training?.loraAdapter || '-';
+                  return `| \`${model}\` | ${appIds.join(', ')} | \`${cloud}\` | ${lora} |`;
+                }),
+                '',
+                '> Local models = $0/token. Cloud costs apply only on escalation.',
+              ];
+              actions.addMessage(pricingSid, {
+                role: 'assistant',
+                content: lines.join('\n'),
+                timestamp: Date.now(),
+              });
+              actions.setStatusLine(null);
+            })
+            .catch(() => {
+              actions.addMessage(pricingSid, {
+                role: 'assistant',
+                content: '**Error:** Could not fetch pricing',
                 timestamp: Date.now(),
               });
               actions.setStatusLine(null);
