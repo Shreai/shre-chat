@@ -1256,6 +1256,15 @@ export function ChatView() {
                 terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' });
               }, 100);
             }}
+            onOpenShreCli={() => {
+              setShowTerminal(true);
+              if (isMobileLayout || termViewMode === 'tabs') {
+                setActiveView('terminal');
+              }
+              setTimeout(() => {
+                terminalRef.current?.openTab({ title: 'Shre CLI', cmd: 'shre' });
+              }, 100);
+            }}
             currentAgentName={currentAgent.name}
             activeSessionId={activeSessionId}
             messages={messages}

@@ -5,6 +5,7 @@ import { exportSessions, importSessions } from '../store';
 import { ECOSYSTEM_APPS } from '../chat-utils';
 import {
   usePreferences,
+  ALLOW_DIRECT_MODE,
   FEATURE_LABELS,
   type GatewayMode,
   type FeatureKey,
@@ -121,13 +122,15 @@ export function HeaderMoreMenu({
           active={gatewayMode === 'router'}
           onClick={() => { onSetGatewayMode('router'); onClose(); }}
         />
-        <GatewayOption
-          label="Direct (Ollama)"
-          description="Local models, no gateway"
-          color="#22c55e"
-          active={gatewayMode === 'direct'}
-          onClick={() => { onSetGatewayMode('direct'); onClose(); }}
-        />
+        {ALLOW_DIRECT_MODE && (
+          <GatewayOption
+            label="Direct (Local)"
+            description="Force local model path"
+            color="#22c55e"
+            active={gatewayMode === 'direct'}
+            onClick={() => { onSetGatewayMode('direct'); onClose(); }}
+          />
+        )}
 
         <Divider />
 

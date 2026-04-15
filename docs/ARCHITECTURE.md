@@ -96,6 +96,9 @@ store.ts
 
 `serve.js` is a single-file Node.js HTTP server (~7200 lines) that handles:
 
+Direct mode is disabled by default. If explicitly enabled, `/api/direct/v1/chat` is still rewritten
+through `shre-router` with a forced local-model route rather than bypassing platform policy.
+
 ### Request Pipeline
 
 ```
@@ -124,6 +127,11 @@ Sessions are stored in SQLite (`~/.shre/sessions.db`):
 - Message compaction (summarize old messages)
 - Cross-device sync via auth token
 
+Canonical history lives in `chat_sessions.messages`.
+The `chat_messages` table is treated as a secondary extracted/indexed view for compatibility,
+search, and recovery rather than the primary source of truth.
+Trimmed-session restore reads the full canonical session history rather than a paginated excerpt.
+
 ### Training Data Pipeline
 
 Every conversation writes to the training WAL (Write-Ahead Log) via `shre-sdk/training`:
@@ -150,14 +158,14 @@ Every conversation writes to the training WAL (Write-Ahead Log) via `shre-sdk/tr
 4. serve.js:
    a. Validates JWT, extracts user claims
    b. Injects x-tenant-id, x-user-id, x-channel headers
-   c. Fetches context from shre-context (platform, RAG, data, contacts)
-   d. Proxies to shre-router with context injection
+   c. Proxies the request to shre-router without mutating the payload
+   d. Lets shre-router perform routing, context loading, tool execution, and policy checks
 5. SSE events stream back:
    - delta: partial token → store.appendToken()
    - done: full response → store.finalizeMessage()
    - tool_use: tool execution → ProcessBar animation
 6. serve.js post-stream:
-   a. Writes conversation to training WAL
-   b. Triggers conversation learner (RAG extraction)
-   c. Emits event bus notification
+   a. Extracts user/assistant messages for local SQLite history
+   b. Client posts `/api/conversation-log` for audit/training side effects
+   c. Session state syncs separately via `/api/chat-sessions/*`
 ```
