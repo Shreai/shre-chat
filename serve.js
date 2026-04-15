@@ -6983,7 +6983,23 @@ else:
     // Append to scrollback ring buffer
     session.scrollback += str;
     if (session.scrollback.length > SCROLLBACK_MAX) {
-      session.scrollback = session.scrollback.slice(-SCROLLBACK_MAX);
+      let trimmed = session.scrollback.slice(-SCROLLBACK_MAX);
+      // Snap to nearest newline to avoid cutting mid-line
+      const nlIdx = trimmed.indexOf("\n");
+      if (nlIdx > 0 && nlIdx < 512) {
+        trimmed = trimmed.slice(nlIdx + 1);
+      }
+      // Strip any incomplete leading escape sequence (ESC not followed by complete seq)
+      if (trimmed.length > 0 && trimmed[0] === "\x1b") {
+        // Find the end of the partial escape — look for the first letter after ESC[...
+        const escEnd = trimmed.search(/\x1b\[[0-9;]*[A-Za-z]/);
+        if (escEnd < 0) {
+          // Entire leading chunk is a broken escape — skip past it
+          const safeStart = trimmed.indexOf("\n");
+          if (safeStart > 0) trimmed = trimmed.slice(safeStart + 1);
+        }
+      }
+      session.scrollback = trimmed;
     }
     // Broadcast to all connected clients
     for (const client of session.clients) {
@@ -7060,7 +7076,8 @@ termWss.on("connection", (ws, req) => {
   // Replay scrollback so reconnecting clients see previous output
   if (session.scrollback.length > 0) {
     try {
-      ws.send("\x1b[2J\x1b[H"); // Clear screen first
+      // Reset terminal state: clear screen, move cursor home, reset attributes
+      ws.send("\x1b[0m\x1b[2J\x1b[H");
       ws.send(session.scrollback);
     } catch {}
   }

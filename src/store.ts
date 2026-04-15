@@ -995,9 +995,7 @@ function _trimLocalStorage(sessions: Session[], keepId: string): void {
 /** Fetch full session messages from the server (for restoring trimmed sessions). */
 export async function fetchFullSessionMessages(sessionId: string): Promise<ChatMessage[] | null> {
   try {
-    const res = await fetch(
-      `/api/chat-sessions/${encodeURIComponent(sessionId)}/messages?limit=200`,
-    );
+    const res = await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`);
     if (!res.ok) return null;
     const data = await res.json();
     return Array.isArray(data.messages) ? data.messages : null;

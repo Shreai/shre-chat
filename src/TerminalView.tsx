@@ -560,7 +560,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
       cursorBlink: true,
       cursorStyle: 'bar',
       theme: {
-        background: 'var(--c-bg-1, #0a1628)',
+        background: '#0a1628',
         foreground: '#c8d6e5',
         cursor: '#6cb4ee',
         selectionBackground: '#2a4a7f80',

@@ -120,6 +120,9 @@ interface ChatComposerProps {
 
   // Open Claude CLI as terminal tab
   onOpenClaudeCli?: () => void;
+
+  // Open Shre CLI as terminal tab
+  onOpenShreCli?: () => void;
 }
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -199,6 +202,7 @@ export function ChatComposer(props: ChatComposerProps) {
     claudeCliMode,
     setClaudeCliMode,
     onOpenClaudeCli,
+    onOpenShreCli,
   } = props;
 
   const features = usePreferences((s) => s.features);
@@ -846,6 +850,32 @@ export function ChatComposer(props: ChatComposerProps) {
                   <polyline points="8 6 2 12 8 18" />
                 </svg>
                 <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
+              </button>
+              )}
+
+              {/* Shre CLI — opens shre REPL as terminal tab */}
+              {features['shreCli'] && (
+              <button
+                tabIndex={-1}
+                onClick={() => {
+                  if (onOpenShreCli) onOpenShreCli();
+                }}
+                className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1"
+                style={{ color: 'var(--c-text-2)' }}
+                title="Open Shre CLI in terminal tab"
+                aria-label="Open Shre CLI in terminal tab"
+              >
+                <svg
+                  className="h-4 w-4 sm:h-4 sm:w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="4 17 10 11 4 5" />
+                  <line x1="12" y1="19" x2="20" y2="19" />
+                </svg>
+                <span className="hidden sm:inline text-[10px] font-medium" style={{ color: '#22c55e' }}>Shre</span>
               </button>
               )}
 

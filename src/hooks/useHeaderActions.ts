@@ -2,7 +2,12 @@ import { useState, useCallback, useEffect } from 'react';
 import type { ChatMessage } from '../router-client';
 import { shareSession } from '../store';
 import { playNotifSound, formatTime } from '../chat-utils';
-import { usePreferences, type GatewayMode, type ConversationModeId } from '../preferences-store';
+import {
+  usePreferences,
+  ALLOW_DIRECT_MODE,
+  type GatewayMode,
+  type ConversationModeId,
+} from '../preferences-store';
 
 interface UseHeaderActionsOptions {
   activeSessionId: string | null;
@@ -66,7 +71,7 @@ export function useHeaderActions({
   }, [setGatewayMode]);
 
   const handleSetGatewayMode = useCallback(
-    (mode: GatewayMode) => setGatewayMode(mode),
+    (mode: GatewayMode) => setGatewayMode(mode === 'direct' && !ALLOW_DIRECT_MODE ? 'router' : mode),
     [setGatewayMode],
   );
 

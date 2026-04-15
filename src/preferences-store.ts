@@ -10,11 +10,13 @@ const LEGACY_MODEL_KEY = 'shre-model-overrides';
 
 export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
 export type GatewayMode = 'router' | 'direct';
+export const ALLOW_DIRECT_MODE = import.meta.env.VITE_ENABLE_DIRECT_MODE === 'true';
 
 // Feature keys that can be toggled on/off
 export type FeatureKey =
   | 'terminal'
   | 'claudeCli'
+  | 'shreCli'
   | 'billing'
   | 'marketplace'
   | 'bookmarks'
@@ -35,6 +37,7 @@ export type FeatureKey =
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   terminal: 'Terminal',
   claudeCli: 'Claude CLI',
+  shreCli: 'Shre CLI',
   billing: 'Billing',
   marketplace: 'Marketplace',
   bookmarks: 'Bookmarks',
@@ -61,6 +64,7 @@ const _isLocal =
 export const DEFAULT_FEATURES: Record<FeatureKey, boolean> = {
   terminal: _isLocal,
   claudeCli: _isLocal,
+  shreCli: _isLocal,
   billing: _isLocal,
   marketplace: _isLocal,
   bookmarks: true,
@@ -176,7 +180,10 @@ export const usePreferences = create<PreferencesState>()(
         ttsVoice: legacy.ttsVoice ?? 'nova',
         ttsProvider: (legacy as any).ttsProvider ?? 'auto',
         modelOverrides: legacy.modelOverrides ?? {},
-        gatewayMode: legacy.gatewayMode ?? 'router',
+        gatewayMode:
+          legacy.gatewayMode === 'direct' && !ALLOW_DIRECT_MODE
+            ? 'router'
+            : (legacy.gatewayMode ?? 'router'),
         features: { ...DEFAULT_FEATURES },
         focusMode: false,
         traceEnabled: false,
@@ -189,7 +196,8 @@ export const usePreferences = create<PreferencesState>()(
         setMicEnabled: (v) => set({ micEnabled: v }),
         setTtsVoice: (v) => set({ ttsVoice: v }),
         setTtsProvider: (v) => set({ ttsProvider: v }),
-        setGatewayMode: (v) => set({ gatewayMode: v }),
+        setGatewayMode: (v) =>
+          set({ gatewayMode: v === 'direct' && !ALLOW_DIRECT_MODE ? 'router' : v }),
         setFocusMode: (v) => set({ focusMode: v }),
         setTraceEnabled: (v) => set({ traceEnabled: v }),
         setConversationMode: (mode, appId) =>

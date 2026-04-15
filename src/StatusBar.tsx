@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, getAgent } from './store';
-import { usePreferences, type GatewayMode } from './preferences-store';
+import { usePreferences, ALLOW_DIRECT_MODE, type GatewayMode } from './preferences-store';
 import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
 import { MemoryPanel } from './components/MemoryPanel';
 
@@ -166,9 +166,9 @@ function RoutingModeIndicator() {
 
   const config: Record<GatewayMode, { label: string; color: string; title: string }> = {
     router: { label: 'Router', color: '#3b82f6', title: 'Shre Router — trust gate, RAG, scoring' },
-    direct: { label: 'Direct', color: '#22c55e', title: 'Direct Ollama — local models, no gateway' },
+    direct: { label: 'Direct', color: '#22c55e', title: 'Direct local mode — explicitly enabled only' },
   };
-  const modes: GatewayMode[] = ['router', 'direct'];
+  const modes: GatewayMode[] = ALLOW_DIRECT_MODE ? ['router', 'direct'] : ['router'];
   const c = config[gatewayMode];
 
   return (
@@ -208,7 +208,7 @@ function RoutingModeIndicator() {
 function StatusBarGatewayPill() {
   const gatewayMode = usePreferences((s) => s.gatewayMode);
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
-  const modes: GatewayMode[] = ['router', 'direct'];
+  const modes: GatewayMode[] = ALLOW_DIRECT_MODE ? ['router', 'direct'] : ['router'];
   const cfg: Record<GatewayMode, { label: string; color: string }> = {
     router: { label: 'R', color: '#3b82f6' },
     direct: { label: 'D', color: '#22c55e' },
