@@ -786,7 +786,39 @@ export function lightweightMarkdown(text: string): string {
     .replace(/^## (.+)$/gm, '<strong style="font-size:1.1em">$1</strong>')
     .replace(/^# (.+)$/gm, '<strong style="font-size:1.15em">$1</strong>')
     // Bullet lists: - or * at start of line
-    .replace(/^[\-\*] (.+)$/gm, '\u2022 $1');
+    .replace(/^[\-\*] (.+)$/gm, '\u2022 $1')
+    // Numbered lists: 1. text, 2. text
+    .replace(/^(\d+)\. (.+)$/gm, '<span style="color:var(--c-accent)">$1.</span> $2');
+
+  // Markdown tables: detect pipe-delimited rows and convert to HTML
+  html = html.replace(
+    /(?:^|\n)((?:\|[^\n]+\|\s*\n){2,})/g,
+    (_match: string, tableBlock: string) => {
+      const rows = tableBlock.trim().split('\n').filter((r: string) => r.trim());
+      if (rows.length < 2) return tableBlock;
+
+      // Check if row 2 is a separator (|---|---|)
+      const isSeparator = (r: string) => /^\|[\s\-:]+\|$/.test(r.trim().replace(/\|[\s\-:]+/g, '|---'));
+      const hasSep = rows.length >= 2 && isSeparator(rows[1]);
+      const dataRows = hasSep ? [rows[0], ...rows.slice(2)] : rows;
+      const startIdx = hasSep ? 1 : 0; // first row is header if separator follows
+
+      let table = '<table style="border-collapse:collapse;width:100%;font-size:0.9em;margin:8px 0">';
+      dataRows.forEach((row: string, i: number) => {
+        const cells = row.split('|').filter((c: string) => c.trim() !== '');
+        const tag = (i === 0 && hasSep) ? 'th' : 'td';
+        const bgStyle = (i === 0 && hasSep)
+          ? 'background:rgba(255,255,255,0.05);font-weight:600;text-transform:uppercase;font-size:0.85em'
+          : (i % 2 === 0 ? '' : 'background:rgba(255,255,255,0.02)');
+        table += `<tr>${cells.map((c: string) =>
+          `<${tag} style="padding:6px 10px;border:1px solid rgba(255,255,255,0.08);text-align:left;${bgStyle}">${c.trim()}</${tag}>`
+        ).join('')}</tr>`;
+      });
+      table += '</table>';
+      return table;
+    },
+  );
+
   return html;
 }
 
