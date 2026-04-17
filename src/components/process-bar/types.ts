@@ -7,6 +7,8 @@ export type ProcessStepKind =
   | 'planning'
   | 'tool_use'
   | 'tool_result'
+  | 'model_call'
+  | 'handoff'
   | 'generating'
   | 'compacting'
   | 'done'
