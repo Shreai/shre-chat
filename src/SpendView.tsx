@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { SBadge } from '@shre/ui-kit';
 import ports from '../../ports.json';
 
-const ROUTER_BASE = `https://localhost:${ports.services['shre-router'].port}`;
+const ROUTER_BASE = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
 
 interface CostSummary {
   totalCostUsd: number;

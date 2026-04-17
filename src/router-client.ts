@@ -57,8 +57,10 @@ export function setUserLanguage(lang: string): void {
 }
 
 /** Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6").
+ *  Also handles "provider:X" format (e.g. "provider:anthropic" → "anthropic").
  *  Some providers expect bare model IDs without provider prefix. */
 export function stripProviderPrefix(modelId: string): string {
+  if (modelId.startsWith('provider:')) return modelId.slice('provider:'.length);
   return modelId.includes('/') ? modelId.split('/').pop()! : modelId;
 }
 
@@ -408,6 +410,68 @@ export async function fetchAvailableModels(): Promise<RouterModel[]> {
     return models.map((m) => ({
       ...m,
       contextWindow: catalog[m.id]?.contextWindow,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Dynamic Tools Discovery from shre-router ─────────────────────────
+
+export interface RouterTool {
+  name: string;
+  description: string;
+  category: 'system' | 'app';
+}
+
+/** Fetch available tools via shre-router proxy. */
+export async function fetchAvailableTools(): Promise<RouterTool[]> {
+  try {
+    const res = await fetch(`${SHRE_ROUTER_URL}/v1/tools/available`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const tools: Array<{ name: string; description: string }> = data.tools || [];
+    const systemCount: number = data.systemTools || 0;
+    return tools.map((t, i) => ({
+      name: t.name,
+      description: t.description,
+      category: (i < systemCount ? 'system' : 'app') as 'system' | 'app',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Dynamic Apps Discovery (via serve.js proxy → shre-skills) ─────────
+
+export interface RouterApp {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  category?: string;
+  activated: boolean;
+  skillCount: number;
+}
+
+/** Fetch available apps via serve.js proxy to shre-skills /v1/apps. */
+export async function fetchAvailableApps(): Promise<RouterApp[]> {
+  try {
+    const res = await fetch('/api/apps', {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.apps || []).map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      description: a.description || '',
+      icon: a.icon,
+      category: a.category,
+      activated: a.activated ?? true,
+      skillCount: a.skillCount || 0,
     }));
   } catch {
     return [];

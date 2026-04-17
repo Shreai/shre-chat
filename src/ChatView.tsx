@@ -38,6 +38,8 @@ import type { ConversationModeId } from './preferences-store';
 import { useMessageListHandlers } from './hooks/useMessageListHandlers';
 import { useFilteredMessages } from './hooks/useFilteredMessages';
 import { useModelList } from './hooks/useModelList';
+import { useAppList } from './hooks/useAppList';
+import { useToolList } from './hooks/useToolList';
 import { useEscalationListener } from './hooks/useEscalationListener';
 
 // Extracted UI components
@@ -227,6 +229,13 @@ export function ChatView() {
     AVAILABLE_MODELS,
     MODEL_CONTEXT_LIMITS,
   } = useModelList();
+
+  // ── Dynamic app list from shre-skills (extracted hook) ──
+  const { appOptions } = useAppList();
+
+  // ── Dynamic tool list from shre-router (extracted hook) ──
+  const { toolOptions, systemCount: toolSystemCount, appCount: toolAppCount } = useToolList();
+
   const [cliMode, setCliMode] = useState(() => {
     const stored = localStorage.getItem('shre-cli-mode-default');
     return stored === 'true'; // Default OFF — user enables via /cli or button
@@ -986,6 +995,10 @@ export function ChatView() {
             conversationMode={conversationMode}
             activeAppId={activeAppId}
             setConversationMode={setConversationMode}
+            appOptions={appOptions}
+            toolOptions={toolOptions}
+            toolSystemCount={toolSystemCount}
+            toolAppCount={toolAppCount}
             showModelPicker={showModelPicker}
             setShowModelPicker={setShowModelPicker}
             selectedModel={selectedModel}

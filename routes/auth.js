@@ -558,6 +558,51 @@ export function registerAuthRoutes({ log }) {
       return true;
     }
 
+    // ── Signup (delegates to shre-auth centralized auth) ──
+    if (url.pathname === "/api/auth/signup" && req.method === "POST") {
+      const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const rl = rateLimit(clientIp, "signup", 5, 60 * 60_000); // 5 signups/hour per IP
+      if (!rl.allowed) {
+        return json(res, { error: "Too many signup attempts. Try again later.", retryAfter: rl.retryAfter }, 429);
+      }
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", async () => {
+        try {
+          const parsed = JSON.parse(body);
+          if (!parsed.email || !parsed.password) return json(res, { error: "Email and password required" }, 400);
+          if (parsed.password.length < 8) return json(res, { error: "Password must be at least 8 characters" }, 400);
+
+          const { serviceUrl } = await import("shre-sdk/discovery");
+          const authUrl = serviceUrl("shre-auth");
+          const authRes = await fetch(`${authUrl}/v1/auth/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-forwarded-for": clientIp },
+            body: JSON.stringify({
+              email: parsed.email,
+              password: parsed.password,
+              name: parsed.name || parsed.email.split("@")[0],
+              workspaceName: parsed.workspaceName,
+            }),
+            signal: AbortSignal.timeout(10000),
+          });
+          const data = await authRes.json();
+          if (!authRes.ok) return json(res, data, authRes.status);
+
+          // Set auth cookie (same as login)
+          if (data.token) {
+            res.setHeader("Set-Cookie", authCookie("shre_token", data.token, 7 * 86400, req));
+          }
+          auditLog("signup_success", { ip: clientIp, email: parsed.email });
+          json(res, data);
+        } catch (err) {
+          log.error("[signup] Error:", err.message);
+          json(res, { error: "Signup failed" }, 500);
+        }
+      });
+      return true;
+    }
+
     // ── 2FA verification ──
     if (url.pathname === "/api/auth/verify-2fa" && req.method === "POST") {
       // @ts-ignore — x-forwarded-for is always a string in practice
@@ -669,6 +714,49 @@ export function registerAuthRoutes({ log }) {
       const user = users[claims.sub];
       json(res, { authenticated: true, user: { username: claims.sub, name: user?.name || claims.sub, role: claims.role } });
       return true;
+    }
+
+    // ── SSO from shre-auth-gate ──
+    if (url.pathname === "/api/auth/gate-sso" && req.method === "GET") {
+      const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+      const gateToken = cookies.find(c => c.startsWith("shre_gate_token="))?.split("=")[1];
+      
+      if (!gateToken) {
+        log.debug("[auth] No gate token found in cookies");
+        return json(res, { sso: false }, 200);
+      }
+
+      try {
+        const authUrl = process.env.SHRE_AUTH_URL || "http://127.0.0.1:5455";
+        const valRes = await fetch(`${authUrl}/v1/verify`, {
+          headers: { "Authorization": `Bearer ${gateToken}` },
+          signal: AbortSignal.timeout(3000)
+        });
+
+        if (valRes.ok) {
+          const valData = await valRes.json();
+          // Generate a local token matching these claims
+          const token = signAuthToken({
+            sub: valData.claims.sub,
+            username: valData.claims.username,
+            role: valData.claims.role || "user"
+          });
+          
+          res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
+          return json(res, {
+            sso: true,
+            token,
+            user: {
+              username: valData.claims.username,
+              name: valData.claims.name || valData.claims.username,
+              role: valData.claims.role
+            }
+          });
+        }
+      } catch (err) {
+        log.warn("[auth] gate-sso verify failed", { error: err.message });
+      }
+      return json(res, { sso: false }, 200);
     }
 
     // ── Workspace switch (proxy to shre-auth) ──

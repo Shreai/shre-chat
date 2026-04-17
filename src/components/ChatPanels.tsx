@@ -7,12 +7,15 @@ import { retryConnection } from '../gateway-ws';
 import { setModelOverride, ECOSYSTEM_APPS } from '../chat-utils';
 import { importSessions, type Session, type View } from '../store';
 import type { ChatMessage, RouterModel } from '../router-client';
+import type { AppOption } from '../hooks/useAppList';
 import { useI18n } from '../useI18n';
 import { LOCALE_LABELS, type Locale } from '../i18n';
 
 import { ModelPicker } from './ModelPicker';
 import ModePicker from './ModePicker';
+import { ToolPicker } from './ToolPicker';
 import type { TTSProvider, GatewayMode, ConversationModeId } from '../preferences-store';
+import type { ToolOption } from '../hooks/useToolList';
 import { HeaderMoreMenu } from './HeaderMoreMenu';
 import { ShareBar } from './ShareBar';
 import { ContextBar } from './ContextBar';
@@ -38,6 +41,11 @@ interface ChatPanelsProps {
   conversationMode: ConversationModeId;
   activeAppId: string | null;
   setConversationMode: (mode: ConversationModeId, appId?: string | null) => void;
+  appOptions?: AppOption[];
+  // Tools
+  toolOptions?: ToolOption[];
+  toolSystemCount?: number;
+  toolAppCount?: number;
   // Model picker
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
@@ -142,6 +150,10 @@ export function ChatPanels(props: ChatPanelsProps) {
     conversationMode,
     activeAppId,
     setConversationMode,
+    appOptions,
+    toolOptions,
+    toolSystemCount,
+    toolAppCount,
     showModelPicker,
     setShowModelPicker,
     selectedModel,
@@ -215,6 +227,8 @@ export function ChatPanels(props: ChatPanelsProps) {
 
   const [modePickerOpen, setModePickerOpen] = useState(false);
   const modePickerRef = useRef<HTMLDivElement>(null);
+  const [toolPickerOpen, setToolPickerOpen] = useState(false);
+  const toolPickerRef = useRef<HTMLDivElement>(null);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const voicePickerRef = useRef<HTMLDivElement>(null);
   const [langPickerOpen, setLangPickerOpen] = useState(false);
@@ -308,6 +322,7 @@ export function ChatPanels(props: ChatPanelsProps) {
             activeAppId={activeAppId}
             onSelectMode={setConversationMode}
             pickerRef={modePickerRef}
+            appOptions={appOptions}
           />
           <ModelPicker
             open={showModelPicker}
@@ -345,6 +360,17 @@ export function ChatPanels(props: ChatPanelsProps) {
             agentName={currentAgent.name}
             pickerRef={modelPickerRef}
           />
+          {toolOptions && toolOptions.length > 0 && (
+            <ToolPicker
+              open={toolPickerOpen}
+              onToggle={() => setToolPickerOpen(!toolPickerOpen)}
+              onClose={() => setToolPickerOpen(false)}
+              tools={toolOptions}
+              systemCount={toolSystemCount ?? 0}
+              appCount={toolAppCount ?? 0}
+              pickerRef={toolPickerRef}
+            />
+          )}
 
           {/* Voice engine selector — icon + dropdown */}
           <div className="relative" ref={voicePickerRef}>

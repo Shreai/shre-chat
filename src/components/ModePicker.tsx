@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ConversationModeId } from '../preferences-store';
+import type { AppOption } from '../hooks/useAppList';
 
 interface ModeOption {
   id: ConversationModeId;
@@ -17,14 +18,6 @@ const MODE_OPTIONS: ModeOption[] = [
   { id: 'business', label: 'Business', subtitle: 'Sales, marketing, investors', icon: 'B' },
 ];
 
-const APP_OPTIONS = [
-  { id: 'aros', label: 'AROS', subtitle: 'RapidRMS POS intelligence' },
-  { id: 'centrix', label: 'Centrix', subtitle: 'ERP & back office' },
-  { id: 'storepulse', label: 'StorePulse', subtitle: 'Analytics dashboard' },
-  { id: 'rapidrms', label: 'RapidRMS', subtitle: 'POS data & operations' },
-  { id: 'verifone', label: 'Verifone', subtitle: 'Payment terminal support' },
-];
-
 interface ModePickerProps {
   open: boolean;
   onToggle: () => void;
@@ -33,6 +26,7 @@ interface ModePickerProps {
   onSelectMode: (mode: ConversationModeId, appId?: string | null) => void;
   activeAppId?: string | null;
   pickerRef: React.RefObject<HTMLDivElement | null>;
+  appOptions?: AppOption[];
 }
 
 export default function ModePicker({
@@ -43,6 +37,7 @@ export default function ModePicker({
   onSelectMode,
   activeAppId,
   pickerRef,
+  appOptions = [],
 }: ModePickerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [showAppPicker, setShowAppPicker] = useState(false);
@@ -71,10 +66,13 @@ export default function ModePicker({
   }, [open, onClose, pickerRef]);
 
   const currentMode = MODE_OPTIONS.find((m) => m.id === selectedMode) || MODE_OPTIONS[0];
-  const currentApp = activeAppId ? APP_OPTIONS.find((a) => a.id === activeAppId) : null;
+  const currentApp = activeAppId ? appOptions.find((a) => a.id === activeAppId) : null;
   const displayLabel = selectedMode === 'apps' && currentApp
     ? `Apps: ${currentApp.label}`
     : currentMode.label;
+
+  // Group apps by category for display
+  const categorized = groupByCategory(appOptions);
 
   return (
     <div ref={pickerRef} style={{ position: 'relative' }}>
@@ -134,12 +132,15 @@ export default function ModePicker({
               top: 'calc(100% + 6px)',
               left: 0,
               zIndex: 100,
-              width: '220px',
+              width: showAppPicker ? '260px' : '220px',
+              maxHeight: 'min(420px, calc(var(--vv-height, 100dvh) - 120px))',
               borderRadius: '10px',
               border: '1px solid var(--c-border-2)',
               background: 'var(--c-bg-2)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
               overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
               animation: 'mode-picker-fade-in 0.12s ease-out',
             }}
           >
@@ -151,11 +152,12 @@ export default function ModePicker({
                 color: 'var(--c-text-3)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
+                flexShrink: 0,
               }}
             >
-              Conversation Mode
+              {showAppPicker ? 'Select App' : 'Conversation Mode'}
             </div>
-            <div style={{ padding: '2px 4px 6px' }}>
+            <div style={{ padding: '2px 4px 6px', overflowY: 'auto', flex: 1 }}>
               {showAppPicker ? (
                 <>
                   <button
@@ -169,35 +171,91 @@ export default function ModePicker({
                   >
                     &#x2190; Back to modes
                   </button>
-                  {APP_OPTIONS.map((app) => {
-                    const active = selectedMode === 'apps' && activeAppId === app.id;
-                    return (
-                      <button
-                        key={app.id}
-                        onClick={() => {
-                          onSelectMode('apps', app.id);
-                          setShowAppPicker(false);
-                          onClose();
-                        }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '8px',
-                          width: '100%', padding: '6px 8px', borderRadius: '6px',
-                          border: 'none',
-                          background: active ? 'var(--c-accent-soft)' : 'transparent',
-                          color: active ? 'var(--c-accent)' : 'var(--c-text-1)',
-                          fontSize: '12px', cursor: 'pointer', textAlign: 'left',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-3)'; }}
-                        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 500 }}>{app.label}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--c-text-3)' }}>{app.subtitle}</div>
+
+                  {categorized.map(([category, apps]) => (
+                    <div key={category}>
+                      {categorized.length > 1 && (
+                        <div
+                          style={{
+                            padding: '6px 8px 2px',
+                            fontSize: '9px',
+                            fontWeight: 600,
+                            color: 'var(--c-text-4)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                          }}
+                        >
+                          {category}
                         </div>
-                      </button>
-                    );
-                  })}
+                      )}
+                      {apps.map((app) => {
+                        const active = selectedMode === 'apps' && activeAppId === app.id;
+                        return (
+                          <button
+                            key={app.id}
+                            onClick={() => {
+                              onSelectMode('apps', app.id);
+                              setShowAppPicker(false);
+                              onClose();
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '8px',
+                              width: '100%', padding: '6px 8px', borderRadius: '6px',
+                              border: 'none',
+                              background: active ? 'var(--c-accent-soft)' : 'transparent',
+                              color: active ? 'var(--c-accent)' : 'var(--c-text-1)',
+                              fontSize: '12px', cursor: 'pointer', textAlign: 'left',
+                              transition: 'background 0.1s',
+                            }}
+                            onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-3)'; }}
+                            onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            {app.icon && (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                width: '20px', height: '20px', borderRadius: '4px',
+                                background: active ? 'var(--c-accent)' : 'var(--c-bg-3)',
+                                color: active ? 'var(--c-bg-1)' : 'var(--c-text-2)',
+                                fontSize: '10px', fontWeight: 700, flexShrink: 0,
+                              }}>
+                                {app.icon}
+                              </span>
+                            )}
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 500 }}>
+                                {app.label}
+                                {app.skillCount > 0 && (
+                                  <span style={{ fontSize: '9px', color: 'var(--c-text-4)', marginLeft: '4px' }}>
+                                    {app.skillCount} skills
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{
+                                fontSize: '10px', color: 'var(--c-text-3)',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                              }}>
+                                {app.subtitle}
+                              </div>
+                            </div>
+                            {!app.activated && (
+                              <span style={{
+                                fontSize: '9px', padding: '1px 4px', borderRadius: '3px',
+                                background: 'var(--c-bg-3)', color: 'var(--c-text-4)',
+                              }}>
+                                inactive
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+
+                  {appOptions.length === 0 && (
+                    <div style={{ padding: '12px 8px', fontSize: '11px', color: 'var(--c-text-4)', textAlign: 'center' }}>
+                      No apps available
+                    </div>
+                  )}
                 </>
               ) : MODE_OPTIONS.map((opt) => {
                 const active = opt.id === selectedMode;
@@ -252,7 +310,14 @@ export default function ModePicker({
                       {opt.icon}
                     </span>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 500 }}>{opt.label}</div>
+                      <div style={{ fontWeight: 500 }}>
+                        {opt.label}
+                        {opt.id === 'apps' && appOptions.length > 0 && (
+                          <span style={{ fontSize: '9px', color: 'var(--c-text-4)', marginLeft: '4px' }}>
+                            {appOptions.length} apps
+                          </span>
+                        )}
+                      </div>
                       <div
                         style={{
                           fontSize: '10px',
@@ -281,4 +346,14 @@ export default function ModePicker({
       `}</style>
     </div>
   );
+}
+
+function groupByCategory(apps: AppOption[]): [string, AppOption[]][] {
+  const groups = new Map<string, AppOption[]>();
+  for (const app of apps) {
+    const cat = app.category || 'General';
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat)!.push(app);
+  }
+  return Array.from(groups.entries());
 }

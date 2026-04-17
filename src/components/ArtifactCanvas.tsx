@@ -9,6 +9,7 @@
  * - JSON tree viewer
  */
 import { useState, useMemo, useCallback, lazy, Suspense, useRef, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { copyToClipboard } from '../chat-utils';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
 
@@ -156,7 +157,7 @@ function ArtifactRenderer({ artifact }: { artifact: Artifact }) {
       return (
         <div
           style={{ padding: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}
-          dangerouslySetInnerHTML={{ __html: artifact.content }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(artifact.content, { USE_PROFILES: { svg: true, svgFilters: true } }) }}
         />
       );
     case 'mermaid':
@@ -187,12 +188,13 @@ function HtmlPreview({ content }: { content: string }) {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  const sanitizedContent = DOMPurify.sanitize(content, { ALLOW_UNKNOWN_PROTOCOLS: false, FORBID_TAGS: ['script', 'iframe', 'object', 'embed'] });
   const srcdoc = `<!DOCTYPE html>
 <html><head><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;padding:16px;overflow:auto}
 a{color:#58a6ff}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border:1px solid #30363d}
-</style></head><body>${content}<script>
+</style></head><body>${sanitizedContent}<script>
 const h=()=>parent.postMessage({type:'iframe-height',height:document.body.scrollHeight},'*');
 h();new MutationObserver(h).observe(document.body,{childList:true,subtree:true});
 </script></body></html>`;

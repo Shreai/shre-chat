@@ -124,7 +124,7 @@ export function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: Vi
               overflowY: 'auto',
             }}
           >
-            {NAV_VIEWS.map((item) => {
+            {NAV_VIEWS.filter((item) => item.key !== 'investor' || __SHRE_INTERNAL__).map((item) => {
               const showSection = item.section !== lastSection;
               lastSection = item.section;
               return (

@@ -9,57 +9,49 @@ export interface ModelInfo {
 }
 
 /**
- * Provider-level model selection.
+ * Two-level model picker: provider groups → individual models.
  *
  * - Auto: routing gates decide the best model per task
- * - ChatGPT: all requests → OpenAI models
- * - Claude: all requests → Anthropic models
- * - Local: all requests → Ollama (local or Shadow PC)
- * - Google: all requests → Gemini models
- *
- * When a provider is selected, shre-router picks the best model from that
- * provider and constrains all fallbacks to the same provider.
+ * - Provider lock: constrain to a provider (router picks best model)
+ * - Specific model: lock to an exact model ID
  */
 
-interface ProviderOption {
-  id: string; // sent as `model` field: "auto" | "provider:openai" | "provider:anthropic" | ...
+interface ProviderGroup {
+  key: string;
   label: string;
-  subtitle: string;
   icon: string;
-  providerKey: string | null; // null = auto
+  providerKeys: string[]; // match against model id prefix
 }
 
-const PROVIDER_OPTIONS: ProviderOption[] = [
-  { id: 'auto', label: 'Auto', subtitle: 'Best model per task', icon: '\u26A1', providerKey: null },
-  {
-    id: 'provider:openai',
-    label: 'ChatGPT',
-    subtitle: 'OpenAI GPT models',
-    icon: '\uD83E\uDDE0',
-    providerKey: 'openai',
-  },
-  {
-    id: 'provider:anthropic',
-    label: 'Claude',
-    subtitle: 'Anthropic Claude models',
-    icon: '\uD83E\uDDCA',
-    providerKey: 'anthropic',
-  },
-  {
-    id: 'provider:ollama',
-    label: 'Local',
-    subtitle: 'Ollama (on-device)',
-    icon: '\uD83D\uDDA5\uFE0F',
-    providerKey: 'ollama',
-  },
-  {
-    id: 'provider:google',
-    label: 'Google',
-    subtitle: 'Gemini models',
-    icon: '\uD83D\uDC8E',
-    providerKey: 'google',
-  },
+const PROVIDER_GROUPS: ProviderGroup[] = [
+  { key: 'ollama', label: 'Local', icon: '\uD83D\uDDA5\uFE0F', providerKeys: ['ollama', 'ollama-remote'] },
+  { key: 'anthropic', label: 'Claude', icon: '\uD83D\uDFE3', providerKeys: ['anthropic', 'claude-cli'] },
+  { key: 'openai', label: 'OpenAI', icon: '\uD83D\uDFE2', providerKeys: ['openai'] },
+  { key: 'google', label: 'Google', icon: '\uD83D\uDD35', providerKeys: ['google'] },
+  { key: 'other', label: 'Other', icon: '\u26AA', providerKeys: [] }, // catch-all
 ];
+
+function getProviderGroup(modelId: string): string {
+  const prefix = modelId.split('/')[0];
+  for (const g of PROVIDER_GROUPS) {
+    if (g.providerKeys.includes(prefix)) return g.key;
+  }
+  return 'other';
+}
+
+function groupModels(models: ModelInfo[]): Map<string, ModelInfo[]> {
+  const groups = new Map<string, ModelInfo[]>();
+  for (const g of PROVIDER_GROUPS) groups.set(g.key, []);
+  for (const m of models) {
+    const key = getProviderGroup(m.id);
+    groups.get(key)!.push(m);
+  }
+  // Remove empty groups (except 'other' which we always skip if empty)
+  for (const [key, list] of groups) {
+    if (list.length === 0) groups.delete(key);
+  }
+  return groups;
+}
 
 interface ModelPickerProps {
   open: boolean;
@@ -72,29 +64,20 @@ interface ModelPickerProps {
   pickerRef: React.RefObject<HTMLDivElement | null>;
 }
 
-/** Check if any model from a given provider is connected */
-function isProviderOnline(models: ModelInfo[], providerKey: string): boolean {
-  const prefixes = providerKey === 'ollama' ? ['ollama', 'ollama-remote'] : [providerKey];
-  return models.some((m) => {
-    const mProvider = m.id.split('/')[0];
-    return prefixes.some((p) => mProvider === p) && m.connected !== false;
-  });
-}
-
-/** Count online models for a provider */
-function providerModelCount(models: ModelInfo[], providerKey: string): number {
-  const prefixes = providerKey === 'ollama' ? ['ollama', 'ollama-remote'] : [providerKey];
-  return models.filter((m) => {
-    const mProvider = m.id.split('/')[0];
-    return prefixes.some((p) => mProvider === p) && m.connected !== false;
-  }).length;
-}
-
-/** Get display label for the selected model */
-function getSelectedLabel(selectedModel: string | null): string {
+/** Get short display name for the selected model */
+function getSelectedLabel(selectedModel: string | null, models: ModelInfo[]): string {
   if (!selectedModel) return 'Auto';
-  const opt = PROVIDER_OPTIONS.find((o) => o.id === selectedModel);
-  return opt?.label || 'Auto';
+  // Provider-level lock
+  if (selectedModel.startsWith('provider:')) {
+    const pKey = selectedModel.replace('provider:', '');
+    const group = PROVIDER_GROUPS.find(
+      (g) => g.key === pKey || g.providerKeys.includes(pKey),
+    );
+    return group?.label || pKey;
+  }
+  // Specific model
+  const m = models.find((x) => x.id === selectedModel);
+  return m?.name || selectedModel.split('/').pop() || 'Auto';
 }
 
 export function ModelPicker({
@@ -108,6 +91,12 @@ export function ModelPicker({
   pickerRef,
 }: ModelPickerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+
+  // Reset expanded group when closing
+  useEffect(() => {
+    if (!open) setExpandedGroup(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -128,14 +117,21 @@ export function ModelPicker({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (expandedGroup) setExpandedGroup(null);
+        else onClose();
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, onClose, expandedGroup]);
 
-  const isSelected = (optId: string) =>
-    optId === 'auto' ? !selectedModel : selectedModel === optId;
+  const grouped = groupModels(models);
+
+  const isAutoSelected = !selectedModel;
+  const isProviderSelected = (groupKey: string) =>
+    selectedModel === `provider:${groupKey}`;
+  const isModelSelected = (modelId: string) => selectedModel === modelId;
 
   return (
     <div ref={pickerRef} style={{ position: 'relative' }}>
@@ -147,8 +143,8 @@ export function ModelPicker({
           background: open ? 'var(--c-bg-active)' : 'transparent',
           border: selectedModel ? '1px solid var(--c-accent-soft)' : '1px solid transparent',
         }}
-        title="Switch AI provider"
-        aria-label="Switch AI provider"
+        title="Switch AI model"
+        aria-label="Switch AI model"
       >
         <svg
           className="h-3.5 w-3.5"
@@ -161,8 +157,8 @@ export function ModelPicker({
           <path d="M2 17l10 5 10-5" />
           <path d="M2 12l10 5 10-5" />
         </svg>
-        <span className="hidden sm:inline max-w-[100px] truncate">
-          {getSelectedLabel(selectedModel)}
+        <span className="hidden sm:inline max-w-[120px] truncate">
+          {getSelectedLabel(selectedModel, models)}
         </span>
         <svg
           className="h-3 w-3 opacity-50"
@@ -183,22 +179,36 @@ export function ModelPicker({
             ref={panelRef}
             className="absolute right-0 z-50 flex flex-col rounded-xl overflow-hidden shadow-2xl model-picker-dropdown"
             style={{
-              width: 280,
+              width: 300,
               top: '100%',
               marginTop: 4,
-              maxHeight: 'min(400px, calc(var(--vv-height, 100dvh) - 100px))',
+              maxHeight: 'min(480px, calc(var(--vv-height, 100dvh) - 100px))',
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-1)',
               animation: 'picker-fade-in 150ms ease-out forwards',
             }}
           >
+            {/* Header */}
             <div
               className="px-3 pt-3 pb-2 shrink-0"
               style={{ borderBottom: '1px solid var(--c-border-2)' }}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold" style={{ color: 'var(--c-text-1)' }}>
-                  AI Provider
+                  {expandedGroup ? (
+                    <button
+                      onClick={() => setExpandedGroup(null)}
+                      className="flex items-center gap-1"
+                      style={{ background: 'none', border: 'none', color: 'var(--c-text-1)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: 0 }}
+                    >
+                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="15 18 9 12 15 6" />
+                      </svg>
+                      {PROVIDER_GROUPS.find((g) => g.key === expandedGroup)?.label} Models
+                    </button>
+                  ) : (
+                    'AI Model'
+                  )}
                 </span>
                 <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
                   for {agentName}
@@ -206,80 +216,227 @@ export function ModelPicker({
               </div>
             </div>
 
+            {/* Body */}
             <div className="flex-1 overflow-y-auto overscroll-contain py-1">
-              {PROVIDER_OPTIONS.map((opt) => {
-                const active = isSelected(opt.id);
-                const online = opt.providerKey ? isProviderOnline(models, opt.providerKey) : true;
-                const count = opt.providerKey
-                  ? providerModelCount(models, opt.providerKey)
-                  : models.filter((m) => m.connected !== false).length;
+              {expandedGroup ? (
+                /* ── Individual models for expanded provider ── */
+                <>
+                  {/* Provider-level lock option — only for known providers, not the catch-all "other" group */}
+                  {expandedGroup !== 'other' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          onSelectModel(`provider:${expandedGroup}`);
+                          onClose();
+                        }}
+                        className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
+                        style={{
+                          color: isProviderSelected(expandedGroup) ? 'var(--c-accent)' : 'var(--c-text-2)',
+                          background: isProviderSelected(expandedGroup) ? 'var(--c-accent-soft)' : 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isProviderSelected(expandedGroup))
+                            e.currentTarget.style.background = 'var(--c-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isProviderSelected(expandedGroup))
+                            e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <span className="text-[13px] w-5 text-center opacity-60">*</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] font-medium">Auto (best from provider)</div>
+                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                            Router picks optimal model
+                          </div>
+                        </div>
+                        {isProviderSelected(expandedGroup) && <CheckIcon />}
+                      </button>
 
-                return (
+                      <div
+                        className="mx-3 my-1"
+                        style={{ borderTop: '1px solid var(--c-border-2)' }}
+                      />
+                    </>
+                  )}
+
+                  {/* Individual models */}
+                  {(grouped.get(expandedGroup) || []).map((m) => {
+                    const active = isModelSelected(m.id);
+                    const offline = m.connected === false;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => {
+                          if (offline) return;
+                          onSelectModel(m.id);
+                          onClose();
+                        }}
+                        className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
+                        style={{
+                          color: active ? 'var(--c-accent)' : offline ? 'var(--c-text-4)' : 'var(--c-text-2)',
+                          background: active ? 'var(--c-accent-soft)' : 'transparent',
+                          opacity: offline ? 0.4 : 1,
+                          cursor: offline ? 'not-allowed' : 'pointer',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!active && !offline)
+                            e.currentTarget.style.background = 'var(--c-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!active) e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <span className="text-[13px] w-5 text-center">{m.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] font-medium truncate">{m.name}</div>
+                          <div
+                            className="text-[10px] truncate"
+                            style={{ color: 'var(--c-text-4)' }}
+                          >
+                            {m.id}
+                          </div>
+                        </div>
+                        {offline && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                            style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
+                          >
+                            offline
+                          </span>
+                        )}
+                        {active && <CheckIcon />}
+                      </button>
+                    );
+                  })}
+                </>
+              ) : (
+                /* ── Top-level: Auto + provider groups ── */
+                <>
+                  {/* Auto option */}
                   <button
-                    key={opt.id}
                     onClick={() => {
-                      if (!online && opt.providerKey) return;
-                      onSelectModel(opt.id === 'auto' ? null : opt.id);
+                      onSelectModel(null);
                       onClose();
                     }}
                     className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
                     style={{
-                      color: active
-                        ? 'var(--c-accent)'
-                        : !online
-                          ? 'var(--c-text-4)'
-                          : 'var(--c-text-2)',
-                      background: active ? 'var(--c-accent-soft)' : 'transparent',
-                      opacity: !online && opt.providerKey ? 0.4 : 1,
-                      cursor: !online && opt.providerKey ? 'not-allowed' : 'pointer',
+                      color: isAutoSelected ? 'var(--c-accent)' : 'var(--c-text-2)',
+                      background: isAutoSelected ? 'var(--c-accent-soft)' : 'transparent',
                     }}
                     onMouseEnter={(e) => {
-                      if (!active && online) e.currentTarget.style.background = 'var(--c-bg-hover)';
+                      if (!isAutoSelected) e.currentTarget.style.background = 'var(--c-bg-hover)';
                     }}
                     onMouseLeave={(e) => {
-                      if (!active) e.currentTarget.style.background = 'transparent';
+                      if (!isAutoSelected) e.currentTarget.style.background = 'transparent';
                     }}
                   >
-                    <span className="text-lg w-7 text-center">{opt.icon}</span>
+                    <span className="text-lg w-7 text-center">{'\u26A1'}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium">{opt.label}</div>
+                      <div className="text-[13px] font-medium">Auto</div>
                       <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                        {opt.subtitle}
-                        {count > 0 ? ` \u00B7 ${count} models` : ''}
+                        Best model per task
+                        {' \u00B7 '}
+                        {models.filter((m) => m.connected !== false).length} models online
                       </div>
                     </div>
-                    {!online && opt.providerKey && (
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded"
-                        style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
-                      >
-                        offline
-                      </span>
-                    )}
-                    {active && (
-                      <svg
-                        className="h-4 w-4 shrink-0"
-                        style={{ color: 'var(--c-accent)' }}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
+                    {isAutoSelected && <CheckIcon />}
                   </button>
-                );
-              })}
+
+                  <div
+                    className="mx-3 my-1"
+                    style={{ borderTop: '1px solid var(--c-border-2)' }}
+                  />
+
+                  {/* Provider groups */}
+                  {PROVIDER_GROUPS.map((group) => {
+                    const groupModels = grouped.get(group.key);
+                    if (!groupModels || groupModels.length === 0) return null;
+
+                    const onlineCount = groupModels.filter(
+                      (m) => m.connected !== false,
+                    ).length;
+                    const allOffline = onlineCount === 0;
+                    const providerActive = isProviderSelected(group.key);
+                    // Check if a specific model from this group is selected
+                    const hasModelSelected = groupModels.some((m) =>
+                      isModelSelected(m.id),
+                    );
+                    const highlighted = providerActive || hasModelSelected;
+
+                    return (
+                      <button
+                        key={group.key}
+                        onClick={() => {
+                          if (allOffline) return;
+                          setExpandedGroup(group.key);
+                        }}
+                        className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
+                        style={{
+                          color: highlighted
+                            ? 'var(--c-accent)'
+                            : allOffline
+                              ? 'var(--c-text-4)'
+                              : 'var(--c-text-2)',
+                          background: highlighted ? 'var(--c-accent-soft)' : 'transparent',
+                          opacity: allOffline ? 0.4 : 1,
+                          cursor: allOffline ? 'not-allowed' : 'pointer',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!highlighted && !allOffline)
+                            e.currentTarget.style.background = 'var(--c-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!highlighted) e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <span className="text-lg w-7 text-center">{group.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium">{group.label}</div>
+                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                            {onlineCount} model{onlineCount !== 1 ? 's' : ''} online
+                            {hasModelSelected && (
+                              <span style={{ color: 'var(--c-accent)' }}>
+                                {' \u00B7 '}
+                                {models.find((m) => isModelSelected(m.id))?.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {allOffline ? (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                            style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
+                          >
+                            offline
+                          </span>
+                        ) : (
+                          <svg
+                            className="h-3.5 w-3.5 shrink-0 opacity-40"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <polyline points="9 6 15 12 9 18" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
 
+            {/* Footer */}
             <div
               className="px-3 py-2 shrink-0"
               style={{ borderTop: '1px solid var(--c-border-2)' }}
             >
               <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                Auto picks the best model per task. Lock to a provider to force all requests through
-                it.
+                {expandedGroup
+                  ? 'Pick a specific model or let the router choose the best one from this provider.'
+                  : 'Auto picks the best model per task. Expand a provider to pick a specific model.'}
               </div>
             </div>
           </div>
@@ -304,5 +461,20 @@ export function ModelPicker({
         }
       `}</style>
     </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0"
+      style={{ color: 'var(--c-accent)' }}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }

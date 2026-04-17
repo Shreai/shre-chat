@@ -539,7 +539,7 @@ export const ECOSYSTEM_APPS = [
     id: 'status',
     name: 'Status',
     icon: 'H',
-    url: 'https://status.nirtek.net',
+    url: isRemote ? 'https://status.nirtek.net' : `http://localhost:${ports.services?.['shre-health']?.port ?? 5485}/dashboard`,
     color: 'from-lime-500 to-green-500',
     description: 'Health Monitor',
   },

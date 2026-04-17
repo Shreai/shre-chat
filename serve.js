@@ -65,6 +65,12 @@ const GATEWAY_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
+// ── Production safety: block empty passwords ──
+if (process.env.NODE_ENV === "production" && !process.env.CORTEX_PG_PASSWORD) {
+  log.error("CORTEX_PG_PASSWORD is required in production. Exiting.");
+  process.exit(1);
+}
+
 // ── CortexDB PostgreSQL pool (replaces execSync docker exec psql) ──
 const cortexPool = new pg.Pool({
   host: "127.0.0.1",
@@ -1019,7 +1025,12 @@ function checkAuth(req) {
     if (claims) return claims;
   }
   // DEV_BYPASS_AUTH: allow unauthenticated access in dev/test with demo claims
+  // BLOCKED in production to prevent accidental exposure
   if (process.env.DEV_BYPASS_AUTH === "true") {
+    if (process.env.NODE_ENV === "production") {
+      log.error("DEV_BYPASS_AUTH is set but NODE_ENV=production — IGNORING for security");
+      return null;
+    }
     return { sub: "dev-user", username: "dev", name: "Developer", activeWorkspaceId: "dev-workspace", role: "owner", scopes: ["*"] };
   }
   return null;
@@ -1052,6 +1063,16 @@ function userContextHeaders(req) {
   if (ctx.companyId) headers["X-Company-Id"] = ctx.companyId;
   // Forward original auth token so downstream can verify if needed
   if (req.headers["authorization"]) headers["Authorization"] = req.headers["authorization"];
+  return headers;
+}
+
+/** Context headers WITHOUT Authorization — for proxy calls that use the service token */
+function userContextHeadersNoAuth(req) {
+  const ctx = getUserContext(req);
+  const headers = {};
+  if (ctx.userId !== "system") headers["X-User-Id"] = ctx.userId;
+  if (ctx.tenantId !== "default") headers["X-Workspace-Id"] = ctx.tenantId;
+  if (ctx.companyId) headers["X-Company-Id"] = ctx.companyId;
   return headers;
 }
 
@@ -1238,7 +1259,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/check", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo", "/api/files/view", "/api/files/preview", "/api/files/recent"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/signup", "/api/auth/check", "/api/auth/gate-sso", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo", "/api/files/view", "/api/files/preview", "/api/files/recent"]);
 
 // ── CSRF token generation + validation ─────────────────────────────
 // Token = HMAC-SHA256(sessionSeed, authSigningKey || fallback). Validated on POST/PUT/DELETE.
@@ -1690,6 +1711,16 @@ async function requestHandler(req, res) {
 
   // ── Route module delegation ────────────────────────────────────
   const _routeUtils = { json, collectBody, rateLimit, authCookie };
+  // Auth rate limiting — 10 attempts/min per IP to prevent brute force
+  if (url.pathname.startsWith("/api/auth/") && req.method === "POST") {
+    const rl = rateLimit(clientIp, "auth", 10, 60_000);
+    if (!rl.allowed) {
+      res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(rl.retryAfter) });
+      res.end(JSON.stringify({ error: "Too many auth attempts. Try again later.", retryAfterSeconds: rl.retryAfter }));
+      return;
+    }
+  }
+
   // Auth routes (public — before auth middleware)
   if (await handleAuth(req, res, url, _routeUtils)) return;
 
@@ -2132,6 +2163,108 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.error("Workspace provisioning failed:", err.message);
       json(res, { error: "Provisioning failed" }, 500);
+    }
+    return;
+  }
+
+  // ── Unified Onboarding proxy (MIB007) ──────────────────────────
+  // NOTE: Use userContextHeadersNoAuth to avoid overwriting the service token
+  // with the user's JWT. MIB007 authenticates these calls via the service token;
+  // the real userId is passed in the body/query params + X-User-Id header.
+  if (url.pathname === "/api/onboarding/status" && req.method === "GET") {
+    try {
+      const ctx = getUserContext(req);
+      const userId = url.searchParams.get("userId") || ctx.userId;
+      const upstream = await mib007Fetch(
+        `/api/aros/onboarding/status?userId=${encodeURIComponent(userId)}&tenantId=${encodeURIComponent(userId)}`,
+        { signal: AbortSignal.timeout(5000), headers: userContextHeadersNoAuth(req) }
+      );
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Onboarding status proxy failed:", err.message);
+      json(res, { started: false, phase: "identity", progress: 0 }, 200);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/onboarding/state" && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      const parsed = JSON.parse(body);
+      const ctx = getUserContext(req);
+      if (!parsed.tenantId) parsed.tenantId = ctx.userId;
+      if (!parsed.userId) parsed.userId = ctx.userId;
+      const upstream = await mib007Fetch("/api/aros/onboarding/state", {
+        method: "POST",
+        signal: AbortSignal.timeout(8000),
+        headers: { ...userContextHeadersNoAuth(req), "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Onboarding state proxy failed:", err.message);
+      json(res, { error: "mib007 unreachable" }, 502);
+    }
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/onboarding/unified/") && req.method === "POST") {
+    try {
+      const body = await collectBody(req);
+      const parsed = JSON.parse(body);
+      const ctx = getUserContext(req);
+      if (!parsed.userId) parsed.userId = ctx.userId;
+      const subPath = url.pathname.replace("/api/onboarding/", "/onboarding/");
+      const upstream = await mib007Fetch(`/api/aros${subPath}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(8000),
+        headers: { ...userContextHeadersNoAuth(req), "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Onboarding unified proxy failed:", err.message);
+      json(res, { error: "mib007 unreachable" }, 502);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/onboarding/landing-target" && req.method === "GET") {
+    try {
+      const ctx = getUserContext(req);
+      const userId = url.searchParams.get("userId") || ctx.userId;
+      const upstream = await mib007Fetch(
+        `/api/aros/onboarding/landing-target?userId=${encodeURIComponent(userId)}`,
+        { signal: AbortSignal.timeout(5000), headers: userContextHeadersNoAuth(req) }
+      );
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Onboarding landing-target proxy failed:", err.message);
+      json(res, { target: "chat", phase: "unknown" }, 200);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/onboarding/agent-bundles" && req.method === "GET") {
+    try {
+      const upstream = await mib007Fetch("/api/aros/onboarding/agent-bundles", {
+        signal: AbortSignal.timeout(5000),
+        headers: userContextHeadersNoAuth(req),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Agent bundles proxy failed:", err.message);
+      json(res, { bundles: [], agents: [] }, 200);
     }
     return;
   }
@@ -3178,6 +3311,33 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Nodes proxy failed:", err.message);
       json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Apps proxy (shre-skills /v1/apps) ──
+  if (url.pathname === "/api/apps" && req.method === "GET") {
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const r = httpsRequest({
+          hostname: "127.0.0.1", port: SKILLS_PORT, path: "/v1/apps", method: "GET",
+          headers: { Authorization: `Bearer ${SKILLS_KEY}` },
+          rejectUnauthorized: false,
+        }, (upstream) => {
+          let buf = "";
+          upstream.on("data", (c) => buf += c);
+          upstream.on("end", () => {
+            try { resolve(JSON.parse(buf)); } catch { resolve({ apps: [] }); }
+          });
+        });
+        r.on("error", reject);
+        r.setTimeout(4000, () => { r.destroy(); reject(new Error("timeout")); });
+        r.end();
+      });
+      json(res, data);
+    } catch (err) {
+      log.warn("Apps proxy failed:", err.message);
+      json(res, { apps: [] }, 502);
     }
     return;
   }

@@ -11,13 +11,29 @@ interface LoginProps {
 
 const REMEMBER_KEY = 'shre_remember_user';
 
+type AuthMode = 'login' | 'signup';
+
 export function LoginView({ onLogin }: LoginProps) {
+  const [mode, setMode] = useState<AuthMode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Signup fields
+  const [signupName, setSignupName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [signupWorkspace, setSignupWorkspace] = useState('');
+  const [businessType, setBusinessType] = useState<'solo' | 'multi_store' | 'corporate' | 'reseller'>('solo');
+
+  // Invite token from URL (?invite=<token>)
+  const [inviteToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('invite') || '';
+  });
 
   const [needs2FA, setNeeds2FA] = useState(false);
   const [maskedEmail, setMaskedEmail] = useState('');
@@ -30,13 +46,17 @@ export function LoginView({ onLogin }: LoginProps) {
   const otpRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Auto-switch to signup if invite link
+    if (inviteToken) {
+      setMode('signup');
+    }
     const saved = localStorage.getItem(REMEMBER_KEY);
     if (saved) {
       setUsername(saved);
       setRememberMe(true);
     }
     inputRef.current?.focus();
-  }, []);
+  }, [inviteToken]);
 
   useEffect(() => {
     if (needs2FA) otpRef.current?.focus();
@@ -116,6 +136,47 @@ export function LoginView({ onLogin }: LoginProps) {
     setLoading(false);
   };
 
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signupEmail.trim() || !signupPassword) return;
+    if (signupPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: signupEmail.trim(),
+          password: signupPassword,
+          name: signupName.trim() || undefined,
+          workspaceName: signupWorkspace.trim() || undefined,
+          ...(inviteToken ? { inviteToken } : {}),
+          ...(!inviteToken ? { businessType } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Signup failed');
+        setLoading(false);
+        return;
+      }
+      onLogin(data.token, data.user, data);
+    } catch {
+      setError('Connection failed');
+      setLoading(false);
+    }
+  };
+
+  const switchMode = (m: AuthMode) => {
+    setMode(m);
+    setError('');
+  };
+
   const EyeIcon = ({ open }: { open: boolean }) => (
     <svg
       width="18"
@@ -166,7 +227,7 @@ export function LoginView({ onLogin }: LoginProps) {
             Shre Chat
           </h1>
           <p className="text-[13px] m-0" style={{ color: 'var(--c-text-4)' }}>
-            {needs2FA ? 'Enter verification code' : 'Sign in to continue'}
+            {needs2FA ? 'Enter verification code' : mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
           </p>
         </div>
 
@@ -178,7 +239,154 @@ export function LoginView({ onLogin }: LoginProps) {
             boxShadow: '0 8px 40px rgba(0,0,0,0.3)',
           }}
         >
-          {!needs2FA ? (
+          {/* Mode tabs — shown when not in 2FA flow */}
+          {!needs2FA && (
+            <div className="flex mb-5 rounded-lg overflow-hidden" style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}>
+              {(['login', 'signup'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => switchMode(m)}
+                  className="flex-1 py-2 text-[13px] font-medium transition-colors"
+                  style={{
+                    background: mode === m ? 'var(--c-accent, #638dff)' : 'transparent',
+                    color: mode === m ? '#fff' : 'var(--c-text-3)',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {m === 'login' ? 'Sign In' : 'Create Account'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!needs2FA && mode === 'signup' ? (
+            <form onSubmit={handleSignup} autoComplete="on">
+              {inviteToken && (
+                <div
+                  className="rounded-[10px] p-3.5 mb-5"
+                  style={{ background: 'rgba(99,141,255,0.08)', border: '1px solid rgba(99,141,255,0.15)' }}
+                >
+                  <div className="text-[13px] font-medium" style={{ color: 'var(--c-accent)' }}>
+                    You've been invited to a workspace
+                  </div>
+                  <div className="text-[11px] mt-0.5" style={{ color: 'var(--c-text-4)' }}>
+                    Create your account to join
+                  </div>
+                </div>
+              )}
+              <div className="mb-4">
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                  Name
+                </label>
+                <SInput
+                  type="text"
+                  value={signupName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupName(e.target.value)}
+                  autoComplete="name"
+                  placeholder="Your name"
+                  style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                  Email <span style={{ color: 'var(--c-accent)' }}>*</span>
+                </label>
+                <SInput
+                  type="email"
+                  value={signupEmail}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupEmail(e.target.value)}
+                  autoComplete="email"
+                  placeholder="you@company.com"
+                  required
+                  style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                  Password <span style={{ color: 'var(--c-accent)' }}>*</span>
+                </label>
+                <SInput
+                  type="password"
+                  value={signupPassword}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupPassword(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="Min 8 characters"
+                  required
+                  style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                />
+              </div>
+              {!inviteToken && (
+                <div className="mb-4">
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                    Business Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { id: 'solo', label: 'Single Store', desc: 'One location' },
+                      { id: 'multi_store', label: 'Multi-Store', desc: 'Multiple locations' },
+                      { id: 'corporate', label: 'Corporate', desc: 'Regional/national chain' },
+                      { id: 'reseller', label: 'Reseller', desc: 'Manage client stores' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setBusinessType(opt.id)}
+                        className="text-left p-2.5 rounded-lg transition-all"
+                        style={{
+                          background: businessType === opt.id ? 'rgba(99,141,255,0.12)' : 'var(--c-bg-1)',
+                          border: `1.5px solid ${businessType === opt.id ? 'var(--c-accent, #638dff)' : 'var(--c-border-2)'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div className="text-[12px] font-medium" style={{ color: businessType === opt.id ? 'var(--c-accent)' : 'var(--c-text-1)' }}>
+                          {opt.label}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!inviteToken && (
+                <div className="mb-5">
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                    {businessType === 'corporate' ? 'Company Name' : businessType === 'reseller' ? 'Reseller Name' : 'Business Name'}
+                  </label>
+                  <SInput
+                    type="text"
+                    value={signupWorkspace}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupWorkspace(e.target.value)}
+                    placeholder="My Company"
+                    style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                  />
+                  <div className="text-[10px] mt-1" style={{ color: 'var(--c-text-4)' }}>
+                    Optional — defaults to your name
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <SBadge variant="destructive" className="w-full justify-start px-3 py-2 mb-4 text-xs rounded-lg">
+                  {error}
+                </SBadge>
+              )}
+
+              <SButton
+                type="submit"
+                disabled={loading || !signupEmail.trim() || !signupPassword || signupPassword.length < 8}
+                className="w-full h-11 text-sm font-semibold"
+                style={{
+                  borderRadius: 10,
+                  background: loading ? 'rgba(99,141,255,0.4)' : 'var(--c-accent, #638dff)',
+                  opacity: !signupEmail.trim() || signupPassword.length < 8 ? 0.5 : 1,
+                }}
+              >
+                {loading ? 'Creating account...' : 'Create Account'}
+              </SButton>
+            </form>
+          ) : !needs2FA ? (
             <form ref={formRef} onSubmit={handleSubmit} autoComplete="on">
               <input type="hidden" name="action" value="login" />
               <div className="mb-4">

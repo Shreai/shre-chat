@@ -36,6 +36,10 @@ const proxyConfig = {
 };
 
 export default defineConfig({
+  define: {
+    __SHRE_INTERNAL__: JSON.stringify(process.env.SHRE_INTERNAL === 'true'),
+    __SHRE_CHANNEL__: JSON.stringify(process.env.SHRE_CHANNEL || 'production'),
+  },
   plugins: [react(), swVersionPlugin()],
   server: {
     host: '0.0.0.0',
@@ -48,6 +52,7 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {

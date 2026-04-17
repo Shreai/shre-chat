@@ -37,6 +37,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { LoginView } from './LoginView';
 import { loadUserProfile, saveUserProfile, createDefaultProfile, type UserProfile } from './store';
+import { OnboardingView } from './OnboardingView';
 import { useAnomalyStream } from './hooks/useAnomalyStream';
 import InstallBanner from './components/InstallBanner';
 
@@ -156,8 +157,8 @@ const AGENT_KEY = 'shre-active-agent';
 const THEME_KEY = 'shre-theme';
 
 export function App() {
-  // ── Demo mode — no auth required, shows sandbox experience ──
-  const isDemoMode = !!(
+  // ── Demo mode — internal only, gated by compile flag ──
+  const isDemoMode = __SHRE_INTERNAL__ && !!(
     (window as any).__SHRE_DEMO_MODE__ ||
     new URLSearchParams(window.location.search).get('demo') === 'true'
   );
@@ -252,22 +253,140 @@ function AuthenticatedApp({
   onWorkspaceSwitch: (workspaceId: string) => void;
 }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
+  const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done'>('loading');
+  const checkedRef = useRef(false);
 
-  if (!userProfile || userProfile.onboardedAt === 0) {
-    const completed = {
-      ...(userProfile || createDefaultProfile(authUser)),
-      onboardedAt: Date.now(),
-    };
-    saveUserProfile(completed);
-    setUserProfile(completed);
-    return null;
+  useEffect(() => {
+    if (checkedRef.current) return;
+    checkedRef.current = true;
+    const ac = new AbortController();
+
+    fetch('/api/onboarding/status', { signal: ac.signal })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (ac.signal.aborted) return;
+        if (data?.phase === 'complete') {
+          // Server says onboarding is done — sync identity to local profile if needed
+          if (!userProfile || userProfile.onboardedAt === 0) {
+            const completed = {
+              ...(userProfile || createDefaultProfile(authUser)),
+              name: data.identityData?.name || authUser.name || '',
+              role: data.identityData?.role || authUser.role || '',
+              onboardedAt: data.updatedAt ? new Date(data.updatedAt).getTime() : Date.now(),
+            };
+            if (data.identityData?.businessName) {
+              completed.business = {
+                ...completed.business,
+                name: data.identityData.businessName,
+                industry: data.identityData.businessType || '',
+                size: data.identityData.businessSize || '',
+              };
+            }
+            saveUserProfile(completed);
+            setUserProfile(completed);
+          }
+          setOnboardingPhase('done');
+        } else {
+          // Server says not complete — check for local migration
+          const migrated = localStorage.getItem('shre-onboarding-migrated');
+          if (!migrated && userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
+            // Existing local user — push to server as complete, don't re-onboard
+            fetch('/api/onboarding/state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                onboardingPhase: 'complete',
+                step: 'dashboard',
+                completedSteps: ['welcome', 'marketplace', 'configure', 'stores', 'model', 'agents', 'dashboard'],
+                path: 'operator',
+                identityData: {
+                  name: userProfile.name,
+                  role: userProfile.role,
+                  businessName: userProfile.business?.name || '',
+                  businessType: userProfile.business?.industry || '',
+                  businessSize: userProfile.business?.size || '',
+                },
+                chatPreferences: userProfile.preferences ? {
+                  communicationStyle: userProfile.preferences.communicationStyle,
+                  goals: userProfile.business?.goals || [],
+                  tools: userProfile.business?.tools || [],
+                } : undefined,
+              }),
+            })
+              .then(() => localStorage.setItem('shre-onboarding-migrated', '1'))
+              .catch(() => { /* non-fatal */ });
+            setOnboardingPhase('done');
+          } else {
+            setOnboardingPhase('needed');
+          }
+        }
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        // MIB007 unreachable — fall back to localStorage
+        if (userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
+          setOnboardingPhase('done');
+        } else {
+          setOnboardingPhase('needed');
+        }
+      });
+    return () => ac.abort();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (onboardingPhase === 'loading') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary, #0a0a0a)' }}>
+        <div style={{ color: 'var(--text-secondary, #888)', fontSize: '14px' }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (onboardingPhase === 'needed') {
+    return (
+      <OnboardingView
+        profile={userProfile || createDefaultProfile(authUser)}
+        onComplete={(completed) => {
+          // Persist to server
+          fetch('/api/onboarding/unified/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              selectedAgents: [],
+              chatPreferences: completed.preferences ? {
+                communicationStyle: completed.preferences.communicationStyle,
+                goals: completed.business?.goals || [],
+                tools: completed.business?.tools || [],
+              } : undefined,
+            }),
+          }).catch(() => { /* non-fatal */ });
+          saveUserProfile(completed);
+          setUserProfile(completed);
+          setOnboardingPhase('done');
+        }}
+        onSkip={() => {
+          const skipped = {
+            ...(userProfile || createDefaultProfile(authUser)),
+            onboardedAt: Date.now(),
+          };
+          // Push skip state to server
+          fetch('/api/onboarding/state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ onboardingPhase: 'complete' }),
+          }).catch(() => { /* non-fatal */ });
+          saveUserProfile(skipped);
+          setUserProfile(skipped);
+          setOnboardingPhase('done');
+        }}
+      />
+    );
   }
 
   return (
     <MainApp
       authUser={authUser}
       onLogout={onLogout}
-      userProfile={userProfile}
+      userProfile={userProfile!}
       setUserProfile={setUserProfile}
       activeWorkspace={activeWorkspace}
       workspaces={workspaces}
@@ -771,7 +890,7 @@ function MainApp({
                       <BillingView />
                     </ViewErrorBoundary>
                   )}
-                  {view === 'investor' && (
+                  {__SHRE_INTERNAL__ && view === 'investor' && (
                     <ViewErrorBoundary viewName="Investor Dashboard">
                       <InvestorView />
                     </ViewErrorBoundary>

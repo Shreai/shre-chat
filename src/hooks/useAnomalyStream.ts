@@ -45,8 +45,8 @@ const RAPIDRMS_SSE_BASE =
   typeof window !== 'undefined'
     ? (window as Window & { __RAPIDRMS_URL__?: string }).__RAPIDRMS_URL__ ||
       (import.meta as { env?: { VITE_RAPIDRMS_URL?: string } }).env?.VITE_RAPIDRMS_URL ||
-      'http://localhost:8899'
-    : 'http://localhost:8899';
+      `${window.location.origin}/api/rapidrms`
+    : '';
 
 /**
  * Try to discover the active workspace from the RapidRMS session endpoint.

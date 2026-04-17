@@ -29,7 +29,7 @@ export function WelcomeScreen({
     if (!userProfile?.preferences?.showTasksOnGreeting) return;
     setTasksLoading(true);
     fetch(
-      `${import.meta.env.VITE_TASKS_URL ?? 'https://127.0.0.1:5460'}/v1/tasks?status=todo&limit=5`,
+      `${import.meta.env.VITE_TASKS_URL ?? '/api/tasks'}/v1/tasks?status=todo&limit=5`,
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((data: PendingTask[]) => setTasks(Array.isArray(data) ? data.slice(0, 5) : []))
