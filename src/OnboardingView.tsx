@@ -20,6 +20,18 @@ interface AgentBundle {
   recommended?: boolean;
 }
 
+interface ConnectorNode {
+  id: string;
+  name: string;
+  category: string;
+  configSchema?: Record<string, { type: string; required?: boolean; label: string; secret?: boolean; default?: unknown }>;
+}
+
+interface TestResult {
+  valid: boolean;
+  message?: string;
+}
+
 const INDUSTRIES = [
   'Retail / C-Store',
   'Restaurant / QSR',
@@ -46,12 +58,11 @@ const BIZ_SIZES = [
   { value: 'large', label: '50+ people' },
 ];
 
-const DATA_SOURCES = [
-  { id: 'rapidrms', name: 'RapidRMS', category: 'POS' },
-  { id: 'square', name: 'Square', category: 'POS' },
-  { id: 'clover', name: 'Clover', category: 'POS' },
-  { id: 'verifone', name: 'Verifone', category: 'POS' },
-  { id: 'csv', name: 'CSV / Excel Import', category: 'File' },
+const FALLBACK_SOURCES: ConnectorNode[] = [
+  { id: 'com.nirlab.rapidrms', name: 'RapidRMS', category: 'pos' },
+  { id: 'com.nirlab.square', name: 'Square', category: 'pos' },
+  { id: 'com.nirlab.clover', name: 'Clover', category: 'pos' },
+  { id: 'com.nirlab.csv-import', name: 'CSV / Excel Import', category: 'file' },
 ];
 
 const COMM_STYLES = [
@@ -67,7 +78,11 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
   const [p, setP] = useState<UserProfile>({ ...profile });
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const [connectors, setConnectors] = useState<ConnectorNode[]>(FALLBACK_SOURCES);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [connectorConfigs, setConnectorConfigs] = useState<Record<string, Record<string, string>>>({});
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const [testing, setTesting] = useState<string | null>(null);
   const [bundles, setBundles] = useState<AgentBundle[]>([]);
   const [selectedBundle, setSelectedBundle] = useState<string | null>(null);
 
@@ -103,6 +118,14 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
       .catch(() => {}); // Server unreachable — start fresh
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch marketplace connectors on mount
+  useEffect(() => {
+    fetch('/api/onboarding/connectors')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (Array.isArray(data) && data.length > 0) setConnectors(data); })
+      .catch(() => {});
+  }, []);
+
   // Fetch agent bundles when entering phase 2
   useEffect(() => {
     if (phase === 2 && bundles.length === 0) {
@@ -129,6 +152,26 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
 
   const canAdvance = phase === 0 ? p.name.trim().length > 0 : true;
 
+  async function testConnector(nodeId: string) {
+    const config = connectorConfigs[nodeId];
+    if (!config) return;
+    setTesting(nodeId);
+    setTestResults(prev => ({ ...prev, [nodeId]: undefined as any }));
+    try {
+      const res = await fetch(`/api/onboarding/connectors/${encodeURIComponent(nodeId)}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      const data = await res.json();
+      setTestResults(prev => ({ ...prev, [nodeId]: data }));
+    } catch {
+      setTestResults(prev => ({ ...prev, [nodeId]: { valid: false, message: 'Connection failed' } }));
+    } finally {
+      setTesting(null);
+    }
+  }
+
   async function handlePhaseComplete() {
     setSaving(true);
     try {
@@ -147,13 +190,27 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         });
         setPhase(1);
       } else if (phase === 1) {
-        // Phase 2 complete (Connect) — advance to activate
+        // Phase 2 complete (Connect) — save connector selection + configs
         if (selectedSources.length === 0) {
-          // User skipping connect
           await fetch('/api/onboarding/unified/skip-connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
+          });
+        } else {
+          // Save selected connectors and their configs to server
+          const selectedNodes = selectedSources.map(id => {
+            const node = connectors.find(c => c.id === id);
+            return { nodeId: id, name: node?.name || id, category: node?.category || 'unknown' };
+          });
+          await fetch('/api/onboarding/state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              onboardingPhase: 'activate',
+              selectedNodes,
+              nodeConfigs: connectorConfigs,
+            }),
           });
         }
         setPhase(2);
@@ -199,7 +256,6 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           setWarning('Workspace setup incomplete — you can configure it later in Settings.');
         }
 
-        const bundle = bundles.find(b => b.id === selectedBundle);
         onComplete(completed, bundle?.agents || [], selectedBundle);
         return;
       }
@@ -271,36 +327,99 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           Optional — connect your POS or import data so AI can start analyzing right away
         </p>
       </div>
+
+      {/* Connector picker */}
       <div className="space-y-2">
-        {DATA_SOURCES.map((src) => (
-          <button
-            key={src.id}
-            onClick={() => setSelectedSources(prev =>
-              prev.includes(src.id) ? prev.filter(s => s !== src.id) : [...prev, src.id]
-            )}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all text-sm"
-            style={{
-              border: `1px solid ${selectedSources.includes(src.id) ? 'var(--c-accent)' : 'var(--c-border-2)'}`,
-              background: selectedSources.includes(src.id) ? 'rgba(99,102,241,0.08)' : 'var(--c-bg-card)',
-              color: 'var(--c-text-2)',
-            }}
-          >
-            <div className="w-5 h-5 rounded border flex items-center justify-center text-xs"
-              style={{
-                borderColor: selectedSources.includes(src.id) ? 'var(--c-accent)' : 'var(--c-border-2)',
-                background: selectedSources.includes(src.id) ? 'var(--c-accent)' : 'transparent',
-                color: selectedSources.includes(src.id) ? '#fff' : 'transparent',
-              }}
-            >
-              {selectedSources.includes(src.id) ? '\u2713' : ''}
+        {connectors.map((src) => {
+          const selected = selectedSources.includes(src.id);
+          const result = testResults[src.id];
+          const isTesting = testing === src.id;
+          return (
+            <div key={src.id}>
+              <button
+                onClick={() => {
+                  setSelectedSources(prev =>
+                    prev.includes(src.id) ? prev.filter(s => s !== src.id) : [...prev, src.id]
+                  );
+                  if (!connectorConfigs[src.id]) setConnectorConfigs(prev => ({ ...prev, [src.id]: {} }));
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all text-sm"
+                style={{
+                  border: `1px solid ${selected ? 'var(--c-accent)' : 'var(--c-border-2)'}`,
+                  background: selected ? 'rgba(99,102,241,0.08)' : 'var(--c-bg-card)',
+                  color: 'var(--c-text-2)',
+                  borderRadius: selected && src.configSchema ? '8px 8px 0 0' : '8px',
+                }}
+              >
+                <div className="w-5 h-5 rounded border flex items-center justify-center text-xs"
+                  style={{
+                    borderColor: selected ? 'var(--c-accent)' : 'var(--c-border-2)',
+                    background: selected ? 'var(--c-accent)' : 'transparent',
+                    color: selected ? '#fff' : 'transparent',
+                  }}
+                >
+                  {selected ? '\u2713' : ''}
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium">{src.name}</div>
+                  <div className="text-xs" style={{ color: 'var(--c-text-4)' }}>{src.category}</div>
+                </div>
+                {result && (
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                    background: result.valid ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: result.valid ? 'rgb(34,197,94)' : 'rgb(239,68,68)',
+                  }}>
+                    {result.valid ? 'Connected' : 'Failed'}
+                  </span>
+                )}
+              </button>
+
+              {/* Credential form — shown when connector is selected and has configSchema */}
+              {selected && src.configSchema && (
+                <div className="px-4 py-3 space-y-2" style={{
+                  background: 'var(--c-bg-3)',
+                  border: '1px solid var(--c-border-2)',
+                  borderTop: 'none',
+                  borderRadius: '0 0 8px 8px',
+                }}>
+                  {Object.entries(src.configSchema).map(([field, schema]) => {
+                    if (schema.required === false) return null;
+                    return (
+                      <Field
+                        key={field}
+                        label={schema.label || field}
+                        value={connectorConfigs[src.id]?.[field] || ''}
+                        onChange={(v) => setConnectorConfigs(prev => ({
+                          ...prev,
+                          [src.id]: { ...prev[src.id], [field]: v },
+                        }))}
+                        placeholder={schema.secret ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : `Enter ${schema.label || field}`}
+                        secret={schema.secret}
+                      />
+                    );
+                  })}
+                  <button
+                    onClick={() => testConnector(src.id)}
+                    disabled={isTesting}
+                    className="w-full mt-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+                    style={{
+                      background: 'var(--c-accent)',
+                      color: '#fff',
+                      opacity: isTesting ? 0.6 : 1,
+                    }}
+                  >
+                    {isTesting ? 'Testing...' : 'Test Connection'}
+                  </button>
+                  {result && !result.valid && result.message && (
+                    <p className="text-xs" style={{ color: 'rgb(239,68,68)' }}>{result.message}</p>
+                  )}
+                </div>
+              )}
             </div>
-            <div>
-              <div className="font-medium">{src.name}</div>
-              <div className="text-xs" style={{ color: 'var(--c-text-4)' }}>{src.category}</div>
-            </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
+
       <p className="text-xs text-center" style={{ color: 'var(--c-text-5)' }}>
         You can always connect data sources later from Settings
       </p>
@@ -492,12 +611,14 @@ function Field({
   onChange,
   placeholder,
   multiline,
+  secret,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   multiline?: boolean;
+  secret?: boolean;
 }) {
   const style = {
     background: 'var(--c-bg-3)',
@@ -524,6 +645,7 @@ function Field({
         />
       ) : (
         <input
+          type={secret ? 'password' : 'text'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
