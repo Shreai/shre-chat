@@ -253,7 +253,8 @@ function AuthenticatedApp({
   onWorkspaceSwitch: (workspaceId: string) => void;
 }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
-  const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done'>('loading');
+  const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done' | 'welcome'>('loading');
+  const [landingTarget, setLandingTarget] = useState<'chat' | 'home'>('chat');
   const checkedRef = useRef(false);
 
   useEffect(() => {
@@ -362,7 +363,14 @@ function AuthenticatedApp({
           }).catch(() => { /* non-fatal */ });
           saveUserProfile(completed);
           setUserProfile(completed);
-          setOnboardingPhase('done');
+          // Check smart landing target
+          fetch('/api/onboarding/landing-target')
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data?.target === 'home') setLandingTarget('home');
+            })
+            .catch(() => {});
+          setOnboardingPhase('welcome');
         }}
         onSkip={() => {
           const skipped = {
@@ -380,6 +388,45 @@ function AuthenticatedApp({
           setOnboardingPhase('done');
         }}
       />
+    );
+  }
+
+  if (onboardingPhase === 'welcome') {
+    const mib007Url = 'https://mib007.nirtek.net';
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ background: 'var(--c-bg-1)' }}
+      >
+        <div className="w-full max-w-md text-center space-y-6">
+          <h2 className="text-2xl font-semibold" style={{ color: 'var(--c-text-1)' }}>
+            You're all set!
+          </h2>
+          <p className="text-sm" style={{ color: 'var(--c-text-4)' }}>
+            Your AI workspace is ready. Where would you like to start?
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => setOnboardingPhase('done')}
+              className="w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors"
+              style={{ background: 'var(--c-accent)', color: '#fff' }}
+            >
+              Start Chatting
+            </button>
+            {landingTarget === 'home' && (
+              <a
+                href={mib007Url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors text-center"
+                style={{ border: '1px solid var(--c-border-2)', color: 'var(--c-text-2)', background: 'var(--c-bg-card)' }}
+              >
+                Go to Dashboard
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
 
