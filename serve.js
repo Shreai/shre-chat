@@ -1713,6 +1713,7 @@ async function requestHandler(req, res) {
   const _routeUtils = { json, collectBody, rateLimit, authCookie };
   // Auth rate limiting — 10 attempts/min per IP to prevent brute force
   if (url.pathname.startsWith("/api/auth/") && req.method === "POST") {
+    const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
     const rl = rateLimit(clientIp, "auth", 10, 60_000);
     if (!rl.allowed) {
       res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(rl.retryAfter) });
@@ -2265,6 +2266,43 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Agent bundles proxy failed:", err.message);
       json(res, { bundles: [], agents: [] }, 200);
+    }
+    return;
+  }
+
+  // ── Marketplace connectors proxy (for onboarding Connect phase) ──
+  if (url.pathname === "/api/onboarding/connectors" && req.method === "GET") {
+    try {
+      const upstream = await mib007Fetch("/api/aros/marketplace/nodes", {
+        signal: AbortSignal.timeout(5000),
+        headers: userContextHeadersNoAuth(req),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Connectors proxy failed:", err.message);
+      json(res, [], 200);
+    }
+    return;
+  }
+
+  if (url.pathname.match(/^\/api\/onboarding\/connectors\/[^/]+\/test$/) && req.method === "POST") {
+    try {
+      const nodeId = url.pathname.split("/")[4];
+      const body = await collectBody(req);
+      const upstream = await mib007Fetch(`/api/aros/marketplace/nodes/${encodeURIComponent(nodeId)}/test`, {
+        method: "POST",
+        signal: AbortSignal.timeout(15000),
+        headers: { ...userContextHeadersNoAuth(req), "Content-Type": "application/json" },
+        body,
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Connector test proxy failed:", err.message);
+      json(res, { valid: false, message: "Service unavailable" }, 502);
     }
     return;
   }
@@ -3311,6 +3349,36 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Nodes proxy failed:", err.message);
       json(res, [], 502);
+    }
+    return;
+  }
+
+  // ── Automation gateway proxy (shre-auto) ──
+  if (url.pathname.startsWith("/api/shre-auto/")) {
+    const autoPath = url.pathname.replace("/api/shre-auto", "");
+    const autoUrl = `http://127.0.0.1:5513${autoPath}${url.search}`;
+    try {
+      let reqBody = "";
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+        reqBody = await collectBody(req);
+      }
+      const headers = {
+        "Content-Type": "application/json",
+        "x-workspace-id": authClaims?.activeWorkspaceId || "default",
+        "x-user-id": authClaims?.sub || "",
+        "x-channel": "shre-chat",
+      };
+      const upstream = await fetch(autoUrl, {
+        method: req.method,
+        headers,
+        body: reqBody || undefined,
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await upstream.json().catch(() => ({}));
+      json(res, data, upstream.status);
+    } catch (err) {
+      log.warn("Automation proxy failed:", err.message);
+      json(res, { error: "Automation gateway unreachable" }, 502);
     }
     return;
   }
