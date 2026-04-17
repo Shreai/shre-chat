@@ -8,7 +8,7 @@ import type { UserProfile } from './store';
 
 interface Props {
   profile: UserProfile;
-  onComplete: (profile: UserProfile) => void;
+  onComplete: (profile: UserProfile, selectedAgents?: string[], selectedBundle?: string | null) => void;
   onSkip: () => void;
 }
 
@@ -199,13 +199,15 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           setWarning('Workspace setup incomplete — you can configure it later in Settings.');
         }
 
-        onComplete(completed);
+        const bundle = bundles.find(b => b.id === selectedBundle);
+        onComplete(completed, bundle?.agents || [], selectedBundle);
         return;
       }
     } catch {
       // Non-fatal — continue locally even if server save fails
       if (phase === 2) {
-        onComplete({ ...p, onboardedAt: Date.now() });
+        const bundle = bundles.find(b => b.id === selectedBundle);
+        onComplete({ ...p, onboardedAt: Date.now() }, bundle?.agents || [], selectedBundle);
         return;
       }
       setPhase(phase + 1);

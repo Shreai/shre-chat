@@ -345,13 +345,14 @@ function AuthenticatedApp({
     return (
       <OnboardingView
         profile={userProfile || createDefaultProfile(authUser)}
-        onComplete={(completed) => {
-          // Persist to server
+        onComplete={(completed, selectedAgents, selectedBundle) => {
+          // Persist to server with selected agents from wizard
           fetch('/api/onboarding/unified/activate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              selectedAgents: [],
+              selectedAgents: selectedAgents || [],
+              selectedBundle: selectedBundle || undefined,
               chatPreferences: completed.preferences ? {
                 communicationStyle: completed.preferences.communicationStyle,
                 goals: completed.business?.goals || [],
