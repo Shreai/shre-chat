@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSpeechLocale } from '../i18n';
+import { usePreferences } from '../preferences-store';
 
 export interface UseWakeWordReturn {
   wakeListenerReady: boolean;
@@ -11,10 +12,14 @@ export function useWakeWord(
   setVoiceAssistantOpen: React.Dispatch<React.SetStateAction<boolean>>,
 ): UseWakeWordReturn {
   const [wakeListenerReady, setWakeListenerReady] = useState(false);
+  // Wake word grabs the audio session (continuous SpeechRecognition on macOS
+  // Chrome can interrupt background media). Opt-in only — keyed off the same
+  // micEnabled preference that gates explicit voice features.
+  const micEnabled = usePreferences((s) => s.micEnabled);
 
   // Activate after first user interaction (tap/click) to satisfy iOS gesture requirement
   useEffect(() => {
-    if (wakeListenerReady) return;
+    if (wakeListenerReady || !micEnabled) return;
     const activate = () => {
       setWakeListenerReady(true);
       document.removeEventListener('click', activate);
@@ -26,11 +31,19 @@ export function useWakeWord(
       document.removeEventListener('click', activate);
       document.removeEventListener('touchstart', activate);
     };
-  }, [wakeListenerReady]);
+  }, [wakeListenerReady, micEnabled]);
+
+  // When the user turns the mic off, tear the wake listener down so it can't
+  // keep restarting via the 300ms onend loop below.
+  useEffect(() => {
+    if (!micEnabled && wakeListenerReady) {
+      setWakeListenerReady(false);
+    }
+  }, [micEnabled, wakeListenerReady]);
 
   // SpeechRecognition wake word detection ("shre shre", "hey shre", etc.)
   useEffect(() => {
-    if (!wakeListenerReady || voiceAssistantOpen || isRecording) return;
+    if (!wakeListenerReady || !micEnabled || voiceAssistantOpen || isRecording) return;
     const SR = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
       // iOS Safari doesn't support SpeechRecognition — wake word unavailable.

@@ -99,6 +99,14 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       const session = await res.json();
       setProvider(session.provider);
       setLatency(session.latencyEstimate || '');
+      // Explicit pickup signal — surface which provider answered so the UI
+      // can show "Ready — speak now" instead of a silent connecting → listening
+      // transition that looks like the agent never picked up.
+      setAiTranscript(
+        session.provider === 'platform'
+          ? 'Ready — speak now (platform, ~1–2s per turn)'
+          : `Ready — speak now (${session.provider})`,
+      );
 
       if (session.provider === 'personaplex' && session.websocketUrl) {
         // PersonaPlex: direct WebSocket full-duplex (Shadow PC)
@@ -114,6 +122,7 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       }
     } catch (error: any) {
       console.error('[RealtimeVoice] Start failed:', error);
+      setAiTranscript(`Call failed to start: ${error?.message || 'unknown error'}`);
       setState('error');
       setTimeout(() => setState('idle'), 3000);
     }
@@ -330,16 +339,21 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
 
           if (!res.ok) {
             const err = await res.json().catch(() => ({ error: 'Unknown' }));
-            setAiTranscript(`Error: ${err.error || res.status}`);
+            const stage = err.stage ? `[${err.stage}] ` : '';
+            setAiTranscript(`${stage}${err.error || res.status}`);
             setState('listening');
             if (platformRecordingRef.current) startPlatformListening();
             return;
           }
 
-          // Response is always JSON: { text, transcript, audio (base64), ... }
+          // Response is always JSON: { text, transcript, audio (base64), stage?, ttsError? ... }
           const data = await res.json();
           if (data.transcript) setTranscript(data.transcript);
           if (data.spokenText || data.text) setAiTranscript(data.spokenText || data.text);
+          if (data.ttsError) {
+            // TTS failed but text came through — show text, mark absence of audio
+            console.warn('[RealtimeVoice] TTS error:', data.ttsError);
+          }
 
           if (data.audio) {
             // Decode base64 audio and play it
