@@ -73,22 +73,102 @@ async function ensureCsrfToken(): Promise<string> {
 export function resetCsrfToken() {
   _csrfToken = null;
 }
+
+// ── Refresh-token support ──
+// When the backend returns 401 on an /api/* or /v1/* call, we transparently
+// try to exchange the current token for a fresh one via /api/auth/refresh
+// (shre-auth enforces a 7-day max refresh window from original iat).
+// If refresh fails, we invoke the registered auth-expired handler so the
+// app can drop to LoginView instead of showing a stale zombie UI.
+
+let _onAuthExpired: (() => void) | null = null;
+/** Registered by useAuth so the fetch interceptor can trigger logout. */
+export function setAuthExpiredHandler(fn: (() => void) | null) {
+  _onAuthExpired = fn;
+}
+
+let _refreshInFlight: Promise<string | null> | null = null;
+function currentToken(): string | null {
+  return sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+/** Attempt to refresh the session. Concurrent calls share one in-flight request. */
+export function attemptRefresh(): Promise<string | null> {
+  if (_refreshInFlight) return _refreshInFlight;
+  _refreshInFlight = (async () => {
+    const oldToken = currentToken();
+    if (!oldToken) return null;
+    try {
+      const res = await _nativeFetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${oldToken}` },
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      const newToken = data?.token;
+      if (!newToken || typeof newToken !== 'string') return null;
+      sessionStorage.setItem(AUTH_TOKEN_KEY, newToken);
+      localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+      return newToken;
+    } catch {
+      return null;
+    } finally {
+      // Clear next tick so a burst of concurrent 401s dedupe, but later
+      // refreshes (hours apart) start fresh.
+      setTimeout(() => {
+        _refreshInFlight = null;
+      }, 0);
+    }
+  })();
+  return _refreshInFlight;
+}
+
+/** Minimal JWT payload parser — used for proactive expiry checks. */
+function parseJwtExp(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof json.exp === 'number' ? json.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function isReplayableBody(body: BodyInit | null | undefined): boolean {
+  if (body == null) return true;
+  if (typeof body === 'string') return true;
+  if (body instanceof URLSearchParams) return true;
+  if (body instanceof FormData) return true;
+  if (body instanceof Blob) return true;
+  if (body instanceof ArrayBuffer) return true;
+  // ReadableStream / TypedArray views can't be replayed reliably
+  return false;
+}
+
+/** Install the auth-aware fetch interceptor. Idempotent — safe to call on login/logout. */
 export function installAuthFetch() {
-  const token = sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
-  if (!token) return;
-  window.fetch = function (input, init) {
+  // Already installed? No need to re-wrap.
+  if ((window.fetch as { __shreAuthWrapped?: boolean }).__shreAuthWrapped) return;
+
+  const wrapped = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url =
       typeof input === 'string'
         ? input
         : input instanceof URL
           ? input.toString()
           : (input as Request).url;
-    if (url.startsWith('/api/') || url.startsWith('/v1/')) {
+    const isApi = url.startsWith('/api/') || url.startsWith('/v1/');
+    if (!isApi) return _nativeFetch(input, init);
+
+    // Never retry the refresh endpoint itself — would loop.
+    const isRefreshCall = url.startsWith('/api/auth/refresh');
+
+    const applyHeaders = (token: string | null): RequestInit => {
       const headers = new Headers(init?.headers);
-      if (!headers.has('Authorization')) {
+      if (token && !headers.has('Authorization')) {
         headers.set('Authorization', `Bearer ${token}`);
       }
-      // Inject CSRF token on state-changing methods
       const method = (init?.method || 'GET').toUpperCase();
       if (
         ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) &&
@@ -97,10 +177,25 @@ export function installAuthFetch() {
       ) {
         headers.set('X-CSRF-Token', _csrfToken);
       }
-      return _nativeFetch(input, { ...init, headers });
+      return { ...init, headers };
+    };
+
+    const firstRes = await _nativeFetch(input, applyHeaders(currentToken()));
+    if (firstRes.status !== 401 || isRefreshCall) return firstRes;
+    if (!isReplayableBody(init?.body)) return firstRes;
+
+    const newToken = await attemptRefresh();
+    if (!newToken) {
+      // Refresh failed → hard expire. Caller still gets the 401 so its own
+      // error path can run, but the app-level handler flips to LoginView.
+      _onAuthExpired?.();
+      return firstRes;
     }
-    return _nativeFetch(input, init);
+    // Retry the original request with the new token.
+    return _nativeFetch(input, applyHeaders(newToken));
   };
+  (wrapped as { __shreAuthWrapped?: boolean }).__shreAuthWrapped = true;
+  window.fetch = wrapped;
 }
 installAuthFetch();
 
@@ -130,6 +225,15 @@ export function useAuth(devBypass: boolean) {
 
   useEffect(() => {
     if (devBypass) return;
+    
+    // Safety timeout: stop checking if it takes more than 10s (e.g. backend hang)
+    const timeout = setTimeout(() => {
+      if (authChecking) {
+        console.warn('Auth check timed out');
+        setAuthChecking(false);
+      }
+    }, 10000);
+
     const stored = getStoredAuth();
     if (stored) {
       fetch('/api/auth/check', {
@@ -153,10 +257,12 @@ export function useAuth(devBypass: boolean) {
             } catch (err) {
               console.debug('auth check workspace parse', err);
             }
+            clearTimeout(timeout);
             setAuthChecking(false);
           }
         })
         .catch(() => {
+          clearTimeout(timeout);
           setAuthChecking(false);
         });
     } else {
@@ -167,6 +273,7 @@ export function useAuth(devBypass: boolean) {
       fetch('/api/auth/gate-sso')
         .then(async (r) => {
           if (!r.ok) {
+            clearTimeout(timeout);
             setAuthChecking(false);
             return;
           }
@@ -178,9 +285,11 @@ export function useAuth(devBypass: boolean) {
             setAuthState({ token: data.token, user: data.user });
             installAuthFetch();
           }
+          clearTimeout(timeout);
           setAuthChecking(false);
         })
         .catch(() => {
+          clearTimeout(timeout);
           setAuthChecking(false);
         });
     }
@@ -294,6 +403,45 @@ export function useAuth(devBypass: boolean) {
     setAuthState(null);
     setPendingWorkspaceSelection(null);
   }, [devBypass]);
+
+  // ── Wire up fetch interceptor's expiry callback to handleLogout ──
+  // When the refresh flow gives up (7-day max window exceeded, revoked
+  // session, network failure), flip the app to LoginView.
+  useEffect(() => {
+    setAuthExpiredHandler(handleLogout);
+    return () => setAuthExpiredHandler(null);
+  }, [handleLogout]);
+
+  // ── Proactive refresh on focus + near-expiry ──
+  // shre-auth issues 8h JWTs; refresh window is 7 days from original iat.
+  // If exp is within 5 minutes OR already past, try refresh silently.
+  useEffect(() => {
+    if (devBypass || !authState?.token) return;
+
+    const tryProactiveRefresh = async () => {
+      const tok = currentToken();
+      if (!tok) return;
+      const exp = parseJwtExp(tok);
+      if (exp == null) return;
+      const secondsLeft = exp - Math.floor(Date.now() / 1000);
+      const PROACTIVE_WINDOW = 5 * 60;
+      if (secondsLeft <= PROACTIVE_WINDOW) {
+        const newTok = await attemptRefresh();
+        if (newTok) {
+          setAuthState((prev) => (prev ? { ...prev, token: newTok } : prev));
+        } else if (secondsLeft <= 0) {
+          handleLogout();
+        }
+      }
+    };
+
+    tryProactiveRefresh();
+    const onFocus = () => {
+      tryProactiveRefresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [devBypass, authState?.token, handleLogout]);
 
   return {
     authState,

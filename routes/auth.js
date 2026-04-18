@@ -816,6 +816,32 @@ export function registerAuthRoutes({ log }) {
       return true;
     }
 
+    // ── Refresh (proxy to shre-auth, rotates JTI, returns fresh 8h JWT) ──
+    if (url.pathname === "/api/auth/refresh" && req.method === "POST") {
+      const authHeader = req.headers["authorization"];
+      if (!authHeader?.startsWith("Bearer ")) {
+        return json(res, { error: "Unauthorized", code: "AUTH_REQUIRED" }, 401);
+      }
+      try {
+        const { serviceUrl } = await import("shre-sdk/discovery");
+        const authUrl = serviceUrl("shre-auth");
+        const upstream = await fetch(`${authUrl}/v1/auth/refresh`, {
+          method: "POST",
+          headers: { "Authorization": authHeader },
+          signal: AbortSignal.timeout(5000),
+        });
+        const body = await upstream.json().catch(() => ({}));
+        if (!upstream.ok || !body?.token) {
+          return json(res, body?.error ? body : { error: "Refresh failed" }, upstream.status || 401);
+        }
+        // Mirror login: set cookie so SSR/cookie-bearing clients stay in sync
+        res.setHeader("Set-Cookie", authCookie("shre_token", body.token, 8 * 60 * 60, req));
+        return json(res, { token: body.token });
+      } catch (err) {
+        return json(res, { error: "Refresh unavailable" }, 503);
+      }
+    }
+
     // ── Logout (also revoke at shre-auth) ──
     if (url.pathname === "/api/auth/logout" && req.method === "POST") {
       const authHeader = req.headers["authorization"];
