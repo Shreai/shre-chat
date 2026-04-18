@@ -428,7 +428,7 @@ if (!existsSync(USERS_PATH)) {
  */
 export function registerAuthRoutes({ log }) {
 
-  return async function handleAuthRoute(req, res, url, { json, rateLimit, authCookie }) {
+  return async function handleAuthRoute(req, res, url, { json, rateLimit, authCookie, isJtiRevoked }) {
 
     // ── Login (delegates to shre-auth centralized auth) ──
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
@@ -686,6 +686,12 @@ export function registerAuthRoutes({ log }) {
         });
         const valData = await valRes.json();
         if (valData.valid && valData.claims) {
+          // Hard revocation — reject if the jti has been revoked at shre-auth
+          // even though the JWT signature + exp still validate. Covers the
+          // stolen-token-survives-refresh gap.
+          if (valData.claims.jti && isJtiRevoked && (await isJtiRevoked(valData.claims.jti))) {
+            return json(res, { authenticated: false, reason: "session_revoked" }, 401);
+          }
           return json(res, {
             authenticated: true,
             user: {
@@ -710,6 +716,9 @@ export function registerAuthRoutes({ log }) {
       // Local JWT fallback
       const claims = checkAuth(req);
       if (!claims) return json(res, { authenticated: false }, 401);
+      if (claims.jti && isJtiRevoked && (await isJtiRevoked(claims.jti))) {
+        return json(res, { authenticated: false, reason: "session_revoked" }, 401);
+      }
       const users = loadUsers();
       const user = users[claims.sub];
       json(res, { authenticated: true, user: { username: claims.sub, name: user?.name || claims.sub, role: claims.role } });

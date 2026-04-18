@@ -1009,6 +1009,59 @@ function verifyAuthToken(token) {
   } catch { return null; }
 }
 
+// ── JTI revocation cache ──
+// Reject tokens whose session has been revoked at shre-auth (logout, refresh
+// rotation). Without this, a stolen pre-refresh JWT keeps authenticating for
+// the full 8h TTL even after the legitimate user refreshes.
+//
+// Cache TTL is 60s: eventually-consistent revocation. Fresh refresh flows
+// (where user's new token immediately succeeds) are unaffected — we only
+// query when a jti first appears or its cache entry ages out.
+const _revokedJtiCache = new Map(); // jti -> { revoked: bool, fetchedAt: number }
+const _revokedJtiPending = new Map(); // jti -> Promise<boolean>  (dedup concurrent)
+const REVOKED_JTI_TTL_MS = 60_000;
+
+async function isJtiRevoked(jti) {
+  if (!jti || typeof jti !== "string") return false;
+  const now = Date.now();
+  const cached = _revokedJtiCache.get(jti);
+  if (cached && now - cached.fetchedAt < REVOKED_JTI_TTL_MS) {
+    return cached.revoked;
+  }
+  const inflight = _revokedJtiPending.get(jti);
+  if (inflight) return inflight;
+  const p = (async () => {
+    try {
+      const res = await cortexPool.query(
+        "SELECT revoked_at FROM shre_auth.sessions WHERE token_jti = $1 LIMIT 1",
+        [jti],
+      );
+      // No row = unknown session (likely pre-dates sessions table, or
+      // non-platform token) — treat as NOT revoked so we fail open.
+      const revoked = res.rows.length > 0 && res.rows[0].revoked_at !== null;
+      _revokedJtiCache.set(jti, { revoked, fetchedAt: Date.now() });
+      return revoked;
+    } catch (err) {
+      // DB unreachable — fail open (accept token) so an auth-DB outage
+      // doesn't lock all authenticated users out.
+      log.warn("[checkAuth] jti revocation lookup failed", { jti: jti.slice(0, 8), error: err.message });
+      return false;
+    } finally {
+      _revokedJtiPending.delete(jti);
+    }
+  })();
+  _revokedJtiPending.set(jti, p);
+  return p;
+}
+
+// Periodic prune to keep the cache bounded.
+setInterval(() => {
+  const cutoff = Date.now() - REVOKED_JTI_TTL_MS;
+  for (const [jti, entry] of _revokedJtiCache) {
+    if (entry.fetchedAt < cutoff) _revokedJtiCache.delete(jti);
+  }
+}, 5 * 60_000).unref();
+
 /** Check if request has valid auth. Returns claims or null. */
 function checkAuth(req) {
   // Check Authorization header first
@@ -1710,7 +1763,7 @@ async function requestHandler(req, res) {
   }
 
   // ── Route module delegation ────────────────────────────────────
-  const _routeUtils = { json, collectBody, rateLimit, authCookie };
+  const _routeUtils = { json, collectBody, rateLimit, authCookie, isJtiRevoked };
   // Auth rate limiting — 10 attempts/min per IP to prevent brute force
   if (url.pathname.startsWith("/api/auth/") && req.method === "POST") {
     const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
@@ -1733,7 +1786,12 @@ async function requestHandler(req, res) {
     || url.pathname.startsWith("/api/i18n/translations/")
     || url.pathname === "/api/i18n/available"
     || url.pathname === "/api/push/vapid-key";
-  const authClaims = checkAuth(req);
+  let authClaims = checkAuth(req);
+  // Hard revocation — JWT is valid but session was revoked (logout / refresh
+  // rotation). Treat as unauthenticated even though signature + exp check out.
+  if (authClaims?.jti && (await isJtiRevoked(authClaims.jti))) {
+    authClaims = null;
+  }
   // Migrate old sessions if user has both UUID (platform) and username claims
   if (authClaims?.sub && authClaims?.username && authClaims.sub !== authClaims.username) {
     migrateSessionUserId(authClaims.sub, authClaims.username, authClaims.activeWorkspaceId);
