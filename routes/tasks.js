@@ -173,9 +173,16 @@ export function registerTaskRoutes({ log }) {
         if (since) queryStr += `&since=${encodeURIComponent(since)}`;
         if (updatedSince) queryStr += `&updated_since=${encodeURIComponent(updatedSince)}`;
 
+        // Forward user context headers for workspace scoping
+        const userHeaders = {};
+        if (req.headers["authorization"]) userHeaders["Authorization"] = req.headers["authorization"];
+        if (req.headers["x-user-id"]) userHeaders["X-User-Id"] = req.headers["x-user-id"];
+        if (req.headers["x-workspace-id"]) userHeaders["X-Workspace-Id"] = req.headers["x-workspace-id"];
+
         const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks${queryStr}`, {
           headers: {
             ...(svcToken ? { Authorization: `Bearer ${svcToken}` } : {}),
+            ...userHeaders,
           },
           signal: AbortSignal.timeout(5000),
         });
