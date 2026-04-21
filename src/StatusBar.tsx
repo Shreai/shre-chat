@@ -27,6 +27,19 @@ const NOTIF_ICONS: Record<string, string> = {
   'service.started': '\u2714\ufe0f',
   'agent.quality_alert': '\ud83d\udcc9',
   'fleet.agent_status': '\ud83e\udd16',
+  'fleet.agent.stuck': '\u26a0\ufe0f',
+  'fleet.agent.dead': '\ud83d\udc80',
+  'fleet.agent.recovered': '\u2705',
+  'fleet.task.degraded': '\u26a0\ufe0f',
+  'fleet.agent.crash_unrecoverable': '\ud83d\udca5',
+  'deploy.monitor.breach': '\ud83d\udea8',
+  'fleet.code_quality': '\ud83d\udcc8',
+  'fleet.done-gate.failed': '\ud83d\uded1',
+  'fleet.verify.passed': '\u2705',
+  'fleet.verify.fix_created': '\ud83d\udd27',
+  'wave.started': '\ud83c\udf0a',
+  'wave.completed': '\ud83c\udfc6',
+  'twin.divergence': '\ud83d\udc65',
 };
 
 // ── Live task tracking types ─────────────────────────────────────────
@@ -73,6 +86,7 @@ interface LiveService {
 const TASK_GROUPS: { label: string; statuses: Set<string> }[] = [
   { label: 'Active', statuses: new Set(['in_progress', 'started', 'working_on']) },
   { label: 'Review', statuses: new Set(['pending_review', 'review_needed', 'approval_needed']) },
+  { label: 'Failed', statuses: new Set(['failed', 'errored', 'crash_unrecoverable', 'divergence']) },
   { label: 'Blocked', statuses: new Set(['blocked', 'roadblock', 'on_hold', 'hold']) },
   { label: 'Queued', statuses: new Set(['created', 'queued', 'todo']) },
   { label: 'Completed', statuses: new Set(['done', 'completed', 'qa_tested', 'production_ready']) },
@@ -98,10 +112,21 @@ const TASK_STATUS_CONFIG: Record<string, { color: string; label: string; icon: s
   qa_tested: { color: '#10b981', label: 'QA Tested', icon: '\u25cf' },
   production_ready: { color: '#059669', label: 'Prod Ready', icon: '\u25cf' },
   cancelled: { color: '#9ca3af', label: 'Cancelled', icon: '\u2715' },
+  failed: { color: '#ef4444', label: 'Failed', icon: '\ud83d\udc80' },
+  errored: { color: '#ef4444', label: 'Error', icon: '\u26a0\ufe0f' },
+  crash_unrecoverable: { color: '#ef4444', label: 'Crashed', icon: '\ud83d\udca5' },
+  divergence: { color: '#f59e0b', label: 'Diverged', icon: '\ud83d\udd00' },
 };
 
 // Important notification types that also show as system messages in chat
-const IMPORTANT_TYPES = new Set(['task.failed', 'service.unhealthy', 'agent.quality_alert']);
+const IMPORTANT_TYPES = new Set([
+  'task.failed',
+  'task.errored',
+  'task.crashed',
+  'task.diverged',
+  'service.unhealthy',
+  'agent.quality_alert',
+]);
 
 // ── Notification filter categories ──────────────────────────────────
 type NotifFilter = 'all' | 'tasks' | 'agents' | 'services';
@@ -435,6 +460,10 @@ export function StatusBar() {
           'review_needed',
           'blocked',
           'roadblock',
+          'failed',
+          'errored',
+          'crash_unrecoverable',
+          'divergence',
         ]);
         tasks.sort((a, b) => {
           const aActive = activeStatuses.has(a.status) ? 0 : 1;
@@ -498,16 +527,23 @@ export function StatusBar() {
   }, []);
 
   const taskAction = useCallback(
-    async (taskId: string, action: 'cancel' | 'escalate', e: React.MouseEvent) => {
+    async (taskId: string, action: 'cancel' | 'escalate' | 'retry', e: React.MouseEvent) => {
       e.stopPropagation();
       setTaskActionPending(taskId);
       try {
-        const body = action === 'cancel' ? { status: 'cancelled' } : { priority: 'critical' };
-        await fetch(`/api/tasks/${taskId}`, {
-          method: 'PATCH',
-          headers: authHeaders(),
-          body: JSON.stringify(body),
-        });
+        if (action === 'retry') {
+          await fetch(`/api/tasks/${taskId}/retry`, {
+            method: 'POST',
+            headers: authHeaders(),
+          });
+        } else {
+          const body = action === 'cancel' ? { status: 'cancelled' } : { priority: 'critical' };
+          await fetch(`/api/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify(body),
+          });
+        }
         // Refresh tasks after action
         setTimeout(fetchLiveTasks, 500);
       } catch {
@@ -1723,6 +1759,34 @@ export function StatusBar() {
                                     >
                                       Reassign agent
                                     </button>
+                                    {['failed', 'errored', 'crash_unrecoverable'].includes(
+                                      task.status,
+                                    ) && (
+                                      <button
+                                        onClick={(e) => taskAction(task.id, 'retry', e)}
+                                        style={{
+                                          width: '100%',
+                                          textAlign: 'left',
+                                          background: 'none',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          padding: '6px 10px',
+                                          borderRadius: 4,
+                                          fontSize: 12,
+                                          color: 'var(--c-accent, #6366f1)',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          (e.currentTarget as HTMLElement).style.background =
+                                            'var(--c-bg-hover)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          (e.currentTarget as HTMLElement).style.background =
+                                            'none';
+                                        }}
+                                      >
+                                        \u21bb Retry execution
+                                      </button>
+                                    )}
                                     {showAssignDropdown === task.id && liveAgents.length > 0 && (
                                       <div
                                         style={{
@@ -2075,12 +2139,53 @@ export function StatusBar() {
                                   fontWeight: 600,
                                   padding: '2px 6px',
                                   borderRadius: 4,
-                                  background: isBusy ? '#8b5cf620' : '#22c55e20',
-                                  color: isBusy ? '#8b5cf6' : '#22c55e',
+                                  background:
+                                    agent.status === 'stuck'
+                                      ? '#f59e0b20'
+                                      : agent.status === 'dead'
+                                        ? '#ef444420'
+                                        : isBusy
+                                          ? '#8b5cf620'
+                                          : '#22c55e20',
+                                  color:
+                                    agent.status === 'stuck'
+                                      ? '#f59e0b'
+                                      : agent.status === 'dead'
+                                        ? '#ef4444'
+                                        : isBusy
+                                          ? '#8b5cf6'
+                                          : '#22c55e',
                                 }}
                               >
-                                {isBusy ? 'busy' : 'idle'}
+                                {agent.status || (isBusy ? 'busy' : 'idle')}
                               </span>
+                              {(agent.status === 'stuck' || agent.status === 'dead') && task && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Restart stuck agent ${agent.name} for task ${task.title.slice(0, 20)}...?`)) {
+                                      try {
+                                        await fetch(`/api/agents/${task.taskId}/restart`, { method: 'POST', headers: authHeaders() });
+                                      } catch (err) {
+                                        console.error('Failed to restart agent', err);
+                                      }
+                                    }
+                                  }}
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    background: 'var(--c-accent-1)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    marginLeft: 6,
+                                  }}
+                                >
+                                  Restart
+                                </button>
+                              )}
                             </div>
                             {/* Current task info */}
                             {task && (

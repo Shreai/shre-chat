@@ -299,6 +299,33 @@ export function registerTaskRoutes({ log }) {
       }
     }
 
+    // ── Retry task ──
+    if (url.pathname.match(/^\/api\/tasks\/[a-zA-Z0-9_-]+\/retry$/) && req.method === "POST") {
+      const taskId = url.pathname.split("/api/tasks/")[1];
+      try {
+        const svcToken = process.env.SHRE_TASKS_TOKEN || "";
+        const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks/${encodeURIComponent(taskId)}/retry`, {
+          method: "POST",
+          headers: {
+            ...(svcToken ? { Authorization: `Bearer ${svcToken}` } : {}),
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!taskRes.ok) {
+          const errText = await taskRes.text().catch(() => "");
+          return json(res, { error: "Failed to retry task", detail: errText.slice(0, 200) }, taskRes.status);
+        }
+
+        const result = await taskRes.json();
+        log.info("Task retried from chat", { taskId });
+        return json(res, { ok: true, task: result });
+      } catch (e) {
+        log.error("Task retry error", {}, e);
+        return json(res, { error: e.message }, 500);
+      }
+    }
+
     return false;
   };
 }
