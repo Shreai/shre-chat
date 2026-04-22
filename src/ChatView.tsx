@@ -184,7 +184,7 @@ export function ChatView() {
     cleanupAudioLevel,
   } = useVoiceRecording();
   // ── Wake word listener (extracted hook) ──
-  useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen);
+  useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen, voiceMode);
 
   // ── Realtime full-duplex voice overlay ──
   const [realtimeVoiceOpen, setRealtimeVoiceOpen] = useState(false);
@@ -649,6 +649,7 @@ export function ChatView() {
     setAudioLevel,
     setRecordingDuration,
     setIsSpeaking,
+    isSpeaking,
     voiceSessionIdRef,
     voiceFinalTranscriptRef,
     audioCtxRef,

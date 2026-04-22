@@ -1703,7 +1703,7 @@ async function requestHandler(req, res) {
     let reason = typeof reasonOrHeaders === "string" ? reasonOrHeaders : undefined;
 
     // Apply security headers to all responses (skip frame restrictions for embedded app proxies)
-    const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui", "/storepulse", "/storepulse-hq", "/app-marketplace"];
+    const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui", "/storepulse", "/storepulse-hq", "/app-marketplace", "/city"];
     const isEmbedProxy = EMBED_PREFIXES.some(p => url.pathname.startsWith(p));
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
       if (isEmbedProxy && k === "X-Frame-Options") continue;
@@ -1714,7 +1714,13 @@ async function requestHandler(req, res) {
     const ct = (headers && (headers["Content-Type"] || headers["content-type"])) || res.getHeader("content-type") || "";
     if (typeof ct === "string" && ct.includes("text/html")) {
       if (isEmbedProxy) {
-        res.setHeader("Content-Security-Policy", CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
+        // Embedded apps (storepulse's legacy HTML, cortexdb dashboards, etc.) use inline
+        // scripts/styles — relax script-src and style-src along with frame-ancestors.
+        const relaxed = CSP
+          .replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+          .replace(/script-src ([^;]*)/, "script-src $1 'unsafe-inline' 'unsafe-eval'")
+          .replace(/style-src ([^;]*)/, "style-src $1 'unsafe-inline'");
+        res.setHeader("Content-Security-Policy", relaxed);
       } else {
         res.setHeader("Content-Security-Policy", CSP);
       }
@@ -1751,6 +1757,8 @@ async function requestHandler(req, res) {
       || url.pathname.startsWith("/api/oauth/")
       || url.pathname.startsWith("/api/cli/")
       || url.pathname.startsWith("/v1/")
+      || url.pathname.startsWith("/storepulse/") || url.pathname === "/storepulse"
+      || url.pathname.startsWith("/storepulse-hq/") || url.pathname === "/storepulse-hq"
       || req.headers["authorization"]?.startsWith("Bearer ")
       || req.headers["x-channel"] === "cli";
     if (!csrfExempt) {
@@ -3516,6 +3524,41 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Agent Recovery Actions ──
+  const agentActionMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/(stop|restart)$/);
+  if (agentActionMatch && req.method === "POST") {
+    const taskId = agentActionMatch[1];
+    const action = agentActionMatch[2];
+    try {
+      const fleetBase = process.env.FLEET_URL || serviceUrl("shre-fleet");
+      const tasksBase = process.env.TASKS_URL || serviceUrl("shre-tasks");
+      const authHeader = req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {};
+
+      // 1. Stop the agent (cancels task in fleet)
+      await fetch(`${fleetBase}/v1/fleet/agents/${taskId}/stop`, {
+        method: "POST",
+        headers: authHeader,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (action === "restart") {
+        // 2. Reset task status to 'queued' so it gets picked up again
+        await fetch(`${tasksBase}/v1/tasks/${taskId}`, {
+          method: "PATCH",
+          headers: { ...authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "queued", assigneeAgentId: null }),
+          signal: AbortSignal.timeout(5000),
+        });
+        return json(res, { success: true, message: "Agent stopped and task requeued" });
+      }
+
+      return json(res, { success: true, message: "Agent stop signal sent" });
+    } catch (err) {
+      log.error(`Agent ${action} failed:`, err.message);
+      return json(res, { error: `Failed to ${action} agent` }, 500);
+    }
+  }
+
   // ── Agents list proxy (enriched with fleet session data) ──
   if (url.pathname === "/api/agents" && req.method === "GET") {
     try {
@@ -3555,6 +3598,7 @@ async function requestHandler(req, res) {
           phase: s.phase,
           progress: s.progress,
           elapsedMs: s.elapsed_ms,
+          status: s.status, // stuck/dead status from fleet
           type: "fleet",
         });
       }
@@ -3566,6 +3610,7 @@ async function requestHandler(req, res) {
             phase: "active",
             progress: `${s.prompt_count} prompts`,
             elapsedMs: s.age_ms,
+            status: "active",
             type: "cli",
           });
         }
@@ -3580,7 +3625,7 @@ async function requestHandler(req, res) {
             id,
             name: id,
             model,
-            status: session ? "busy" : "idle",
+            status: session?.status === "stuck" ? "stuck" : session?.status === "dead" ? "dead" : session ? "busy" : "idle",
             currentTask: session || null,
           };
         });
@@ -3592,7 +3637,7 @@ async function requestHandler(req, res) {
             id: agentId,
             name: agentId,
             model: fleetSessions.find(s => s.agent === agentId)?.model || "unknown",
-            status: "busy",
+            status: session.status === "stuck" ? "stuck" : session.status === "dead" ? "dead" : "busy",
             currentTask: session,
           });
         }
@@ -6961,13 +7006,34 @@ Examples:
   const EMBEDDED_PROXIES = [
     { prefix: "/shre-dashboard", host: "127.0.0.1", port: 5500, proto: "https", label: "Shre AI Dashboard" },
     { prefix: "/cortexdb-ui", host: "127.0.0.1", port: 3400, proto: "http", label: "CortexDB Dashboard" },
-    { prefix: "/storepulse", host: "127.0.0.1", port: 8899, proto: "http", label: "StorePulse" },
-    { prefix: "/storepulse-hq", host: "127.0.0.1", port: 8900, proto: "http", label: "StorePulse HQ" },
+    // storepulse serves its UI, assets, and /api/* under the /storepulse path prefix
+    // on its own live-server, so we forward the full path (keepPrefix: true).
+    { prefix: "/storepulse", host: "127.0.0.1", port: 8899, proto: "http", label: "StorePulse", keepPrefix: true },
+    { prefix: "/storepulse-hq", host: "127.0.0.1", port: 8900, proto: "http", label: "StorePulse HQ", keepPrefix: true },
     { prefix: "/app-marketplace", host: "127.0.0.1", port: 5458, proto: "http", label: "Marketplace" },
+    { prefix: "/city", host: "127.0.0.1", port: 5479, proto: "http", label: "City" },
   ];
   for (const ep of EMBEDDED_PROXIES) {
     if (url.pathname.startsWith(ep.prefix + "/") || url.pathname === ep.prefix) {
-      const upPath = url.pathname.replace(new RegExp(`^${ep.prefix}`), "") || "/";
+      // storepulse's live-server serves SPA routes under the `/storepulse` prefix but
+      // exposes its backend (/api, /ws, /assets, /login, static files) at the root. We
+      // strip the prefix for backend paths and preserve it for SPA entry routes.
+      let upPath;
+      if (ep.keepPrefix) {
+        const stripped = url.pathname.replace(new RegExp(`^${ep.prefix}`), "") || "/";
+        const isBackend = stripped === "/"
+          || stripped.startsWith("/api/") || stripped === "/api"
+          || stripped.startsWith("/ws")
+          || stripped.startsWith("/assets/")
+          || stripped.startsWith("/login") || stripped.startsWith("/logout")
+          || stripped.startsWith("/chat-proxy")
+          || stripped.startsWith("/chat-context")
+          || stripped === "/chat-widget.js"
+          || /\.(svg|png|jpg|jpeg|ico|css|js|woff2?|ttf|map)$/.test(stripped);
+        upPath = isBackend ? stripped : url.pathname;
+      } else {
+        upPath = url.pathname.replace(new RegExp(`^${ep.prefix}`), "") || "/";
+      }
       const upUrl = `${ep.proto}://${ep.host}:${ep.port}${upPath}${url.search}`;
       try {
         const upHeaders = { ...req.headers, host: `${ep.host}:${ep.port}` };
@@ -6977,6 +7043,15 @@ Examples:
           const rHeaders = { ...upRes.headers };
           delete rHeaders["x-frame-options"];
           delete rHeaders["content-security-policy"];
+          // Rewrite absolute-path redirects so they stay under our mount prefix.
+          // Upstream may emit `Location: /login` or `/storepulse` — the iframe is
+          // at chat's origin, so those would escape to chat's own routes.
+          if (ep.keepPrefix && rHeaders.location && typeof rHeaders.location === "string") {
+            const loc = rHeaders.location;
+            if (loc.startsWith("/") && !loc.startsWith("//") && !loc.startsWith(ep.prefix + "/") && loc !== ep.prefix) {
+              rHeaders.location = ep.prefix + loc;
+            }
+          }
           res.writeHead(upRes.statusCode ?? 502, rHeaders);
           upRes.pipe(res);
         });
@@ -7086,15 +7161,15 @@ function panelPush(category) {
 }
 
 // Subscribe to task events → push panel.refresh for tasks tab
-for (const evt of ["task.started", "task.assigned", "task.completed", "task.failed", "task.unblocked", "task.updated"]) {
+for (const evt of ["task.started", "task.assigned", "task.completed", "task.failed", "task.unblocked", "task.updated", "wave.started", "wave.completed"]) {
   eventBus.subscribe(evt, () => panelPush("tasks"));
 }
 // Subscribe to fleet/agent events → push for agents tab
-for (const evt of ["fleet.agent_status", "agent.quality_alert"]) {
+for (const evt of ["fleet.agent_status", "fleet.agent.stuck", "fleet.agent.dead", "fleet.agent.recovered", "fleet.task.degraded", "fleet.agent.crash_unrecoverable", "fleet.code_quality", "fleet.done-gate.failed", "fleet.verify.passed", "fleet.verify.fix_created", "twin.divergence", "agent.quality_alert"]) {
   eventBus.subscribe(evt, () => panelPush("agents"));
 }
 // Subscribe to service events → push for services tab
-for (const evt of ["service.unhealthy", "service.started"]) {
+for (const evt of ["service.unhealthy", "service.started", "deploy.monitor.breach", "deploy.monitor.rollback"]) {
   eventBus.subscribe(evt, () => panelPush("services"));
 }
 
