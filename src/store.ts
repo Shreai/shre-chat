@@ -334,8 +334,14 @@ export async function fetchAgentRegistry(): Promise<void> {
     if (!res.ok) return;
     const data = (await res.json()) as {
       agents: Array<{
-        id: string; name: string; emoji: string; tier: string;
-        audience: string; group: string; domains: string[]; description: string;
+        id: string;
+        name: string;
+        emoji: string;
+        tier: string;
+        audience: string;
+        group: string;
+        domains: string[];
+        description: string;
       }>;
     };
     if (!data.agents?.length) return;

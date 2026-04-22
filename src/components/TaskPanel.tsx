@@ -50,7 +50,13 @@ interface TaskPanelProps {
   fetchTrace: (traceId: string) => Promise<TraceStep[]>;
 }
 
-export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTrace }: TaskPanelProps) {
+export function TaskPanel({
+  task,
+  onClose,
+  onUpdateTask,
+  fetchSubtasks,
+  fetchTrace,
+}: TaskPanelProps) {
   const [subtasks, setSubtasks] = useState<TrackedTask[]>([]);
   const [traceSteps, setTraceSteps] = useState<TraceStep[]>([]);
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
@@ -91,8 +97,11 @@ export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTra
     [onUpdateTask, fetchSubtasks, task.id],
   );
 
-  const isDone = task.status === 'done' || task.status === 'completed' || task.status === 'cancelled';
-  const completedSubtasks = subtasks.filter((s) => s.status === 'done' || s.status === 'completed').length;
+  const isDone =
+    task.status === 'done' || task.status === 'completed' || task.status === 'cancelled';
+  const completedSubtasks = subtasks.filter(
+    (s) => s.status === 'done' || s.status === 'completed',
+  ).length;
   const progress =
     task.completion_ratio != null
       ? Math.round(task.completion_ratio * 100)
@@ -119,10 +128,7 @@ export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTra
             className="shrink-0 h-2.5 w-2.5 rounded-full"
             style={{ background: STATUS_COLORS[task.status] || '#6b7280' }}
           />
-          <span
-            className="text-sm font-semibold truncate"
-            style={{ color: 'var(--c-text-1)' }}
-          >
+          <span className="text-sm font-semibold truncate" style={{ color: 'var(--c-text-1)' }}>
             {task.title}
           </span>
         </div>
@@ -131,7 +137,13 @@ export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTra
           className="shrink-0 p-1 rounded hover:bg-white/5 transition-colors"
           style={{ color: 'var(--c-text-4)' }}
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
@@ -151,18 +163,22 @@ export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTra
             {STATUS_LABELS[task.status] || task.status}
           </span>
           {task.agent && <span>Agent: {task.agent}</span>}
-          {task.priority && (
-            <span style={{ textTransform: 'capitalize' }}>{task.priority}</span>
-          )}
+          {task.priority && <span style={{ textTransform: 'capitalize' }}>{task.priority}</span>}
           <span>{relativeTime(task.updated_at || task.created_at)}</span>
         </div>
         {progress != null && (
           <div className="mt-2">
-            <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--c-text-4)' }}>
+            <div
+              className="flex items-center justify-between text-[11px] mb-1"
+              style={{ color: 'var(--c-text-4)' }}
+            >
               <span>Progress</span>
               <span>{progress}%</span>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--c-bg-3, rgba(255,255,255,0.06))' }}>
+            <div
+              className="h-1.5 rounded-full overflow-hidden"
+              style={{ background: 'var(--c-bg-3, rgba(255,255,255,0.06))' }}
+            >
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -184,7 +200,8 @@ export function TaskPanel({ task, onClose, onUpdateTask, fetchSubtasks, fetchTra
             className="flex-1 text-[11px] py-2 transition-colors"
             style={{
               color: activeTab === tab ? 'var(--c-accent, #8b5cf6)' : 'var(--c-text-4)',
-              borderBottom: activeTab === tab ? '2px solid var(--c-accent, #8b5cf6)' : '2px solid transparent',
+              borderBottom:
+                activeTab === tab ? '2px solid var(--c-accent, #8b5cf6)' : '2px solid transparent',
               fontWeight: activeTab === tab ? 600 : 400,
             }}
           >
@@ -299,7 +316,10 @@ function DetailTab({
           <InfoRow label="Quality" value={`${task.quality_score.toFixed(1)} / 5.0`} />
         )}
         {task.depends_on && task.depends_on.length > 0 && (
-          <InfoRow label="Depends on" value={task.depends_on.map((d) => d.slice(0, 8)).join(', ')} />
+          <InfoRow
+            label="Depends on"
+            value={task.depends_on.map((d) => d.slice(0, 8)).join(', ')}
+          />
         )}
         <InfoRow label="Created" value={new Date(task.created_at).toLocaleString()} />
         {task.updated_at && <InfoRow label="Updated" value={relativeTime(task.updated_at)} />}
@@ -312,7 +332,10 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-[11px]">
       <span style={{ color: 'var(--c-text-4)' }}>{label}</span>
-      <span style={{ color: 'var(--c-text-2)' }} className="font-mono text-right max-w-[200px] truncate">
+      <span
+        style={{ color: 'var(--c-text-2)' }}
+        className="font-mono text-right max-w-[200px] truncate"
+      >
         {value}
       </span>
     </div>
@@ -389,12 +412,24 @@ function SubtasksTab({
               }}
             >
               {isChecked && (
-                <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2">
+                <svg
+                  className="h-2.5 w-2.5"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2"
+                >
                   <path d="M2 6l3 3 5-5" />
                 </svg>
               )}
               {isFailed && (
-                <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" stroke="#ef4444" strokeWidth="2">
+                <svg
+                  className="h-2.5 w-2.5"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="2"
+                >
                   <path d="M3 3l6 6M9 3l-6 6" />
                 </svg>
               )}
@@ -417,7 +452,10 @@ function SubtasksTab({
               >
                 {sub.title}
               </div>
-              <div className="flex items-center gap-2 mt-0.5 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+              <div
+                className="flex items-center gap-2 mt-0.5 text-[10px]"
+                style={{ color: 'var(--c-text-4)' }}
+              >
                 {sub.agent && <span>{sub.agent}</span>}
                 {sub.quality_score != null && <span>Q: {sub.quality_score.toFixed(1)}</span>}
                 <span
@@ -484,7 +522,14 @@ function TraceTab({
 
       <div className="space-y-0.5">
         {steps.map((step, i) => {
-          const icon = step.status === 'ok' ? 'check' : step.status === 'fail' ? 'x' : step.status === 'running' ? 'pulse' : 'dot';
+          const icon =
+            step.status === 'ok'
+              ? 'check'
+              : step.status === 'fail'
+                ? 'x'
+                : step.status === 'running'
+                  ? 'pulse'
+                  : 'dot';
           const color =
             step.status === 'ok'
               ? '#22c55e'
@@ -514,7 +559,10 @@ function TraceTab({
                   </svg>
                 )}
                 {icon === 'pulse' && (
-                  <span className="h-3 w-3 rounded-full animate-pulse" style={{ background: color }} />
+                  <span
+                    className="h-3 w-3 rounded-full animate-pulse"
+                    style={{ background: color }}
+                  />
                 )}
                 {icon === 'dot' && (
                   <span
@@ -526,10 +574,18 @@ function TraceTab({
 
               {/* Label */}
               <div className="flex-1 min-w-0">
-                <div className="text-[12px]" style={{ color: step.status === 'pending' ? 'var(--c-text-4)' : 'var(--c-text-1)' }}>
+                <div
+                  className="text-[12px]"
+                  style={{
+                    color: step.status === 'pending' ? 'var(--c-text-4)' : 'var(--c-text-1)',
+                  }}
+                >
                   {step.name}
                 </div>
-                <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                <div
+                  className="flex items-center gap-2 text-[10px]"
+                  style={{ color: 'var(--c-text-4)' }}
+                >
                   {step.duration_ms != null && (
                     <span>
                       {step.duration_ms < 1000
@@ -623,9 +679,7 @@ export function InlineTaskPills({
 
             {/* Agent + status */}
             <span className="truncate max-w-[120px]">{task.agent || 'agent'}</span>
-            <span style={{ opacity: 0.7 }}>
-              {STATUS_LABELS[task.status] || task.status}
-            </span>
+            <span style={{ opacity: 0.7 }}>{STATUS_LABELS[task.status] || task.status}</span>
 
             {/* Completion */}
             {task.completion_ratio != null && task.completion_ratio > 0 && (
@@ -671,7 +725,13 @@ export function TaskIndicatorButton({
         <span className="h-2 w-2 rounded-full" style={{ background: '#ef4444' }} />
       )}
 
-      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M9 11l3 3L22 4" />
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>

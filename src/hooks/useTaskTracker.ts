@@ -58,34 +58,31 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
   const fetchTasks = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const res = await fetch(
-        `/api/tasks?session_id=${encodeURIComponent(sessionId)}&limit=50`,
-        { signal: AbortSignal.timeout(5000) },
-      );
+      const res = await fetch(`/api/tasks?session_id=${encodeURIComponent(sessionId)}&limit=50`, {
+        signal: AbortSignal.timeout(5000),
+      });
       if (!res.ok) return;
       const data = await res.json();
-      const list: TrackedTask[] = (Array.isArray(data) ? data : data.tasks || []).map(
-        (t: any) => ({
-          id: t.id,
-          title: t.title,
-          status: t.status,
-          agent: t.agent || t.agent_id,
-          agent_id: t.agent_id,
-          priority: t.priority,
-          project_id: t.project_id,
-          parent_id: t.parent_id,
-          session_id: t.session_id,
-          quality_score: t.quality_score,
-          completion_ratio: t.completion_ratio,
-          description: t.description,
-          source: t.source,
-          depends_on: t.depends_on,
-          message_index: t.metadata?.message_index,
-          created_at: t.created_at,
-          updated_at: t.updated_at,
-          trace_id: t.trace_id || t.metadata?.trace_id,
-        }),
-      );
+      const list: TrackedTask[] = (Array.isArray(data) ? data : data.tasks || []).map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        agent: t.agent || t.agent_id,
+        agent_id: t.agent_id,
+        priority: t.priority,
+        project_id: t.project_id,
+        parent_id: t.parent_id,
+        session_id: t.session_id,
+        quality_score: t.quality_score,
+        completion_ratio: t.completion_ratio,
+        description: t.description,
+        source: t.source,
+        depends_on: t.depends_on,
+        message_index: t.metadata?.message_index,
+        created_at: t.created_at,
+        updated_at: t.updated_at,
+        trace_id: t.trace_id || t.metadata?.trace_id,
+      }));
       setTasks(list);
     } catch {
       // Network error — keep existing state
@@ -231,7 +228,8 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
       return (data.spans || data.steps || []).map((s: any) => ({
         name: s.name || s.step,
         status: s.error ? 'fail' : s.endTime ? 'ok' : s.startTime ? 'running' : 'pending',
-        duration_ms: s.duration_ms ?? (s.endTime && s.startTime ? s.endTime - s.startTime : undefined),
+        duration_ms:
+          s.duration_ms ?? (s.endTime && s.startTime ? s.endTime - s.startTime : undefined),
         error: s.error,
         timestamp: s.startTime || s.timestamp,
       }));

@@ -73,7 +73,10 @@ export async function getOrRequestStream(): Promise<MediaStream> {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch (constraintErr: any) {
-    if (constraintErr?.name === 'OverconstrainedError' || constraintErr?.name === 'NotReadableError') {
+    if (
+      constraintErr?.name === 'OverconstrainedError' ||
+      constraintErr?.name === 'NotReadableError'
+    ) {
       console.warn('[mic] Constraint error, retrying with basic audio:', constraintErr.message);
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } else {

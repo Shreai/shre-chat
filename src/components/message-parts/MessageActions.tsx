@@ -118,7 +118,11 @@ export function MessageActions({
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: plainText, voice: usePreferences.getState().ttsVoice, provider: usePreferences.getState().ttsProvider || 'auto' }),
+        body: JSON.stringify({
+          input: plainText,
+          voice: usePreferences.getState().ttsVoice,
+          provider: usePreferences.getState().ttsProvider || 'auto',
+        }),
         signal: abort.signal,
       });
       if (!res.ok) {

@@ -225,7 +225,7 @@ export function useAuth(devBypass: boolean) {
 
   useEffect(() => {
     if (devBypass) return;
-    
+
     // Safety timeout: stop checking if it takes more than 10s (e.g. backend hang)
     const timeout = setTimeout(() => {
       if (authChecking) {

@@ -17,7 +17,11 @@ function stepFromToolExec(msg: ChatMessage): ProgressStep {
   const tool = (m.tool || 'unknown').replace(/^(mib_|aros_)/, '').replace(/_/g, ' ');
   const status = m.status === 'error' ? 'error' : m.status === 'running' ? 'running' : 'success';
   const duration = m.duration ? parseInt(m.duration, 10) : undefined;
-  const durationStr = duration ? (duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(1)}s`) : '';
+  const durationStr = duration
+    ? duration < 1000
+      ? `${duration}ms`
+      : `${(duration / 1000).toFixed(1)}s`
+    : '';
 
   const icons = { running: '⚡', success: '✓', error: '✕' };
   const colors = {
@@ -32,10 +36,19 @@ function stepFromToolExec(msg: ChatMessage): ProgressStep {
   };
 
   let detail = '';
-  const input = m.inputJson ? (() => { try { return JSON.parse(m.inputJson); } catch { return null; } })() : null;
+  const input = m.inputJson
+    ? (() => {
+        try {
+          return JSON.parse(m.inputJson);
+        } catch {
+          return null;
+        }
+      })()
+    : null;
   if (input) {
     if (input.command) detail = String(input.command).slice(0, 80);
-    else if (input.path || input.file_path) detail = String(input.path || input.file_path).slice(0, 80);
+    else if (input.path || input.file_path)
+      detail = String(input.path || input.file_path).slice(0, 80);
     else if (input.query) detail = String(input.query).slice(0, 80);
   }
   if (status === 'error' && m.error) detail = m.error.slice(0, 80);
@@ -78,9 +91,21 @@ const StatusIcon = memo(function StatusIcon({ step }: { step: ProgressStep }) {
     return (
       <div
         className="flex items-center justify-center rounded-full animate-pulse"
-        style={{ width: size, height: size, background: `${step.color}22`, border: `1.5px solid ${step.color}` }}
+        style={{
+          width: size,
+          height: size,
+          background: `${step.color}22`,
+          border: `1.5px solid ${step.color}`,
+        }}
       >
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={step.color} strokeWidth="3">
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={step.color}
+          strokeWidth="3"
+        >
           <polyline points="4 17 10 11 4 5" />
         </svg>
       </div>
@@ -90,9 +115,21 @@ const StatusIcon = memo(function StatusIcon({ step }: { step: ProgressStep }) {
     return (
       <div
         className="flex items-center justify-center rounded-full"
-        style={{ width: size, height: size, background: `${step.color}22`, border: `1.5px solid ${step.color}` }}
+        style={{
+          width: size,
+          height: size,
+          background: `${step.color}22`,
+          border: `1.5px solid ${step.color}`,
+        }}
       >
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={step.color} strokeWidth="3">
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={step.color}
+          strokeWidth="3"
+        >
           <polyline points="20 6 9 17 4 12" />
         </svg>
       </div>
@@ -102,9 +139,21 @@ const StatusIcon = memo(function StatusIcon({ step }: { step: ProgressStep }) {
     return (
       <div
         className="flex items-center justify-center rounded-full"
-        style={{ width: size, height: size, background: `${step.color}22`, border: `1.5px solid ${step.color}` }}
+        style={{
+          width: size,
+          height: size,
+          background: `${step.color}22`,
+          border: `1.5px solid ${step.color}`,
+        }}
       >
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={step.color} strokeWidth="3">
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={step.color}
+          strokeWidth="3"
+        >
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
@@ -114,7 +163,12 @@ const StatusIcon = memo(function StatusIcon({ step }: { step: ProgressStep }) {
   return (
     <div
       className="flex items-center justify-center rounded-full"
-      style={{ width: size, height: size, background: `${step.color}22`, border: `1.5px solid ${step.color}` }}
+      style={{
+        width: size,
+        height: size,
+        background: `${step.color}22`,
+        border: `1.5px solid ${step.color}`,
+      }}
     >
       <span style={{ fontSize: 8, lineHeight: 1 }}>{step.icon}</span>
     </div>

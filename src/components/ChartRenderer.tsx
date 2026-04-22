@@ -41,11 +41,17 @@ function useThemeColors() {
 
   useEffect(() => {
     const observer = new MutationObserver(() => setDark(isDarkTheme()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'data-theme'],
+    });
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onMq = () => setDark(isDarkTheme());
     mq.addEventListener('change', onMq);
-    return () => { observer.disconnect(); mq.removeEventListener('change', onMq); };
+    return () => {
+      observer.disconnect();
+      mq.removeEventListener('change', onMq);
+    };
   }, []);
 
   return {
@@ -449,14 +455,48 @@ export default function ChartRenderer({
         </text>
       )}
 
-      {data.type === 'bar' && <BarChart data={data} w={numW} h={h + titleOffset} pad={pad} textColor={textColor} gridColor={gridColor} />}
+      {data.type === 'bar' && (
+        <BarChart
+          data={data}
+          w={numW}
+          h={h + titleOffset}
+          pad={pad}
+          textColor={textColor}
+          gridColor={gridColor}
+        />
+      )}
       {data.type === 'line' && (
-        <LineAreaChart data={data} w={numW} h={h + titleOffset} pad={pad} filled={false} textColor={textColor} gridColor={gridColor} />
+        <LineAreaChart
+          data={data}
+          w={numW}
+          h={h + titleOffset}
+          pad={pad}
+          filled={false}
+          textColor={textColor}
+          gridColor={gridColor}
+        />
       )}
       {data.type === 'area' && (
-        <LineAreaChart data={data} w={numW} h={h + titleOffset} pad={pad} filled textColor={textColor} gridColor={gridColor} />
+        <LineAreaChart
+          data={data}
+          w={numW}
+          h={h + titleOffset}
+          pad={pad}
+          filled
+          textColor={textColor}
+          gridColor={gridColor}
+        />
       )}
-      {data.type === 'pie' && <PieChart data={data} w={numW} h={h + titleOffset} pad={pad} textColor={textColor} pieInnerColor={pieInnerColor} />}
+      {data.type === 'pie' && (
+        <PieChart
+          data={data}
+          w={numW}
+          h={h + titleOffset}
+          pad={pad}
+          textColor={textColor}
+          pieInnerColor={pieInnerColor}
+        />
+      )}
 
       {showLegend && (
         <g transform={`translate(${numW / 2}, ${totalH - 10})`}>

@@ -50,7 +50,8 @@ const FORGET_PATTERNS: Array<{ regex: RegExp; extractor: (m: RegExpMatchArray) =
     extractor: (m) => m[1],
   },
   {
-    regex: /^(?:please\s+)?(?:delete|remove|erase)\s+(?:the\s+(?:fact|memory)\s+(?:that|about)\s+)?(.+)/i,
+    regex:
+      /^(?:please\s+)?(?:delete|remove|erase)\s+(?:the\s+(?:fact|memory)\s+(?:that|about)\s+)?(.+)/i,
     extractor: (m) => m[1],
   },
   {
@@ -207,7 +208,7 @@ export async function listMemories(): Promise<MemoryResult> {
       facts: data.facts || [],
       message: data.facts?.length
         ? `I remember ${data.facts.length} facts about our conversations.`
-        : 'I don\'t have any stored memories yet.',
+        : "I don't have any stored memories yet.",
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to list memories' };

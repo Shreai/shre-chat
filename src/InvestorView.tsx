@@ -49,7 +49,10 @@ function StatCard({
         border: '1px solid var(--c-border-2)',
       }}
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--c-text-4)' }}>
+      <div
+        className="text-[11px] font-medium uppercase tracking-wider mb-1"
+        style={{ color: 'var(--c-text-4)' }}
+      >
         {label}
       </div>
       <div
@@ -83,21 +86,39 @@ function SectionHeader({ title, icon }: { title: string; icon: string }) {
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--c-bg-3, rgba(255,255,255,0.05))' }}>
-      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+    <div
+      className="h-2 rounded-full overflow-hidden"
+      style={{ background: 'var(--c-bg-3, rgba(255,255,255,0.05))' }}
+    >
+      <div
+        className="h-full rounded-full transition-all"
+        style={{ width: `${pct}%`, background: color }}
+      />
     </div>
   );
 }
 
 // ── Opportunity Card ──
-function OpportunityCard({ title, desc, size, status }: { title: string; desc: string; size: string; status: string }) {
+function OpportunityCard({
+  title,
+  desc,
+  size,
+  status,
+}: {
+  title: string;
+  desc: string;
+  size: string;
+  status: string;
+}) {
   return (
     <div
       className="rounded-xl p-4"
       style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[13px] font-semibold" style={{ color: 'var(--c-text-1)' }}>{title}</span>
+        <span className="text-[13px] font-semibold" style={{ color: 'var(--c-text-1)' }}>
+          {title}
+        </span>
         <span
           className="text-[10px] px-2 py-0.5 rounded-full font-medium"
           style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}
@@ -105,8 +126,12 @@ function OpportunityCard({ title, desc, size, status }: { title: string; desc: s
           {status}
         </span>
       </div>
-      <div className="text-[12px] mb-2" style={{ color: 'var(--c-text-3)' }}>{desc}</div>
-      <div className="text-[11px] font-medium" style={{ color: 'var(--c-accent, #6366f1)' }}>{size}</div>
+      <div className="text-[12px] mb-2" style={{ color: 'var(--c-text-3)' }}>
+        {desc}
+      </div>
+      <div className="text-[11px] font-medium" style={{ color: 'var(--c-accent, #6366f1)' }}>
+        {size}
+      </div>
     </div>
   );
 }
@@ -114,32 +139,82 @@ function OpportunityCard({ title, desc, size, status }: { title: string; desc: s
 // ── ROI Table ──
 function ROITable() {
   const rows = [
-    { role: 'Store Manager (reporting)', human: '$3,500/mo', ai: '$49/mo', savings: '98.6%', note: 'Automated daily/weekly/monthly reports' },
-    { role: 'Inventory Analyst', human: '$4,000/mo', ai: '$49/mo', savings: '98.8%', note: 'Real-time stock alerts, reorder suggestions' },
-    { role: 'Compliance Officer', human: '$5,000/mo', ai: '$49/mo', savings: '99.0%', note: 'Automated audit trails, exception flagging' },
-    { role: 'Data Analyst (HQ)', human: '$6,500/mo', ai: '$99/mo', savings: '98.5%', note: 'Cross-store benchmarking, trend analysis' },
-    { role: 'Marketing Coordinator', human: '$3,200/mo', ai: '$49/mo', savings: '98.5%', note: 'AI-generated promotions, loyalty campaigns' },
+    {
+      role: 'Store Manager (reporting)',
+      human: '$3,500/mo',
+      ai: '$49/mo',
+      savings: '98.6%',
+      note: 'Automated daily/weekly/monthly reports',
+    },
+    {
+      role: 'Inventory Analyst',
+      human: '$4,000/mo',
+      ai: '$49/mo',
+      savings: '98.8%',
+      note: 'Real-time stock alerts, reorder suggestions',
+    },
+    {
+      role: 'Compliance Officer',
+      human: '$5,000/mo',
+      ai: '$49/mo',
+      savings: '99.0%',
+      note: 'Automated audit trails, exception flagging',
+    },
+    {
+      role: 'Data Analyst (HQ)',
+      human: '$6,500/mo',
+      ai: '$99/mo',
+      savings: '98.5%',
+      note: 'Cross-store benchmarking, trend analysis',
+    },
+    {
+      role: 'Marketing Coordinator',
+      human: '$3,200/mo',
+      ai: '$49/mo',
+      savings: '98.5%',
+      note: 'AI-generated promotions, loyalty campaigns',
+    },
   ];
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[12px]" style={{ color: 'var(--c-text-2)' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--c-border-2)' }}>
-            <th className="text-left py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>Role Replaced</th>
-            <th className="text-right py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>Human Cost</th>
-            <th className="text-right py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>AI Agent Cost</th>
-            <th className="text-right py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>Savings</th>
-            <th className="text-left py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>What AI Does</th>
+            <th className="text-left py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>
+              Role Replaced
+            </th>
+            <th className="text-right py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>
+              Human Cost
+            </th>
+            <th className="text-right py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>
+              AI Agent Cost
+            </th>
+            <th className="text-right py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>
+              Savings
+            </th>
+            <th className="text-left py-2 px-2 font-medium" style={{ color: 'var(--c-text-4)' }}>
+              What AI Does
+            </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.role} style={{ borderBottom: '1px solid var(--c-border-2)' }}>
-              <td className="py-2 px-2 font-medium" style={{ color: 'var(--c-text-1)' }}>{r.role}</td>
-              <td className="py-2 px-2 text-right" style={{ color: '#ef4444' }}>{r.human}</td>
-              <td className="py-2 px-2 text-right" style={{ color: '#22c55e' }}>{r.ai}</td>
-              <td className="py-2 px-2 text-right font-bold" style={{ color: '#22c55e' }}>{r.savings}</td>
-              <td className="py-2 px-2 text-[11px]" style={{ color: 'var(--c-text-3)' }}>{r.note}</td>
+              <td className="py-2 px-2 font-medium" style={{ color: 'var(--c-text-1)' }}>
+                {r.role}
+              </td>
+              <td className="py-2 px-2 text-right" style={{ color: '#ef4444' }}>
+                {r.human}
+              </td>
+              <td className="py-2 px-2 text-right" style={{ color: '#22c55e' }}>
+                {r.ai}
+              </td>
+              <td className="py-2 px-2 text-right font-bold" style={{ color: '#22c55e' }}>
+                {r.savings}
+              </td>
+              <td className="py-2 px-2 text-[11px]" style={{ color: 'var(--c-text-3)' }}>
+                {r.note}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -279,7 +354,12 @@ export function InvestorView() {
       {/* ═══ INVESTOR KPIs ═══ */}
       <SectionHeader title="Business Metrics" icon="$" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Customers" value={inv.customers} sub="Pre-launch — seeking beta pilots" large />
+        <StatCard
+          label="Customers"
+          value={inv.customers}
+          sub="Pre-launch — seeking beta pilots"
+          large
+        />
         <StatCard label="MRR" value="$0" sub="No revenue yet" />
         <StatCard label="ARR" value="$0" sub="Target: $81K Y1" />
         <StatCard
@@ -299,7 +379,11 @@ export function InvestorView() {
           accent="#3b82f6"
           large
         />
-        <StatCard label="Analytics Views" value={inv.dataAdvantage.views} sub="Materialized POS views" />
+        <StatCard
+          label="Analytics Views"
+          value={inv.dataAdvantage.views}
+          sub="Materialized POS views"
+        />
         <StatCard label="Partner" value="RapidRMS" sub="3,100+ store ecosystem" accent="#22c55e" />
         <StatCard label="Verticals" value="5" sub="C-Store, Liquor, QSR, Fuel, Retail" />
       </div>
@@ -311,9 +395,13 @@ export function InvestorView() {
         style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}
       >
         <ROITable />
-        <div className="mt-3 text-[11px] flex items-center gap-4" style={{ color: 'var(--c-text-3)' }}>
+        <div
+          className="mt-3 text-[11px] flex items-center gap-4"
+          style={{ color: 'var(--c-text-3)' }}
+        >
           <span>
-            <strong style={{ color: '#22c55e' }}>Per-store savings:</strong> $15,700-22,200/mo in labor replaced by $49-99/mo AI agents
+            <strong style={{ color: '#22c55e' }}>Per-store savings:</strong> $15,700-22,200/mo in
+            labor replaced by $49-99/mo AI agents
           </span>
           <span>
             <strong style={{ color: 'var(--c-accent)' }}>ROI:</strong> 150-450x on subscription cost
@@ -341,7 +429,9 @@ export function InvestorView() {
       {/* ═══ PLATFORM KPIs ═══ */}
       <SectionHeader title="Platform KPIs (Real-Time)" icon="#" />
       {loading ? (
-        <div className="text-[12px] py-4" style={{ color: 'var(--c-text-4)' }}>Loading platform metrics...</div>
+        <div className="text-[12px] py-4" style={{ color: 'var(--c-text-4)' }}>
+          Loading platform metrics...
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -361,7 +451,11 @@ export function InvestorView() {
               label="Benchmark Score"
               value={`${platform?.benchmark.score || 0}%`}
               sub={`Goal: ${platform?.benchmark.goal}%`}
-              accent={(platform?.benchmark.score || 0) >= (platform?.benchmark.goal || 95) ? '#22c55e' : '#eab308'}
+              accent={
+                (platform?.benchmark.score || 0) >= (platform?.benchmark.goal || 95)
+                  ? '#22c55e'
+                  : '#eab308'
+              }
             />
             <StatCard
               label="Uptime"
@@ -372,16 +466,38 @@ export function InvestorView() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-            <StatCard label="Tasks Completed" value={platform?.tasks.completed || 0} sub={`${platform?.tasks.inProgress || 0} in progress`} />
-            <StatCard label="Training Data Points" value={platform?.training.dataPoints || 0} sub={platform?.training.lastRun || 'N/A'} />
-            <StatCard label="Model Version" value={platform?.training.modelVersion || 'N/A'} sub="Fine-tuned daily" />
-            <StatCard label="E2E Tests" value={inv.techStack.e2eTests} sub="110 passing, 9 agents" accent="#22c55e" />
+            <StatCard
+              label="Tasks Completed"
+              value={platform?.tasks.completed || 0}
+              sub={`${platform?.tasks.inProgress || 0} in progress`}
+            />
+            <StatCard
+              label="Training Data Points"
+              value={platform?.training.dataPoints || 0}
+              sub={platform?.training.lastRun || 'N/A'}
+            />
+            <StatCard
+              label="Model Version"
+              value={platform?.training.modelVersion || 'N/A'}
+              sub="Fine-tuned daily"
+            />
+            <StatCard
+              label="E2E Tests"
+              value={inv.techStack.e2eTests}
+              sub="110 passing, 9 agents"
+              accent="#22c55e"
+            />
           </div>
 
           {/* Service Health Bar */}
-          <div className="mt-4 rounded-xl p-4" style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}>
+          <div
+            className="mt-4 rounded-xl p-4"
+            style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-2)' }}
+          >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-medium" style={{ color: 'var(--c-text-3)' }}>Service Health</span>
+              <span className="text-[11px] font-medium" style={{ color: 'var(--c-text-3)' }}>
+                Service Health
+              </span>
               <span className="text-[11px]" style={{ color: 'var(--c-text-4)' }}>
                 {platform?.services.healthy || 0} healthy / {platform?.services.total || 30} total
               </span>
@@ -400,7 +516,11 @@ export function InvestorView() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Microservices" value={inv.techStack.services} sub="Fully operational" />
         <StatCard label="AI Agents" value={inv.techStack.agents} sub="Multi-agent fleet" />
-        <StatCard label="SDK Modules" value={inv.techStack.sdkModules} sub="Shared infrastructure" />
+        <StatCard
+          label="SDK Modules"
+          value={inv.techStack.sdkModules}
+          sub="Shared infrastructure"
+        />
         <StatCard label="E2E Test Agents" value="9" sub="Parallel QA coverage" />
       </div>
       <div
@@ -410,7 +530,10 @@ export function InvestorView() {
         <div className="text-[12px] font-medium mb-2" style={{ color: 'var(--c-text-2)' }}>
           Core Infrastructure
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--c-text-3)' }}>
+        <div
+          className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-[11px]"
+          style={{ color: 'var(--c-text-3)' }}
+        >
           <div>CortexDB (PG + Qdrant + Redis)</div>
           <div>shre-router Gateway (multi-model)</div>
           <div>Architecture Council</div>
@@ -426,19 +549,52 @@ export function InvestorView() {
       {/* ═══ COST STRUCTURE ═══ */}
       <SectionHeader title="Monthly Cost Structure (Pre-Revenue)" icon="-" />
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Infrastructure" value={`$${inv.costStructure.infra}/mo`} sub="Hosting + DB + CDN" />
-        <StatCard label="Compute" value={`$${inv.costStructure.compute}/mo`} sub="GPU (Shadow PC) + API" />
-        <StatCard label="Total Burn" value={`$${inv.costStructure.total}/mo`} sub="Lean — solo founder" accent="#eab308" />
+        <StatCard
+          label="Infrastructure"
+          value={`$${inv.costStructure.infra}/mo`}
+          sub="Hosting + DB + CDN"
+        />
+        <StatCard
+          label="Compute"
+          value={`$${inv.costStructure.compute}/mo`}
+          sub="GPU (Shadow PC) + API"
+        />
+        <StatCard
+          label="Total Burn"
+          value={`$${inv.costStructure.total}/mo`}
+          sub="Lean — solo founder"
+          accent="#eab308"
+        />
       </div>
 
       {/* ═══ ROADMAP ═══ */}
       <SectionHeader title="Roadmap" icon=">" />
       <div className="space-y-2">
         {[
-          { phase: 'Now', label: 'Beta Launch', desc: 'Deploy to first 5 RapidRMS pilot stores, validate product-market fit', status: 'current' },
-          { phase: 'Q2 2026', label: '50 Paying Stores', desc: 'Expand via RapidRMS dealer network, collect 3 case studies', status: 'next' },
-          { phase: 'Q4 2026', label: 'Multi-POS', desc: 'Build NCR, Clover, Square adapters. Unlock 200K+ additional stores', status: 'planned' },
-          { phase: '2027', label: 'Platform Ecosystem', desc: 'Open SDK, agent marketplace, BlockOS block marketplace (30% take rate)', status: 'planned' },
+          {
+            phase: 'Now',
+            label: 'Beta Launch',
+            desc: 'Deploy to first 5 RapidRMS pilot stores, validate product-market fit',
+            status: 'current',
+          },
+          {
+            phase: 'Q2 2026',
+            label: '50 Paying Stores',
+            desc: 'Expand via RapidRMS dealer network, collect 3 case studies',
+            status: 'next',
+          },
+          {
+            phase: 'Q4 2026',
+            label: 'Multi-POS',
+            desc: 'Build NCR, Clover, Square adapters. Unlock 200K+ additional stores',
+            status: 'planned',
+          },
+          {
+            phase: '2027',
+            label: 'Platform Ecosystem',
+            desc: 'Open SDK, agent marketplace, BlockOS block marketplace (30% take rate)',
+            status: 'planned',
+          },
         ].map((item) => (
           <div
             key={item.phase}
@@ -451,15 +607,20 @@ export function InvestorView() {
             <span
               className="text-[10px] font-bold px-2 py-0.5 rounded shrink-0"
               style={{
-                background: item.status === 'current' ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)',
+                background:
+                  item.status === 'current' ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)',
                 color: item.status === 'current' ? '#3b82f6' : 'var(--c-text-3)',
               }}
             >
               {item.phase}
             </span>
             <div className="flex-1">
-              <span className="text-[13px] font-medium" style={{ color: 'var(--c-text-1)' }}>{item.label}</span>
-              <span className="text-[11px] ml-2" style={{ color: 'var(--c-text-3)' }}>{item.desc}</span>
+              <span className="text-[13px] font-medium" style={{ color: 'var(--c-text-1)' }}>
+                {item.label}
+              </span>
+              <span className="text-[11px] ml-2" style={{ color: 'var(--c-text-3)' }}>
+                {item.desc}
+              </span>
             </div>
           </div>
         ))}
@@ -477,7 +638,10 @@ export function InvestorView() {
               <div
                 key={`${entry.version}-${i}`}
                 className="px-4 py-2.5 flex items-start gap-3"
-                style={{ borderBottom: i < Math.min(changelog.length, 10) - 1 ? '1px solid var(--c-border-2)' : 'none' }}
+                style={{
+                  borderBottom:
+                    i < Math.min(changelog.length, 10) - 1 ? '1px solid var(--c-border-2)' : 'none',
+                }}
               >
                 <span
                   className="text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 mt-0.5"
@@ -487,7 +651,11 @@ export function InvestorView() {
                 </span>
                 <div className="flex-1">
                   <div className="text-[11px]" style={{ color: 'var(--c-text-4)' }}>
-                    {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(entry.date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
                   </div>
                   {entry.changes.map((c, j) => (
                     <div key={j} className="text-[12px]" style={{ color: 'var(--c-text-2)' }}>
@@ -503,9 +671,8 @@ export function InvestorView() {
 
       {/* Footer disclaimer */}
       <div className="mt-8 mb-4 text-[10px] text-center" style={{ color: 'var(--c-text-4)' }}>
-        Confidential — Nirlab Inc. All projections are forward-looking estimates.
-        Currently pre-launch with zero customers and zero revenue.
-        Platform metrics refresh every 60 seconds.
+        Confidential — Nirlab Inc. All projections are forward-looking estimates. Currently
+        pre-launch with zero customers and zero revenue. Platform metrics refresh every 60 seconds.
       </div>
     </div>
   );

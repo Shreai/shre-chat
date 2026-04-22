@@ -566,7 +566,8 @@ export function ChatComposer(props: ChatComposerProps) {
           )}
 
           {/* Voice status mini toolbar */}
-          {(isRecording || voicePhase === 'transcribing' ||
+          {(isRecording ||
+            voicePhase === 'transcribing' ||
             (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
             <div
               className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
@@ -578,9 +579,12 @@ export function ChatComposer(props: ChatComposerProps) {
               {isRecording && voicePhase === 'recording' && (
                 <>
                   <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                  <span style={{ color: '#f87171' }} className="font-medium">Recording</span>
+                  <span style={{ color: '#f87171' }} className="font-medium">
+                    Recording
+                  </span>
                   <span className="tabular-nums" style={{ color: 'var(--c-text-3)' }}>
-                    {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                    {Math.floor(recordingDuration / 60)}:
+                    {String(recordingDuration % 60).padStart(2, '0')}
                   </span>
                   {recordingDuration >= MAX_RECORDING_SECONDS - 30 && (
                     <span className="text-yellow-400 animate-pulse">Stopping soon...</span>
@@ -602,7 +606,13 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
               {voicePhase === 'transcribing' && (
                 <>
-                  <svg className="h-3 w-3 animate-spin text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg
+                    className="h-3 w-3 animate-spin text-blue-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
                     <circle cx="12" cy="12" r="10" opacity="0.3" />
                     <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
                   </svg>
@@ -610,18 +620,25 @@ export function ChatComposer(props: ChatComposerProps) {
                 </>
               )}
               {/* Speaking indicator only shown when mic was used (hands-free or recording) */}
-              {!isRecording && !voicePhase.startsWith('trans') && !isSpeaking && interimTranscript && (
-                <span
-                  className="truncate"
-                  style={{
-                    color: interimTranscript.includes('failed') || interimTranscript.includes('blocked') ||
-                      interimTranscript.includes('timed') || interimTranscript.includes('error')
-                        ? '#f87171' : 'var(--c-text-4)',
-                  }}
-                >
-                  {interimTranscript}
-                </span>
-              )}
+              {!isRecording &&
+                !voicePhase.startsWith('trans') &&
+                !isSpeaking &&
+                interimTranscript && (
+                  <span
+                    className="truncate"
+                    style={{
+                      color:
+                        interimTranscript.includes('failed') ||
+                        interimTranscript.includes('blocked') ||
+                        interimTranscript.includes('timed') ||
+                        interimTranscript.includes('error')
+                          ? '#f87171'
+                          : 'var(--c-text-4)',
+                    }}
+                  >
+                    {interimTranscript}
+                  </span>
+                )}
               {/* Hands-free disabled for now
               {isHandsFree && !isRecording && !interimTranscript && !isSpeaking && (
                 <>
@@ -861,77 +878,82 @@ export function ChatComposer(props: ChatComposerProps) {
 
               {/* Claude CLI — opens as terminal tab */}
               {features['claudeCli'] && (
-              <button
-                tabIndex={-1}
-                onClick={() => {
-                  if (onOpenClaudeCli) onOpenClaudeCli();
-                }}
-                className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                style={{ color: 'var(--c-text-2)' }}
-                title="Open Claude CLI in terminal tab"
-                aria-label="Open Claude CLI in terminal tab"
-              >
-                <svg
-                  className="h-4 w-4 sm:h-4 sm:w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                <button
+                  tabIndex={-1}
+                  onClick={() => {
+                    if (onOpenClaudeCli) onOpenClaudeCli();
+                  }}
+                  className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                  style={{ color: 'var(--c-text-2)' }}
+                  title="Open Claude CLI in terminal tab"
+                  aria-label="Open Claude CLI in terminal tab"
                 >
-                  <polyline points="16 18 22 12 16 6" />
-                  <polyline points="8 6 2 12 8 18" />
-                </svg>
-                <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
-              </button>
+                  <svg
+                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="16 18 22 12 16 6" />
+                    <polyline points="8 6 2 12 8 18" />
+                  </svg>
+                  <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
+                </button>
               )}
 
               {/* Shre CLI — opens shre REPL as terminal tab */}
               {features['shreCli'] && (
-              <button
-                tabIndex={-1}
-                onClick={() => {
-                  if (onOpenShreCli) onOpenShreCli();
-                }}
-                className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1"
-                style={{ color: 'var(--c-text-2)' }}
-                title="Open Shre CLI in terminal tab"
-                aria-label="Open Shre CLI in terminal tab"
-              >
-                <svg
-                  className="h-4 w-4 sm:h-4 sm:w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                <button
+                  tabIndex={-1}
+                  onClick={() => {
+                    if (onOpenShreCli) onOpenShreCli();
+                  }}
+                  className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1"
+                  style={{ color: 'var(--c-text-2)' }}
+                  title="Open Shre CLI in terminal tab"
+                  aria-label="Open Shre CLI in terminal tab"
                 >
-                  <polyline points="4 17 10 11 4 5" />
-                  <line x1="12" y1="19" x2="20" y2="19" />
-                </svg>
-                <span className="hidden sm:inline text-[10px] font-medium" style={{ color: '#22c55e' }}>Shre</span>
-              </button>
+                  <svg
+                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="4 17 10 11 4 5" />
+                    <line x1="12" y1="19" x2="20" y2="19" />
+                  </svg>
+                  <span
+                    className="hidden sm:inline text-[10px] font-medium"
+                    style={{ color: '#22c55e' }}
+                  >
+                    Shre
+                  </span>
+                </button>
               )}
 
               {/* Terminal toggle */}
               {features['terminal'] && (
-              <button
-                tabIndex={-1}
-                onClick={onToggleTerminal}
-                className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${showTerminal ? 'bg-violet-500/20 text-violet-400' : ''}`}
-                style={showTerminal ? {} : { color: 'var(--c-text-2)' }}
-                title={showTerminal ? 'Close terminal' : 'Open terminal'}
-                aria-label={showTerminal ? 'Close terminal' : 'Open terminal'}
-              >
-                <svg
-                  className="h-4 w-4 sm:h-4 sm:w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                <button
+                  tabIndex={-1}
+                  onClick={onToggleTerminal}
+                  className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${showTerminal ? 'bg-violet-500/20 text-violet-400' : ''}`}
+                  style={showTerminal ? {} : { color: 'var(--c-text-2)' }}
+                  title={showTerminal ? 'Close terminal' : 'Open terminal'}
+                  aria-label={showTerminal ? 'Close terminal' : 'Open terminal'}
                 >
-                  <polyline points="4 17 10 11 4 5" />
-                  <line x1="12" y1="19" x2="20" y2="19" />
-                </svg>
-              </button>
+                  <svg
+                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="4 17 10 11 4 5" />
+                    <line x1="12" y1="19" x2="20" y2="19" />
+                  </svg>
+                </button>
               )}
 
               {/* View mode toggle */}

@@ -35,11 +35,19 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
 
   const cleanup = useCallback(() => {
     if (recRef.current) {
-      try { recRef.current.abort(); } catch (_) { void _; }
+      try {
+        recRef.current.abort();
+      } catch (_) {
+        void _;
+      }
       recRef.current = null;
     }
     if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') {
-      try { mediaRecRef.current.stop(); } catch (_) { void _; }
+      try {
+        mediaRecRef.current.stop();
+      } catch (_) {
+        void _;
+      }
     }
     mediaRecRef.current = null;
     if (streamRef.current) {
@@ -69,7 +77,11 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
 
     // Stop browser SpeechRecognition
     if (recRef.current) {
-      try { recRef.current.stop(); } catch (_) { void _; }
+      try {
+        recRef.current.stop();
+      } catch (_) {
+        void _;
+      }
       recRef.current = null;
     }
 
@@ -145,9 +157,12 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (err2: any) {
-        const msg = err2.name === 'NotAllowedError' ? 'Microphone blocked'
-          : err2.name === 'NotFoundError' ? 'No microphone found'
-          : 'Mic access failed';
+        const msg =
+          err2.name === 'NotAllowedError'
+            ? 'Microphone blocked'
+            : err2.name === 'NotFoundError'
+              ? 'No microphone found'
+              : 'Mic access failed';
         setErrorMsg(msg);
         setPhase('error');
         setTimeout(() => setPhase('idle'), 3000);
@@ -165,7 +180,9 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
         };
         mr.start(500); // collect chunks every 500ms
         mediaRecRef.current = mr;
-      } catch (_) { void _; }
+      } catch (_) {
+        void _;
+      }
     }
 
     // Start browser SpeechRecognition for live interim text (skip on Android — unreliable)
@@ -185,11 +202,17 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
           liveTextRef.current = (liveTextRef.current + final).trim();
           setText(() => (liveTextRef.current + (interim ? ' ' + interim : '')).trim());
         };
-        rec.onerror = () => { /* Whisper fallback will handle it */ };
-        rec.onend = () => { recRef.current = null; };
+        rec.onerror = () => {
+          /* Whisper fallback will handle it */
+        };
+        rec.onend = () => {
+          recRef.current = null;
+        };
         rec.start();
         recRef.current = rec;
-      } catch (_) { void _; }
+      } catch (_) {
+        void _;
+      }
     }
   }, [isAndroid]);
 
@@ -226,15 +249,23 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
 
   const hasMic = !!(SpeechRec || PREFERRED_MIME);
 
-  const micColor = phase === 'recording' ? '#f87171'
-    : phase === 'transcribing' ? '#facc15'
-    : phase === 'error' ? '#ef4444'
-    : 'var(--c-text-3, rgba(255,255,255,0.4))';
+  const micColor =
+    phase === 'recording'
+      ? '#f87171'
+      : phase === 'transcribing'
+        ? '#facc15'
+        : phase === 'error'
+          ? '#ef4444'
+          : 'var(--c-text-3, rgba(255,255,255,0.4))';
 
-  const placeholder = phase === 'recording' ? 'Listening... tap mic to stop'
-    : phase === 'transcribing' ? 'Transcribing...'
-    : phase === 'error' ? errorMsg || 'Voice error'
-    : 'Type or speak a command...';
+  const placeholder =
+    phase === 'recording'
+      ? 'Listening... tap mic to stop'
+      : phase === 'transcribing'
+        ? 'Transcribing...'
+        : phase === 'error'
+          ? errorMsg || 'Voice error'
+          : 'Type or speak a command...';
 
   return (
     <div
@@ -256,13 +287,21 @@ function TerminalVoiceInput({ onSubmit }: { onSubmit: (text: string) => void }) 
             cursor: phase === 'transcribing' ? 'wait' : 'pointer',
           }}
           title={
-            phase === 'recording' ? 'Stop & transcribe'
-            : phase === 'transcribing' ? 'Transcribing...'
-            : 'Voice input'
+            phase === 'recording'
+              ? 'Stop & transcribe'
+              : phase === 'transcribing'
+                ? 'Transcribing...'
+                : 'Voice input'
           }
         >
           {phase === 'transcribing' ? (
-            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className="h-4 w-4 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
             </svg>
           ) : (
@@ -363,7 +402,10 @@ function DaemonControls({ isMobile }: { isMobile: boolean }) {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`${DAEMON_URL}/health`, { signal: AbortSignal.timeout(3000) });
-      if (!res.ok) { setStatus('offline'); return; }
+      if (!res.ok) {
+        setStatus('offline');
+        return;
+      }
       const data = await res.json();
       setStatus(data.sessions?.busy > 0 ? 'busy' : 'online');
       setSessions(data.sessions?.active || 0);
@@ -388,7 +430,9 @@ function DaemonControls({ isMobile }: { isMobile: boolean }) {
         await fetch(`${DAEMON_URL}/v1/sessions/${s.id}`, { method: 'DELETE' });
       }
       fetchStatus();
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   };
 
   const restartDaemon = async () => {
@@ -400,7 +444,9 @@ function DaemonControls({ isMobile }: { isMobile: boolean }) {
         body: JSON.stringify({ sessionId: 'default' }),
       });
       fetchStatus();
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   };
 
   const statusColor = {
@@ -422,11 +468,16 @@ function DaemonControls({ isMobile }: { isMobile: boolean }) {
   };
 
   return (
-    <div className="flex items-center gap-1" title={`Daemon: ${status} | ${sessions} sessions | ${queue} queued`}>
+    <div
+      className="flex items-center gap-1"
+      title={`Daemon: ${status} | ${sessions} sessions | ${queue} queued`}
+    >
       {/* Status dot */}
       <span
         style={{
-          width: 6, height: 6, borderRadius: '50%',
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
           background: statusColor,
           boxShadow: status === 'online' ? `0 0 4px ${statusColor}` : 'none',
           display: 'inline-block',
@@ -480,7 +531,15 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
   const createTab = useCallback((opts?: { title?: string; cmd?: string }) => {
     const id = `term-${++tabCounter}`;
     const title = opts?.title || `Terminal ${tabCounter}`;
-    const newTab: TabState = { id, title, initialCmd: opts?.cmd, term: null, ws: null, fit: null, observer: null };
+    const newTab: TabState = {
+      id,
+      title,
+      initialCmd: opts?.cmd,
+      term: null,
+      ws: null,
+      fit: null,
+      observer: null,
+    };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
     return id;
@@ -591,9 +650,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
 
     // ── Auto-reconnecting WebSocket for terminal ──────────────
     // Each tab gets its own unique PTY session — no session sharing between tabs
-    const termSessionId = activeTab.initialCmd
-      ? `cli-${activeTab.id}`
-      : `tab-${activeTab.id}`;
+    const termSessionId = activeTab.initialCmd ? `cli-${activeTab.id}` : `tab-${activeTab.id}`;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let wsUrl = `${proto}//${location.host}/ws/terminal?session=${termSessionId}`;
     if (activeTab.initialCmd) {
@@ -739,7 +796,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
       window.removeEventListener('resize', checkViewport);
       if (vv) vv.removeEventListener('resize', checkViewport);
     };
-  }, [activeTab?.fit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab?.fit]);
 
   if (!visible) return null;
 
@@ -806,7 +863,15 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
             }}
             title="Back to Chat"
           >
-            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="h-3 w-3"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <polyline points="15 18 9 12 15 6" />
             </svg>
             Chat
@@ -856,7 +921,9 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(functi
         {/* Daemon controls + New tab + close */}
         <div className="flex items-center gap-1 px-2 shrink-0">
           <DaemonControls isMobile={isMobileView} />
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
+          <div
+            style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }}
+          />
           <button
             onClick={() => createTab()}
             style={{

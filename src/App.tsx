@@ -129,7 +129,13 @@ const LazyFallback = () => (
 
 /** Router Gateway Control UI embed — auto-injects gateway token + WS URL */
 function RouterGatewayEmbed() {
-  const [status, setStatus] = useState<{ ok?: boolean; models?: string[]; agents?: number; uptime?: number; error?: string } | null>(null);
+  const [status, setStatus] = useState<{
+    ok?: boolean;
+    models?: string[];
+    agents?: number;
+    uptime?: number;
+    error?: string;
+  } | null>(null);
   useEffect(() => {
     fetch('/api/router/health')
       .then((r) => r.json())
@@ -137,14 +143,20 @@ function RouterGatewayEmbed() {
       .catch(() => setStatus({ error: 'Cannot reach shre-router' }));
   }, []);
   return (
-    <div className="flex-1 w-full h-full flex flex-col items-center justify-center gap-4 p-6" style={{ background: 'var(--c-bg-1)' }}>
+    <div
+      className="flex-1 w-full h-full flex flex-col items-center justify-center gap-4 p-6"
+      style={{ background: 'var(--c-bg-1)' }}
+    >
       <div style={{ fontSize: 14, color: 'var(--c-text-2)', maxWidth: 480, textAlign: 'center' }}>
         <h2 style={{ fontSize: 18, color: 'var(--c-text-1)', marginBottom: 12 }}>Router Gateway</h2>
         {!status && <p>Loading...</p>}
         {status?.error && <p style={{ color: '#ef4444' }}>{status.error}</p>}
         {status?.ok && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
-            <p><span style={{ color: '#22c55e' }}>&#9679;</span> shre-router is online (uptime: {Math.round((status.uptime || 0) / 60)}m)</p>
+            <p>
+              <span style={{ color: '#22c55e' }}>&#9679;</span> shre-router is online (uptime:{' '}
+              {Math.round((status.uptime || 0) / 60)}m)
+            </p>
             {status.agents != null && <p>Active agents: {status.agents}</p>}
           </div>
         )}
@@ -161,10 +173,12 @@ const THEME_KEY = 'shre-theme';
 
 export function App() {
   // ── Demo mode — internal only, gated by compile flag ──
-  const isDemoMode = __SHRE_INTERNAL__ && !!(
-    (window as any).__SHRE_DEMO_MODE__ ||
-    new URLSearchParams(window.location.search).get('demo') === 'true'
-  );
+  const isDemoMode =
+    __SHRE_INTERNAL__ &&
+    !!(
+      (window as any).__SHRE_DEMO_MODE__ ||
+      new URLSearchParams(window.location.search).get('demo') === 'true'
+    );
 
   const DEV_BYPASS_AUTH = false;
 
@@ -256,7 +270,9 @@ function AuthenticatedApp({
   onWorkspaceSwitch: (workspaceId: string) => void;
 }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
-  const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done' | 'welcome'>('loading');
+  const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done' | 'welcome'>(
+    'loading',
+  );
   const [landingTarget, setLandingTarget] = useState<'chat' | 'home'>('chat');
   const checkedRef = useRef(false);
 
@@ -266,8 +282,8 @@ function AuthenticatedApp({
     const ac = new AbortController();
 
     fetch('/api/onboarding/status', { signal: ac.signal })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
         if (ac.signal.aborted) return;
         if (data?.phase === 'complete') {
           // Server says onboarding is done — sync identity to local profile if needed
@@ -301,7 +317,15 @@ function AuthenticatedApp({
               body: JSON.stringify({
                 onboardingPhase: 'complete',
                 step: 'dashboard',
-                completedSteps: ['welcome', 'marketplace', 'configure', 'stores', 'model', 'agents', 'dashboard'],
+                completedSteps: [
+                  'welcome',
+                  'marketplace',
+                  'configure',
+                  'stores',
+                  'model',
+                  'agents',
+                  'dashboard',
+                ],
                 path: 'operator',
                 identityData: {
                   name: userProfile.name,
@@ -310,15 +334,19 @@ function AuthenticatedApp({
                   businessType: userProfile.business?.industry || '',
                   businessSize: userProfile.business?.size || '',
                 },
-                chatPreferences: userProfile.preferences ? {
-                  communicationStyle: userProfile.preferences.communicationStyle,
-                  goals: userProfile.business?.goals || [],
-                  tools: userProfile.business?.tools || [],
-                } : undefined,
+                chatPreferences: userProfile.preferences
+                  ? {
+                      communicationStyle: userProfile.preferences.communicationStyle,
+                      goals: userProfile.business?.goals || [],
+                      tools: userProfile.business?.tools || [],
+                    }
+                  : undefined,
               }),
             })
               .then(() => localStorage.setItem('shre-onboarding-migrated', '1'))
-              .catch(() => { /* non-fatal */ });
+              .catch(() => {
+                /* non-fatal */
+              });
             setOnboardingPhase('done');
           } else {
             setOnboardingPhase('needed');
@@ -339,7 +367,15 @@ function AuthenticatedApp({
 
   if (onboardingPhase === 'loading') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary, #0a0a0a)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          background: 'var(--bg-primary, #0a0a0a)',
+        }}
+      >
         <div style={{ color: 'var(--text-secondary, #888)', fontSize: '14px' }}>Loading...</div>
       </div>
     );
@@ -357,19 +393,23 @@ function AuthenticatedApp({
             body: JSON.stringify({
               selectedAgents: selectedAgents || [],
               selectedBundle: selectedBundle || undefined,
-              chatPreferences: completed.preferences ? {
-                communicationStyle: completed.preferences.communicationStyle,
-                goals: completed.business?.goals || [],
-                tools: completed.business?.tools || [],
-              } : undefined,
+              chatPreferences: completed.preferences
+                ? {
+                    communicationStyle: completed.preferences.communicationStyle,
+                    goals: completed.business?.goals || [],
+                    tools: completed.business?.tools || [],
+                  }
+                : undefined,
             }),
-          }).catch(() => { /* non-fatal */ });
+          }).catch(() => {
+            /* non-fatal */
+          });
           saveUserProfile(completed);
           setUserProfile(completed);
           // Check smart landing target
           fetch('/api/onboarding/landing-target')
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
               if (data?.target === 'home') setLandingTarget('home');
             })
             .catch(() => {});
@@ -385,7 +425,9 @@ function AuthenticatedApp({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ onboardingPhase: 'complete' }),
-          }).catch(() => { /* non-fatal */ });
+          }).catch(() => {
+            /* non-fatal */
+          });
           saveUserProfile(skipped);
           setUserProfile(skipped);
           setOnboardingPhase('done');
@@ -422,7 +464,11 @@ function AuthenticatedApp({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors text-center"
-                style={{ border: '1px solid var(--c-border-2)', color: 'var(--c-text-2)', background: 'var(--c-bg-card)' }}
+                style={{
+                  border: '1px solid var(--c-border-2)',
+                  color: 'var(--c-text-2)',
+                  background: 'var(--c-bg-card)',
+                }}
               >
                 Go to Dashboard
               </a>

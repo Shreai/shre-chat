@@ -25,12 +25,7 @@ import {
   detectIssueIntent,
   createIssueFromChat,
 } from '../taskDetector';
-import {
-  detectMemoryIntent,
-  captureMemory,
-  forgetMemory,
-  listMemories,
-} from '../memoryDetector';
+import { detectMemoryIntent, captureMemory, forgetMemory, listMemories } from '../memoryDetector';
 
 // ── Extracted modules ──
 import {
@@ -1191,7 +1186,11 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           }
           const finalContent = full.trim() ? full : fullResponse.trim() ? fullResponse : '';
           if (finalContent) {
-            actions.addMessage(sessionId, { role: 'assistant', content: finalContent, meta: httpMeta });
+            actions.addMessage(sessionId, {
+              role: 'assistant',
+              content: finalContent,
+              meta: httpMeta,
+            });
           } else {
             actions.addMessage(sessionId, {
               role: 'assistant',
@@ -1245,11 +1244,15 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             const isToolLoop =
               error.startsWith('tool_loop_exhausted:') ||
               error.includes('maximum iteration') ||
-              (error.includes('iterations') && (error.includes('tool') || error.includes('execution') || error.includes('loop')));
+              (error.includes('iterations') &&
+                (error.includes('tool') || error.includes('execution') || error.includes('loop')));
             if (isToolLoop) {
               friendlyError =
                 'The AI hit its tool execution limit on this request. Ellie has been notified and will review it. You can try rephrasing or breaking the request into smaller steps.';
-              actions.addMessage(sessionId, { role: 'assistant', content: `\u26a0\ufe0f ${friendlyError}` });
+              actions.addMessage(sessionId, {
+                role: 'assistant',
+                content: `\u26a0\ufe0f ${friendlyError}`,
+              });
               actions.setStreamText('');
               actions.setStreaming(false);
               actions.setStatusLine(null);
@@ -1260,12 +1263,12 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
               return;
             }
             const isTransient =
-              !isToolLoop && (
-              error.includes('502') ||
-              error.includes('503') ||
-              error.includes('504') ||
-              error.includes('unreachable') ||
-              error.includes('Gateway unavailable'));
+              !isToolLoop &&
+              (error.includes('502') ||
+                error.includes('503') ||
+                error.includes('504') ||
+                error.includes('unreachable') ||
+                error.includes('Gateway unavailable'));
             if (isTransient && autoRetryCountRef.current < 2) {
               autoRetryCountRef.current++;
               actions.setStatusLine(
@@ -1300,16 +1303,27 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
                       onDone: (full) => {
                         const retryMeta: Record<string, string> = {
                           route: 'http',
-                          model: selectedModel ? selectedModel.split('/').pop() || selectedModel : 'auto',
+                          model: selectedModel
+                            ? selectedModel.split('/').pop() || selectedModel
+                            : 'auto',
                           retry: String(autoRetryCountRef.current),
                         };
-                        const finalContent = full.trim() ? full : retryResponse.trim() ? retryResponse : '';
+                        const finalContent = full.trim()
+                          ? full
+                          : retryResponse.trim()
+                            ? retryResponse
+                            : '';
                         if (finalContent) {
-                          actions.addMessage(sessionId, { role: 'assistant', content: finalContent, meta: retryMeta });
+                          actions.addMessage(sessionId, {
+                            role: 'assistant',
+                            content: finalContent,
+                            meta: retryMeta,
+                          });
                         } else {
                           actions.addMessage(sessionId, {
                             role: 'assistant',
-                            content: '[system] Received empty response from the AI. Please try again.',
+                            content:
+                              '[system] Received empty response from the AI. Please try again.',
                             timestamp: Date.now(),
                             meta: { system: 'true', type: 'system', event: 'empty-response' },
                           });

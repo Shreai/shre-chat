@@ -76,7 +76,11 @@ function extractCitations(content: string, toolResults?: Props['toolResults']): 
       const urls = tool.result.match(URL_REGEX) ?? [];
       for (const url of urls.slice(0, 5)) {
         const cleaned = url.replace(/[.,;:!?)]+$/, '');
-        if (!seen.has(cleaned) && !cleaned.includes('localhost') && !cleaned.includes('127.0.0.1')) {
+        if (
+          !seen.has(cleaned) &&
+          !cleaned.includes('localhost') &&
+          !cleaned.includes('127.0.0.1')
+        ) {
           seen.add(cleaned);
           citations.push({
             index: citations.length + 1,
@@ -98,14 +102,16 @@ export function CitationLinks({ content, toolResults }: Props) {
   if (citations.length === 0) return null;
 
   return (
-    <div style={{
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 6,
-      marginTop: 8,
-      paddingTop: 8,
-      borderTop: '1px solid var(--c-border, rgba(255,255,255,0.08))',
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 8,
+        paddingTop: 8,
+        borderTop: '1px solid var(--c-border, rgba(255,255,255,0.08))',
+      }}
+    >
       <span style={{ fontSize: 11, color: 'var(--c-text-3)', width: '100%', marginBottom: 2 }}>
         Sources
       </span>
@@ -138,7 +144,15 @@ export function CitationLinks({ content, toolResults }: Props) {
             {c.index}
           </span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.domain}</span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.5 }}>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            style={{ flexShrink: 0, opacity: 0.5 }}
+          >
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
             <polyline points="15 3 21 3 21 9" />
             <line x1="10" y1="14" x2="21" y2="3" />

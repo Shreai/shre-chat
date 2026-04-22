@@ -50,42 +50,51 @@ function TimelineStep({ step, highlight }: { step: ProcessStep; highlight?: bool
       <div
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}
       >
-        <div 
-          style={{ 
-            width: '28px', 
-            height: '28px', 
-            borderRadius: '50%', 
+        <div
+          style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
             background: `${COLORS[step.kind]}15`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            border: `1px solid ${COLORS[step.kind]}33`
+            border: `1px solid ${COLORS[step.kind]}33`,
           }}
         >
           <span style={{ fontSize: '15px' }}>{ICONS[step.kind]}</span>
         </div>
-        <div style={{ width: '1.5px', flex: 1, background: 'var(--c-border-2, rgba(255,255,255,0.1))', marginTop: '6px' }} />
+        <div
+          style={{
+            width: '1.5px',
+            flex: 1,
+            background: 'var(--c-border-2, rgba(255,255,255,0.1))',
+            marginTop: '6px',
+          }}
+        />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--c-text-2)' }}>
             {step.label}
           </span>
-          <span style={{ fontSize: '10px', color: 'var(--c-text-5)', opacity: 0.7 }}>{duration}</span>
-          <span 
-            style={{ 
-              fontSize: '9px', 
-              textTransform: 'uppercase', 
-              letterSpacing: '0.5px', 
+          <span style={{ fontSize: '10px', color: 'var(--c-text-5)', opacity: 0.7 }}>
+            {duration}
+          </span>
+          <span
+            style={{
+              fontSize: '9px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
               color: COLORS[step.kind],
               fontWeight: 700,
-              opacity: 0.8
+              opacity: 0.8,
             }}
           >
             {step.kind.replace('_', ' ')}
           </span>
         </div>
-        
+
         {step.detail && (
           <p
             style={{
@@ -108,10 +117,19 @@ function TimelineStep({ step, highlight }: { step: ProcessStep; highlight?: bool
               background: 'var(--c-bg-card, rgba(0,0,0,0.1))',
               borderRadius: '6px',
               border: '1px solid var(--c-border-2)',
-              overflow: 'hidden'
+              overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '4px 8px', background: 'var(--c-bg-3)', borderBottom: '1px solid var(--c-border-2)', fontSize: '10px', fontWeight: 600, color: 'var(--c-accent-soft)' }}>
+            <div
+              style={{
+                padding: '4px 8px',
+                background: 'var(--c-bg-3)',
+                borderBottom: '1px solid var(--c-border-2)',
+                fontSize: '10px',
+                fontWeight: 600,
+                color: 'var(--c-accent-soft)',
+              }}
+            >
               TOOL: {step.toolName}
             </div>
             {step.toolArgs != null && (
@@ -123,7 +141,7 @@ function TimelineStep({ step, highlight }: { step: ProcessStep; highlight?: bool
                   overflowX: 'auto',
                   maxHeight: '120px',
                   margin: 0,
-                  fontFamily: 'ui-monospace, monospace'
+                  fontFamily: 'ui-monospace, monospace',
                 }}
               >
                 {typeof step.toolArgs === 'string'
@@ -133,7 +151,16 @@ function TimelineStep({ step, highlight }: { step: ProcessStep; highlight?: bool
             )}
             {step.toolOutput && (
               <div style={{ borderTop: '1px solid var(--c-border-2)' }}>
-                <div style={{ padding: '4px 8px', background: 'var(--c-bg-3)', borderBottom: '1px solid var(--c-border-2)', fontSize: '10px', fontWeight: 600, color: 'var(--c-success)' }}>
+                <div
+                  style={{
+                    padding: '4px 8px',
+                    background: 'var(--c-bg-3)',
+                    borderBottom: '1px solid var(--c-border-2)',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color: 'var(--c-success)',
+                  }}
+                >
                   OUTPUT
                 </div>
                 <pre
@@ -145,10 +172,12 @@ function TimelineStep({ step, highlight }: { step: ProcessStep; highlight?: bool
                     maxHeight: '150px',
                     margin: 0,
                     whiteSpace: 'pre-wrap',
-                    fontFamily: 'ui-monospace, monospace'
+                    fontFamily: 'ui-monospace, monospace',
                   }}
                 >
-                  {step.toolOutput.length > 1000 ? step.toolOutput.slice(0, 1000) + '\n\n[... truncated ...]' : step.toolOutput}
+                  {step.toolOutput.length > 1000
+                    ? step.toolOutput.slice(0, 1000) + '\n\n[... truncated ...]'
+                    : step.toolOutput}
                 </pre>
               </div>
             )}
@@ -214,7 +243,7 @@ export function ProcessDetail({ run, highlightStepId, onClose }: ProcessDetailPr
               fontSize: '12px',
               padding: '4px 8px',
               borderRadius: '6px',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
             }}
           >
             Close
@@ -254,9 +283,7 @@ export function ProcessDetail({ run, highlightStepId, onClose }: ProcessDetailPr
             </span>
           )}
         </div>
-        <div style={{ fontWeight: 600 }}>
-          {totalDuration} TOTAL
-        </div>
+        <div style={{ fontWeight: 600 }}>{totalDuration} TOTAL</div>
       </div>
     </div>
   );

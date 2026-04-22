@@ -30,7 +30,7 @@ export default function RecentTasksPanel({ size }: ChatWidgetProps) {
         if (!res.ok) throw new Error('fetch failed');
         const data = await res.json();
         if (cancelled) return;
-        const list = (Array.isArray(data) ? data : data.tasks ?? [])
+        const list = (Array.isArray(data) ? data : (data.tasks ?? []))
           .slice(0, 5)
           .map((t: any) => ({
             id: t.id,
@@ -45,7 +45,9 @@ export default function RecentTasksPanel({ size }: ChatWidgetProps) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const limit = size === 'compact' ? 3 : 5;
@@ -66,9 +68,7 @@ export default function RecentTasksPanel({ size }: ChatWidgetProps) {
                 className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[t.status] ?? 'bg-zinc-500'}`}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-normal text-[var(--c-text-2)] truncate">
-                  {t.title}
-                </p>
+                <p className="text-[13px] font-normal text-[var(--c-text-2)] truncate">{t.title}</p>
                 {t.agent && (
                   <p className="text-[11px] font-medium text-[var(--c-text-3)]">{t.agent}</p>
                 )}

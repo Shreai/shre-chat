@@ -645,17 +645,31 @@ export async function sendMessage(
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[shre] shre-router failed:', msg);
     // Classify error for better UX — order matters: check specific patterns before generic fallback
-    const isToolLoopError = msg.includes('iterations') || msg.includes('tool loop') || msg.includes('maximum iteration') || msg.includes('tool_loop');
-    const isNetworkError = msg.includes('Failed to fetch') || msg.includes('NetworkError') || (msg.includes('TypeError') && msg.includes('fetch'));
-    const isAuthError = msg.includes('auth_expired') || msg.includes('Session expired') || msg.includes('sign in again');
+    const isToolLoopError =
+      msg.includes('iterations') ||
+      msg.includes('tool loop') ||
+      msg.includes('maximum iteration') ||
+      msg.includes('tool_loop');
+    const isNetworkError =
+      msg.includes('Failed to fetch') ||
+      msg.includes('NetworkError') ||
+      (msg.includes('TypeError') && msg.includes('fetch'));
+    const isAuthError =
+      msg.includes('auth_expired') ||
+      msg.includes('Session expired') ||
+      msg.includes('sign in again');
     if (isToolLoopError) {
       // Tool loop exhaustion — NOT a gateway error, NOT transient. Prefix with 'tool_loop_exhausted:'
       // so useMessageHandlers knows not to auto-retry.
-      safeCallbacks.onError('tool_loop_exhausted: The agent ran out of tool iterations. Your message has been escalated for review. Try rephrasing or breaking the request into smaller steps.');
+      safeCallbacks.onError(
+        'tool_loop_exhausted: The agent ran out of tool iterations. Your message has been escalated for review. Try rephrasing or breaking the request into smaller steps.',
+      );
     } else if (isAuthError) {
       safeCallbacks.onError('Session expired — please sign in again.');
     } else if (isNetworkError) {
-      safeCallbacks.onError('Cannot reach the gateway — check if shre-router is running. Please try again.');
+      safeCallbacks.onError(
+        'Cannot reach the gateway — check if shre-router is running. Please try again.',
+      );
     } else {
       safeCallbacks.onError(`Gateway unavailable — ${msg}. Please try again.`);
     }
@@ -687,17 +701,19 @@ async function streamViaFallback(
   callbacks.onStatus?.('connecting');
 
   const messages = [
-    ...history.filter((m) => {
-      if (!m.meta?.system) return true;
-      // Keep system messages that carry substantive context (errors, escalations)
-      // Drop pure routing noise — the server-side noise filter handles the rest
-      const t = m.content.trim();
-      if (t.startsWith('[system] Routing via ')) return false;
-      if (t.startsWith('[tool_exec]')) return false;
-      if (/^\[system\] .+ API quota exceeded/.test(t)) return false;
-      // Keep error messages, escalation notices, and other substantive system info
-      return true;
-    }).map((m) => ({ role: m.role, content: m.content })),
+    ...history
+      .filter((m) => {
+        if (!m.meta?.system) return true;
+        // Keep system messages that carry substantive context (errors, escalations)
+        // Drop pure routing noise — the server-side noise filter handles the rest
+        const t = m.content.trim();
+        if (t.startsWith('[system] Routing via ')) return false;
+        if (t.startsWith('[tool_exec]')) return false;
+        if (/^\[system\] .+ API quota exceeded/.test(t)) return false;
+        // Keep error messages, escalation notices, and other substantive system info
+        return true;
+      })
+      .map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: message },
   ];
 
@@ -707,7 +723,7 @@ async function streamViaFallback(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
+      Accept: 'text/event-stream',
       'X-App-Version': APP_VERSION,
       'x-channel': 'shre-chat',
     },
@@ -739,7 +755,13 @@ async function streamViaFallback(
     const text = await res.text().catch(() => '');
     // Handle auth errors — session expired or unauthorized
     if (res.status === 401 || res.status === 403) {
-      const parsed = (() => { try { return JSON.parse(text); } catch { return null; } })();
+      const parsed = (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return null;
+        }
+      })();
       const errMsg = parsed?.message || text.slice(0, 200) || 'Session expired';
       throw new Error(`auth_expired: ${errMsg}`);
     }
@@ -779,7 +801,9 @@ async function streamViaFallback(
       if (fullText && fullText.trim().length > 0) {
         callbacks.onStatus?.('warning', 'Stream timed out — response may be incomplete');
       }
-      try { reader.cancel(); } catch {}
+      try {
+        reader.cancel();
+      } catch {}
     }, STREAM_SILENCE_TIMEOUT);
   };
 
@@ -953,7 +977,11 @@ async function streamViaFallback(
             const errMsg = evt.error || 'Gateway error';
             // Tool loop exhaustion is not a gateway failure — surface it accurately
             // and skip the outer catch (which would prepend "Gateway unavailable")
-            if (errMsg.includes('iterations') || errMsg.includes('tool loop') || errMsg.includes('maximum')) {
+            if (
+              errMsg.includes('iterations') ||
+              errMsg.includes('tool loop') ||
+              errMsg.includes('maximum')
+            ) {
               callbacks.onError(`tool_loop_exhausted: ${errMsg}`);
               return;
             }
@@ -973,7 +1001,9 @@ async function streamViaFallback(
   if (!fullText || fullText.trim().length < 3) {
     const elapsed = Date.now() - fallbackStart;
     if (elapsed >= STREAM_SILENCE_TIMEOUT - 1000) {
-      callbacks.onError('Request timed out — no response received. The service may be restarting. Please try again.');
+      callbacks.onError(
+        'Request timed out — no response received. The service may be restarting. Please try again.',
+      );
       return;
     }
 
@@ -982,13 +1012,29 @@ async function streamViaFallback(
       callbacks.onStatus?.('thinking', 'Empty response — retrying...');
       await new Promise((r) => setTimeout(r, 800));
       return streamViaFallback(
-        message, history, systemPrompt, callbacks, signal, modelOverride,
-        attachments, routerMode, threadContext, contextHealth, claudeCliMode, directMode,
-        voiceMode, traceEnabled, conversationMode, activeAppId, true,
+        message,
+        history,
+        systemPrompt,
+        callbacks,
+        signal,
+        modelOverride,
+        attachments,
+        routerMode,
+        threadContext,
+        contextHealth,
+        claudeCliMode,
+        directMode,
+        voiceMode,
+        traceEnabled,
+        conversationMode,
+        activeAppId,
+        true,
       );
     }
 
-    callbacks.onError('The model returned an empty response. This has been escalated automatically. Please try again.');
+    callbacks.onError(
+      'The model returned an empty response. This has been escalated automatically. Please try again.',
+    );
     return;
   }
 

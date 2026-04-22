@@ -71,7 +71,8 @@ export function useHeaderActions({
   }, [setGatewayMode]);
 
   const handleSetGatewayMode = useCallback(
-    (mode: GatewayMode) => setGatewayMode(mode === 'direct' && !ALLOW_DIRECT_MODE ? 'router' : mode),
+    (mode: GatewayMode) =>
+      setGatewayMode(mode === 'direct' && !ALLOW_DIRECT_MODE ? 'router' : mode),
     [setGatewayMode],
   );
 

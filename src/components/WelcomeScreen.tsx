@@ -28,9 +28,7 @@ export function WelcomeScreen({
   useEffect(() => {
     if (!userProfile?.preferences?.showTasksOnGreeting) return;
     setTasksLoading(true);
-    fetch(
-      `${import.meta.env.VITE_TASKS_URL ?? '/api/tasks'}/v1/tasks?status=todo&limit=5`,
-    )
+    fetch(`${import.meta.env.VITE_TASKS_URL ?? '/api/tasks'}/v1/tasks?status=todo&limit=5`)
       .then((r) => (r.ok ? r.json() : []))
       .then((data: PendingTask[]) => setTasks(Array.isArray(data) ? data.slice(0, 5) : []))
       .catch(() => setTasks([]))

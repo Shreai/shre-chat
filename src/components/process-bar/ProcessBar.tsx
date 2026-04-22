@@ -57,7 +57,9 @@ function StepPill({
         borderRadius: '9999px',
         padding: '3px 8px',
         fontSize: '10px',
-        background: isActive ? 'var(--c-bg-active, rgba(255,255,255,0.06))' : 'rgba(255,255,255,0.02)',
+        background: isActive
+          ? 'var(--c-bg-active, rgba(255,255,255,0.06))'
+          : 'rgba(255,255,255,0.02)',
         border: `1px solid ${isActive ? color : 'transparent'}`,
         cursor: 'pointer',
         color,
@@ -128,7 +130,7 @@ export function ProcessBar({ runs, activeRun, onStepClick, compact, className }:
           100% { opacity: 1; transform: scale(1); }
         }
       `}</style>
-      
+
       {displayRun.steps.map((step) => (
         <StepPill
           key={step.id}
@@ -163,9 +165,7 @@ export function ProcessBar({ runs, activeRun, onStepClick, compact, className }:
             </span>
           )}
           {displayRun.durationMs && (
-            <span style={{ fontWeight: 500 }}>
-              {(displayRun.durationMs / 1000).toFixed(1)}s
-            </span>
+            <span style={{ fontWeight: 500 }}>{(displayRun.durationMs / 1000).toFixed(1)}s</span>
           )}
         </div>
       )}

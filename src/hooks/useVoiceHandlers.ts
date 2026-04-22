@@ -375,7 +375,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
     // Stop MediaRecorder and collect audio chunks for Whisper fallback
     const recorder = mediaRecorderRef.current;
-    let audioChunks = [...audioChunksRef.current];
+    const audioChunks = [...audioChunksRef.current];
     if (recorder && recorder.state !== 'inactive') {
       try {
         recorder.stop();
@@ -593,7 +593,10 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
     // Trigger TTS if in voiceMode OR if this assistant message is a response to a voice-sent input
     // We check both the ref and optional metadata for robustness.
-    const isVoiceTurn = voiceMode || lastVoiceSentRef.current === voiceSessionIdRef.current || lastMsg.meta?.voice === 'true';
+    const isVoiceTurn =
+      voiceMode ||
+      lastVoiceSentRef.current === voiceSessionIdRef.current ||
+      lastMsg.meta?.voice === 'true';
     if (!isVoiceTurn) return;
 
     const msgKey = `${lastMsg.timestamp}-${lastMsg.content.length}`;

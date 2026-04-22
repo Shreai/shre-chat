@@ -91,13 +91,15 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
     async function load() {
       setLoading(true);
       try {
-        const [summaryRes, modelsRes, agentsRes, budgetRes, accuracyRes] = await Promise.allSettled([
-          fetch(`/api/usage-summary?days=${days}`).then((r) => (r.ok ? r.json() : null)),
-          fetch(`/api/costs/by-model?days=${days}`).then((r) => (r.ok ? r.json() : null)),
-          fetch(`/api/costs/by-agent?days=${days}`).then((r) => (r.ok ? r.json() : null)),
-          fetch('/api/costs/budget').then((r) => (r.ok ? r.json() : null)),
-          fetch(`/api/costs/token-accuracy?days=${days}`).then((r) => (r.ok ? r.json() : null)),
-        ]);
+        const [summaryRes, modelsRes, agentsRes, budgetRes, accuracyRes] = await Promise.allSettled(
+          [
+            fetch(`/api/usage-summary?days=${days}`).then((r) => (r.ok ? r.json() : null)),
+            fetch(`/api/costs/by-model?days=${days}`).then((r) => (r.ok ? r.json() : null)),
+            fetch(`/api/costs/by-agent?days=${days}`).then((r) => (r.ok ? r.json() : null)),
+            fetch('/api/costs/budget').then((r) => (r.ok ? r.json() : null)),
+            fetch(`/api/costs/token-accuracy?days=${days}`).then((r) => (r.ok ? r.json() : null)),
+          ],
+        );
         if (summaryRes.status === 'fulfilled' && summaryRes.value) setSummary(summaryRes.value);
         if (
           modelsRes.status === 'fulfilled' &&
@@ -106,10 +108,14 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
         ) {
           const raw = modelsRes.value;
           const arr = Array.isArray(raw) ? raw : Array.isArray(raw.models) ? raw.models : [];
-          setModels(arr.filter((m: any) => m && typeof m.model === 'string').map((m: any) => ({
-            ...m,
-            local: m.local ?? (m.provider === 'ollama' || m.provider === 'ollama-local'),
-          })));
+          setModels(
+            arr
+              .filter((m: any) => m && typeof m.model === 'string')
+              .map((m: any) => ({
+                ...m,
+                local: m.local ?? (m.provider === 'ollama' || m.provider === 'ollama-local'),
+              })),
+          );
         }
         if (
           agentsRes.status === 'fulfilled' &&
@@ -121,12 +127,14 @@ export function UsageDashboard({ standalone }: { standalone?: boolean } = {}) {
           const filtered = arr.filter((a: any) => a && typeof a.agentId === 'string');
           // Compute pct client-side if shre-meter doesn't provide it
           const totalCost = filtered.reduce((s: number, a: any) => s + (a.costUsd || 0), 0);
-          setAgents(filtered.map((a: any) => ({
-            ...a,
-            agentName: a.agentName || a.agentId,
-            tokens: a.tokens || a.totalTokens || 0,
-            pct: totalCost > 0 ? ((a.costUsd || 0) / totalCost) * 100 : 0,
-          })));
+          setAgents(
+            filtered.map((a: any) => ({
+              ...a,
+              agentName: a.agentName || a.agentId,
+              tokens: a.tokens || a.totalTokens || 0,
+              pct: totalCost > 0 ? ((a.costUsd || 0) / totalCost) * 100 : 0,
+            })),
+          );
         }
         if (budgetRes.status === 'fulfilled' && budgetRes.value) setBudget(budgetRes.value);
         if (accuracyRes.status === 'fulfilled' && accuracyRes.value?.breakdown) {

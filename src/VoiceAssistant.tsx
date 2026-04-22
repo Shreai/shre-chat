@@ -4,7 +4,11 @@ import type { VoiceAction, VoicePhase } from './voiceStateMachine';
 import { useVAD } from './useVAD';
 import { useProactiveNotifications } from './hooks/useProactiveNotifications';
 import { getSpeechLocale } from './i18n';
-import { sendMessage as sendChatMessage, type ChatMessage, type StreamCallbacks } from './router-client';
+import {
+  sendMessage as sendChatMessage,
+  type ChatMessage,
+  type StreamCallbacks,
+} from './router-client';
 
 // ── Extracted modules ──
 import {
@@ -128,7 +132,7 @@ export default function VoiceAssistant({
           void 0;
         });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist turns to sessionStorage + debounced server sync
   useEffect(() => {
@@ -257,12 +261,24 @@ export default function VoiceAssistant({
   // Called before TTS playback to prevent mic picking up speaker output
   const stopListeningHardware = useCallback(() => {
     if (recRef.current) {
-      try { recRef.current.abort(); } catch { /* already stopped */ }
+      try {
+        recRef.current.abort();
+      } catch {
+        /* already stopped */
+      }
       recRef.current = null;
     }
-    try { vad.stop(); } catch { /* ok */ }
+    try {
+      vad.stop();
+    } catch {
+      /* ok */
+    }
     if (mediaRecorderRef.current?.state === 'recording') {
-      try { mediaRecorderRef.current.stop(); } catch { /* ok */ }
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        /* ok */
+      }
     }
   }, [vad]);
 
@@ -280,7 +296,7 @@ export default function VoiceAssistant({
       vad,
       stopListeningHardware,
     }),
-    [ttsVoice, ttsProvider, vad, stopListeningHardware], // eslint-disable-line react-hooks/exhaustive-deps
+    [ttsVoice, ttsProvider, vad, stopListeningHardware],
   );
 
   // ── AI request ──
@@ -533,7 +549,8 @@ export default function VoiceAssistant({
           );
           if (!response || !activeRef.current) {
             // Prevent black hole: recover from thinking phase if AI returned nothing
-            if (activeRef.current && (phaseRef.current as VoicePhase) === 'thinking') dispatch({ type: 'INTERRUPT' });
+            if (activeRef.current && (phaseRef.current as VoicePhase) === 'thinking')
+              dispatch({ type: 'INTERRUPT' });
             return;
           }
         } else {
@@ -564,7 +581,8 @@ export default function VoiceAssistant({
         if (!activeRef.current) {
           // Prevent black hole: recover from thinking/speaking if voice closed mid-flow
           const p = phaseRef.current as VoicePhase;
-          if (p === 'thinking' || p === 'speaking' || p === 'transcribing') dispatch({ type: 'INTERRUPT' });
+          if (p === 'thinking' || p === 'speaking' || p === 'transcribing')
+            dispatch({ type: 'INTERRUPT' });
           return;
         }
 
@@ -599,7 +617,7 @@ export default function VoiceAssistant({
       }
     },
     [speak, askAI, messages, onClose, agents, onSwitchAgent, onVoiceTurn, tryVoiceCommand],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // ── Start listening ──
   const startListening = useCallback(async () => {
@@ -900,7 +918,7 @@ export default function VoiceAssistant({
       if (stuckTimer) clearTimeout(stuckTimer);
       clearInterval(interval);
     };
-  }, [open, state.phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, state.phase]);
 
   // ── Orb tap (push-to-talk) ──
   const handleOrbTap = useCallback(() => {
@@ -1016,7 +1034,15 @@ export default function VoiceAssistant({
             aria-label="Voice settings"
             title="Model, agent & voice settings"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
@@ -1118,7 +1144,10 @@ export default function VoiceAssistant({
           {/* Model selector */}
           {models && models.length > 0 && (
             <div>
-              <label className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              <label
+                className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+              >
                 Model
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -1139,8 +1168,10 @@ export default function VoiceAssistant({
                     onClick={() => onSelectModel?.(m.id)}
                     className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
                     style={{
-                      background: selectedModel === m.id ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
-                      color: selectedModel === m.id ? 'rgba(96,165,250,0.95)' : 'rgba(255,255,255,0.5)',
+                      background:
+                        selectedModel === m.id ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
+                      color:
+                        selectedModel === m.id ? 'rgba(96,165,250,0.95)' : 'rgba(255,255,255,0.5)',
                       border: `1px solid ${selectedModel === m.id ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.06)'}`,
                     }}
                   >
@@ -1154,17 +1185,23 @@ export default function VoiceAssistant({
           {/* Agent selector */}
           {agents && agents.length > 1 && (
             <div>
-              <label className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              <label
+                className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+              >
                 Agent
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {agents.slice(0, 8).map((a) => (
                   <button
                     key={a.id}
-                    onClick={() => { onSwitchAgent?.(a.id); }}
+                    onClick={() => {
+                      onSwitchAgent?.(a.id);
+                    }}
                     className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
                     style={{
-                      background: a.id === agentId ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.06)',
+                      background:
+                        a.id === agentId ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.06)',
                       color: a.id === agentId ? 'rgba(192,132,252,0.95)' : 'rgba(255,255,255,0.5)',
                       border: `1px solid ${a.id === agentId ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.06)'}`,
                     }}
@@ -1178,21 +1215,27 @@ export default function VoiceAssistant({
 
           {/* Voice engine selector */}
           <div>
-            <label className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <label
+              className="text-[10px] font-medium uppercase tracking-wider mb-1.5 block"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+            >
               Voice Engine
             </label>
             <div className="flex flex-wrap gap-1.5">
-              {([
-                { id: 'auto', label: 'Auto', color: '255,255,255' },
-                { id: 'elevenlabs', label: 'ElevenLabs', color: '99,102,241' },
-                { id: 'personaplex', label: 'PersonaPlex', color: '118,185,0' },
-              ] as const).map((v) => (
+              {(
+                [
+                  { id: 'auto', label: 'Auto', color: '255,255,255' },
+                  { id: 'elevenlabs', label: 'ElevenLabs', color: '99,102,241' },
+                  { id: 'personaplex', label: 'PersonaPlex', color: '118,185,0' },
+                ] as const
+              ).map((v) => (
                 <button
                   key={v.id}
                   onClick={() => onSetTtsProvider?.(v.id)}
                   className="px-3 py-1.5 rounded-full text-[11px] active:scale-95 transition-all"
                   style={{
-                    background: ttsProvider === v.id ? `rgba(${v.color},0.2)` : 'rgba(255,255,255,0.06)',
+                    background:
+                      ttsProvider === v.id ? `rgba(${v.color},0.2)` : 'rgba(255,255,255,0.06)',
                     color: ttsProvider === v.id ? `rgba(${v.color},0.95)` : 'rgba(255,255,255,0.5)',
                     border: `1px solid ${ttsProvider === v.id ? `rgba(${v.color},0.3)` : 'rgba(255,255,255,0.06)'}`,
                   }}
@@ -1214,7 +1257,14 @@ export default function VoiceAssistant({
             border: '1px solid rgba(239, 68, 68, 0.3)',
           }}
         >
-          <svg className="h-5 w-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round">
+          <svg
+            className="h-5 w-5 shrink-0 mt-0.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
             <line x1="1" y1="1" x2="23" y2="23" />
@@ -1224,7 +1274,8 @@ export default function VoiceAssistant({
               Microphone access blocked
             </p>
             <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              {/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+              {/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
                 ? 'Open Settings \u2192 Safari \u2192 Microphone and allow for this site.'
                 : /Android/i.test(navigator.userAgent)
                   ? 'Tap the lock icon in the address bar \u2192 Permissions \u2192 Microphone \u2192 Allow.'

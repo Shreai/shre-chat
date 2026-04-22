@@ -11,7 +11,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-export type PermissionName = 'microphone' | 'camera' | 'notifications' | 'location' | 'clipboard-read';
+export type PermissionName =
+  | 'microphone'
+  | 'camera'
+  | 'notifications'
+  | 'location'
+  | 'clipboard-read';
 export type PermissionStatus = 'unknown' | 'prompt' | 'granted' | 'denied' | 'unsupported';
 
 interface PermissionEntry {
@@ -51,11 +56,14 @@ export const PERMISSION_LABELS: Record<PermissionName, string> = {
 
 /** Icons as SVG paths (24x24 viewBox) */
 export const PERMISSION_ICONS: Record<PermissionName, string> = {
-  microphone: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8',
-  camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z',
+  microphone:
+    'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8',
+  camera:
+    'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z',
   notifications: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
   location: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
-  'clipboard-read': 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z',
+  'clipboard-read':
+    'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z',
 };
 
 function loadPersistedPermissions(): Partial<PermissionsMap> {
@@ -76,7 +84,10 @@ function persistPermissions(perms: PermissionsMap): void {
 }
 
 function isIOS(): boolean {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
 }
 
 function isAndroid(): boolean {
@@ -146,13 +157,21 @@ export function useDevicePermissions() {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   // Check all permissions on mount
   useEffect(() => {
     const checkAll = async () => {
-      const names: PermissionName[] = ['microphone', 'camera', 'notifications', 'location', 'clipboard-read'];
+      const names: PermissionName[] = [
+        'microphone',
+        'camera',
+        'notifications',
+        'location',
+        'clipboard-read',
+      ];
       const updates: Partial<PermissionsMap> = {};
 
       for (const name of names) {
@@ -182,7 +201,10 @@ export function useDevicePermissions() {
   const requestPermission = useCallback(async (name: PermissionName): Promise<boolean> => {
     if (!isAPISupported(name)) {
       setPermissions((prev) => {
-        const next = { ...prev, [name]: { ...prev[name], status: 'unsupported' as const, lastChecked: Date.now() } };
+        const next = {
+          ...prev,
+          [name]: { ...prev[name], status: 'unsupported' as const, lastChecked: Date.now() },
+        };
         persistPermissions(next);
         return next;
       });
@@ -212,7 +234,11 @@ export function useDevicePermissions() {
         }
         case 'location': {
           await new Promise<void>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(() => resolve(), (err) => reject(err), { timeout: 10000 });
+            navigator.geolocation.getCurrentPosition(
+              () => resolve(),
+              (err) => reject(err),
+              { timeout: 10000 },
+            );
           });
           granted = true;
           break;
@@ -243,7 +269,9 @@ export function useDevicePermissions() {
         const entry: PermissionEntry = {
           status: isDenied ? 'denied' : 'prompt',
           lastChecked: Date.now(),
-          deniedCount: isDenied ? (prev[name]?.deniedCount ?? 0) + 1 : (prev[name]?.deniedCount ?? 0),
+          deniedCount: isDenied
+            ? (prev[name]?.deniedCount ?? 0) + 1
+            : (prev[name]?.deniedCount ?? 0),
         };
         const next = { ...prev, [name]: entry };
         persistPermissions(next);
@@ -255,15 +283,21 @@ export function useDevicePermissions() {
   }, []);
 
   /** Get the status of a specific permission */
-  const getStatus = useCallback((name: PermissionName): PermissionStatus => {
-    return permissions[name]?.status ?? 'unknown';
-  }, [permissions]);
+  const getStatus = useCallback(
+    (name: PermissionName): PermissionStatus => {
+      return permissions[name]?.status ?? 'unknown';
+    },
+    [permissions],
+  );
 
   /** Check if permission is permanently denied (denied 2+ times) */
-  const isPermanentlyDenied = useCallback((name: PermissionName): boolean => {
-    const entry = permissions[name];
-    return entry?.status === 'denied' && (entry?.deniedCount ?? 0) >= 2;
-  }, [permissions]);
+  const isPermanentlyDenied = useCallback(
+    (name: PermissionName): boolean => {
+      const entry = permissions[name];
+      return entry?.status === 'denied' && (entry?.deniedCount ?? 0) >= 2;
+    },
+    [permissions],
+  );
 
   /** Get instructions for enabling in device settings */
   const getSettingsInstructions = useCallback((name: PermissionName): string => {

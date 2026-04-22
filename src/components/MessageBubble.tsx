@@ -138,7 +138,8 @@ const MessageBubble = memo(function MessageBubble({
   const traceEnabled = usePreferences((s) => s.traceEnabled);
 
   // CLI Ledger: summary/full toggle for CLI responses
-  const isCliResponse = !isUser && (message.meta?.route === 'cli' || message.meta?.route === 'claude-cli');
+  const isCliResponse =
+    !isUser && (message.meta?.route === 'cli' || message.meta?.route === 'claude-cli');
   const [summaryViewMode, setSummaryViewMode] = useState<'full' | 'summary'>('full');
   const [summaryText, setSummaryText] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -177,9 +178,8 @@ const MessageBubble = memo(function MessageBubble({
   }, [displayContent, message.meta?.ledgerSessionId, message.id, summaryText]);
 
   // Use summary text when in summary mode, otherwise full content
-  const effectiveContent = isCliResponse && summaryViewMode === 'summary' && summaryText
-    ? summaryText
-    : displayContent;
+  const effectiveContent =
+    isCliResponse && summaryViewMode === 'summary' && summaryText ? summaryText : displayContent;
 
   const meta = message.meta;
   const shortModel = meta?.model
@@ -472,7 +472,10 @@ const MessageBubble = memo(function MessageBubble({
                       }
                     }
 
-                    const contentTypes: Record<string, 'html' | 'json' | 'chart' | 'table' | 'pdf'> = {
+                    const contentTypes: Record<
+                      string,
+                      'html' | 'json' | 'chart' | 'table' | 'pdf'
+                    > = {
                       'html:preview': 'html',
                       'html:embed': 'html',
                       'json:viewer': 'json',
@@ -602,7 +605,8 @@ const MessageBubble = memo(function MessageBubble({
               disabled={summaryLoading}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-150 hover:brightness-110"
               style={{
-                background: summaryViewMode === 'summary' ? 'rgba(139,92,246,0.15)' : 'rgba(107,114,128,0.1)',
+                background:
+                  summaryViewMode === 'summary' ? 'rgba(139,92,246,0.15)' : 'rgba(107,114,128,0.1)',
                 color: summaryViewMode === 'summary' ? 'rgb(167,139,250)' : 'var(--c-text-2)',
                 border: `1px solid ${summaryViewMode === 'summary' ? 'rgba(139,92,246,0.25)' : 'rgba(107,114,128,0.15)'}`,
               }}
@@ -612,18 +616,26 @@ const MessageBubble = memo(function MessageBubble({
                 <span>Summarizing...</span>
               ) : summaryViewMode === 'full' ? (
                 <>
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path d="M2 4h12v1H2V4zm0 3h8v1H2V7zm0 3h10v1H2v-1z" /></svg>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                    <path d="M2 4h12v1H2V4zm0 3h8v1H2V7zm0 3h10v1H2v-1z" />
+                  </svg>
                   Summary
                 </>
               ) : (
                 <>
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3"><path d="M2 4h12v1H2V4zm0 3h12v1H2V7zm0 3h12v1H2v-1z" /></svg>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                    <path d="M2 4h12v1H2V4zm0 3h12v1H2V7zm0 3h12v1H2v-1z" />
+                  </svg>
                   Full Response
                 </>
               )}
             </button>
             {message.meta?.ledgerSessionId && (
-              <span className="text-[9px]" style={{ color: 'var(--c-text-3)' }} title={`Session: ${message.meta.ledgerSessionId}`}>
+              <span
+                className="text-[9px]"
+                style={{ color: 'var(--c-text-3)' }}
+                title={`Session: ${message.meta.ledgerSessionId}`}
+              >
                 Ledger
               </span>
             )}
@@ -737,9 +749,7 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         )}
         {/* Citations — extracted URLs and source references */}
-        {!isUser && !streaming && message.content && (
-          <CitationLinks content={message.content} />
-        )}
+        {!isUser && !streaming && message.content && <CitationLinks content={message.content} />}
         {/* Conversation trace drawer — shows request pipeline per message */}
         {!isUser && !streaming && traceEnabled && meta?.traceId && (
           <MessageTraceDrawer

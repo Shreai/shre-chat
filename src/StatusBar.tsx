@@ -86,7 +86,10 @@ interface LiveService {
 const TASK_GROUPS: { label: string; statuses: Set<string> }[] = [
   { label: 'Active', statuses: new Set(['in_progress', 'started', 'working_on']) },
   { label: 'Review', statuses: new Set(['pending_review', 'review_needed', 'approval_needed']) },
-  { label: 'Failed', statuses: new Set(['failed', 'errored', 'crash_unrecoverable', 'divergence']) },
+  {
+    label: 'Failed',
+    statuses: new Set(['failed', 'errored', 'crash_unrecoverable', 'divergence']),
+  },
   { label: 'Blocked', statuses: new Set(['blocked', 'roadblock', 'on_hold', 'hold']) },
   { label: 'Queued', statuses: new Set(['created', 'queued', 'todo']) },
   { label: 'Completed', statuses: new Set(['done', 'completed', 'qa_tested', 'production_ready']) },
@@ -191,7 +194,11 @@ function RoutingModeIndicator() {
 
   const config: Record<GatewayMode, { label: string; color: string; title: string }> = {
     router: { label: 'Router', color: '#3b82f6', title: 'Shre Router — trust gate, RAG, scoring' },
-    direct: { label: 'Direct', color: '#22c55e', title: 'Direct local mode — explicitly enabled only' },
+    direct: {
+      label: 'Direct',
+      color: '#22c55e',
+      title: 'Direct local mode — explicitly enabled only',
+    },
   };
   const modes: GatewayMode[] = ALLOW_DIRECT_MODE ? ['router', 'direct'] : ['router'];
   const c = config[gatewayMode];
@@ -750,7 +757,9 @@ export function StatusBar() {
     } catch (err: any) {
       console.error('[StatusBar] Mic error:', err?.name, err?.message, err);
 
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
+      const isIOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
       const isAndroid = /Android/i.test(navigator.userAgent);
       let msg: string;
 
@@ -773,9 +782,11 @@ export function StatusBar() {
       setTimeout(() => actions.setStatusLine(null), 8000);
 
       // Also dispatch as system message so it persists in chat history
-      window.dispatchEvent(new CustomEvent('shre-system-message', {
-        detail: { text: msg, type: 'error' },
-      }));
+      window.dispatchEvent(
+        new CustomEvent('shre-system-message', {
+          detail: { text: msg, type: 'error' },
+        }),
+      );
     }
   }, [recording, micEnabled, setMicEnabled]);
 
@@ -814,7 +825,14 @@ export function StatusBar() {
       <button
         onClick={() => actions.setSidebarOpen(!state.sidebarOpen)}
         className="shrink-0 p-2 md:p-1 rounded-lg transition-colors hover:bg-white/5"
-        style={{ color: 'var(--c-text-3)', minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{
+          color: 'var(--c-text-3)',
+          minWidth: 36,
+          minHeight: 36,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
         aria-label={state.sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
       >
         <svg
@@ -930,7 +948,8 @@ export function StatusBar() {
                   width: 6,
                   height: 6,
                   borderRadius: '50%',
-                  background: i === 0 ? '#22c55e' : i === 1 ? 'var(--c-accent)' : 'var(--c-border-2)',
+                  background:
+                    i === 0 ? '#22c55e' : i === 1 ? 'var(--c-accent)' : 'var(--c-border-2)',
                   animation: i <= 1 ? 'statusPulse 1.5s ease-in-out infinite' : 'none',
                   animationDelay: `${i * 200}ms`,
                 }}
@@ -1064,7 +1083,15 @@ export function StatusBar() {
             if (!bellOpen) fetchNotifications();
           }}
           className="status-bar-item flex"
-          style={{ ...styles.iconBtn, position: 'relative', minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{
+            ...styles.iconBtn,
+            position: 'relative',
+            minWidth: 36,
+            minHeight: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
           title={`${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}`}
           aria-label="Notifications"
         >
@@ -1127,7 +1154,11 @@ export function StatusBar() {
           transition: 'all 0.2s ease',
           flexShrink: 0,
         }}
-        title={focusMode ? 'Focus mode ON — system events hidden. Click to show all' : 'Focus mode OFF — showing all messages. Click to hide system events'}
+        title={
+          focusMode
+            ? 'Focus mode ON — system events hidden. Click to show all'
+            : 'Focus mode OFF — showing all messages. Click to hide system events'
+        }
         aria-label={focusMode ? 'Disable focus mode' : 'Enable focus mode'}
       >
         <svg
@@ -1176,7 +1207,16 @@ export function StatusBar() {
         title="Memory — view learned facts and patterns"
         aria-label="Toggle memory panel"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M12 2a9 9 0 0 0-9 9c0 3.9 2.5 7.1 6 8.3V21h6v-1.7c3.5-1.2 6-4.4 6-8.3a9 9 0 0 0-9-9z" />
           <path d="M9 21h6" />
         </svg>
@@ -1202,10 +1242,23 @@ export function StatusBar() {
           transition: 'all 0.2s ease',
           flexShrink: 0,
         }}
-        title={traceEnabled ? 'Trace ON — showing request pipeline per message' : 'Trace OFF — enable to see request flow details'}
+        title={
+          traceEnabled
+            ? 'Trace ON — showing request pipeline per message'
+            : 'Trace OFF — enable to see request flow details'
+        }
         aria-label={traceEnabled ? 'Disable trace mode' : 'Enable trace mode'}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
       </button>
@@ -1215,9 +1268,10 @@ export function StatusBar() {
         onClick={toggleMic}
         style={{
           ...styles.micBtn,
-          background: recording || micEnabled
-            ? 'var(--c-accent, #6366f1)'
-            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
+          background:
+            recording || micEnabled
+              ? 'var(--c-accent, #6366f1)'
+              : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
           animation: recording ? 'mic-pulse 1.5s ease-in-out infinite' : 'none',
         }}
         title={
@@ -1228,11 +1282,7 @@ export function StatusBar() {
               : 'Tap to start voice input'
         }
         aria-label={
-          recording
-            ? 'Stop recording'
-            : micEnabled
-              ? 'Disable voice input'
-              : 'Start voice input'
+          recording ? 'Stop recording' : micEnabled ? 'Disable voice input' : 'Start voice input'
         }
       >
         <svg
@@ -2163,9 +2213,16 @@ export function StatusBar() {
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    if (confirm(`Restart stuck agent ${agent.name} for task ${task.title.slice(0, 20)}...?`)) {
+                                    if (
+                                      confirm(
+                                        `Restart stuck agent ${agent.name} for task ${task.title.slice(0, 20)}...?`,
+                                      )
+                                    ) {
                                       try {
-                                        await fetch(`/api/agents/${task.taskId}/restart`, { method: 'POST', headers: authHeaders() });
+                                        await fetch(`/api/agents/${task.taskId}/restart`, {
+                                          method: 'POST',
+                                          headers: authHeaders(),
+                                        });
                                       } catch (err) {
                                         console.error('Failed to restart agent', err);
                                       }

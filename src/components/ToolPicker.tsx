@@ -154,7 +154,8 @@ export function ToolPicker({
               {/* Tabs */}
               <div className="flex gap-1 mt-2">
                 {(['all', 'system', 'app'] as const).map((tab) => {
-                  const count = tab === 'all' ? tools.length : tab === 'system' ? systemCount : appCount;
+                  const count =
+                    tab === 'all' ? tools.length : tab === 'system' ? systemCount : appCount;
                   return (
                     <button
                       key={tab}
@@ -194,28 +195,17 @@ export function ToolPicker({
                     className="text-[9px] px-1.5 py-0.5 rounded shrink-0 mt-0.5 font-medium"
                     style={{
                       background:
-                        tool.category === 'system'
-                          ? 'var(--c-accent-soft)'
-                          : 'var(--c-bg-3)',
-                      color:
-                        tool.category === 'system'
-                          ? 'var(--c-accent)'
-                          : 'var(--c-text-3)',
+                        tool.category === 'system' ? 'var(--c-accent-soft)' : 'var(--c-bg-3)',
+                      color: tool.category === 'system' ? 'var(--c-accent)' : 'var(--c-text-3)',
                     }}
                   >
                     {tool.category === 'system' ? 'SYS' : 'APP'}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div
-                      className="text-[12px] font-medium"
-                      style={{ color: 'var(--c-text-1)' }}
-                    >
+                    <div className="text-[12px] font-medium" style={{ color: 'var(--c-text-1)' }}>
                       {tool.name}
                     </div>
-                    <div
-                      className="text-[10px] leading-snug"
-                      style={{ color: 'var(--c-text-3)' }}
-                    >
+                    <div className="text-[10px] leading-snug" style={{ color: 'var(--c-text-3)' }}>
                       {tool.description}
                     </div>
                   </div>

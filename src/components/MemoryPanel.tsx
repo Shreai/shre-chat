@@ -132,17 +132,47 @@ export function MemoryPanel({ open, onClose }: Props) {
         }}
       >
         {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c-border, #1f2937)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--c-border, #1f2937)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#8b5cf6"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 2a9 9 0 0 0-9 9c0 3.9 2.5 7.1 6 8.3V21h6v-1.7c3.5-1.2 6-4.4 6-8.3a9 9 0 0 0-9-9z" />
               <path d="M9 21h6" />
               <path d="M10 17v-2" />
               <path d="M14 17v-2" />
             </svg>
-            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--c-text-1, #f9fafb)' }}>Memory</span>
+            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--c-text-1, #f9fafb)' }}>
+              Memory
+            </span>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--c-text-3)', cursor: 'pointer', fontSize: 18 }}>x</button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--c-text-3)',
+              cursor: 'pointer',
+              fontSize: 18,
+            }}
+          >
+            x
+          </button>
         </div>
 
         {/* Tabs */}
@@ -171,7 +201,11 @@ export function MemoryPanel({ open, onClose }: Props) {
 
         {/* Content */}
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-          {loading && <div style={{ color: 'var(--c-text-3)', textAlign: 'center', padding: 20 }}>Loading...</div>}
+          {loading && (
+            <div style={{ color: 'var(--c-text-3)', textAlign: 'center', padding: 20 }}>
+              Loading...
+            </div>
+          )}
 
           {!loading && tab === 'facts' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -181,17 +215,23 @@ export function MemoryPanel({ open, onClose }: Props) {
                 </div>
               )}
               {facts.map((fact) => (
-                <div key={fact.id} style={{ background: 'var(--c-bg-3, #1f2937)', borderRadius: 10, padding: 12 }}>
+                <div
+                  key={fact.id}
+                  style={{ background: 'var(--c-bg-3, #1f2937)', borderRadius: 10, padding: 12 }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <span style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      background: (CATEGORY_COLORS[fact.category] ?? CATEGORY_COLORS.default) + '33',
-                      color: CATEGORY_COLORS[fact.category] ?? CATEGORY_COLORS.default,
-                      textTransform: 'uppercase',
-                    }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        background:
+                          (CATEGORY_COLORS[fact.category] ?? CATEGORY_COLORS.default) + '33',
+                        color: CATEGORY_COLORS[fact.category] ?? CATEGORY_COLORS.default,
+                        textTransform: 'uppercase',
+                      }}
+                    >
                       {fact.category}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--c-text-3)' }}>{fact.agentId}</span>
@@ -202,13 +242,26 @@ export function MemoryPanel({ open, onClose }: Props) {
                   <div style={{ fontSize: 13, color: 'var(--c-text-1, #f9fafb)', lineHeight: 1.5 }}>
                     {fact.text}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: 8,
+                    }}
+                  >
                     <span style={{ fontSize: 11, color: 'var(--c-text-3)' }}>
                       {new Date(fact.createdAt).toLocaleDateString()}
                     </span>
                     <button
                       onClick={() => handleForget(fact.id)}
-                      style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}
+                      style={{
+                        fontSize: 11,
+                        color: '#ef4444',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
                     >
                       Forget
                     </button>
@@ -224,9 +277,23 @@ export function MemoryPanel({ open, onClose }: Props) {
                 <StatCard label="Total Patterns" value={muscleMemory.totalPatterns} />
                 <StatCard label="Learned" value={muscleMemory.learnedPatterns} color="#22c55e" />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text-1)', marginTop: 8 }}>Top Agents</div>
+              <div
+                style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text-1)', marginTop: 8 }}
+              >
+                Top Agents
+              </div>
               {muscleMemory.topAgents.map((a) => (
-                <div key={a.agentId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--c-bg-3, #1f2937)', borderRadius: 8 }}>
+                <div
+                  key={a.agentId}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    background: 'var(--c-bg-3, #1f2937)',
+                    borderRadius: 8,
+                  }}
+                >
                   <span style={{ fontSize: 13, color: 'var(--c-text-1)' }}>{a.agentId}</span>
                   <span style={{ fontSize: 12, color: '#22c55e' }}>{a.learnedCount} learned</span>
                 </div>
@@ -239,25 +306,71 @@ export function MemoryPanel({ open, onClose }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <StatCard label="Total Facts" value={dashboard.totalFacts} />
                 <StatCard label="Active" value={dashboard.activeFacts} color="#22c55e" />
-                <StatCard label="Recall Rate" value={`${(dashboard.recallHitRate * 100).toFixed(0)}%`} color="#6366f1" />
+                <StatCard
+                  label="Recall Rate"
+                  value={`${(dashboard.recallHitRate * 100).toFixed(0)}%`}
+                  color="#6366f1"
+                />
                 <StatCard label="Categories" value={Object.keys(dashboard.byCategory).length} />
               </div>
               {Object.keys(dashboard.byCategory).length > 0 && (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text-1)', marginTop: 8 }}>By Category</div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--c-text-1)',
+                      marginTop: 8,
+                    }}
+                  >
+                    By Category
+                  </div>
                   {Object.entries(dashboard.byCategory).map(([cat, count]) => (
-                    <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--c-bg-3)', borderRadius: 8 }}>
-                      <span style={{ fontSize: 13, color: CATEGORY_COLORS[cat] ?? 'var(--c-text-1)' }}>{cat}</span>
-                      <span style={{ fontSize: 12, color: 'var(--c-text-3)' }}>{count as number}</span>
+                    <div
+                      key={cat}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '6px 12px',
+                        background: 'var(--c-bg-3)',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <span
+                        style={{ fontSize: 13, color: CATEGORY_COLORS[cat] ?? 'var(--c-text-1)' }}
+                      >
+                        {cat}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--c-text-3)' }}>
+                        {count as number}
+                      </span>
                     </div>
                   ))}
                 </>
               )}
               {dashboard.consolidation && (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text-1)', marginTop: 8 }}>Last Consolidation</div>
-                  <div style={{ fontSize: 12, color: 'var(--c-text-3)', padding: '8px 12px', background: 'var(--c-bg-3)', borderRadius: 8 }}>
-                    Merged: {dashboard.consolidation.merged} | Promoted: {dashboard.consolidation.promoted} | Demoted: {dashboard.consolidation.demoted}
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--c-text-1)',
+                      marginTop: 8,
+                    }}
+                  >
+                    Last Consolidation
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--c-text-3)',
+                      padding: '8px 12px',
+                      background: 'var(--c-bg-3)',
+                      borderRadius: 8,
+                    }}
+                  >
+                    Merged: {dashboard.consolidation.merged} | Promoted:{' '}
+                    {dashboard.consolidation.promoted} | Demoted: {dashboard.consolidation.demoted}
                     <br />
                     {new Date(dashboard.consolidation.lastRunAt).toLocaleString()}
                   </div>
@@ -272,11 +385,21 @@ export function MemoryPanel({ open, onClose }: Props) {
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
+function StatCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  color?: string;
+}) {
   return (
     <div style={{ background: 'var(--c-bg-3, #1f2937)', borderRadius: 10, padding: '12px 14px' }}>
       <div style={{ fontSize: 11, color: 'var(--c-text-3)', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: color ?? 'var(--c-text-1, #f9fafb)' }}>{value}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: color ?? 'var(--c-text-1, #f9fafb)' }}>
+        {value}
+      </div>
     </div>
   );
 }

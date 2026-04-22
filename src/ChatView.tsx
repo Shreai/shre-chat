@@ -679,8 +679,12 @@ export function ChatView() {
 
   // ── Header mic → ChatComposer push-to-talk bridge ──
   useEffect(() => {
-    const onMicStart = () => { startRecording(); };
-    const onMicStop = () => { stopRecording(); };
+    const onMicStart = () => {
+      startRecording();
+    };
+    const onMicStop = () => {
+      stopRecording();
+    };
     window.addEventListener('shre-mic-start', onMicStart);
     window.addEventListener('shre-mic-stop', onMicStop);
     return () => {
@@ -906,7 +910,11 @@ export function ChatView() {
         style={{
           ...(isTabMode
             ? {}
-            : { height: '40%', minHeight: isMobileLayout ? 140 : 200, borderBottom: '2px solid rgba(255,255,255,0.1)' }),
+            : {
+                height: '40%',
+                minHeight: isMobileLayout ? 140 : 200,
+                borderBottom: '2px solid rgba(255,255,255,0.1)',
+              }),
           display: (isTabMode ? showTermPanel : showTerminal)
             ? isTabMode
               ? 'flex'
@@ -953,458 +961,463 @@ export function ChatView() {
 
       {/* Artifact canvas — side panel for code, HTML, diagrams, tables */}
       {activeArtifact && (
-        <ArtifactCanvas
-          artifact={activeArtifact}
-          onClose={() => setActiveArtifact(null)}
-        />
+        <ArtifactCanvas artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
       )}
 
       {/* Chat content — hidden in tab mode when terminal is active */}
       {showChat && (
         <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
-        {/* Chat column */}
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          {/* Trial status banner */}
-          <TrialBanner />
+          {/* Chat column */}
+          <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {/* Trial status banner */}
+            <TrialBanner />
 
-          {/* Active task indicator — click to open task panel */}
-          {activeTasks.length > 0 && (
-            <div className="flex items-center px-4 py-1 shrink-0" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
-              <TaskIndicatorButton
-                activeTasks={activeTasks}
-                onClick={() => setSelectedTaskId(activeTasks[0]?.id ?? null)}
-              />
-              <span className="ml-2 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
-                {activeTasks.filter(t => t.status === 'in_progress').length > 0
-                  ? `${activeTasks.filter(t => t.status === 'in_progress').length} running`
-                  : `${activeTasks.length} pending`}
-              </span>
-            </div>
-          )}
+            {/* Active task indicator — click to open task panel */}
+            {activeTasks.length > 0 && (
+              <div
+                className="flex items-center px-4 py-1 shrink-0"
+                style={{ borderBottom: '1px solid var(--c-border-2)' }}
+              >
+                <TaskIndicatorButton
+                  activeTasks={activeTasks}
+                  onClick={() => setSelectedTaskId(activeTasks[0]?.id ?? null)}
+                />
+                <span className="ml-2 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                  {activeTasks.filter((t) => t.status === 'in_progress').length > 0
+                    ? `${activeTasks.filter((t) => t.status === 'in_progress').length} running`
+                    : `${activeTasks.length} pending`}
+                </span>
+              </div>
+            )}
 
-          <ChatPanels
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            activeSession={activeSession}
-            activeAgentId={activeAgentId}
-            editingTabId={editingTabId}
-            editingTabText={editingTabText}
-            setEditingTabId={setEditingTabId}
-            setEditingTabText={setEditingTabText}
-            cliMode={cliMode}
-            actions={actions}
-            conversationMode={conversationMode}
-            activeAppId={activeAppId}
-            setConversationMode={setConversationMode}
-            appOptions={appOptions}
-            toolOptions={toolOptions}
-            toolSystemCount={toolSystemCount}
-            toolAppCount={toolAppCount}
-            showModelPicker={showModelPicker}
-            setShowModelPicker={setShowModelPicker}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            AVAILABLE_MODELS={AVAILABLE_MODELS}
-            MODEL_CONTEXT_LIMITS={MODEL_CONTEXT_LIMITS}
-            dynamicModelsCount={dynamicModels.length}
-            currentAgent={currentAgent}
-            modelPickerRef={modelPickerRef}
-            ensureSession={ensureSession}
-            ttsProvider={ttsProvider}
-            setTtsProvider={setTtsProvider}
-            onOpenVoiceChat={() => setVoiceAssistantOpen(true)}
-            onOpenRealtimeVoice={() => setRealtimeVoiceOpen(true)}
-            showHeaderMore={showHeaderMore}
-            setShowHeaderMore={setShowHeaderMore}
-            headerMoreRef={headerMoreRef}
-            routerMode={routerMode}
-            handleToggleRouterMode={handleToggleRouterMode}
-            gatewayMode={gatewayMode}
-            handleSetGatewayMode={handleSetGatewayMode}
-            compareMode={compareMode}
-            compareModels={compareModels}
-            handleToggleCompare={handleToggleCompare}
-            setCompareStreams={setCompareStreams}
-            setCompareWinner={setCompareWinner}
-            comparePickerRef={comparePickerRef}
-            handleOpenSystemPrompt={handleOpenSystemPrompt}
-            compact={state.compact}
-            notifSound={notifSound}
-            handleToggleNotifSound={handleToggleNotifSound}
-            messages={messages}
-            userName={userName}
-            summarizing={summarizing}
-            handleSummarize={handleSummarize}
-            showAnalytics={showAnalytics}
-            setShowAnalytics={setShowAnalytics}
-            handleShare={handleShare}
-            handleCopyMarkdown={handleCopyMarkdown}
-            handleDownloadMd={handleDownloadMd}
-            handleDownloadJson={handleDownloadJson}
-            showApps={showApps}
-            setShowApps={setShowApps}
-            view={view}
-            importInputRef={importInputRef}
-            wsFailed={wsFailed}
-            setWsFailed={setWsFailed}
-            setWsConnected={setWsConnected}
-            shareUrl={shareUrl}
-            shareCopied={shareCopied}
-            setShareCopied={setShareCopied}
-            setShareUrl={setShareUrl}
-            offlineQueue={offlineQueue}
-            selectedModelForContext={selectedModel}
-            chatSearchOpen={chatSearchOpen}
-            chatSearchRef={chatSearchRef}
-            chatSearch={chatSearch}
-            setChatSearch={setChatSearch}
-            closeChatSearch={closeChatSearch}
-            chatSearchNavigate={chatSearchNavigate}
-            chatSearchResults={chatSearchResults}
-            chatSearchIndex={chatSearchIndex}
-            showSystemPrompt={showSystemPrompt}
-            setShowSystemPrompt={setShowSystemPrompt}
-            systemPromptDraft={systemPromptDraft}
-            setSystemPromptDraft={setSystemPromptDraft}
-            handleSaveSystemPrompt={handleSaveSystemPrompt}
-            showSummary={showSummary}
-            setShowSummary={setShowSummary}
-            summaryText={summaryText}
-          />
-
-          {/* Messages */}
-          <MessageList
-            filteredMessages={filteredMessages}
-            messages={messages}
-            streaming={streaming}
-            streamText={streamText}
-            syncing={syncing}
-            compact={state.compact}
-            currentAgent={currentAgent}
-            activeAgentId={activeAgentId}
-            userName={userName}
-            activeSessionId={activeSessionId}
-            chatSearchOpen={chatSearchOpen}
-            chatSearch={chatSearch}
-            chatSearchResults={chatSearchResults}
-            chatSearchIndex={chatSearchIndex}
-            selectedMsgIndex={selectedMsgIndex}
-            editingMsgIndex={editingMsgIndex}
-            editingMsgText={editingMsgText}
-            scrollRef={scrollRef}
-            showJumpToLatest={showJumpToLatest}
-            newMsgStartIndex={newMsgStartIndex}
-            pullDistance={pullDistance}
-            pullRefreshing={pullRefreshing}
-            PULL_THRESHOLD={PULL_THRESHOLD}
-            streamStall={streamStall}
-            stallCountdown={stallCountdown}
-            streamElapsed={streamElapsed}
-            streamPhase={streamPhase}
-            activeToolName={activeToolName}
-            compacting={compacting}
-            pendingApproval={pendingApproval}
-            firstTokenReceived={firstTokenReceived}
-            onCancelStream={() => {
-              abortRef.current?.abort();
-              actions.setStreaming(false);
-              actions.setStreamText('');
-              actions.setStatusLine('');
-            }}
-            runs={runs}
-            getRunForMessage={getRunForMessage}
-            userProfile={state.userProfile}
-            onScroll={handleScroll}
-            onPullStart={handlePullStart}
-            onPullMove={handlePullMove}
-            onPullEnd={handlePullEnd}
-            onJumpToLatest={jumpToLatest}
-            {...messageListHandlers}
-            onModeSwitchRequest={(mode: string) => setConversationMode(mode as ConversationModeId)}
-            virtualizer={virtualizer}
-            useVirtual={useVirtual}
-          />
-
-          {/* Compare mode results */}
-          {compareMode && (
-            <CompareView
-              compareStreams={compareStreams}
-              compareWinner={compareWinner}
-              availableModels={AVAILABLE_MODELS}
+            <ChatPanels
+              sessions={sessions}
               activeSessionId={activeSessionId}
-              onPickWinner={(modelId, text) => {
-                setCompareWinner(modelId);
-                if (activeSessionId) {
-                  const modelInfo = AVAILABLE_MODELS.find((m) => m.id === modelId);
-                  actions.addMessage(activeSessionId, {
-                    role: 'assistant',
-                    content: text,
-                    timestamp: Date.now(),
-                  });
-                  actions.addActivity(
-                    activeSessionId,
-                    'done',
-                    `Compare winner: ${modelInfo?.name || modelId}`,
-                  );
-                  actions.addFeed(
-                    activeSessionId,
-                    'received',
-                    `Winner: ${modelInfo?.name || modelId} (${text.length} chars)`,
-                    { compare: 'true', model: modelId },
-                  );
-                }
+              activeSession={activeSession}
+              activeAgentId={activeAgentId}
+              editingTabId={editingTabId}
+              editingTabText={editingTabText}
+              setEditingTabId={setEditingTabId}
+              setEditingTabText={setEditingTabText}
+              cliMode={cliMode}
+              actions={actions}
+              conversationMode={conversationMode}
+              activeAppId={activeAppId}
+              setConversationMode={setConversationMode}
+              appOptions={appOptions}
+              toolOptions={toolOptions}
+              toolSystemCount={toolSystemCount}
+              toolAppCount={toolAppCount}
+              showModelPicker={showModelPicker}
+              setShowModelPicker={setShowModelPicker}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              AVAILABLE_MODELS={AVAILABLE_MODELS}
+              MODEL_CONTEXT_LIMITS={MODEL_CONTEXT_LIMITS}
+              dynamicModelsCount={dynamicModels.length}
+              currentAgent={currentAgent}
+              modelPickerRef={modelPickerRef}
+              ensureSession={ensureSession}
+              ttsProvider={ttsProvider}
+              setTtsProvider={setTtsProvider}
+              onOpenVoiceChat={() => setVoiceAssistantOpen(true)}
+              onOpenRealtimeVoice={() => setRealtimeVoiceOpen(true)}
+              showHeaderMore={showHeaderMore}
+              setShowHeaderMore={setShowHeaderMore}
+              headerMoreRef={headerMoreRef}
+              routerMode={routerMode}
+              handleToggleRouterMode={handleToggleRouterMode}
+              gatewayMode={gatewayMode}
+              handleSetGatewayMode={handleSetGatewayMode}
+              compareMode={compareMode}
+              compareModels={compareModels}
+              handleToggleCompare={handleToggleCompare}
+              setCompareStreams={setCompareStreams}
+              setCompareWinner={setCompareWinner}
+              comparePickerRef={comparePickerRef}
+              handleOpenSystemPrompt={handleOpenSystemPrompt}
+              compact={state.compact}
+              notifSound={notifSound}
+              handleToggleNotifSound={handleToggleNotifSound}
+              messages={messages}
+              userName={userName}
+              summarizing={summarizing}
+              handleSummarize={handleSummarize}
+              showAnalytics={showAnalytics}
+              setShowAnalytics={setShowAnalytics}
+              handleShare={handleShare}
+              handleCopyMarkdown={handleCopyMarkdown}
+              handleDownloadMd={handleDownloadMd}
+              handleDownloadJson={handleDownloadJson}
+              showApps={showApps}
+              setShowApps={setShowApps}
+              view={view}
+              importInputRef={importInputRef}
+              wsFailed={wsFailed}
+              setWsFailed={setWsFailed}
+              setWsConnected={setWsConnected}
+              shareUrl={shareUrl}
+              shareCopied={shareCopied}
+              setShareCopied={setShareCopied}
+              setShareUrl={setShareUrl}
+              offlineQueue={offlineQueue}
+              selectedModelForContext={selectedModel}
+              chatSearchOpen={chatSearchOpen}
+              chatSearchRef={chatSearchRef}
+              chatSearch={chatSearch}
+              setChatSearch={setChatSearch}
+              closeChatSearch={closeChatSearch}
+              chatSearchNavigate={chatSearchNavigate}
+              chatSearchResults={chatSearchResults}
+              chatSearchIndex={chatSearchIndex}
+              showSystemPrompt={showSystemPrompt}
+              setShowSystemPrompt={setShowSystemPrompt}
+              systemPromptDraft={systemPromptDraft}
+              setSystemPromptDraft={setSystemPromptDraft}
+              handleSaveSystemPrompt={handleSaveSystemPrompt}
+              showSummary={showSummary}
+              setShowSummary={setShowSummary}
+              summaryText={summaryText}
+            />
+
+            {/* Messages */}
+            <MessageList
+              filteredMessages={filteredMessages}
+              messages={messages}
+              streaming={streaming}
+              streamText={streamText}
+              syncing={syncing}
+              compact={state.compact}
+              currentAgent={currentAgent}
+              activeAgentId={activeAgentId}
+              userName={userName}
+              activeSessionId={activeSessionId}
+              chatSearchOpen={chatSearchOpen}
+              chatSearch={chatSearch}
+              chatSearchResults={chatSearchResults}
+              chatSearchIndex={chatSearchIndex}
+              selectedMsgIndex={selectedMsgIndex}
+              editingMsgIndex={editingMsgIndex}
+              editingMsgText={editingMsgText}
+              scrollRef={scrollRef}
+              showJumpToLatest={showJumpToLatest}
+              newMsgStartIndex={newMsgStartIndex}
+              pullDistance={pullDistance}
+              pullRefreshing={pullRefreshing}
+              PULL_THRESHOLD={PULL_THRESHOLD}
+              streamStall={streamStall}
+              stallCountdown={stallCountdown}
+              streamElapsed={streamElapsed}
+              streamPhase={streamPhase}
+              activeToolName={activeToolName}
+              compacting={compacting}
+              pendingApproval={pendingApproval}
+              firstTokenReceived={firstTokenReceived}
+              onCancelStream={() => {
+                abortRef.current?.abort();
+                actions.setStreaming(false);
+                actions.setStreamText('');
+                actions.setStatusLine('');
               }}
-              onDismiss={() => {
-                setCompareStreams({});
-                setCompareWinner(null);
+              runs={runs}
+              getRunForMessage={getRunForMessage}
+              userProfile={state.userProfile}
+              onScroll={handleScroll}
+              onPullStart={handlePullStart}
+              onPullMove={handlePullMove}
+              onPullEnd={handlePullEnd}
+              onJumpToLatest={jumpToLatest}
+              {...messageListHandlers}
+              onModeSwitchRequest={(mode: string) =>
+                setConversationMode(mode as ConversationModeId)
+              }
+              virtualizer={virtualizer}
+              useVirtual={useVirtual}
+            />
+
+            {/* Compare mode results */}
+            {compareMode && (
+              <CompareView
+                compareStreams={compareStreams}
+                compareWinner={compareWinner}
+                availableModels={AVAILABLE_MODELS}
+                activeSessionId={activeSessionId}
+                onPickWinner={(modelId, text) => {
+                  setCompareWinner(modelId);
+                  if (activeSessionId) {
+                    const modelInfo = AVAILABLE_MODELS.find((m) => m.id === modelId);
+                    actions.addMessage(activeSessionId, {
+                      role: 'assistant',
+                      content: text,
+                      timestamp: Date.now(),
+                    });
+                    actions.addActivity(
+                      activeSessionId,
+                      'done',
+                      `Compare winner: ${modelInfo?.name || modelId}`,
+                    );
+                    actions.addFeed(
+                      activeSessionId,
+                      'received',
+                      `Winner: ${modelInfo?.name || modelId} (${text.length} chars)`,
+                      { compare: 'true', model: modelId },
+                    );
+                  }
+                }}
+                onDismiss={() => {
+                  setCompareStreams({});
+                  setCompareWinner(null);
+                }}
+              />
+            )}
+
+            {/* Process Detail overlay */}
+            {processDetailOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '50%',
+                  zIndex: 30,
+                  borderTop: '1px solid var(--c-border-1)',
+                  background: 'var(--c-bg-main)',
+                  boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                }}
+              >
+                <ProcessDetail
+                  run={activeRun ?? runs[runs.length - 1] ?? null}
+                  highlightStepId={highlightStepId}
+                  onClose={() => setProcessDetailOpen(false)}
+                />
+              </div>
+            )}
+
+            {/* Task Queue */}
+            <MessageQueue
+              queue={queue}
+              editingQueueId={editingQueueId}
+              onReorder={(idx, dir) =>
+                setQueue((prev) => {
+                  const next = [...prev];
+                  const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+                  [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+                  return next;
+                })
+              }
+              onEdit={(item) => {
+                setEditingQueueId(item.id);
+                setEditingQueueText(item.text);
+                setInput(item.text);
+                setTimeout(() => {
+                  const ta = document.getElementById('shre-chat-textarea');
+                  if (ta) {
+                    ta.focus();
+                    (ta as HTMLTextAreaElement).setSelectionRange(
+                      item.text.length,
+                      item.text.length,
+                    );
+                  }
+                }, 50);
+              }}
+              onRemove={(id) => setQueue((prev) => prev.filter((q) => q.id !== id))}
+            />
+
+            {/* Process Bar — between messages and input */}
+            <ProcessBar
+              runs={runs}
+              activeRun={activeRun}
+              onStepClick={(_runId, stepId) => {
+                setHighlightStepId(stepId);
+                setProcessDetailOpen(true);
               }}
             />
-          )}
 
-          {/* Process Detail overlay */}
-          {processDetailOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '50%',
-                zIndex: 30,
-                borderTop: '1px solid var(--c-border-1)',
-                background: 'var(--c-bg-main)',
-                boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+            {/* Contextual quick-action suggestions from last assistant message */}
+            <SuggestionsBar
+              lastAssistantMessage={lastAssistantMessage}
+              streaming={streaming}
+              messageCount={messages.length}
+              onSelect={(text) => {
+                setInput(text);
+                pendingSuggestionSendRef.current = true;
               }}
-            >
-              <ProcessDetail
-                run={activeRun ?? runs[runs.length - 1] ?? null}
-                highlightStepId={highlightStepId}
-                onClose={() => setProcessDetailOpen(false)}
-              />
-            </div>
+            />
+
+            <ChatComposer
+              input={input}
+              setInput={setInput}
+              onKeyDown={handleKeyDown}
+              onSend={handleSend}
+              onAbort={handleAbort}
+              streaming={streaming}
+              syncing={syncing}
+              writeEnabled={state.writeEnabled}
+              compareMode={compareMode}
+              compareModelsCount={compareModels.length}
+              cliMode={cliMode}
+              claudeCliMode={claudeCliMode}
+              setClaudeCliMode={(on: boolean) => {
+                setClaudeCliMode(on);
+                localStorage.setItem('shre-claude-cli-mode', String(on));
+                if (on) {
+                  setShowTerminal(true);
+                  if (isMobileLayout || termViewMode === 'tabs') {
+                    setActiveView('terminal');
+                  }
+                } else {
+                  if (cliMode) {
+                    setCliMode(false);
+                    localStorage.setItem('shre-cli-mode-default', 'false');
+                  }
+                }
+              }}
+              onOpenClaudeCli={() => {
+                setShowTerminal(true);
+                if (isMobileLayout || termViewMode === 'tabs') {
+                  setActiveView('terminal');
+                }
+                // Open a Claude CLI tab via the terminal ref
+                setTimeout(() => {
+                  terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' });
+                }, 100);
+              }}
+              onOpenShreCli={() => {
+                setShowTerminal(true);
+                if (isMobileLayout || termViewMode === 'tabs') {
+                  setActiveView('terminal');
+                }
+                setTimeout(() => {
+                  terminalRef.current?.openTab({ title: 'Shre CLI', cmd: 'shre' });
+                }, 100);
+              }}
+              currentAgentName={currentAgent.name}
+              activeSessionId={activeSessionId}
+              messages={messages}
+              inputRef={inputRef}
+              fileRef={fileRef}
+              emojiRef={emojiRef}
+              pendingFiles={pendingFiles}
+              onFileSelect={handleFileSelect}
+              onRemovePendingFile={removePendingFile}
+              onImageClick={setLightboxSrc}
+              onPaste={handlePaste}
+              showEmoji={showEmoji}
+              setShowEmoji={setShowEmoji}
+              isRecording={isRecording}
+              voicePhase={voicePhase}
+              audioLevel={audioLevel}
+              recordingDuration={recordingDuration}
+              isSpeaking={isSpeaking}
+              interimTranscript={interimTranscript}
+              isHandsFree={isHandsFree}
+              voiceMode={voiceMode}
+              ttsVoice={ttsVoice}
+              ttsProvider={ttsProvider}
+              speechSupported={speechSupported}
+              hasSpeechRecognition={hasSpeechRecognition}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              setIsHandsFree={setIsHandsFree}
+              setVoiceMode={setVoiceMode}
+              setTtsVoice={setTtsVoice}
+              setTtsProvider={setTtsProvider}
+              onStopTTS={() => {
+                if (ttsAudioRef.current) {
+                  ttsAudioRef.current.pause();
+                  ttsAudioRef.current = null;
+                }
+                window.speechSynthesis?.cancel();
+                setIsSpeaking(false);
+              }}
+              showTerminal={showTerminal}
+              termViewMode={termViewMode}
+              onToggleTerminal={() => {
+                if (!showTerminal) {
+                  setShowTerminal(true);
+                  // On mobile/tab mode, switch to terminal view so the panel is visible
+                  if (isMobileLayout || termViewMode === 'tabs') {
+                    setActiveView('terminal');
+                  }
+                } else {
+                  setShowTerminal(false);
+                  setActiveView('chat');
+                }
+              }}
+              onToggleTermViewMode={() => {
+                const next = termViewMode === 'split' ? 'tabs' : 'split';
+                setTermViewMode(next);
+                if (next === 'tabs') setActiveView('chat');
+              }}
+              slashOpen={slashOpen}
+              slashFiltered={slashFiltered}
+              slashIndex={slashIndex}
+              slashRef={slashRef}
+              setSlashIndex={setSlashIndex}
+              onSlashSelect={(cmd) => {
+                const hasArg = slashFiltered.find((c) => c.name === cmd)?.usage.includes('<');
+                if (hasArg && !input.includes(' ')) {
+                  setInput(`/${cmd} `);
+                } else {
+                  executeSlashCommand(cmd.startsWith('model ') ? cmd : input.slice(1));
+                }
+              }}
+              mentionOpen={mentionOpen}
+              mentionFiltered={mentionFiltered}
+              mentionIndex={mentionIndex}
+              mentionRef={mentionRef}
+              setMentionIndex={setMentionIndex}
+              onMentionSelect={onMentionSelect}
+              mentionAgent={mentionAgent}
+              replyToIndex={state.replyToIndex}
+              replyToContent={
+                state.replyToIndex !== null
+                  ? (filteredMessages[state.replyToIndex]?.content ??
+                    messages[state.replyToIndex]?.content ??
+                    null)
+                  : null
+              }
+              onCancelReply={() => actions.setReplyTo(null)}
+              editingMsgIndex={editingMsgIndex}
+              editingQueueId={editingQueueId}
+              onCancelEdit={() => {
+                if (editingQueueId) {
+                  setEditingQueueId(null);
+                  setEditingQueueText('');
+                } else {
+                  setEditingMsgIndex(null);
+                  setEditingMsgText('');
+                }
+                setInput('');
+              }}
+              suggestions={suggestions}
+              onSelectSuggestion={(s) => {
+                setSuggestions([]);
+                setInput(s);
+              }}
+              voiceAnnouncement={voiceAnnouncement}
+              queueCount={state.queue.length}
+              onInputChange={(val) => {
+                setInput(val);
+                if (activeSessionId) actions.setDraft(activeSessionId, val);
+                if (val && suggestions.length) setSuggestions([]);
+                if (selectedMsgIndex !== null) setSelectedMsgIndex(null);
+              }}
+              filteredMessages={filteredMessages}
+            />
+          </div>
+
+          {/* Task detail drawer — slides in from right when a task is selected */}
+          {selectedTask && (
+            <TaskPanel
+              task={selectedTask}
+              onClose={() => setSelectedTaskId(null)}
+              onUpdateTask={updateTask}
+              fetchSubtasks={fetchSubtasks}
+              fetchTrace={fetchTrace}
+            />
           )}
-
-          {/* Task Queue */}
-          <MessageQueue
-            queue={queue}
-            editingQueueId={editingQueueId}
-            onReorder={(idx, dir) =>
-              setQueue((prev) => {
-                const next = [...prev];
-                const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
-                [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-                return next;
-              })
-            }
-            onEdit={(item) => {
-              setEditingQueueId(item.id);
-              setEditingQueueText(item.text);
-              setInput(item.text);
-              setTimeout(() => {
-                const ta = document.getElementById('shre-chat-textarea');
-                if (ta) {
-                  ta.focus();
-                  (ta as HTMLTextAreaElement).setSelectionRange(item.text.length, item.text.length);
-                }
-              }, 50);
-            }}
-            onRemove={(id) => setQueue((prev) => prev.filter((q) => q.id !== id))}
-          />
-
-          {/* Process Bar — between messages and input */}
-          <ProcessBar
-            runs={runs}
-            activeRun={activeRun}
-            onStepClick={(_runId, stepId) => {
-              setHighlightStepId(stepId);
-              setProcessDetailOpen(true);
-            }}
-          />
-
-          {/* Contextual quick-action suggestions from last assistant message */}
-          <SuggestionsBar
-            lastAssistantMessage={lastAssistantMessage}
-            streaming={streaming}
-            messageCount={messages.length}
-            onSelect={(text) => {
-              setInput(text);
-              pendingSuggestionSendRef.current = true;
-            }}
-          />
-
-          <ChatComposer
-            input={input}
-            setInput={setInput}
-            onKeyDown={handleKeyDown}
-            onSend={handleSend}
-            onAbort={handleAbort}
-            streaming={streaming}
-            syncing={syncing}
-            writeEnabled={state.writeEnabled}
-            compareMode={compareMode}
-            compareModelsCount={compareModels.length}
-            cliMode={cliMode}
-            claudeCliMode={claudeCliMode}
-            setClaudeCliMode={(on: boolean) => {
-              setClaudeCliMode(on);
-              localStorage.setItem('shre-claude-cli-mode', String(on));
-              if (on) {
-                setShowTerminal(true);
-                if (isMobileLayout || termViewMode === 'tabs') {
-                  setActiveView('terminal');
-                }
-              } else {
-                if (cliMode) {
-                  setCliMode(false);
-                  localStorage.setItem('shre-cli-mode-default', 'false');
-                }
-              }
-            }}
-            onOpenClaudeCli={() => {
-              setShowTerminal(true);
-              if (isMobileLayout || termViewMode === 'tabs') {
-                setActiveView('terminal');
-              }
-              // Open a Claude CLI tab via the terminal ref
-              setTimeout(() => {
-                terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' });
-              }, 100);
-            }}
-            onOpenShreCli={() => {
-              setShowTerminal(true);
-              if (isMobileLayout || termViewMode === 'tabs') {
-                setActiveView('terminal');
-              }
-              setTimeout(() => {
-                terminalRef.current?.openTab({ title: 'Shre CLI', cmd: 'shre' });
-              }, 100);
-            }}
-            currentAgentName={currentAgent.name}
-            activeSessionId={activeSessionId}
-            messages={messages}
-            inputRef={inputRef}
-            fileRef={fileRef}
-            emojiRef={emojiRef}
-            pendingFiles={pendingFiles}
-            onFileSelect={handleFileSelect}
-            onRemovePendingFile={removePendingFile}
-            onImageClick={setLightboxSrc}
-            onPaste={handlePaste}
-            showEmoji={showEmoji}
-            setShowEmoji={setShowEmoji}
-            isRecording={isRecording}
-            voicePhase={voicePhase}
-            audioLevel={audioLevel}
-            recordingDuration={recordingDuration}
-            isSpeaking={isSpeaking}
-            interimTranscript={interimTranscript}
-            isHandsFree={isHandsFree}
-            voiceMode={voiceMode}
-            ttsVoice={ttsVoice}
-            ttsProvider={ttsProvider}
-            speechSupported={speechSupported}
-            hasSpeechRecognition={hasSpeechRecognition}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            setIsHandsFree={setIsHandsFree}
-            setVoiceMode={setVoiceMode}
-            setTtsVoice={setTtsVoice}
-            setTtsProvider={setTtsProvider}
-            onStopTTS={() => {
-              if (ttsAudioRef.current) {
-                ttsAudioRef.current.pause();
-                ttsAudioRef.current = null;
-              }
-              window.speechSynthesis?.cancel();
-              setIsSpeaking(false);
-            }}
-            showTerminal={showTerminal}
-            termViewMode={termViewMode}
-            onToggleTerminal={() => {
-              if (!showTerminal) {
-                setShowTerminal(true);
-                // On mobile/tab mode, switch to terminal view so the panel is visible
-                if (isMobileLayout || termViewMode === 'tabs') {
-                  setActiveView('terminal');
-                }
-              } else {
-                setShowTerminal(false);
-                setActiveView('chat');
-              }
-            }}
-            onToggleTermViewMode={() => {
-              const next = termViewMode === 'split' ? 'tabs' : 'split';
-              setTermViewMode(next);
-              if (next === 'tabs') setActiveView('chat');
-            }}
-            slashOpen={slashOpen}
-            slashFiltered={slashFiltered}
-            slashIndex={slashIndex}
-            slashRef={slashRef}
-            setSlashIndex={setSlashIndex}
-            onSlashSelect={(cmd) => {
-              const hasArg = slashFiltered.find((c) => c.name === cmd)?.usage.includes('<');
-              if (hasArg && !input.includes(' ')) {
-                setInput(`/${cmd} `);
-              } else {
-                executeSlashCommand(cmd.startsWith('model ') ? cmd : input.slice(1));
-              }
-            }}
-            mentionOpen={mentionOpen}
-            mentionFiltered={mentionFiltered}
-            mentionIndex={mentionIndex}
-            mentionRef={mentionRef}
-            setMentionIndex={setMentionIndex}
-            onMentionSelect={onMentionSelect}
-            mentionAgent={mentionAgent}
-            replyToIndex={state.replyToIndex}
-            replyToContent={
-              state.replyToIndex !== null
-                ? (filteredMessages[state.replyToIndex]?.content ??
-                  messages[state.replyToIndex]?.content ??
-                  null)
-                : null
-            }
-            onCancelReply={() => actions.setReplyTo(null)}
-            editingMsgIndex={editingMsgIndex}
-            editingQueueId={editingQueueId}
-            onCancelEdit={() => {
-              if (editingQueueId) {
-                setEditingQueueId(null);
-                setEditingQueueText('');
-              } else {
-                setEditingMsgIndex(null);
-                setEditingMsgText('');
-              }
-              setInput('');
-            }}
-            suggestions={suggestions}
-            onSelectSuggestion={(s) => {
-              setSuggestions([]);
-              setInput(s);
-            }}
-            voiceAnnouncement={voiceAnnouncement}
-            queueCount={state.queue.length}
-            onInputChange={(val) => {
-              setInput(val);
-              if (activeSessionId) actions.setDraft(activeSessionId, val);
-              if (val && suggestions.length) setSuggestions([]);
-              if (selectedMsgIndex !== null) setSelectedMsgIndex(null);
-            }}
-            filteredMessages={filteredMessages}
-          />
-        </div>
-
-        {/* Task detail drawer — slides in from right when a task is selected */}
-        {selectedTask && (
-          <TaskPanel
-            task={selectedTask}
-            onClose={() => setSelectedTaskId(null)}
-            onUpdateTask={updateTask}
-            fetchSubtasks={fetchSubtasks}
-            fetchTrace={fetchTrace}
-          />
-        )}
         </div>
       )}
 

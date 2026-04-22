@@ -104,7 +104,7 @@ export function BriefingView() {
     );
 
   if (!briefing) return null;
-  const sections = briefing.sections ?? {} as BriefingData['sections'];
+  const sections = briefing.sections ?? ({} as BriefingData['sections']);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0">

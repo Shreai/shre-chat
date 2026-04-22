@@ -42,9 +42,7 @@ function CsvTable({ content }: { content: string }) {
   const lines = content.trim().split('\n').filter(Boolean);
   if (lines.length < 2) {
     return (
-      <pre style={{ color: 'var(--c-text-3)', fontSize: 12, padding: 8, margin: 0 }}>
-        {content}
-      </pre>
+      <pre style={{ color: 'var(--c-text-3)', fontSize: 12, padding: 8, margin: 0 }}>{content}</pre>
     );
   }
 
@@ -198,18 +196,15 @@ function AttachmentCard({
   const isImage = attachment.type.startsWith('image/');
   const isVideo = attachment.type.startsWith('video/');
   const isDocx =
-    attachment.type ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    attachment.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     ext === 'docx';
   const isXlsx =
-    attachment.type ===
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    attachment.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
     ext === 'xlsx' ||
     ext === 'xls';
   const isPptx =
     attachment.type ===
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
-    ext === 'pptx';
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation' || ext === 'pptx';
   const isOfficeDoc = isDocx || isXlsx || isPptx;
   const [expanded, setExpanded] = useState(isPdf || isCsv);
 
@@ -247,7 +242,12 @@ function AttachmentCard({
               ? { icon: '\u{1F4CA}', color: '#16a34a', bg: 'rgba(22,163,74,0.12)', label: 'XLSX' }
               : isPptx
                 ? { icon: '\u{1F4FD}', color: '#ea580c', bg: 'rgba(234,88,12,0.12)', label: 'PPTX' }
-                : { icon: '\u{1F4CE}', color: 'var(--c-text-3)', bg: 'var(--c-bg-3)', label: ext.toUpperCase() || 'FILE' };
+                : {
+                    icon: '\u{1F4CE}',
+                    color: 'var(--c-text-3)',
+                    bg: 'var(--c-bg-3)',
+                    label: ext.toUpperCase() || 'FILE',
+                  };
 
   // Video: inline player
   if (isVideo) {
@@ -352,37 +352,55 @@ function AttachmentCard({
           }}
         />
         {/* Vision indicator badge */}
-        <span style={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          fontSize: 9,
-          fontWeight: 700,
-          padding: '2px 6px',
-          borderRadius: 4,
-          background: 'rgba(139, 92, 246, 0.85)',
-          color: '#fff',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 3,
-        }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <span
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            fontSize: 9,
+            fontWeight: 700,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: 'rgba(139, 92, 246, 0.85)',
+            color: '#fff',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 3,
+          }}
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
             <circle cx="12" cy="12" r="3" />
           </svg>
           Vision
         </span>
         {/* File name + size below image */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '4px 2px',
-          fontSize: 10,
-          color: 'var(--c-text-3)',
-        }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '4px 2px',
+            fontSize: 10,
+            color: 'var(--c-text-3)',
+          }}
+        >
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: 180,
+            }}
+          >
             {attachment.name}
           </span>
           {attachment.size && <span>{formatFileSize(attachment.size)}</span>}
@@ -483,9 +501,7 @@ function AttachmentCard({
       </div>
 
       {/* Inline preview */}
-      {expanded && isPdf && (
-        <PdfEmbed dataUrl={attachment.dataUrl} name={attachment.name} />
-      )}
+      {expanded && isPdf && <PdfEmbed dataUrl={attachment.dataUrl} name={attachment.name} />}
       {expanded && isCsv && textContent && (
         <div style={{ maxHeight: 320, overflow: 'auto' }}>
           <CsvTable content={textContent} />

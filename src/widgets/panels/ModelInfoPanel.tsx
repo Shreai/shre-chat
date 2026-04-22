@@ -18,7 +18,9 @@ function getSessionStats() {
         messages: typeof d.messages === 'number' ? d.messages : 0,
       };
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return { model: 'auto', cost: 0, tokens: 0, messages: 0 };
 }
 

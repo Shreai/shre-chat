@@ -24,8 +24,18 @@ interface ProviderGroup {
 }
 
 const PROVIDER_GROUPS: ProviderGroup[] = [
-  { key: 'ollama', label: 'Local', icon: '\uD83D\uDDA5\uFE0F', providerKeys: ['ollama', 'ollama-remote'] },
-  { key: 'anthropic', label: 'Claude', icon: '\uD83D\uDFE3', providerKeys: ['anthropic', 'claude-cli'] },
+  {
+    key: 'ollama',
+    label: 'Local',
+    icon: '\uD83D\uDDA5\uFE0F',
+    providerKeys: ['ollama', 'ollama-remote'],
+  },
+  {
+    key: 'anthropic',
+    label: 'Claude',
+    icon: '\uD83D\uDFE3',
+    providerKeys: ['anthropic', 'claude-cli'],
+  },
   { key: 'openai', label: 'OpenAI', icon: '\uD83D\uDFE2', providerKeys: ['openai'] },
   { key: 'google', label: 'Google', icon: '\uD83D\uDD35', providerKeys: ['google'] },
   { key: 'other', label: 'Other', icon: '\u26AA', providerKeys: [] }, // catch-all
@@ -70,9 +80,7 @@ function getSelectedLabel(selectedModel: string | null, models: ModelInfo[]): st
   // Provider-level lock
   if (selectedModel.startsWith('provider:')) {
     const pKey = selectedModel.replace('provider:', '');
-    const group = PROVIDER_GROUPS.find(
-      (g) => g.key === pKey || g.providerKeys.includes(pKey),
-    );
+    const group = PROVIDER_GROUPS.find((g) => g.key === pKey || g.providerKeys.includes(pKey));
     return group?.label || pKey;
   }
   // Specific model
@@ -129,8 +137,7 @@ export function ModelPicker({
   const grouped = groupModels(models);
 
   const isAutoSelected = !selectedModel;
-  const isProviderSelected = (groupKey: string) =>
-    selectedModel === `provider:${groupKey}`;
+  const isProviderSelected = (groupKey: string) => selectedModel === `provider:${groupKey}`;
   const isModelSelected = (modelId: string) => selectedModel === modelId;
 
   return (
@@ -199,9 +206,23 @@ export function ModelPicker({
                     <button
                       onClick={() => setExpandedGroup(null)}
                       className="flex items-center gap-1"
-                      style={{ background: 'none', border: 'none', color: 'var(--c-text-1)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: 0 }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--c-text-1)',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        padding: 0,
+                      }}
                     >
-                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
                         <polyline points="15 18 9 12 15 6" />
                       </svg>
                       {PROVIDER_GROUPS.find((g) => g.key === expandedGroup)?.label} Models
@@ -231,8 +252,12 @@ export function ModelPicker({
                         }}
                         className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
                         style={{
-                          color: isProviderSelected(expandedGroup) ? 'var(--c-accent)' : 'var(--c-text-2)',
-                          background: isProviderSelected(expandedGroup) ? 'var(--c-accent-soft)' : 'transparent',
+                          color: isProviderSelected(expandedGroup)
+                            ? 'var(--c-accent)'
+                            : 'var(--c-text-2)',
+                          background: isProviderSelected(expandedGroup)
+                            ? 'var(--c-accent-soft)'
+                            : 'transparent',
                         }}
                         onMouseEnter={(e) => {
                           if (!isProviderSelected(expandedGroup))
@@ -274,7 +299,11 @@ export function ModelPicker({
                         }}
                         className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
                         style={{
-                          color: active ? 'var(--c-accent)' : offline ? 'var(--c-text-4)' : 'var(--c-text-2)',
+                          color: active
+                            ? 'var(--c-accent)'
+                            : offline
+                              ? 'var(--c-text-4)'
+                              : 'var(--c-text-2)',
                           background: active ? 'var(--c-accent-soft)' : 'transparent',
                           opacity: offline ? 0.4 : 1,
                           cursor: offline ? 'not-allowed' : 'pointer',
@@ -343,25 +372,18 @@ export function ModelPicker({
                     {isAutoSelected && <CheckIcon />}
                   </button>
 
-                  <div
-                    className="mx-3 my-1"
-                    style={{ borderTop: '1px solid var(--c-border-2)' }}
-                  />
+                  <div className="mx-3 my-1" style={{ borderTop: '1px solid var(--c-border-2)' }} />
 
                   {/* Provider groups */}
                   {PROVIDER_GROUPS.map((group) => {
                     const groupModels = grouped.get(group.key);
                     if (!groupModels || groupModels.length === 0) return null;
 
-                    const onlineCount = groupModels.filter(
-                      (m) => m.connected !== false,
-                    ).length;
+                    const onlineCount = groupModels.filter((m) => m.connected !== false).length;
                     const allOffline = onlineCount === 0;
                     const providerActive = isProviderSelected(group.key);
                     // Check if a specific model from this group is selected
-                    const hasModelSelected = groupModels.some((m) =>
-                      isModelSelected(m.id),
-                    );
+                    const hasModelSelected = groupModels.some((m) => isModelSelected(m.id));
                     const highlighted = providerActive || hasModelSelected;
 
                     return (

@@ -27,7 +27,9 @@ export function LoginView({ onLogin }: LoginProps) {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupWorkspace, setSignupWorkspace] = useState('');
-  const [businessType, setBusinessType] = useState<'solo' | 'multi_store' | 'corporate' | 'reseller'>('solo');
+  const [businessType, setBusinessType] = useState<
+    'solo' | 'multi_store' | 'corporate' | 'reseller'
+  >('solo');
 
   // Invite token from URL (?invite=<token>)
   const [inviteToken] = useState(() => {
@@ -227,7 +229,11 @@ export function LoginView({ onLogin }: LoginProps) {
             Shre Chat
           </h1>
           <p className="text-[13px] m-0" style={{ color: 'var(--c-text-4)' }}>
-            {needs2FA ? 'Enter verification code' : mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
+            {needs2FA
+              ? 'Enter verification code'
+              : mode === 'signup'
+                ? 'Create your account'
+                : 'Sign in to continue'}
           </p>
         </div>
 
@@ -241,7 +247,10 @@ export function LoginView({ onLogin }: LoginProps) {
         >
           {/* Mode tabs — shown when not in 2FA flow */}
           {!needs2FA && (
-            <div className="flex mb-5 rounded-lg overflow-hidden" style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}>
+            <div
+              className="flex mb-5 rounded-lg overflow-hidden"
+              style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
+            >
               {(['login', 'signup'] as const).map((m) => (
                 <button
                   key={m}
@@ -266,7 +275,10 @@ export function LoginView({ onLogin }: LoginProps) {
               {inviteToken && (
                 <div
                   className="rounded-[10px] p-3.5 mb-5"
-                  style={{ background: 'rgba(99,141,255,0.08)', border: '1px solid rgba(99,141,255,0.15)' }}
+                  style={{
+                    background: 'rgba(99,141,255,0.08)',
+                    border: '1px solid rgba(99,141,255,0.15)',
+                  }}
                 >
                   <div className="text-[13px] font-medium" style={{ color: 'var(--c-accent)' }}>
                     You've been invited to a workspace
@@ -277,73 +289,113 @@ export function LoginView({ onLogin }: LoginProps) {
                 </div>
               )}
               <div className="mb-4">
-                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                <label
+                  className="block text-xs font-medium mb-1.5"
+                  style={{ color: 'var(--c-text-3)' }}
+                >
                   Name
                 </label>
                 <SInput
                   type="text"
                   value={signupName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupName(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSignupName(e.target.value)
+                  }
                   autoComplete="name"
                   placeholder="Your name"
-                  style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                  style={{
+                    background: 'var(--c-bg-1)',
+                    borderColor: 'var(--c-border-2)',
+                    borderRadius: 10,
+                  }}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                <label
+                  className="block text-xs font-medium mb-1.5"
+                  style={{ color: 'var(--c-text-3)' }}
+                >
                   Email <span style={{ color: 'var(--c-accent)' }}>*</span>
                 </label>
                 <SInput
                   type="email"
                   value={signupEmail}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupEmail(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSignupEmail(e.target.value)
+                  }
                   autoComplete="email"
                   placeholder="you@company.com"
                   required
-                  style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                  style={{
+                    background: 'var(--c-bg-1)',
+                    borderColor: 'var(--c-border-2)',
+                    borderRadius: 10,
+                  }}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                <label
+                  className="block text-xs font-medium mb-1.5"
+                  style={{ color: 'var(--c-text-3)' }}
+                >
                   Password <span style={{ color: 'var(--c-accent)' }}>*</span>
                 </label>
                 <SInput
                   type="password"
                   value={signupPassword}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupPassword(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSignupPassword(e.target.value)
+                  }
                   autoComplete="new-password"
                   placeholder="Min 8 characters"
                   required
-                  style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                  style={{
+                    background: 'var(--c-bg-1)',
+                    borderColor: 'var(--c-border-2)',
+                    borderRadius: 10,
+                  }}
                 />
               </div>
               {!inviteToken && (
                 <div className="mb-4">
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                  <label
+                    className="block text-xs font-medium mb-1.5"
+                    style={{ color: 'var(--c-text-3)' }}
+                  >
                     Business Type
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { id: 'solo', label: 'Single Store', desc: 'One location' },
-                      { id: 'multi_store', label: 'Multi-Store', desc: 'Multiple locations' },
-                      { id: 'corporate', label: 'Corporate', desc: 'Regional/national chain' },
-                      { id: 'reseller', label: 'Reseller', desc: 'Manage client stores' },
-                    ] as const).map((opt) => (
+                    {(
+                      [
+                        { id: 'solo', label: 'Single Store', desc: 'One location' },
+                        { id: 'multi_store', label: 'Multi-Store', desc: 'Multiple locations' },
+                        { id: 'corporate', label: 'Corporate', desc: 'Regional/national chain' },
+                        { id: 'reseller', label: 'Reseller', desc: 'Manage client stores' },
+                      ] as const
+                    ).map((opt) => (
                       <button
                         key={opt.id}
                         type="button"
                         onClick={() => setBusinessType(opt.id)}
                         className="text-left p-2.5 rounded-lg transition-all"
                         style={{
-                          background: businessType === opt.id ? 'rgba(99,141,255,0.12)' : 'var(--c-bg-1)',
+                          background:
+                            businessType === opt.id ? 'rgba(99,141,255,0.12)' : 'var(--c-bg-1)',
                           border: `1.5px solid ${businessType === opt.id ? 'var(--c-accent, #638dff)' : 'var(--c-border-2)'}`,
                           cursor: 'pointer',
                         }}
                       >
-                        <div className="text-[12px] font-medium" style={{ color: businessType === opt.id ? 'var(--c-accent)' : 'var(--c-text-1)' }}>
+                        <div
+                          className="text-[12px] font-medium"
+                          style={{
+                            color: businessType === opt.id ? 'var(--c-accent)' : 'var(--c-text-1)',
+                          }}
+                        >
                           {opt.label}
                         </div>
-                        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>{opt.desc}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                          {opt.desc}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -351,15 +403,28 @@ export function LoginView({ onLogin }: LoginProps) {
               )}
               {!inviteToken && (
                 <div className="mb-5">
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
-                    {businessType === 'corporate' ? 'Company Name' : businessType === 'reseller' ? 'Reseller Name' : 'Business Name'}
+                  <label
+                    className="block text-xs font-medium mb-1.5"
+                    style={{ color: 'var(--c-text-3)' }}
+                  >
+                    {businessType === 'corporate'
+                      ? 'Company Name'
+                      : businessType === 'reseller'
+                        ? 'Reseller Name'
+                        : 'Business Name'}
                   </label>
                   <SInput
                     type="text"
                     value={signupWorkspace}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSignupWorkspace(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSignupWorkspace(e.target.value)
+                    }
                     placeholder="My Company"
-                    style={{ background: 'var(--c-bg-1)', borderColor: 'var(--c-border-2)', borderRadius: 10 }}
+                    style={{
+                      background: 'var(--c-bg-1)',
+                      borderColor: 'var(--c-border-2)',
+                      borderRadius: 10,
+                    }}
                   />
                   <div className="text-[10px] mt-1" style={{ color: 'var(--c-text-4)' }}>
                     Optional — defaults to your name
@@ -368,14 +433,19 @@ export function LoginView({ onLogin }: LoginProps) {
               )}
 
               {error && (
-                <SBadge variant="destructive" className="w-full justify-start px-3 py-2 mb-4 text-xs rounded-lg">
+                <SBadge
+                  variant="destructive"
+                  className="w-full justify-start px-3 py-2 mb-4 text-xs rounded-lg"
+                >
                   {error}
                 </SBadge>
               )}
 
               <SButton
                 type="submit"
-                disabled={loading || !signupEmail.trim() || !signupPassword || signupPassword.length < 8}
+                disabled={
+                  loading || !signupEmail.trim() || !signupPassword || signupPassword.length < 8
+                }
                 className="w-full h-11 text-sm font-semibold"
                 style={{
                   borderRadius: 10,

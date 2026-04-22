@@ -67,9 +67,8 @@ export default function ModePicker({
 
   const currentMode = MODE_OPTIONS.find((m) => m.id === selectedMode) || MODE_OPTIONS[0];
   const currentApp = activeAppId ? appOptions.find((a) => a.id === activeAppId) : null;
-  const displayLabel = selectedMode === 'apps' && currentApp
-    ? `Apps: ${currentApp.label}`
-    : currentMode.label;
+  const displayLabel =
+    selectedMode === 'apps' && currentApp ? `Apps: ${currentApp.label}` : currentMode.label;
 
   // Group apps by category for display
   const categorized = groupByCategory(appOptions);
@@ -163,10 +162,16 @@ export default function ModePicker({
                   <button
                     onClick={() => setShowAppPicker(false)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: '4px',
-                      padding: '4px 8px', marginBottom: '2px',
-                      fontSize: '10px', color: 'var(--c-text-3)',
-                      background: 'none', border: 'none', cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 8px',
+                      marginBottom: '2px',
+                      fontSize: '10px',
+                      color: 'var(--c-text-3)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
                     }}
                   >
                     &#x2190; Back to modes
@@ -199,25 +204,43 @@ export default function ModePicker({
                               onClose();
                             }}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: '8px',
-                              width: '100%', padding: '6px 8px', borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              width: '100%',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
                               border: 'none',
                               background: active ? 'var(--c-accent-soft)' : 'transparent',
                               color: active ? 'var(--c-accent)' : 'var(--c-text-1)',
-                              fontSize: '12px', cursor: 'pointer', textAlign: 'left',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
                               transition: 'background 0.1s',
                             }}
-                            onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-3)'; }}
-                            onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                            onMouseEnter={(e) => {
+                              if (!active) e.currentTarget.style.background = 'var(--c-bg-3)';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!active) e.currentTarget.style.background = 'transparent';
+                            }}
                           >
                             {app.icon && (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                width: '20px', height: '20px', borderRadius: '4px',
-                                background: active ? 'var(--c-accent)' : 'var(--c-bg-3)',
-                                color: active ? 'var(--c-bg-1)' : 'var(--c-text-2)',
-                                fontSize: '10px', fontWeight: 700, flexShrink: 0,
-                              }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '4px',
+                                  background: active ? 'var(--c-accent)' : 'var(--c-bg-3)',
+                                  color: active ? 'var(--c-bg-1)' : 'var(--c-text-2)',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  flexShrink: 0,
+                                }}
+                              >
                                 {app.icon}
                               </span>
                             )}
@@ -225,23 +248,39 @@ export default function ModePicker({
                               <div style={{ fontWeight: 500 }}>
                                 {app.label}
                                 {app.skillCount > 0 && (
-                                  <span style={{ fontSize: '9px', color: 'var(--c-text-4)', marginLeft: '4px' }}>
+                                  <span
+                                    style={{
+                                      fontSize: '9px',
+                                      color: 'var(--c-text-4)',
+                                      marginLeft: '4px',
+                                    }}
+                                  >
                                     {app.skillCount} skills
                                   </span>
                                 )}
                               </div>
-                              <div style={{
-                                fontSize: '10px', color: 'var(--c-text-3)',
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                              }}>
+                              <div
+                                style={{
+                                  fontSize: '10px',
+                                  color: 'var(--c-text-3)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
                                 {app.subtitle}
                               </div>
                             </div>
                             {!app.activated && (
-                              <span style={{
-                                fontSize: '9px', padding: '1px 4px', borderRadius: '3px',
-                                background: 'var(--c-bg-3)', color: 'var(--c-text-4)',
-                              }}>
+                              <span
+                                style={{
+                                  fontSize: '9px',
+                                  padding: '1px 4px',
+                                  borderRadius: '3px',
+                                  background: 'var(--c-bg-3)',
+                                  color: 'var(--c-text-4)',
+                                }}
+                              >
                                 inactive
                               </span>
                             )}
@@ -252,87 +291,102 @@ export default function ModePicker({
                   ))}
 
                   {appOptions.length === 0 && (
-                    <div style={{ padding: '12px 8px', fontSize: '11px', color: 'var(--c-text-4)', textAlign: 'center' }}>
+                    <div
+                      style={{
+                        padding: '12px 8px',
+                        fontSize: '11px',
+                        color: 'var(--c-text-4)',
+                        textAlign: 'center',
+                      }}
+                    >
                       No apps available
                     </div>
                   )}
                 </>
-              ) : MODE_OPTIONS.map((opt) => {
-                const active = opt.id === selectedMode;
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => {
-                      if (opt.id === 'apps') {
-                        setShowAppPicker(true);
-                        return;
-                      }
-                      onSelectMode(opt.id);
-                      onClose();
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      background: active ? 'var(--c-accent-soft)' : 'transparent',
-                      color: active ? 'var(--c-accent)' : 'var(--c-text-1)',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!active) (e.currentTarget.style.background = 'var(--c-bg-3)');
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!active) (e.currentTarget.style.background = 'transparent');
-                    }}
-                  >
-                    <span
+              ) : (
+                MODE_OPTIONS.map((opt) => {
+                  const active = opt.id === selectedMode;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => {
+                        if (opt.id === 'apps') {
+                          setShowAppPicker(true);
+                          return;
+                        }
+                        onSelectMode(opt.id);
+                        onClose();
+                      }}
                       style={{
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '4px',
-                        background: active ? 'var(--c-accent)' : 'var(--c-bg-3)',
-                        color: active ? 'var(--c-bg-1)' : 'var(--c-text-2)',
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        flexShrink: 0,
+                        gap: '8px',
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: active ? 'var(--c-accent-soft)' : 'transparent',
+                        color: active ? 'var(--c-accent)' : 'var(--c-text-1)',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) e.currentTarget.style.background = 'var(--c-bg-3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) e.currentTarget.style.background = 'transparent';
                       }}
                     >
-                      {opt.icon}
-                    </span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 500 }}>
-                        {opt.label}
-                        {opt.id === 'apps' && appOptions.length > 0 && (
-                          <span style={{ fontSize: '9px', color: 'var(--c-text-4)', marginLeft: '4px' }}>
-                            {appOptions.length} apps
-                          </span>
-                        )}
-                      </div>
-                      <div
+                      <span
                         style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '4px',
+                          background: active ? 'var(--c-accent)' : 'var(--c-bg-3)',
+                          color: active ? 'var(--c-bg-1)' : 'var(--c-text-2)',
                           fontSize: '10px',
-                          color: 'var(--c-text-3)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
+                          fontWeight: 700,
+                          flexShrink: 0,
                         }}
                       >
-                        {opt.subtitle}
+                        {opt.icon}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 500 }}>
+                          {opt.label}
+                          {opt.id === 'apps' && appOptions.length > 0 && (
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                color: 'var(--c-text-4)',
+                                marginLeft: '4px',
+                              }}
+                            >
+                              {appOptions.length} apps
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            color: 'var(--c-text-3)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {opt.subtitle}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         </>

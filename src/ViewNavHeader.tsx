@@ -120,39 +120,42 @@ export function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: Vi
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
-              maxHeight: 'min(420px, calc(var(--vv-height, 100dvh) - 80px - env(safe-area-inset-bottom, 0px)))',
+              maxHeight:
+                'min(420px, calc(var(--vv-height, 100dvh) - 80px - env(safe-area-inset-bottom, 0px)))',
               overflowY: 'auto',
             }}
           >
-            {NAV_VIEWS.filter((item) => item.key !== 'investor' || __SHRE_INTERNAL__).map((item) => {
-              const showSection = item.section !== lastSection;
-              lastSection = item.section;
-              return (
-                <div key={item.key}>
-                  {showSection && (
-                    <div
-                      className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
-                      style={{ color: 'var(--c-text-4)' }}
-                    >
-                      {item.section}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => onSwitch(item.key)}
-                    className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                    style={{ color: view === item.key ? 'var(--c-accent)' : 'var(--c-text-1)' }}
-                  >
-                    {view === item.key && (
-                      <span
-                        className="inline-block h-1.5 w-1.5 rounded-full"
-                        style={{ background: 'var(--c-accent)' }}
-                      />
+            {NAV_VIEWS.filter((item) => item.key !== 'investor' || __SHRE_INTERNAL__).map(
+              (item) => {
+                const showSection = item.section !== lastSection;
+                lastSection = item.section;
+                return (
+                  <div key={item.key}>
+                    {showSection && (
+                      <div
+                        className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ color: 'var(--c-text-4)' }}
+                      >
+                        {item.section}
+                      </div>
                     )}
-                    {item.label}
-                  </button>
-                </div>
-              );
-            })}
+                    <button
+                      onClick={() => onSwitch(item.key)}
+                      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+                      style={{ color: view === item.key ? 'var(--c-accent)' : 'var(--c-text-1)' }}
+                    >
+                      {view === item.key && (
+                        <span
+                          className="inline-block h-1.5 w-1.5 rounded-full"
+                          style={{ background: 'var(--c-accent)' }}
+                        />
+                      )}
+                      {item.label}
+                    </button>
+                  </div>
+                );
+              },
+            )}
           </div>
         )}
       </div>

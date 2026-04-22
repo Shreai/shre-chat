@@ -311,7 +311,11 @@ export function MessageList(props: MessageListProps) {
         role="log"
         aria-label="Message history"
         aria-relevant="additions"
-        style={{ paddingLeft: '24px', paddingRight: '24px', paddingBottom: window.innerWidth <= 768 ? '120px' : '24px' }}
+        style={{
+          paddingLeft: '24px',
+          paddingRight: '24px',
+          paddingBottom: window.innerWidth <= 768 ? '120px' : '24px',
+        }}
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || pullRefreshing) && (
@@ -429,12 +433,17 @@ export function MessageList(props: MessageListProps) {
                     ...(isGrouped ? { height: 0, overflow: 'hidden' } : {}),
                   }}
                 >
-                  {isGrouped ? null : msg.content?.includes('[browser_approval]') && isStatusMessage(msg) ? (
+                  {isGrouped ? null : msg.content?.includes('[browser_approval]') &&
+                    isStatusMessage(msg) ? (
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : isStatusMessage(msg) ? (
-                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} onModeSwitchRequest={props.onModeSwitchRequest} />
+                    <SystemEventChip
+                      message={msg}
+                      timestamp={formatTime(msg.timestamp)}
+                      onModeSwitchRequest={props.onModeSwitchRequest}
+                    />
                   ) : (
                     <>
                       <MessageBubble
@@ -448,9 +457,7 @@ export function MessageList(props: MessageListProps) {
                             : undefined
                         }
                       />
-                      {trail && trail.length > 0 && (
-                        <MessageProgressTrail steps={trail} />
-                      )}
+                      {trail && trail.length > 0 && <MessageProgressTrail steps={trail} />}
                     </>
                   )}
                 </div>
@@ -479,7 +486,11 @@ export function MessageList(props: MessageListProps) {
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : isStatusMessage(msg) ? (
-                    <SystemEventChip message={msg} timestamp={formatTime(msg.timestamp)} onModeSwitchRequest={props.onModeSwitchRequest} />
+                    <SystemEventChip
+                      message={msg}
+                      timestamp={formatTime(msg.timestamp)}
+                      onModeSwitchRequest={props.onModeSwitchRequest}
+                    />
                   ) : (
                     <>
                       <MessageBubble
@@ -491,15 +502,14 @@ export function MessageList(props: MessageListProps) {
                                   const el = scrollRef.current?.querySelector(
                                     `[data-msg-index="${msg.replyTo}"]`,
                                   );
-                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  if (el)
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 }
                               }
                             : undefined
                         }
                       />
-                      {trail && trail.length > 0 && (
-                        <MessageProgressTrail steps={trail} />
-                      )}
+                      {trail && trail.length > 0 && <MessageProgressTrail steps={trail} />}
                     </>
                   )}
                 </div>
@@ -519,7 +529,9 @@ export function MessageList(props: MessageListProps) {
               >
                 <span
                   className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
-                  style={{ background: streamElapsed >= 30 ? 'var(--c-warning)' : 'var(--c-text-2)' }}
+                  style={{
+                    background: streamElapsed >= 30 ? 'var(--c-warning)' : 'var(--c-text-2)',
+                  }}
                 />
                 <span>
                   {streamElapsed < 30
@@ -541,7 +553,8 @@ export function MessageList(props: MessageListProps) {
                       (e.target as HTMLButtonElement).style.background = 'rgba(248, 113, 113, 0.3)';
                     }}
                     onMouseLeave={(e) => {
-                      (e.target as HTMLButtonElement).style.background = 'rgba(248, 113, 113, 0.15)';
+                      (e.target as HTMLButtonElement).style.background =
+                        'rgba(248, 113, 113, 0.15)';
                     }}
                   >
                     Cancel

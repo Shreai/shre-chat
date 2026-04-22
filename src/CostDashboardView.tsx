@@ -122,12 +122,14 @@ export function CostDashboardView() {
       setSummary(s);
       setByModel(m ?? []);
       // Normalize: shre-meter returns agentId, UI expects agent
-      setByAgent((a ?? []).map((x: any) => ({
-        agent: x.agent || x.agentId || 'unknown',
-        requests: x.requests || 0,
-        costUsd: x.costUsd || 0,
-        savingsUsd: x.savingsUsd || 0,
-      })));
+      setByAgent(
+        (a ?? []).map((x: any) => ({
+          agent: x.agent || x.agentId || 'unknown',
+          requests: x.requests || 0,
+          costUsd: x.costUsd || 0,
+          savingsUsd: x.savingsUsd || 0,
+        })),
+      );
       setTimeline(t ?? []);
       setBudgets(b ?? []);
       setLoading(false);

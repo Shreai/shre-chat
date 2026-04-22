@@ -239,10 +239,18 @@ export function ChatPanels(props: ChatPanelsProps) {
   useEffect(() => {
     if (!voicePickerOpen && !langPickerOpen) return;
     const handler = (e: MouseEvent) => {
-      if (voicePickerOpen && voicePickerRef.current && !voicePickerRef.current.contains(e.target as Node)) {
+      if (
+        voicePickerOpen &&
+        voicePickerRef.current &&
+        !voicePickerRef.current.contains(e.target as Node)
+      ) {
         setVoicePickerOpen(false);
       }
-      if (langPickerOpen && langPickerRef.current && !langPickerRef.current.contains(e.target as Node)) {
+      if (
+        langPickerOpen &&
+        langPickerRef.current &&
+        !langPickerRef.current.contains(e.target as Node)
+      ) {
         setLangPickerOpen(false);
       }
     };
@@ -378,16 +386,26 @@ export function ChatPanels(props: ChatPanelsProps) {
               onClick={() => setVoicePickerOpen((v) => !v)}
               className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
               style={{
-                color: ttsProvider === 'personaplex'
-                  ? '#76b900'
-                  : ttsProvider === 'elevenlabs'
-                    ? '#818cf8'
-                    : 'var(--c-text-3)',
+                color:
+                  ttsProvider === 'personaplex'
+                    ? '#76b900'
+                    : ttsProvider === 'elevenlabs'
+                      ? '#818cf8'
+                      : 'var(--c-text-3)',
               }}
               title={`Voice: ${ttsProvider === 'personaplex' ? 'PersonaPlex' : ttsProvider === 'elevenlabs' ? 'ElevenLabs' : 'Auto'}`}
               aria-label="Select voice engine"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
@@ -407,34 +425,76 @@ export function ChatPanels(props: ChatPanelsProps) {
                     animation: 'picker-fade-in 150ms ease-out forwards',
                   }}
                 >
-                  <div className="px-3 pt-2.5 pb-1.5" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
-                    <span className="text-[12px] font-semibold" style={{ color: 'var(--c-text-1)' }}>Voice Engine</span>
+                  <div
+                    className="px-3 pt-2.5 pb-1.5"
+                    style={{ borderBottom: '1px solid var(--c-border-2)' }}
+                  >
+                    <span
+                      className="text-[12px] font-semibold"
+                      style={{ color: 'var(--c-text-1)' }}
+                    >
+                      Voice Engine
+                    </span>
                   </div>
-                  {([
-                    { id: 'auto' as const, label: 'Auto', subtitle: 'Best available', icon: '\u26A1', color: 'var(--c-text-2)' },
-                    { id: 'elevenlabs' as const, label: 'ElevenLabs', subtitle: 'Cloud neural voice', icon: '\uD83C\uDF10', color: '#818cf8' },
-                    { id: 'personaplex' as const, label: 'PersonaPlex', subtitle: 'NVIDIA local TTS', icon: '\uD83D\uDDA5\uFE0F', color: '#76b900' },
-                  ]).map((v) => {
+                  {[
+                    {
+                      id: 'auto' as const,
+                      label: 'Auto',
+                      subtitle: 'Best available',
+                      icon: '\u26A1',
+                      color: 'var(--c-text-2)',
+                    },
+                    {
+                      id: 'elevenlabs' as const,
+                      label: 'ElevenLabs',
+                      subtitle: 'Cloud neural voice',
+                      icon: '\uD83C\uDF10',
+                      color: '#818cf8',
+                    },
+                    {
+                      id: 'personaplex' as const,
+                      label: 'PersonaPlex',
+                      subtitle: 'NVIDIA local TTS',
+                      icon: '\uD83D\uDDA5\uFE0F',
+                      color: '#76b900',
+                    },
+                  ].map((v) => {
                     const active = ttsProvider === v.id;
                     return (
                       <button
                         key={v.id}
-                        onClick={() => { setTtsProvider(v.id); setVoicePickerOpen(false); }}
+                        onClick={() => {
+                          setTtsProvider(v.id);
+                          setVoicePickerOpen(false);
+                        }}
                         className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
                         style={{
                           color: active ? v.color : 'var(--c-text-2)',
                           background: active ? 'var(--c-accent-soft)' : 'transparent',
                         }}
-                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-hover)'; }}
-                        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                        onMouseEnter={(e) => {
+                          if (!active) e.currentTarget.style.background = 'var(--c-bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!active) e.currentTarget.style.background = 'transparent';
+                        }}
                       >
                         <span className="text-base w-6 text-center">{v.icon}</span>
                         <div className="flex-1 min-w-0">
                           <div className="text-[12px] font-medium">{v.label}</div>
-                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>{v.subtitle}</div>
+                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                            {v.subtitle}
+                          </div>
                         </div>
                         {active && (
-                          <svg className="h-4 w-4 shrink-0" style={{ color: v.color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <svg
+                            className="h-4 w-4 shrink-0"
+                            style={{ color: v.color }}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
                         )}
@@ -455,7 +515,16 @@ export function ChatPanels(props: ChatPanelsProps) {
               title={`Language: ${LOCALE_LABELS[locale]}`}
               aria-label="Select language"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <line x1="2" y1="12" x2="22" y2="12" />
                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -476,8 +545,16 @@ export function ChatPanels(props: ChatPanelsProps) {
                     animation: 'picker-fade-in 150ms ease-out forwards',
                   }}
                 >
-                  <div className="px-3 pt-2.5 pb-1.5" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
-                    <span className="text-[12px] font-semibold" style={{ color: 'var(--c-text-1)' }}>Language</span>
+                  <div
+                    className="px-3 pt-2.5 pb-1.5"
+                    style={{ borderBottom: '1px solid var(--c-border-2)' }}
+                  >
+                    <span
+                      className="text-[12px] font-semibold"
+                      style={{ color: 'var(--c-text-1)' }}
+                    >
+                      Language
+                    </span>
                   </div>
                   <div className="overflow-y-auto" style={{ maxHeight: 300 }}>
                     {(Object.entries(LOCALE_LABELS) as [Locale, string][]).map(([code, label]) => {
@@ -485,18 +562,32 @@ export function ChatPanels(props: ChatPanelsProps) {
                       return (
                         <button
                           key={code}
-                          onClick={() => { setLocale(code); setLangPickerOpen(false); }}
+                          onClick={() => {
+                            setLocale(code);
+                            setLangPickerOpen(false);
+                          }}
                           className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
                           style={{
                             color: active ? 'var(--c-accent)' : 'var(--c-text-2)',
                             background: active ? 'var(--c-accent-soft)' : 'transparent',
                           }}
-                          onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--c-bg-hover)'; }}
-                          onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                          onMouseEnter={(e) => {
+                            if (!active) e.currentTarget.style.background = 'var(--c-bg-hover)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) e.currentTarget.style.background = 'transparent';
+                          }}
                         >
                           <span className="flex-1 text-[12px]">{label}</span>
                           {active && (
-                            <svg className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--c-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <svg
+                              className="h-3.5 w-3.5 shrink-0"
+                              style={{ color: 'var(--c-accent)' }}
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                            >
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
                           )}
@@ -517,7 +608,16 @@ export function ChatPanels(props: ChatPanelsProps) {
             aria-label="Open voice chat"
             title="Voice chat"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               <line x1="12" y1="19" x2="12" y2="23" />
@@ -534,7 +634,16 @@ export function ChatPanels(props: ChatPanelsProps) {
               aria-label="Realtime voice call"
               title="Realtime voice (full-duplex)"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
               </svg>
             </button>

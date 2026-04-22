@@ -33,7 +33,11 @@ const stateLabels: Record<RealtimeVoiceState, string> = {
   error: 'Connection lost',
 };
 
-export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre', onVoiceTurn }: RealtimeVoiceOverlayProps) {
+export function RealtimeVoiceOverlay({
+  onClose,
+  defaultPersona = 'shre',
+  onVoiceTurn,
+}: RealtimeVoiceOverlayProps) {
   const [selectedPersona, setSelectedPersona] = useState(defaultPersona);
   const {
     state,
@@ -46,7 +50,7 @@ export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre', onVoice
     isActive,
   } = useRealtimeVoice();
 
-  const persona = PERSONAS.find(p => p.id === selectedPersona) || PERSONAS[0];
+  const persona = PERSONAS.find((p) => p.id === selectedPersona) || PERSONAS[0];
 
   // Persist voice turns to chat history via onVoiceTurn callback
   const lastUserTranscriptRef = useRef('');
@@ -98,7 +102,11 @@ export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre', onVoice
             }}
           />
           <span className="text-white/60 text-sm">
-            {provider === 'personaplex' ? 'PersonaPlex' : provider === 'openai_realtime' ? 'OpenAI' : 'Voice AI'}
+            {provider === 'personaplex'
+              ? 'PersonaPlex'
+              : provider === 'openai_realtime'
+                ? 'OpenAI'
+                : 'Voice AI'}
             {latency && ` (${latency})`}
           </span>
         </div>
@@ -186,7 +194,7 @@ export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre', onVoice
         {/* Persona pills */}
         {!isActive && (
           <div className="flex justify-center gap-2">
-            {PERSONAS.map(p => (
+            {PERSONAS.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setSelectedPersona(p.id)}
@@ -214,7 +222,14 @@ export function RealtimeVoiceOverlay({ onClose, defaultPersona = 'shre', onVoice
               onClick={handleEnd}
               className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-red-500/30 transition-all"
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 2.59 3.4z" />
                 <line x1="1" y1="1" x2="23" y2="23" />
               </svg>

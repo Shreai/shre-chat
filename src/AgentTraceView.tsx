@@ -150,7 +150,7 @@ async function safeFetch<T>(url: string): Promise<{ data: T | null; error: strin
 }
 
 function phaseIndex(phase: string): number {
-  const idx = PIPELINE_PHASES.indexOf(phase as typeof PIPELINE_PHASES[number]);
+  const idx = PIPELINE_PHASES.indexOf(phase as (typeof PIPELINE_PHASES)[number]);
   return idx >= 0 ? idx : -1;
 }
 
@@ -200,13 +200,7 @@ function PhaseBadge({ phase }: { phase?: string }) {
 
 /* ---------- Traceroute Pipeline ---------- */
 
-function TraceroutePipeline({
-  currentPhase,
-  spans,
-}: {
-  currentPhase: string;
-  spans: TraceSpan[];
-}) {
+function TraceroutePipeline({ currentPhase, spans }: { currentPhase: string; spans: TraceSpan[] }) {
   const activeIdx = phaseIndex(currentPhase);
   const spanMap = useMemo(() => {
     const m = new Map<string, TraceSpan>();
@@ -302,7 +296,11 @@ function TraceroutePipeline({
                 <span
                   style={{
                     fontSize: 10,
-                    color: isCurrent ? 'var(--c-text-1)' : isPending ? 'var(--c-text-4)' : 'var(--c-text-3)',
+                    color: isCurrent
+                      ? 'var(--c-text-1)'
+                      : isPending
+                        ? 'var(--c-text-4)'
+                        : 'var(--c-text-3)',
                     fontWeight: isCurrent ? 600 : 400,
                     whiteSpace: 'nowrap',
                   }}
@@ -410,7 +408,9 @@ export function AgentTraceView() {
   }, [assignments, metrics]);
 
   const summary = useMemo(() => {
-    let active = 0, queued = 0, idle = 0;
+    let active = 0,
+      queued = 0,
+      idle = 0;
     for (const a of agents) {
       if (a.status === 'active') active++;
       else if (a.status === 'queued') queued++;
@@ -421,26 +421,17 @@ export function AgentTraceView() {
 
   /* ----- selected agent data ----- */
   const selectedAssignments = useMemo(
-    () =>
-      selectedAgent
-        ? assignments.filter((a) => a.agent === selectedAgent)
-        : assignments,
+    () => (selectedAgent ? assignments.filter((a) => a.agent === selectedAgent) : assignments),
     [assignments, selectedAgent],
   );
 
   const selectedTraces = useMemo(
-    () =>
-      selectedAgent
-        ? traces.filter((t) => t.agentId === selectedAgent)
-        : traces,
+    () => (selectedAgent ? traces.filter((t) => t.agentId === selectedAgent) : traces),
     [traces, selectedAgent],
   );
 
   const selectedRouting = useMemo(
-    () =>
-      selectedAgent
-        ? routing.filter((r) => r.agentId === selectedAgent)
-        : routing,
+    () => (selectedAgent ? routing.filter((r) => r.agentId === selectedAgent) : routing),
     [routing, selectedAgent],
   );
 
@@ -448,7 +439,9 @@ export function AgentTraceView() {
     () =>
       selectedAgent
         ? events.filter(
-            (e) => (e.data?.agent as string) === selectedAgent || (e.data?.agentId as string) === selectedAgent,
+            (e) =>
+              (e.data?.agent as string) === selectedAgent ||
+              (e.data?.agentId as string) === selectedAgent,
           )
         : events,
     [events, selectedAgent],
@@ -600,8 +593,7 @@ export function AgentTraceView() {
     const agentTraces = selectedTraces.filter((t) => t.status !== 'partial');
     const completed = agentTraces.length;
     const succeeded = agentTraces.filter((t) => t.status === 'ok').length;
-    const avgMs =
-      completed > 0 ? agentTraces.reduce((s, t) => s + t.totalMs, 0) / completed : 0;
+    const avgMs = completed > 0 ? agentTraces.reduce((s, t) => s + t.totalMs, 0) / completed : 0;
     const successRate = completed > 0 ? (succeeded / completed) * 100 : 0;
     return { completed, avgMs, successRate };
   }, [selectedTraces]);
@@ -729,8 +721,7 @@ export function AgentTraceView() {
                 padding: '8px 14px',
                 width: '100%',
                 border: 'none',
-                background:
-                  selectedAgent === agent.id ? 'var(--c-bg-glass)' : 'transparent',
+                background: selectedAgent === agent.id ? 'var(--c-bg-glass)' : 'transparent',
                 color: 'var(--c-text-1)',
                 cursor: 'pointer',
                 fontSize: 12,
@@ -829,11 +820,7 @@ export function AgentTraceView() {
         >
           {selectedAgent ? (
             <>
-              <StatusDot
-                status={
-                  agents.find((a) => a.id === selectedAgent)?.status || 'idle'
-                }
-              />
+              <StatusDot status={agents.find((a) => a.id === selectedAgent)?.status || 'idle'} />
               <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedAgent}</span>
               {activeAssignment && (
                 <>
@@ -870,8 +857,16 @@ export function AgentTraceView() {
         </div>
 
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+        <div
+          style={{
+            flex: 1,
+            overflow: 'auto',
+            padding: 20,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 20,
+          }}
+        >
           {/* ---- Traceroute Pipeline (agent selected only) ---- */}
           {selectedAgent && activeAssignment && (
             <div
@@ -882,7 +877,16 @@ export function AgentTraceView() {
                 padding: '12px 16px',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c-text-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--c-text-3)',
+                  marginBottom: 4,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
                 Execution Pipeline
               </div>
               <TraceroutePipeline
@@ -906,7 +910,13 @@ export function AgentTraceView() {
                 <StatBox
                   label="Success Rate"
                   value={`${agentStats.successRate.toFixed(0)}%`}
-                  accent={agentStats.successRate >= 90 ? '#22c55e' : agentStats.successRate >= 70 ? '#eab308' : '#ef4444'}
+                  accent={
+                    agentStats.successRate >= 90
+                      ? '#22c55e'
+                      : agentStats.successRate >= 70
+                        ? '#eab308'
+                        : '#ef4444'
+                  }
                 />
                 {activeAssignment?.quality != null && (
                   <StatBox
@@ -930,7 +940,8 @@ export function AgentTraceView() {
                       label="Budget (D/W)"
                       value={`${selectedMetrics.budget_pct.daily.toFixed(0)}% / ${selectedMetrics.budget_pct.weekly.toFixed(0)}%`}
                       accent={
-                        selectedMetrics.budget_pct.daily > 90 || selectedMetrics.budget_pct.weekly > 90
+                        selectedMetrics.budget_pct.daily > 90 ||
+                        selectedMetrics.budget_pct.weekly > 90
                           ? '#ef4444'
                           : undefined
                       }
@@ -958,7 +969,16 @@ export function AgentTraceView() {
                 padding: '12px 16px',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c-text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--c-text-3)',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
                 Task Queue
               </div>
               {inProgressTasks.map((t) => (
@@ -985,7 +1005,15 @@ export function AgentTraceView() {
                   >
                     in_progress
                   </span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--c-text-2)' }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: 'var(--c-text-2)',
+                    }}
+                  >
                     {t.title}
                   </span>
                   {t.progress > 0 && (
@@ -1017,7 +1045,15 @@ export function AgentTraceView() {
                   >
                     queued
                   </span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--c-text-2)' }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: 'var(--c-text-2)',
+                    }}
+                  >
                     {t.title}
                   </span>
                 </div>
@@ -1037,12 +1073,31 @@ export function AgentTraceView() {
               flexDirection: 'column',
             }}
           >
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c-text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Live Events {selectedEvents.length > 0 && <span style={{ fontWeight: 400 }}>({selectedEvents.length})</span>}
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--c-text-3)',
+                marginBottom: 8,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Live Events{' '}
+              {selectedEvents.length > 0 && (
+                <span style={{ fontWeight: 400 }}>({selectedEvents.length})</span>
+              )}
             </div>
             <div ref={eventContainerRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               {selectedEvents.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--c-text-4)', padding: '20px 0', textAlign: 'center' }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--c-text-4)',
+                    padding: '20px 0',
+                    textAlign: 'center',
+                  }}
+                >
                   Waiting for events...
                 </div>
               )}
@@ -1080,7 +1135,9 @@ export function AgentTraceView() {
                   >
                     {PULSE_ICONS[evt.type] || '\u2022'}
                   </span>
-                  <span style={{ fontSize: 10, color: 'var(--c-text-4)', flexShrink: 0, minWidth: 60 }}>
+                  <span
+                    style={{ fontSize: 10, color: 'var(--c-text-4)', flexShrink: 0, minWidth: 60 }}
+                  >
                     {fmtTime(evt.ts)}
                   </span>
                   <span
@@ -1126,14 +1183,26 @@ export function AgentTraceView() {
                 padding: '12px 16px',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: '#ef4444',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
                 Errors ({errorEvents.length})
               </div>
               {errorEvents.slice(0, 20).map((evt, i) => {
                 const key = `${evt.ts}-${i}`;
                 const expanded = expandedErrors.has(key);
                 return (
-                  <div key={key} style={{ borderBottom: '1px solid var(--c-border-2)', padding: '6px 0' }}>
+                  <div
+                    key={key}
+                    style={{ borderBottom: '1px solid var(--c-border-2)', padding: '6px 0' }}
+                  >
                     <button
                       onClick={() => toggleError(key)}
                       style={{
@@ -1150,9 +1219,20 @@ export function AgentTraceView() {
                         padding: 0,
                       }}
                     >
-                      <span style={{ color: '#ef4444', flexShrink: 0 }}>{expanded ? '\u25BC' : '\u25B6'}</span>
-                      <span style={{ fontSize: 10, color: 'var(--c-text-4)', flexShrink: 0 }}>{fmtTime(evt.ts)}</span>
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: '#ef4444', flexShrink: 0 }}>
+                        {expanded ? '\u25BC' : '\u25B6'}
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--c-text-4)', flexShrink: 0 }}>
+                        {fmtTime(evt.ts)}
+                      </span>
+                      <span
+                        style={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         {(evt.data?.title as string) || (evt.data?.error as string) || evt.type}
                       </span>
                     </button>
@@ -1190,20 +1270,55 @@ export function AgentTraceView() {
                 padding: '12px 16px',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c-text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--c-text-3)',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
                 Recent Routing
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto auto', gap: '4px 12px', fontSize: 12, alignItems: 'center' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto auto 1fr auto auto',
+                  gap: '4px 12px',
+                  fontSize: 12,
+                  alignItems: 'center',
+                }}
+              >
                 {selectedRouting.slice(0, 10).map((r, i) => (
                   <div key={i} style={{ display: 'contents' }}>
-                    <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>{fmtTime(r.timestamp)}</span>
-                    <span style={{ color: 'var(--c-accent)', fontWeight: 600, fontSize: 11 }}>{r.model}</span>
-                    <span style={{ color: 'var(--c-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</span>
+                    <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>
+                      {fmtTime(r.timestamp)}
+                    </span>
+                    <span style={{ color: 'var(--c-accent)', fontWeight: 600, fontSize: 11 }}>
+                      {r.model}
+                    </span>
+                    <span
+                      style={{
+                        color: 'var(--c-text-3)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {r.reason}
+                    </span>
                     <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>{r.latencyMs}ms</span>
                     <span
                       style={{
                         fontSize: 10,
-                        color: r.confidence >= 0.8 ? '#22c55e' : r.confidence >= 0.5 ? '#eab308' : '#ef4444',
+                        color:
+                          r.confidence >= 0.8
+                            ? '#22c55e'
+                            : r.confidence >= 0.5
+                              ? '#eab308'
+                              : '#ef4444',
                       }}
                     >
                       {(r.confidence * 100).toFixed(0)}%
@@ -1240,15 +1355,7 @@ export function AgentTraceView() {
 /*  StatBox                                                            */
 /* ------------------------------------------------------------------ */
 
-function StatBox({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: string;
-}) {
+function StatBox({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
     <div
       style={{
@@ -1259,7 +1366,15 @@ function StatBox({
         minWidth: 80,
       }}
     >
-      <div style={{ fontSize: 10, color: 'var(--c-text-4)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--c-text-4)',
+          marginBottom: 2,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}
+      >
         {label}
       </div>
       <div style={{ fontSize: 16, fontWeight: 700, color: accent || 'var(--c-text-1)' }}>

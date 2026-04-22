@@ -31,7 +31,9 @@ export default function ActiveAgentsPanel({ size }: ChatWidgetProps) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const activeCount = agents.filter((a) => a.status === 'active').length;

@@ -15,7 +15,15 @@ import { ViewErrorBoundary } from '../ViewErrorBoundary';
 
 const JsonViewer = lazy(() => import('./JsonViewer'));
 
-export type ArtifactType = 'code' | 'html' | 'svg' | 'mermaid' | 'json' | 'table' | 'chart' | 'text';
+export type ArtifactType =
+  | 'code'
+  | 'html'
+  | 'svg'
+  | 'mermaid'
+  | 'json'
+  | 'table'
+  | 'chart'
+  | 'text';
 
 export interface Artifact {
   id: string;
@@ -82,7 +90,9 @@ export function ArtifactCanvas({ artifact, onClose }: Props) {
 
   const handleDownload = useCallback(() => {
     if (!artifact) return;
-    const ext = artifact.language ?? (artifact.type === 'html' ? 'html' : artifact.type === 'svg' ? 'svg' : 'txt');
+    const ext =
+      artifact.language ??
+      (artifact.type === 'html' ? 'html' : artifact.type === 'svg' ? 'svg' : 'txt');
     const blob = new Blob([artifact.content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -95,43 +105,54 @@ export function ArtifactCanvas({ artifact, onClose }: Props) {
   if (!artifact) return null;
 
   return (
-    <div style={{
-      flex: 1,
-      minHeight: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'var(--c-bg-1, #0a0a0a)',
-      borderLeft: '1px solid var(--c-border, #1f2937)',
-    }}>
-      {/* Header */}
-      <div style={{
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 16px',
-        borderBottom: '1px solid var(--c-border, #1f2937)',
-        flexShrink: 0,
-      }}>
+        flexDirection: 'column',
+        background: 'var(--c-bg-1, #0a0a0a)',
+        borderLeft: '1px solid var(--c-border, #1f2937)',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--c-border, #1f2937)',
+          flexShrink: 0,
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <TypeIcon type={artifact.type} />
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text-1, #f9fafb)' }}>
             {artifact.title}
           </span>
           {artifact.language && (
-            <span style={{
-              fontSize: 10,
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: 'rgba(99, 102, 241, 0.15)',
-              color: '#818cf8',
-              fontWeight: 600,
-            }}>
+            <span
+              style={{
+                fontSize: 10,
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: '#818cf8',
+                fontWeight: 600,
+              }}
+            >
               {artifact.language}
             </span>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <IconButton icon="copy" title={copied ? 'Copied!' : 'Copy'} onClick={handleCopy} active={copied} />
+          <IconButton
+            icon="copy"
+            title={copied ? 'Copied!' : 'Copy'}
+            onClick={handleCopy}
+            active={copied}
+          />
           <IconButton icon="download" title="Download" onClick={handleDownload} />
           <IconButton icon="close" title="Close" onClick={onClose} />
         </div>
@@ -156,8 +177,18 @@ function ArtifactRenderer({ artifact }: { artifact: Artifact }) {
     case 'svg':
       return (
         <div
-          style={{ padding: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(artifact.content, { USE_PROFILES: { svg: true, svgFilters: true } }) }}
+          style={{
+            padding: 16,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: 200,
+          }}
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(artifact.content, {
+              USE_PROFILES: { svg: true, svgFilters: true },
+            }),
+          }}
         />
       );
     case 'mermaid':
@@ -188,7 +219,10 @@ function HtmlPreview({ content }: { content: string }) {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const sanitizedContent = DOMPurify.sanitize(content, { ALLOW_UNKNOWN_PROTOCOLS: false, FORBID_TAGS: ['script', 'iframe', 'object', 'embed'] });
+  const sanitizedContent = DOMPurify.sanitize(content, {
+    ALLOW_UNKNOWN_PROTOCOLS: false,
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+  });
   const srcdoc = `<!DOCTYPE html>
 <html><head><style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -248,7 +282,9 @@ mermaid.run().then(()=>{
   }, [content]);
 
   if (error) {
-    return <div style={{ padding: 16, color: '#ef4444', fontSize: 13 }}>Mermaid error: {error}</div>;
+    return (
+      <div style={{ padding: 16, color: '#ef4444', fontSize: 13 }}>Mermaid error: {error}</div>
+    );
   }
 
   return <div ref={containerRef} style={{ padding: 16 }} />;
@@ -256,17 +292,19 @@ mermaid.run().then(()=>{
 
 function CodePreview({ content, language }: { content: string; language?: string }) {
   return (
-    <pre style={{
-      margin: 0,
-      padding: 16,
-      fontSize: 13,
-      lineHeight: 1.6,
-      fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-      color: '#e6edf3',
-      overflow: 'auto',
-      whiteSpace: 'pre',
-      tabSize: 2,
-    }}>
+    <pre
+      style={{
+        margin: 0,
+        padding: 16,
+        fontSize: 13,
+        lineHeight: 1.6,
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        color: '#e6edf3',
+        overflow: 'auto',
+        whiteSpace: 'pre',
+        tabSize: 2,
+      }}
+    >
       <code>{content}</code>
     </pre>
   );
@@ -274,7 +312,10 @@ function CodePreview({ content, language }: { content: string; language?: string
 
 function CsvTable({ content }: { content: string }) {
   const rows = useMemo(() => {
-    return content.split('\n').filter(Boolean).map((line) => line.split(',').map((c) => c.trim()));
+    return content
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.split(',').map((c) => c.trim()));
   }, [content]);
 
   if (rows.length === 0) return null;
@@ -294,11 +335,18 @@ function CsvTable({ content }: { content: string }) {
   return (
     <div style={{ padding: 16 }}>
       <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={handleExport} style={{
-          fontSize: 11, padding: '4px 10px', borderRadius: 4,
-          background: 'rgba(99,102,241,0.15)', color: '#818cf8',
-          border: 'none', cursor: 'pointer',
-        }}>
+        <button
+          onClick={handleExport}
+          style={{
+            fontSize: 11,
+            padding: '4px 10px',
+            borderRadius: 4,
+            background: 'rgba(99,102,241,0.15)',
+            color: '#818cf8',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
           Export CSV
         </button>
       </div>
@@ -306,7 +354,16 @@ function CsvTable({ content }: { content: string }) {
         <thead>
           <tr>
             {headers.map((h, i) => (
-              <th key={i} style={{ padding: '6px 10px', borderBottom: '2px solid #30363d', textAlign: 'left', color: '#9ca3af', fontWeight: 600 }}>
+              <th
+                key={i}
+                style={{
+                  padding: '6px 10px',
+                  borderBottom: '2px solid #30363d',
+                  textAlign: 'left',
+                  color: '#9ca3af',
+                  fontWeight: 600,
+                }}
+              >
                 {h}
               </th>
             ))}
@@ -316,7 +373,9 @@ function CsvTable({ content }: { content: string }) {
           {data.map((row, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #1f2937' }}>
               {row.map((cell, j) => (
-                <td key={j} style={{ padding: '5px 10px', color: '#e6edf3' }}>{cell}</td>
+                <td key={j} style={{ padding: '5px 10px', color: '#e6edf3' }}>
+                  {cell}
+                </td>
               ))}
             </tr>
           ))}
@@ -338,20 +397,32 @@ function TypeIcon({ type }: { type: ArtifactType }) {
     text: 'TXT',
   };
   return (
-    <span style={{
-      fontSize: 10,
-      fontWeight: 700,
-      padding: '2px 5px',
-      borderRadius: 3,
-      background: 'rgba(99,102,241,0.15)',
-      color: '#818cf8',
-    }}>
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        padding: '2px 5px',
+        borderRadius: 3,
+        background: 'rgba(99,102,241,0.15)',
+        color: '#818cf8',
+      }}
+    >
       {icons[type] ?? type}
     </span>
   );
 }
 
-function IconButton({ icon, title, onClick, active }: { icon: string; title: string; onClick: () => void; active?: boolean }) {
+function IconButton({
+  icon,
+  title,
+  onClick,
+  active,
+}: {
+  icon: string;
+  title: string;
+  onClick: () => void;
+  active?: boolean;
+}) {
   const paths: Record<string, string> = {
     copy: 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6v4H9z',
     download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
@@ -362,14 +433,29 @@ function IconButton({ icon, title, onClick, active }: { icon: string; title: str
       onClick={onClick}
       title={title}
       style={{
-        width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        border: 'none',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         background: active ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)',
         color: active ? '#22c55e' : 'var(--c-text-3)',
         transition: 'all 0.15s',
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d={paths[icon]} />
       </svg>
     </button>
@@ -377,5 +463,7 @@ function IconButton({ icon, title, onClick, active }: { icon: string; title: str
 }
 
 function LoadingFallback() {
-  return <div style={{ padding: 20, textAlign: 'center', color: 'var(--c-text-3)' }}>Loading...</div>;
+  return (
+    <div style={{ padding: 20, textAlign: 'center', color: 'var(--c-text-3)' }}>Loading...</div>
+  );
 }

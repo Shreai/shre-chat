@@ -16,9 +16,9 @@ export type RealtimeVoiceState = 'idle' | 'connecting' | 'listening' | 'speaking
 export interface UseRealtimeVoiceReturn {
   state: RealtimeVoiceState;
   provider: string | null;
-  transcript: string;        // What the user said
-  aiTranscript: string;      // What the AI said
-  latency: string;           // Estimated latency
+  transcript: string; // What the user said
+  aiTranscript: string; // What the AI said
+  latency: string; // Estimated latency
   startRealtime: (persona?: string) => Promise<void>;
   stopRealtime: () => void;
   isActive: boolean;
@@ -46,7 +46,11 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
     platformRecordingRef.current = false;
     if (platformMediaRecorderRef.current) {
       if (platformMediaRecorderRef.current.state !== 'inactive') {
-        try { platformMediaRecorderRef.current.stop(); } catch { /* ok */ }
+        try {
+          platformMediaRecorderRef.current.stop();
+        } catch {
+          /* ok */
+        }
       }
       platformMediaRecorderRef.current = null;
     }
@@ -64,7 +68,7 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       audioCtxPPRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
     if (audioRef.current) {
@@ -199,9 +203,8 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
     ws.onmessage = (event) => {
       if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
         // Audio data from PersonaPlex — queue and play sequentially
-        const audioBlob = event.data instanceof Blob
-          ? event.data
-          : new Blob([event.data], { type: 'audio/pcm' });
+        const audioBlob =
+          event.data instanceof Blob ? event.data : new Blob([event.data], { type: 'audio/pcm' });
         audioQueueRef.current.push(audioBlob);
         playNextInQueue();
       } else {
@@ -224,7 +227,9 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
             isPlayingRef.current = false;
             setState('listening');
           }
-        } catch { /* binary data */ }
+        } catch {
+          /* binary data */
+        }
       }
     };
 
@@ -410,7 +415,7 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
     // Microphone input
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     // Data channel for transcripts
     const dc = pc.createDataChannel('oai-events');
@@ -435,7 +440,9 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
         if (msg.type === 'response.done' || msg.type === 'response.audio.done') {
           setState('listening');
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
 
     dc.onopen = () => setState('listening');
@@ -449,11 +456,11 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ephemeralKey}`,
+          Authorization: `Bearer ${ephemeralKey}`,
           'Content-Type': 'application/sdp',
         },
         body: offer.sdp,
-      }
+      },
     );
 
     if (!sdpRes.ok) throw new Error('WebRTC negotiation failed');

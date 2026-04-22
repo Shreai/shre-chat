@@ -22,8 +22,18 @@ export interface TTSDeps {
 
 /** Create a speak function bound to the given refs/deps. */
 export function createSpeak(deps: TTSDeps) {
-  const { ttsVoice, ttsProvider, activeRef, ttsAbortRef, ttsAudioRef, mediaStreamRef, phaseRef, dispatch, vad, stopListeningHardware } =
-    deps;
+  const {
+    ttsVoice,
+    ttsProvider,
+    activeRef,
+    ttsAbortRef,
+    ttsAudioRef,
+    mediaStreamRef,
+    phaseRef,
+    dispatch,
+    vad,
+    stopListeningHardware,
+  } = deps;
 
   return function speak(text: string): Promise<void> {
     return new Promise((resolve) => {
@@ -208,7 +218,11 @@ export function createSpeak(deps: TTSDeps) {
           fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input: plain, voice: ttsVoice, provider: ttsProvider || 'auto' }),
+            body: JSON.stringify({
+              input: plain,
+              voice: ttsVoice,
+              provider: ttsProvider || 'auto',
+            }),
             signal: ctrl.signal,
           })
             .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`TTS ${r.status}`))))

@@ -28,7 +28,13 @@ const PROVIDERS: ProviderConfig[] = [
     keyPrefix: 'sk-ant-',
     color: '#d97706',
     icon: (
-      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        className="h-4 w-4"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
@@ -72,13 +78,17 @@ export function OAuthSetup({ onClose }: OAuthSetupProps) {
     }
   }, []);
 
-  useEffect(() => { checkStatus(); }, [checkStatus]);
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
 
   if (loading) {
     return (
       <div className="px-3 py-4 flex items-center justify-center">
-        <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"
-          style={{ color: 'var(--c-text-5)' }} />
+        <div
+          className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"
+          style={{ color: 'var(--c-text-5)' }}
+        />
       </div>
     );
   }
@@ -86,7 +96,10 @@ export function OAuthSetup({ onClose }: OAuthSetupProps) {
   return (
     <div className="px-3 py-3 space-y-2" style={{ color: 'var(--c-text-2)' }}>
       {error && (
-        <div className="text-[12px] px-2.5 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+        <div
+          className="text-[12px] px-2.5 py-2 rounded-lg"
+          style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
+        >
           {error}
         </div>
       )}
@@ -214,7 +227,10 @@ function ProviderCard({
           return;
         }
         const iv = setInterval(() => {
-          if (popup.closed) { clearInterval(iv); onStatusChange(); }
+          if (popup.closed) {
+            clearInterval(iv);
+            onStatusChange();
+          }
         }, 1000);
         setTimeout(() => clearInterval(iv), 5 * 60 * 1000);
       }
@@ -232,19 +248,30 @@ function ProviderCard({
         style={{ background: 'var(--c-bg-2)' }}
       >
         <span style={{ color: provider.color }}>{provider.icon}</span>
-        <span className="text-[13px] font-semibold flex-1 text-left" style={{ color: 'var(--c-text-1)' }}>
+        <span
+          className="text-[13px] font-semibold flex-1 text-left"
+          style={{ color: 'var(--c-text-1)' }}
+        >
           {provider.label}
         </span>
         {isConnected && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
+          >
             {tokenCount} key{tokenCount !== 1 ? 's' : ''}
           </span>
         )}
         <svg
           className="h-3 w-3 transition-transform"
-          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', color: 'var(--c-text-4)' }}
-          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          style={{
+            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            color: 'var(--c-text-4)',
+          }}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -255,21 +282,32 @@ function ProviderCard({
         <div className="px-3 py-3 space-y-3" style={{ borderTop: '1px solid var(--c-border-2)' }}>
           {isConnected && (
             <div className="text-[12px]" style={{ color: 'var(--c-text-3)' }}>
-              {provider.label} is active with {tokenCount} token{tokenCount !== 1 ? 's' : ''}.
-              You can add more keys below.
+              {provider.label} is active with {tokenCount} token{tokenCount !== 1 ? 's' : ''}. You
+              can add more keys below.
             </div>
           )}
 
           {error && (
-            <div className="text-[11px] px-2 py-1.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+            <div
+              className="text-[11px] px-2 py-1.5 rounded-lg"
+              style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
+            >
               {error}
             </div>
           )}
 
           {/* Tab buttons */}
           <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--c-bg-3)' }}>
-            <TabButton active={mode === 'apikey'} onClick={() => setMode('apikey')} label="API Key" />
-            <TabButton active={mode === 'oauth'} onClick={() => setMode('oauth')} label="OAuth App" />
+            <TabButton
+              active={mode === 'apikey'}
+              onClick={() => setMode('apikey')}
+              label="API Key"
+            />
+            <TabButton
+              active={mode === 'oauth'}
+              onClick={() => setMode('oauth')}
+              label="OAuth App"
+            />
           </div>
 
           {/* API Key mode */}
@@ -340,7 +378,8 @@ function ProviderCard({
                 disabled={saving || !clientId.trim() || !clientSecret.trim()}
                 className="w-full py-2 rounded-lg text-[12px] font-semibold transition-all"
                 style={{
-                  background: clientId.trim() && clientSecret.trim() ? provider.color : 'var(--c-bg-3)',
+                  background:
+                    clientId.trim() && clientSecret.trim() ? provider.color : 'var(--c-bg-3)',
                   color: clientId.trim() && clientSecret.trim() ? '#fff' : 'var(--c-text-5)',
                   opacity: saving ? 0.6 : 1,
                 }}
@@ -355,7 +394,15 @@ function ProviderCard({
   );
 }
 
-function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function TabButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
   return (
     <button
       onClick={onClick}

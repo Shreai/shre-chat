@@ -176,7 +176,14 @@ export function MessageTraceDrawer({
           transition: 'all 0.15s',
         }}
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
         Trace
@@ -276,7 +283,9 @@ export function MessageTraceDrawer({
             <div style={{ fontSize: 10, color: 'var(--c-text-4)', padding: 4 }}>
               Trace ID: <span style={{ fontFamily: 'monospace' }}>{traceId}</span>
               <br />
-              <span style={{ opacity: 0.7 }}>Full trace data not available — enable trace mode before sending the message.</span>
+              <span style={{ opacity: 0.7 }}>
+                Full trace data not available — enable trace mode before sending the message.
+              </span>
             </div>
           )}
         </div>

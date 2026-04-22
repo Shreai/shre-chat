@@ -8,7 +8,11 @@ import type { UserProfile } from './store';
 
 interface Props {
   profile: UserProfile;
-  onComplete: (profile: UserProfile, selectedAgents?: string[], selectedBundle?: string | null) => void;
+  onComplete: (
+    profile: UserProfile,
+    selectedAgents?: string[],
+    selectedBundle?: string | null,
+  ) => void;
   onSkip: () => void;
 }
 
@@ -24,7 +28,10 @@ interface ConnectorNode {
   id: string;
   name: string;
   category: string;
-  configSchema?: Record<string, { type: string; required?: boolean; label: string; secret?: boolean; default?: unknown }>;
+  configSchema?: Record<
+    string,
+    { type: string; required?: boolean; label: string; secret?: boolean; default?: unknown }
+  >;
 }
 
 interface TestResult {
@@ -80,7 +87,9 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
   const [warning, setWarning] = useState<string | null>(null);
   const [connectors, setConnectors] = useState<ConnectorNode[]>(FALLBACK_SOURCES);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [connectorConfigs, setConnectorConfigs] = useState<Record<string, Record<string, string>>>({});
+  const [connectorConfigs, setConnectorConfigs] = useState<Record<string, Record<string, string>>>(
+    {},
+  );
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [bundles, setBundles] = useState<AgentBundle[]>([]);
@@ -95,8 +104,8 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
   // Resume from server state if user previously completed some phases
   useEffect(() => {
     fetch('/api/onboarding/status')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
         if (!data?.started) return;
         const serverPhase = data.phase || data.onboardingPhase;
         if (serverPhase === 'connect') setPhase(1);
@@ -116,13 +125,15 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         }
       })
       .catch(() => {}); // Server unreachable — start fresh
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch marketplace connectors on mount
   useEffect(() => {
     fetch('/api/onboarding/connectors')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (Array.isArray(data) && data.length > 0) setConnectors(data); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) setConnectors(data);
+      })
       .catch(() => {});
   }, []);
 
@@ -130,8 +141,8 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
   useEffect(() => {
     if (phase === 2 && bundles.length === 0) {
       fetch('/api/onboarding/agent-bundles')
-        .then(r => r.ok ? r.json() : { bundles: [] })
-        .then(data => {
+        .then((r) => (r.ok ? r.json() : { bundles: [] }))
+        .then((data) => {
           const list = data.bundles || data || [];
           setBundles(list);
           // Auto-select recommended bundle
@@ -141,9 +152,25 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         .catch(() => {
           // Use hardcoded fallback
           setBundles([
-            { id: 'essentials', name: 'Retail Essentials', description: 'POS analytics, inventory alerts, sales reports', agents: ['aros-agent', 'ana', 'victor'], recommended: true },
-            { id: 'developer', name: 'Developer', description: 'Code, infra, security agents', agents: ['founding-engineer', 'architect', 'founding-security'] },
-            { id: 'business', name: 'Business Suite', description: 'Sales, marketing, strategy', agents: ['herald', 'compass', 'sunny'] },
+            {
+              id: 'essentials',
+              name: 'Retail Essentials',
+              description: 'POS analytics, inventory alerts, sales reports',
+              agents: ['aros-agent', 'ana', 'victor'],
+              recommended: true,
+            },
+            {
+              id: 'developer',
+              name: 'Developer',
+              description: 'Code, infra, security agents',
+              agents: ['founding-engineer', 'architect', 'founding-security'],
+            },
+            {
+              id: 'business',
+              name: 'Business Suite',
+              description: 'Sales, marketing, strategy',
+              agents: ['herald', 'compass', 'sunny'],
+            },
           ]);
           if (!selectedBundle) setSelectedBundle('essentials');
         });
@@ -156,7 +183,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
     const config = connectorConfigs[nodeId];
     if (!config) return;
     setTesting(nodeId);
-    setTestResults(prev => ({ ...prev, [nodeId]: undefined as any }));
+    setTestResults((prev) => ({ ...prev, [nodeId]: undefined as any }));
     try {
       const res = await fetch(`/api/onboarding/connectors/${encodeURIComponent(nodeId)}/test`, {
         method: 'POST',
@@ -164,9 +191,12 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         body: JSON.stringify(config),
       });
       const data = await res.json();
-      setTestResults(prev => ({ ...prev, [nodeId]: data }));
+      setTestResults((prev) => ({ ...prev, [nodeId]: data }));
     } catch {
-      setTestResults(prev => ({ ...prev, [nodeId]: { valid: false, message: 'Connection failed' } }));
+      setTestResults((prev) => ({
+        ...prev,
+        [nodeId]: { valid: false, message: 'Connection failed' },
+      }));
     } finally {
       setTesting(null);
     }
@@ -199,8 +229,8 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           });
         } else {
           // Save selected connectors and their configs to server
-          const selectedNodes = selectedSources.map(id => {
-            const node = connectors.find(c => c.id === id);
+          const selectedNodes = selectedSources.map((id) => {
+            const node = connectors.find((c) => c.id === id);
             return { nodeId: id, name: node?.name || id, category: node?.category || 'unknown' };
           });
           await fetch('/api/onboarding/state', {
@@ -217,7 +247,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
       } else {
         // Phase 3 complete (Activate) — finish onboarding
         const completed = { ...p, onboardedAt: Date.now() };
-        const bundle = bundles.find(b => b.id === selectedBundle);
+        const bundle = bundles.find((b) => b.id === selectedBundle);
 
         await fetch('/api/onboarding/unified/activate', {
           method: 'POST',
@@ -262,7 +292,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
     } catch {
       // Non-fatal — continue locally even if server save fails
       if (phase === 2) {
-        const bundle = bundles.find(b => b.id === selectedBundle);
+        const bundle = bundles.find((b) => b.id === selectedBundle);
         onComplete({ ...p, onboardedAt: Date.now() }, bundle?.agents || [], selectedBundle);
         return;
       }
@@ -284,19 +314,43 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         </p>
       </div>
       <div className="space-y-3">
-        <Field label="Your name" value={p.name} onChange={(v) => update({ name: v })} placeholder="e.g., Nir" />
-        <Field label="Your role" value={p.role} onChange={(v) => update({ role: v })} placeholder="e.g., CEO, Store Manager, Developer" />
-        <Field label="Business name" value={p.business.name} onChange={(v) => updateBiz({ name: v })} placeholder="e.g., Quick Stop Mart" />
+        <Field
+          label="Your name"
+          value={p.name}
+          onChange={(v) => update({ name: v })}
+          placeholder="e.g., Nir"
+        />
+        <Field
+          label="Your role"
+          value={p.role}
+          onChange={(v) => update({ role: v })}
+          placeholder="e.g., CEO, Store Manager, Developer"
+        />
+        <Field
+          label="Business name"
+          value={p.business.name}
+          onChange={(v) => updateBiz({ name: v })}
+          placeholder="e.g., Quick Stop Mart"
+        />
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>Industry</label>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+            Industry
+          </label>
           <div className="flex flex-wrap gap-1.5">
             {INDUSTRIES.map((ind) => (
-              <Chip key={ind} label={ind} active={p.business.industry === ind} onClick={() => updateBiz({ industry: ind })} />
+              <Chip
+                key={ind}
+                label={ind}
+                active={p.business.industry === ind}
+                onClick={() => updateBiz({ industry: ind })}
+              />
             ))}
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>Team size</label>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+            Team size
+          </label>
           <div className="grid grid-cols-4 gap-2">
             {BIZ_SIZES.map((s) => (
               <button
@@ -305,7 +359,8 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
                 className="px-2 py-2 rounded-lg text-center transition-all text-xs"
                 style={{
                   border: `1px solid ${p.business.size === s.value ? 'var(--c-accent)' : 'var(--c-border-2)'}`,
-                  background: p.business.size === s.value ? 'rgba(99,102,241,0.1)' : 'var(--c-bg-card)',
+                  background:
+                    p.business.size === s.value ? 'rgba(99,102,241,0.1)' : 'var(--c-bg-card)',
                   color: 'var(--c-text-2)',
                 }}
               >
@@ -338,10 +393,11 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
             <div key={src.id}>
               <button
                 onClick={() => {
-                  setSelectedSources(prev =>
-                    prev.includes(src.id) ? prev.filter(s => s !== src.id) : [...prev, src.id]
+                  setSelectedSources((prev) =>
+                    prev.includes(src.id) ? prev.filter((s) => s !== src.id) : [...prev, src.id],
                   );
-                  if (!connectorConfigs[src.id]) setConnectorConfigs(prev => ({ ...prev, [src.id]: {} }));
+                  if (!connectorConfigs[src.id])
+                    setConnectorConfigs((prev) => ({ ...prev, [src.id]: {} }));
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all text-sm"
                 style={{
@@ -351,7 +407,8 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
                   borderRadius: selected && src.configSchema ? '8px 8px 0 0' : '8px',
                 }}
               >
-                <div className="w-5 h-5 rounded border flex items-center justify-center text-xs"
+                <div
+                  className="w-5 h-5 rounded border flex items-center justify-center text-xs"
                   style={{
                     borderColor: selected ? 'var(--c-accent)' : 'var(--c-border-2)',
                     background: selected ? 'var(--c-accent)' : 'transparent',
@@ -362,13 +419,18 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
                 </div>
                 <div className="flex-1">
                   <div className="font-medium">{src.name}</div>
-                  <div className="text-xs" style={{ color: 'var(--c-text-4)' }}>{src.category}</div>
+                  <div className="text-xs" style={{ color: 'var(--c-text-4)' }}>
+                    {src.category}
+                  </div>
                 </div>
                 {result && (
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                    background: result.valid ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                    color: result.valid ? 'rgb(34,197,94)' : 'rgb(239,68,68)',
-                  }}>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{
+                      background: result.valid ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: result.valid ? 'rgb(34,197,94)' : 'rgb(239,68,68)',
+                    }}
+                  >
                     {result.valid ? 'Connected' : 'Failed'}
                   </span>
                 )}
@@ -376,12 +438,15 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
 
               {/* Credential form — shown when connector is selected and has configSchema */}
               {selected && src.configSchema && (
-                <div className="px-4 py-3 space-y-2" style={{
-                  background: 'var(--c-bg-3)',
-                  border: '1px solid var(--c-border-2)',
-                  borderTop: 'none',
-                  borderRadius: '0 0 8px 8px',
-                }}>
+                <div
+                  className="px-4 py-3 space-y-2"
+                  style={{
+                    background: 'var(--c-bg-3)',
+                    border: '1px solid var(--c-border-2)',
+                    borderTop: 'none',
+                    borderRadius: '0 0 8px 8px',
+                  }}
+                >
                   {Object.entries(src.configSchema).map(([field, schema]) => {
                     if (schema.required === false) return null;
                     return (
@@ -389,11 +454,17 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
                         key={field}
                         label={schema.label || field}
                         value={connectorConfigs[src.id]?.[field] || ''}
-                        onChange={(v) => setConnectorConfigs(prev => ({
-                          ...prev,
-                          [src.id]: { ...prev[src.id], [field]: v },
-                        }))}
-                        placeholder={schema.secret ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : `Enter ${schema.label || field}`}
+                        onChange={(v) =>
+                          setConnectorConfigs((prev) => ({
+                            ...prev,
+                            [src.id]: { ...prev[src.id], [field]: v },
+                          }))
+                        }
+                        placeholder={
+                          schema.secret
+                            ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
+                            : `Enter ${schema.label || field}`
+                        }
                         secret={schema.secret}
                       />
                     );
@@ -411,7 +482,9 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
                     {isTesting ? 'Testing...' : 'Test Connection'}
                   </button>
                   {result && !result.valid && result.message && (
-                    <p className="text-xs" style={{ color: 'rgb(239,68,68)' }}>{result.message}</p>
+                    <p className="text-xs" style={{ color: 'rgb(239,68,68)' }}>
+                      {result.message}
+                    </p>
                   )}
                 </div>
               )}
@@ -443,11 +516,13 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
             className="w-full flex items-start gap-3 px-4 py-3 rounded-lg text-left transition-all text-sm"
             style={{
               border: `1px solid ${selectedBundle === bundle.id ? 'var(--c-accent)' : 'var(--c-border-2)'}`,
-              background: selectedBundle === bundle.id ? 'rgba(99,102,241,0.08)' : 'var(--c-bg-card)',
+              background:
+                selectedBundle === bundle.id ? 'rgba(99,102,241,0.08)' : 'var(--c-bg-card)',
               color: 'var(--c-text-2)',
             }}
           >
-            <div className="w-4 h-4 mt-0.5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+            <div
+              className="w-4 h-4 mt-0.5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
               style={{
                 borderColor: selectedBundle === bundle.id ? 'var(--c-accent)' : 'var(--c-border-2)',
               }}
@@ -460,12 +535,17 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
               <div className="font-medium flex items-center gap-2">
                 {bundle.name}
                 {bundle.recommended && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(99,102,241,0.15)', color: 'var(--c-accent)' }}>
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded-full"
+                    style={{ background: 'rgba(99,102,241,0.15)', color: 'var(--c-accent)' }}
+                  >
                     Recommended
                   </span>
                 )}
               </div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--c-text-4)' }}>{bundle.description}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--c-text-4)' }}>
+                {bundle.description}
+              </div>
               <div className="text-xs mt-1" style={{ color: 'var(--c-text-5)' }}>
                 {bundle.agents.length} agent{bundle.agents.length !== 1 ? 's' : ''}
               </div>
@@ -487,12 +567,17 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
               className="px-2 py-2 rounded-lg text-center transition-all"
               style={{
                 border: `1px solid ${p.preferences.communicationStyle === s.value ? 'var(--c-accent)' : 'var(--c-border-2)'}`,
-                background: p.preferences.communicationStyle === s.value ? 'rgba(99,102,241,0.1)' : 'var(--c-bg-card)',
+                background:
+                  p.preferences.communicationStyle === s.value
+                    ? 'rgba(99,102,241,0.1)'
+                    : 'var(--c-bg-card)',
                 color: 'var(--c-text-2)',
               }}
             >
               <div className="text-xs font-medium">{s.label}</div>
-              <div className="text-[10px] mt-0.5" style={{ color: 'var(--c-text-4)' }}>{s.desc}</div>
+              <div className="text-[10px] mt-0.5" style={{ color: 'var(--c-text-4)' }}>
+                {s.desc}
+              </div>
             </button>
           ))}
         </div>
@@ -531,7 +616,14 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-1)' }}
         >
           {warning && (
-            <div className="mb-4 px-3 py-2 rounded-lg text-xs" style={{ background: 'rgba(234,179,8,0.1)', color: 'rgb(202,138,4)', border: '1px solid rgba(234,179,8,0.2)' }}>
+            <div
+              className="mb-4 px-3 py-2 rounded-lg text-xs"
+              style={{
+                background: 'rgba(234,179,8,0.1)',
+                color: 'rgb(202,138,4)',
+                border: '1px solid rgba(234,179,8,0.2)',
+              }}
+            >
               {warning}
             </div>
           )}
@@ -671,4 +763,3 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
     </button>
   );
 }
-

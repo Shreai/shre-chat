@@ -1317,7 +1317,9 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                 '| Local Model | Apps | Cloud Escalation | LoRA |',
                 '|-------------|------|------------------|------|',
                 ...Object.entries(modelGroups).map(([model, appIds]) => {
-                  const sample = appList.find((a: any) => (a.localModel || '').replace('ollama-remote/', '') === model);
+                  const sample = appList.find(
+                    (a: any) => (a.localModel || '').replace('ollama-remote/', '') === model,
+                  );
                   const cloud = sample?.cloudModel?.replace('anthropic/', '') || '-';
                   const lora = sample?.training?.loraAdapter || '-';
                   return `| \`${model}\` | ${appIds.join(', ')} | \`${cloud}\` | ${lora} |`;

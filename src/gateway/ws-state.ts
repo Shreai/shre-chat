@@ -3,7 +3,7 @@
  * Centralized here so all gateway modules can read/write consistently.
  */
 
-import ReconnectingWebSocket from 'partysocket/ws';
+import type ReconnectingWebSocket from 'partysocket/ws';
 import type {
   WSState,
   WSStateInfo,

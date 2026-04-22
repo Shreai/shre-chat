@@ -97,8 +97,12 @@ export function SystemEventChip({
   if (message.meta?.event === 'mode-suggestion' && message.meta?.suggestedMode) {
     const suggestedMode = message.meta.suggestedMode;
     const modeLabels: Record<string, string> = {
-      assistant: 'Assistant', code: 'Code', apps: 'Apps',
-      ops: 'Ops', strategy: 'Strategy', business: 'Business',
+      assistant: 'Assistant',
+      code: 'Code',
+      apps: 'Apps',
+      ops: 'Ops',
+      strategy: 'Strategy',
+      business: 'Business',
     };
     const label = modeLabels[suggestedMode] || suggestedMode;
     return (
@@ -120,7 +124,9 @@ export function SystemEventChip({
             <span>Switch to {label} mode</span>
           </button>
           {timestamp && (
-            <span className="text-[9px]" style={{ color: 'var(--c-text-5)' }}>{timestamp}</span>
+            <span className="text-[9px]" style={{ color: 'var(--c-text-5)' }}>
+              {timestamp}
+            </span>
           )}
           <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
         </div>

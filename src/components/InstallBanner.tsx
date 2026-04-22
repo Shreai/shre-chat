@@ -32,13 +32,14 @@ export default function InstallBanner() {
     >
       <div style={{ flex: 1 }}>
         {canInstall && (
-          <span>Install <strong>Shre AI</strong> for quick access</span>
+          <span>
+            Install <strong>Shre AI</strong> for quick access
+          </span>
         )}
         {showIOSGuide && (
           <span>
-            Tap{' '}
-            <span style={{ fontSize: 16, verticalAlign: 'middle' }}>&#x2191;</span>{' '}
-            then <strong>"Add to Home Screen"</strong>
+            Tap <span style={{ fontSize: 16, verticalAlign: 'middle' }}>&#x2191;</span> then{' '}
+            <strong>"Add to Home Screen"</strong>
           </span>
         )}
       </div>

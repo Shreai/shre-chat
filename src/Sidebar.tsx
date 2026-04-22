@@ -853,48 +853,48 @@ export function Sidebar() {
               }
             />
             {features['bookmarks'] && (
-            <div style={{ position: 'relative' }}>
-              <NavIconBtn
-                active={false}
-                onClick={() => setBookmarkPanelOpen(true)}
-                title="Bookmarks"
-                icon={
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
+              <div style={{ position: 'relative' }}>
+                <NavIconBtn
+                  active={false}
+                  onClick={() => setBookmarkPanelOpen(true)}
+                  title="Bookmarks"
+                  icon={
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                    </svg>
+                  }
+                />
+                {bookmarkCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      right: 2,
+                      minWidth: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      background: 'var(--c-accent, #638dff)',
+                      color: '#fff',
+                      fontSize: 8,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 2px',
+                      lineHeight: 1,
+                      pointerEvents: 'none',
+                    }}
                   >
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                  </svg>
-                }
-              />
-              {bookmarkCount > 0 && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 2,
-                    right: 2,
-                    minWidth: 12,
-                    height: 12,
-                    borderRadius: 6,
-                    background: 'var(--c-accent, #638dff)',
-                    color: '#fff',
-                    fontSize: 8,
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '0 2px',
-                    lineHeight: 1,
-                    pointerEvents: 'none',
-                  }}
-                >
-                  {bookmarkCount > 99 ? '99+' : bookmarkCount}
-                </span>
-              )}
-            </div>
+                    {bookmarkCount > 99 ? '99+' : bookmarkCount}
+                  </span>
+                )}
+              </div>
             )}
             <NavIconBtn
               active={view === 'employee-activity'}
@@ -976,42 +976,42 @@ export function Sidebar() {
               }
             />
             {features['marketplace'] && (
-            <NavIconBtn
-              active={view === 'marketplace'}
-              onClick={() => actions.setView('marketplace')}
-              title="Marketplace"
-              icon={
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z" />
-                  <line x1="3" y1="7" x2="21" y2="7" />
-                </svg>
-              }
-            />
+              <NavIconBtn
+                active={view === 'marketplace'}
+                onClick={() => actions.setView('marketplace')}
+                title="Marketplace"
+                icon={
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M6 2L3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7l-3-5z" />
+                    <line x1="3" y1="7" x2="21" y2="7" />
+                  </svg>
+                }
+              />
             )}
             {features['billing'] && (
-            <NavIconBtn
-              active={view === 'billing'}
-              onClick={() => actions.setView('billing')}
-              title="Billing"
-              icon={
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                  <line x1="1" y1="10" x2="23" y2="10" />
-                </svg>
-              }
-            />
+              <NavIconBtn
+                active={view === 'billing'}
+                onClick={() => actions.setView('billing')}
+                title="Billing"
+                icon={
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                    <line x1="1" y1="10" x2="23" y2="10" />
+                  </svg>
+                }
+              />
             )}
           </div>
 
