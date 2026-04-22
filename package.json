@@ -1,6 +1,6 @@
 {
   "name": "shre-chat",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "private": true,
   "description": "AROS — AI-powered retail chat assistant",
   "main": "electron/dist/main.cjs",
@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "vite --port 5000 --host 0.0.0.0",
     "build": "vite build",
+    "lint": "eslint src/ --max-warnings=9999",
+    "lint:fix": "eslint src/ --fix --max-warnings=9999",
     "test": "vitest run",
     "serve": "node serve.js",
     "preview": "vite preview --port 5510",

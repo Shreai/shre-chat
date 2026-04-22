@@ -166,6 +166,18 @@ export function App() {
     new URLSearchParams(window.location.search).get('demo') === 'true'
   );
 
+  const DEV_BYPASS_AUTH = false;
+
+  const {
+    authState,
+    authChecking,
+    pendingWorkspaceSelection,
+    handleLogin,
+    handleWorkspaceSelected,
+    handleWorkspaceSwitch,
+    handleLogout,
+  } = useAuth(DEV_BYPASS_AUTH);
+
   if (isDemoMode) {
     return (
       <Suspense
@@ -188,18 +200,6 @@ export function App() {
       </Suspense>
     );
   }
-
-  const DEV_BYPASS_AUTH = false;
-
-  const {
-    authState,
-    authChecking,
-    pendingWorkspaceSelection,
-    handleLogin,
-    handleWorkspaceSelected,
-    handleWorkspaceSwitch,
-    handleLogout,
-  } = useAuth(DEV_BYPASS_AUTH);
 
   if (authChecking) {
     return (
