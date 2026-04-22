@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 // shre-chat QA Test Suite
 // Tests: auth, router proxy, chat (streaming + non-streaming), agents, model routing,
-//        gateway WebSocket, status bar, concurrency, error handling
-
-import { randomUUID } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+//        notifications WebSocket, status bar, concurrency, error handling
 
 const BASE = 'http://127.0.0.1:5510';
-const GW_WS = 'ws://127.0.0.1:18789';
+const NOTIFY_WS = BASE.replace(/^http/, 'ws') + '/ws/notifications';
 const CREDS = {
   username: process.env.SHRE_ADMIN_USER || 'admin',
   password:
@@ -18,17 +13,6 @@ const CREDS = {
       throw new Error('SHRE_ADMIN_PASSWORD required');
     })(),
 };
-
-// Load gateway token for WS auth
-let GW_TOKEN = '';
-try {
-  // Try shre-router config first, fall back to legacy path
-  const shreConfigPath = join(homedir(), '.shre', 'router.json');
-  const legacyConfigPath = join(homedir(), '.openclaw', 'openclaw.json');
-  const configPath = existsSync(shreConfigPath) ? shreConfigPath : legacyConfigPath;
-  const ocConfig = JSON.parse(readFileSync(configPath, 'utf8'));
-  GW_TOKEN = ocConfig?.gateway?.auth?.token || ocConfig?.auth?.token || '';
-} catch {}
 
 const results = [];
 
@@ -48,9 +32,14 @@ async function fetchJson(url, opts = {}) {
   return { status: res.status, ok: res.ok, text, json, headers: res.headers };
 }
 
-/** Extract text content from a chat response (handles string or content blocks array) */
+/** Extract text content from a chat response (handles OpenAI, Anthropic, and Ollama shapes) */
 function extractContent(json) {
-  const raw = json?.choices?.[0]?.message?.content || json?.content || json?.text || '';
+  const raw =
+    json?.choices?.[0]?.message?.content ||
+    json?.message?.content || // Ollama native chat shape
+    json?.content ||
+    json?.text ||
+    '';
   if (typeof raw === 'string') return raw;
   if (Array.isArray(raw)) return raw.map((b) => b.text || '').join('');
   return String(raw);
@@ -313,119 +302,56 @@ async function testModelRouting() {
   }
 }
 
-// ─── 7. Gateway WebSocket ──────────────────────────────────────────────────
+// ─── 7. Notifications WebSocket ────────────────────────────────────────────
+// The legacy OpenClaw gateway (ws://127.0.0.1:18789) was retired on 2026-04-06.
+// This test now exercises shre-chat's own notifications upgrade path, which is
+// what the browser actually uses.
 
-async function testGatewayWebSocket() {
+async function testNotificationsWebSocket() {
   const t0 = performance.now();
 
-  // Dynamic import ws (available in shre-chat node_modules)
   let WebSocket;
   try {
     WebSocket = (await import('ws')).default;
   } catch {
-    record('7. Gateway WebSocket', false, performance.now() - t0, 'ws module not available');
+    record('7. Notifications WebSocket', false, performance.now() - t0, 'ws module not available');
     return;
   }
 
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      record('7. Gateway WebSocket', false, performance.now() - t0, 'timeout after 10s');
+    let settled = false;
+    const finish = (pass, details) => {
+      if (settled) return;
+      settled = true;
+      record('7. Notifications WebSocket', pass, performance.now() - t0, details);
       try {
         ws.close();
       } catch {}
       resolve();
-    }, 10_000);
+    };
+
+    const timeout = setTimeout(() => finish(false, 'timeout after 5s'), 5_000);
 
     let ws;
     try {
-      ws = new WebSocket(GW_WS, {
+      ws = new WebSocket(NOTIFY_WS, {
         rejectUnauthorized: false,
-        origin: 'http://127.0.0.1:5510',
-        headers: { Origin: 'http://127.0.0.1:5510' },
+        headers: { Origin: BASE },
       });
     } catch (err) {
       clearTimeout(timeout);
-      record(
-        '7. Gateway WebSocket',
-        false,
-        performance.now() - t0,
-        `connect error: ${err.message}`,
-      );
-      resolve();
+      finish(false, `connect error: ${err.message}`);
       return;
     }
 
-    let gotChallenge = false;
-    let gotConnectResponse = false;
+    ws.on('open', () => {
+      clearTimeout(timeout);
+      finish(true, `upgraded at ${NOTIFY_WS}`);
+    });
 
     ws.on('error', (err) => {
       clearTimeout(timeout);
-      record('7. Gateway WebSocket', false, performance.now() - t0, `ws error: ${err.message}`);
-      resolve();
-    });
-
-    ws.on('message', (data) => {
-      try {
-        const frame = JSON.parse(data.toString());
-
-        // Step 1: Receive challenge, send connect
-        if (frame.type === 'event' && frame.event === 'connect.challenge') {
-          gotChallenge = true;
-          ws.send(
-            JSON.stringify({
-              type: 'req',
-              id: randomUUID(),
-              method: 'connect',
-              params: {
-                minProtocol: 3,
-                maxProtocol: 3,
-                client: {
-                  id: 'router-control-ui',
-                  version: '1.0.0',
-                  platform: 'web',
-                  mode: 'ui',
-                },
-                role: 'operator',
-                scopes: ['operator.read', 'operator.write'],
-                auth: { token: GW_TOKEN, password: '' },
-                caps: ['tool-events'],
-              },
-            }),
-          );
-        }
-
-        // Step 2: Receive connect response
-        if (frame.type === 'res' && gotChallenge) {
-          gotConnectResponse = true;
-          const ok = !frame.error;
-          clearTimeout(timeout);
-          ws.close();
-          record(
-            '7. Gateway WebSocket',
-            ok,
-            performance.now() - t0,
-            ok
-              ? `connected, protocol=${frame.result?.protocol || '?'}`
-              : `connect rejected: ${JSON.stringify(frame.error).slice(0, 80)}`,
-          );
-          resolve();
-        }
-      } catch {}
-    });
-
-    ws.on('close', () => {
-      if (!gotConnectResponse) {
-        clearTimeout(timeout);
-        record(
-          '7. Gateway WebSocket',
-          gotChallenge,
-          performance.now() - t0,
-          gotChallenge
-            ? 'challenge received but connection closed before response'
-            : 'closed before challenge',
-        );
-        resolve();
-      }
+      finish(false, `ws error: ${err.message}`);
     });
   });
 }
@@ -577,7 +503,7 @@ async function main() {
 
   // 7. Gateway WebSocket
   console.log('\n\x1b[36m── Gateway WebSocket ──\x1b[0m');
-  await testGatewayWebSocket();
+  await testNotificationsWebSocket();
 
   // 8. Status bar
   console.log('\n\x1b[36m── Status Bar ──\x1b[0m');

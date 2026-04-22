@@ -10,6 +10,7 @@ export function useWakeWord(
   voiceAssistantOpen: boolean,
   isRecording: boolean,
   setVoiceAssistantOpen: React.Dispatch<React.SetStateAction<boolean>>,
+  voiceMode?: boolean,
 ): UseWakeWordReturn {
   const [wakeListenerReady, setWakeListenerReady] = useState(false);
   // Wake word grabs the audio session (continuous SpeechRecognition on macOS
@@ -43,7 +44,7 @@ export function useWakeWord(
 
   // SpeechRecognition wake word detection ("shre shre", "hey shre", etc.)
   useEffect(() => {
-    if (!wakeListenerReady || !micEnabled || voiceAssistantOpen || isRecording) return;
+    if (!wakeListenerReady || !micEnabled || voiceAssistantOpen || isRecording || voiceMode) return;
     const SR = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
       // iOS Safari doesn't support SpeechRecognition — wake word unavailable.

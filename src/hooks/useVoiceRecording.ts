@@ -151,7 +151,7 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
   const lastSpokenMsgRef = useRef<string>('');
 
   const SILENCE_THRESHOLD = 0.06;
-  const SILENCE_TIMEOUT_MS = 8000;
+  const SILENCE_TIMEOUT_MS = 3000;
 
   // Voice start/stop event listeners
   useEffect(() => {

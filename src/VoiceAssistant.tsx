@@ -363,10 +363,11 @@ export default function VoiceAssistant({
       whisperAbortRef.current.abort();
       whisperAbortRef.current = null;
     }
+    let timeout: any;
     try {
       const ctrl = new AbortController();
       whisperAbortRef.current = ctrl;
-      const timeout = setTimeout(() => ctrl.abort(), 10_000);
+      timeout = setTimeout(() => ctrl.abort(), 30_000);
       const formData = new FormData();
       formData.append('file', audioBlob, 'voice.webm');
       formData.append('model', 'whisper-1');
@@ -381,6 +382,7 @@ export default function VoiceAssistant({
       const data = await res.json();
       return (data.text || '').trim();
     } catch (err) {
+      if (timeout) clearTimeout(timeout);
       console.debug('whisper transcription failed', err);
       whisperAbortRef.current = null;
       return '';

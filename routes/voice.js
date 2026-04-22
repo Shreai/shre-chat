@@ -301,15 +301,15 @@ export function registerVoiceRoutes({ log, GATEWAY_TOKEN, chatDb, logConversatio
         for (const pat of taskPatterns) {
           const m = text.match(pat.re);
           if (m && m[pat.extract]) {
-            const title = m[pat.extract].replace(/[.!?]+$/, "").trim().slice(0, 500);
-            if (!title) continue;
+            const rawTitle = m[pat.extract].replace(/[.!?]+$/, "").trim().slice(0, 500);
+            if (!rawTitle) continue;
 
             let priority = "medium";
-            if (/\b(urgent|asap|immediately|critical)\b/i.test(title)) priority = "high";
-            if (/\b(whenever|eventually|someday|low priority)\b/i.test(title)) priority = "low";
+            if (/\b(urgent|asap|immediately|critical)\b/i.test(rawTitle)) priority = "high";
+            if (/\b(whenever|eventually|someday|low priority)\b/i.test(rawTitle)) priority = "low";
 
             let due_at = undefined;
-            const byMatch = title.match(/\bby\s+(tomorrow|tonight|end of day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+            const byMatch = rawTitle.match(/\bby\s+(tomorrow|tonight|end of day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
             if (byMatch) {
               const when = byMatch[1].toLowerCase();
               const now = new Date();
@@ -327,6 +327,11 @@ export function registerVoiceRoutes({ log, GATEWAY_TOKEN, chatDb, logConversatio
                 }
               }
             }
+            const title = rawTitle
+              .replace(/\s*\bby\s+(tomorrow|tonight|end of day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i, "")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (!title) continue;
 
             try {
               const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/intake`, {
@@ -336,8 +341,11 @@ export function registerVoiceRoutes({ log, GATEWAY_TOKEN, chatDb, logConversatio
                   title,
                   description: `Created via voice command: "${text}"`,
                   priority,
+                  due_at,
                   source: "chat",
                   requestor: "voice-assistant",
+                  created_by: "shre-chat",
+                  status: "created",
                   category: "general",
                   skip_decompose: true,
                 }),

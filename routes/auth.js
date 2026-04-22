@@ -416,8 +416,11 @@ export function checkAuth(req) {
 if (!existsSync(USERS_PATH)) {
   const dir = join(homedir(), ".shre", "vault");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const defaultAdminPassword =
+    process.env.SHRE_ADMIN_PASSWORD ||
+    (process.env.NODE_ENV === "test" || process.env.VITEST ? "test-admin-password" : (() => { throw new Error("SHRE_ADMIN_PASSWORD env var required"); })());
   writeFileSync(USERS_PATH, JSON.stringify({
-    [process.env.SHRE_ADMIN_USER || "admin"]: { hash: hashPassword(process.env.SHRE_ADMIN_PASSWORD || (() => { throw new Error("SHRE_ADMIN_PASSWORD env var required"); })()), role: "admin", name: "Admin" }
+    [process.env.SHRE_ADMIN_USER || "admin"]: { hash: hashPassword(defaultAdminPassword), role: "admin", name: "Admin" }
   }, null, 2), { mode: 0o600 });
 }
 

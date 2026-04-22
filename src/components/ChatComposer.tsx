@@ -825,7 +825,39 @@ export function ChatComposer(props: ChatComposerProps) {
                 </button>
               )}
 
-              {/* Voice mode + TTS voice selector — hidden pending proper implementation */}
+              {/* Hands-free toggle — auto-starts listening when AI finishes speaking */}
+              {speechSupported && (
+                <button
+                  tabIndex={-1}
+                  onClick={() => {
+                    const nextMode = !voiceMode;
+                    setVoiceMode(nextMode);
+                    if (nextMode && !isRecording) {
+                      onStartRecording();
+                    } else if (!nextMode && isRecording) {
+                      onStopRecording();
+                    }
+                  }}
+                  className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
+                  style={voiceMode ? {} : { color: 'var(--c-text-2)' }}
+                  title={voiceMode ? 'Deactivate hands-free mode' : 'Activate hands-free mode'}
+                  aria-label={voiceMode ? 'Deactivate hands-free' : 'Activate hands-free'}
+                >
+                  <svg
+                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M18 8a3 3 0 0 1 3 3 3 3 0 0 1-3 3 3 3 0 0 1-3-3 3 3 0 0 1 3-3z" />
+                    <path d="M6 8a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z" />
+                    <line x1="10" y1="12" x2="14" y2="12" />
+                  </svg>
+                </button>
+              )}
 
               {/* Claude CLI — opens as terminal tab */}
               {features['claudeCli'] && (

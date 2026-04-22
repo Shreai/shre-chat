@@ -136,7 +136,7 @@ export default defineConfig({
     // ── Agent 11: Voice Features ──
     {
       name: 'voice',
-      testMatch: /voice\.spec\.ts/,
+      testMatch: /voice.*\.spec\.ts/,
       use: { browserName: 'chromium', storageState: AUTH_FILE },
       dependencies: ['setup'],
     },

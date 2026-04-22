@@ -54,8 +54,10 @@ export function registerTaskRoutes({ log }) {
           title: cleanTitle,
           description: cleanDesc,
           priority: priority || "medium",
-          source: "chat",
+          source: source || "chat",
           requestor: "shre-chat",
+          created_by: "shre-chat",
+          status: "created",
           category: "general",
           skip_decompose: true, // simple chat tasks don't need decomposition
         };
@@ -84,9 +86,18 @@ export function registerTaskRoutes({ log }) {
         }
 
         const result = await taskRes.json();
-        log.info("Task created from chat via intake", { taskId: result.objective_id, title: cleanTitle.slice(0, 50), approval: result.approval_needed });
+        const normalizedTaskId = result.objective_id || result.id;
+        log.info("Task created from chat via intake", { taskId: normalizedTaskId, title: cleanTitle.slice(0, 50), approval: result.approval_needed });
         // Return in the shape the client expects
-        return json(res, { ok: true, task: { id: result.objective_id, title: cleanTitle, status: result.status, approval_needed: result.approval_needed } });
+        return json(res, {
+          ok: true,
+          task: {
+            id: normalizedTaskId,
+            title: cleanTitle,
+            status: result.status || "created",
+            approval_needed: result.approval_needed,
+          },
+        });
       } catch (e) {
         log.error("Task creation error", {}, e);
         return json(res, { error: e.message }, 400);

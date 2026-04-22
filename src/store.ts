@@ -619,6 +619,7 @@ export type View =
   | 'admin'
   | 'feed-analytics'
   | 'task-timeline'
+  | 'agent-social'
   | 'finetune'
   | 'reports'
   | 'employee-activity'

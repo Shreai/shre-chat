@@ -200,7 +200,7 @@ describe('POST /api/verify-identity — rate limiting', () => {
 });
 
 describe('POST /api/verify-identity — route matching', () => {
-  it('handler returns true for POST /api/verify-identity', () => {
+  it('handler returns true for POST /api/verify-identity', async () => {
     const req = createMockReq({
       method: 'POST',
       url: '/api/verify-identity',
@@ -210,25 +210,25 @@ describe('POST /api/verify-identity — route matching', () => {
     const res = createMockRes();
     const url = new URL('/api/verify-identity', 'http://localhost');
     const rateLimit = createRateLimitHelper();
-    const result = handleAuth(req, res, url, { json, rateLimit, authCookie });
+    const result = await handleAuth(req, res, url, { json, rateLimit, authCookie });
     expect(result).toBe(true);
   });
 
-  it('handler returns false for GET /api/verify-identity', () => {
+  it('handler returns false for GET /api/verify-identity', async () => {
     const req = createMockReq({ method: 'GET', url: '/api/verify-identity' });
     const res = createMockRes();
     const url = new URL('/api/verify-identity', 'http://localhost');
     const rateLimit = createRateLimitHelper();
-    const result = handleAuth(req, res, url, { json, rateLimit, authCookie });
+    const result = await handleAuth(req, res, url, { json, rateLimit, authCookie });
     expect(result).toBe(false);
   });
 
-  it('handler returns false for unrelated paths', () => {
+  it('handler returns false for unrelated paths', async () => {
     const req = createMockReq({ method: 'POST', url: '/api/other' });
     const res = createMockRes();
     const url = new URL('/api/other', 'http://localhost');
     const rateLimit = createRateLimitHelper();
-    const result = handleAuth(req, res, url, { json, rateLimit, authCookie });
+    const result = await handleAuth(req, res, url, { json, rateLimit, authCookie });
     expect(result).toBe(false);
   });
 });

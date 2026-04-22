@@ -34,6 +34,7 @@ import { flushMessageQueue } from './ws-queue';
 
 // Connect via same-origin proxy (serve.js proxies WS to gateway)
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/notifications`;
+let currentGatewayToken = '';
 
 function startHeartbeat() {
   stopHeartbeat();
@@ -60,29 +61,27 @@ function stopHeartbeat() {
 function handleFrame(frame: any) {
   if (frame.type === 'event') {
     if (frame.event === 'connect.challenge') {
-      getGatewayToken().then((token) => {
-        sendRaw({
-          type: 'req',
-          id: uuid(),
-          method: 'connect',
-          params: {
-            minProtocol: 3,
-            maxProtocol: 3,
-            client: {
-              id: 'webchat',
-              version: '1.0.0',
-              platform: 'web',
-              mode: 'ui',
-            },
-            role: 'operator',
-            scopes: ['operator.admin'],
-            auth: {
-              token,
-              password: '',
-            },
-            caps: ['tool-events'],
+      sendRaw({
+        type: 'req',
+        id: uuid(),
+        method: 'connect',
+        params: {
+          minProtocol: 3,
+          maxProtocol: 3,
+          client: {
+            id: 'webchat',
+            version: '1.0.0',
+            platform: 'web',
+            mode: 'ui',
           },
-        });
+          role: 'operator',
+          scopes: ['operator.admin'],
+          auth: {
+            token: currentGatewayToken,
+            password: '',
+          },
+          caps: ['tool-events'],
+        },
       });
       return;
     }
@@ -159,6 +158,7 @@ export async function connectGateway(): Promise<void> {
     notifyState(isTokenFetchFailed() ? 'Not authenticated — sign in to connect' : undefined);
     return Promise.reject(new Error('No gateway token'));
   }
+  currentGatewayToken = token;
 
   setWsState('connecting');
   notifyState();

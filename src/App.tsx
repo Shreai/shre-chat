@@ -76,6 +76,9 @@ const FeedView = lazy(() => import('./FeedView').then((m) => ({ default: m.FeedV
 const AgentFeedView = lazy(() =>
   import('./AgentFeedView').then((m) => ({ default: m.AgentFeedView })),
 );
+const AgentSocialView = lazy(() =>
+  import('./AgentSocialView').then((m) => ({ default: m.AgentSocialView })),
+);
 const PreviewView = lazy(() => import('./PreviewView').then((m) => ({ default: m.PreviewView })));
 const SpendView = lazy(() => import('./SpendView').then((m) => ({ default: m.SpendView })));
 const BriefingView = lazy(() =>
@@ -856,6 +859,11 @@ function MainApp({
                   {view === 'agent-feed' && (
                     <ViewErrorBoundary viewName="Agent Feed">
                       <AgentFeedView />
+                    </ViewErrorBoundary>
+                  )}
+                  {view === 'agent-social' && (
+                    <ViewErrorBoundary viewName="Agent Social">
+                      <AgentSocialView />
                     </ViewErrorBoundary>
                   )}
                   {view === 'preview' && (
