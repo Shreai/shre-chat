@@ -1690,6 +1690,13 @@ async function requestHandler(req, res) {
     }
   }
 
+  // ── Embedded app proxy prefixes ────────────────────────────────
+  // Paths under these prefixes are forwarded to upstream apps (storepulse, city,
+  // cortexdb-ui, etc.). Shared by security-header relaxation, CSRF exemption,
+  // and the proxy dispatch below.
+  const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui", "/storepulse", "/storepulse-hq", "/app-marketplace", "/city"];
+  const isEmbedPath = EMBED_PREFIXES.some(p => url.pathname === p || url.pathname.startsWith(p + "/"));
+
   // ── Security headers middleware ────────────────────────────────
   // Wrap writeHead to inject security headers on every response
   // and add CSP only on HTML responses (not API/JSON).
@@ -1703,8 +1710,7 @@ async function requestHandler(req, res) {
     let reason = typeof reasonOrHeaders === "string" ? reasonOrHeaders : undefined;
 
     // Apply security headers to all responses (skip frame restrictions for embedded app proxies)
-    const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui", "/storepulse", "/storepulse-hq", "/app-marketplace", "/city"];
-    const isEmbedProxy = EMBED_PREFIXES.some(p => url.pathname.startsWith(p));
+    const isEmbedProxy = isEmbedPath;
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
       if (isEmbedProxy && k === "X-Frame-Options") continue;
       res.setHeader(k, v);
@@ -1757,8 +1763,7 @@ async function requestHandler(req, res) {
       || url.pathname.startsWith("/api/oauth/")
       || url.pathname.startsWith("/api/cli/")
       || url.pathname.startsWith("/v1/")
-      || url.pathname.startsWith("/storepulse/") || url.pathname === "/storepulse"
-      || url.pathname.startsWith("/storepulse-hq/") || url.pathname === "/storepulse-hq"
+      || isEmbedPath  // Embedded apps (storepulse, city, marketplace, etc.) enforce their own CSRF
       || req.headers["authorization"]?.startsWith("Bearer ")
       || req.headers["x-channel"] === "cli";
     if (!csrfExempt) {

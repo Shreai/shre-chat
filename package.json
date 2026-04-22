@@ -1,6 +1,6 @@
 {
   "name": "shre-chat",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "private": true,
   "description": "AROS — AI-powered retail chat assistant",
   "main": "electron/dist/main.cjs",
