@@ -70,12 +70,20 @@ Browser ──► serve.js (port 5510) ──► shre-router (port 5497) ──�
 | `npm run serve` | Start production server (port 5510) |
 | `npm run preview` | Vite preview (port 5510) |
 | `npm run build:app` | Build Electron desktop app |
+| `npm test` | Vitest unit tests (302 tests, includes component tests via @testing-library/react) |
+| `npm run lint` | ESLint on `src/` (uses root `eslint.config.mjs`) |
+| `npm run lint:fix` | ESLint auto-fix |
+| `npm run format` | Prettier write `src/**/*.{ts,tsx,json,md}` |
+| `npm run format:check` | Prettier check without writing |
 | `npm run test:e2e` | Run all Playwright E2E tests |
 | `npm run qa` | Full QA: run tests + create bug tasks |
 | `npm run qa:agent -- chat-core` | Run single test agent |
 | `npm run qa:rerun` | Re-run only failed tests |
 | `npm run qa:dry` | Test run without creating tasks |
 | `npm run test:android` | Run tests on connected Android device |
+
+Pre-commit runs `lint-staged` via husky: ESLint --fix + Prettier --write
+on staged `src/**/*.{ts,tsx,json,md,yml,yaml}` files.
 
 ## Testing
 

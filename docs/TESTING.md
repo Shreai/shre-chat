@@ -2,12 +2,28 @@
 
 ## Overview
 
-Shre Chat uses a multi-agent Playwright E2E test architecture with 16 specialized test agents, a QA orchestrator that auto-creates bug tasks, and support for real Android device testing.
+Shre Chat has three test layers:
+
+1. **Unit tests (Vitest + @testing-library/react)** — 302 tests across
+   `src/__tests__/`. Fast (~1s), covers store, router-client, serve.js
+   routes, WebSocket, voice context, and a growing set of React
+   components (ErrorBoundary, InstallBanner, ViewErrorBoundary to date).
+2. **E2E tests (Playwright)** — 16 parallel test agents, each covering
+   a distinct UI domain. Auto-creates bug tasks via QA orchestrator.
+3. **Accessibility** — `e2e/accessibility.spec.ts` runs
+   `@axe-core/playwright` WCAG 2.1 A/AA scans on chat view + sidebar,
+   plus 13 hand-rolled a11y checks (labels, focus, console errors).
 
 ## Quick Start
 
 ```bash
-# Ensure shre-chat is running
+# Unit tests — fast, no services needed
+npm test
+
+# Specific component
+npm test -- src/__tests__/ErrorBoundary.test.tsx
+
+# E2E: ensure shre-chat is running
 npm run serve &
 
 # Smoke test (30 seconds)
@@ -20,10 +36,33 @@ npm run qa
 npm run test:android
 ```
 
+## Unit Test Authoring
+
+- Node env (default): server/route/utility tests use `src/__tests__/*.test.ts`.
+- jsdom env: component tests use `.test.tsx` with `// @vitest-environment jsdom`
+  as the first line (opt-in per file).
+- `@testing-library/jest-dom` matchers are wired via `setupFiles`.
+
+```ts
+// @vitest-environment jsdom
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { MyComponent } from '../components/MyComponent';
+
+describe('MyComponent', () => {
+  it('renders', () => {
+    render(<MyComponent />);
+    expect(screen.getByText(/hello/)).toBeInTheDocument();
+  });
+});
+```
+
 ## Test Commands
 
 | Command | Description | Duration |
 |---------|-------------|----------|
+| `npm test` | Vitest unit + component tests (jsdom per-file) | ~1 s |
+| `npm test -- <file>` | Single test file | <1 s |
 | `npm run test:e2e` | Raw Playwright run (all projects) | ~8 min |
 | `npm run qa` | Full QA + bug task creation in shre-tasks | ~8 min |
 | `npm run qa:agent -- <name>` | Single agent (e.g., `smoke`, `chat-core`) | 5-60s |
@@ -41,7 +80,7 @@ npm run test:android
 | Agent 3 (api-health) | api-health.spec.ts | 20 | Endpoint availability, security headers |
 | Agent 4 (ecosystem) | ecosystem.spec.ts | 11 | App drawer, integrations |
 | Agent 5 (sidebar) | sidebar.spec.ts | 9 | Sessions, search, bookmarks |
-| Agent 6 (accessibility) | accessibility.spec.ts | 13 | A11y labels, WCAG, touch targets |
+| Agent 6 (accessibility) | accessibility.spec.ts | 15 | axe-core WCAG 2.1 A/AA scans (chat + sidebar), A11y labels, focus, touch targets |
 | Agent 7 (preview) | preview.spec.ts | 13 | File rendering (HTML, CSV, JSON, PDF) |
 | Agent 8 (responsive) | responsive.spec.ts | 6 | Viewport layouts, touch targets |
 | Agent 9 (data-integration) | data-integration.spec.ts | 10 | POS/RapidRMS integration |
