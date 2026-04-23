@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 test.describe('Agent 6: Accessibility & Edge Cases', () => {
   test.setTimeout(60_000);
@@ -6,6 +7,60 @@ test.describe('Agent 6: Accessibility & Edge Cases', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#shre-chat-textarea:not([disabled])', { timeout: 30_000 });
+  });
+
+  // ═══════════ axe-core scans ═══════════
+  // WCAG 2.1 A/AA compliance baseline. Disables color-contrast because the
+  // theme is intentionally high-contrast dark and axe's static analysis
+  // mis-flags CSS variables it can't resolve. Re-enable after a design audit.
+  test('chat view — no critical or serious axe violations', async ({ page }) => {
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa'])
+      .disableRules(['color-contrast'])
+      .analyze();
+
+    const critical = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious',
+    );
+    if (critical.length > 0) {
+      console.log('axe violations:');
+      for (const v of critical) {
+        console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node${v.nodes.length !== 1 ? 's' : ''})`);
+      }
+    }
+    expect(critical).toHaveLength(0);
+  });
+
+  test('sidebar — no critical or serious axe violations when open', async ({ page }) => {
+    // Open the sidebar if it's not already visible. The hamburger button
+    // lives in the status bar; some widths auto-open it so a toggle would
+    // close it. Click only if .sidebar-panel is not visible.
+    const sidebar = page.locator('.sidebar-panel, [data-testid="sidebar"]').first();
+    if (!(await sidebar.isVisible().catch(() => false))) {
+      const hamburger = page
+        .locator('button[aria-label*="sidebar" i], button[aria-label*="menu" i]')
+        .first();
+      if (await hamburger.isVisible().catch(() => false)) {
+        await hamburger.click();
+        await page.waitForTimeout(300);
+      }
+    }
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa'])
+      .disableRules(['color-contrast'])
+      .analyze();
+
+    const critical = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious',
+    );
+    if (critical.length > 0) {
+      console.log('axe violations (sidebar open):');
+      for (const v of critical) {
+        console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node${v.nodes.length !== 1 ? 's' : ''})`);
+      }
+    }
+    expect(critical).toHaveLength(0);
   });
 
   // ═══════════ Accessibility ═══════════
