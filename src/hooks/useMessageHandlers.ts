@@ -1256,12 +1256,16 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             });
           }
           const toolLabel = event.tool.replace(/^(mib_|aros_)/, '').replace(/_/g, ' ');
-          const inputPreview = event.input?.command
-            ? `: \`${String(event.input.command).slice(0, 60)}\``
-            : event.input?.path
-              ? `: ${String(event.input.path).slice(0, 60)}`
-              : event.input?.query
-                ? `: ${String(event.input.query).slice(0, 60)}`
+          const input =
+            event.input && typeof event.input === 'object'
+              ? (event.input as Record<string, unknown>)
+              : {};
+          const inputPreview = input.command
+            ? `: \`${String(input.command).slice(0, 60)}\``
+            : input.path
+              ? `: ${String(input.path).slice(0, 60)}`
+              : input.query
+                ? `: ${String(input.query).slice(0, 60)}`
                 : '';
           actions.addMessage(sessionId, {
             role: 'assistant',

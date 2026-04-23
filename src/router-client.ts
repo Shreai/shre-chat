@@ -159,6 +159,50 @@ export interface SyncResult {
   hasMore?: boolean;
 }
 
+// Shape of /api/sessions/:agent/:key and /api/feed responses from serve.js.
+// Matches the subset we consume — unknown extra fields are preserved via `unknown`.
+interface SessionMessageApi {
+  // Widened from ChatMessage role — the API can also return 'system' messages.
+  // Consumers (fetchSessionMessages, fetchFeed) pass them through as-is for
+  // back-compat; callers filter to user|assistant when building ChatMessage[].
+  role: ChatMessage['role'] | 'system';
+  content: string;
+  timestamp?: number;
+  model?: string;
+  provider?: string;
+}
+
+interface SessionMessagesApiResponse {
+  messages?: SessionMessageApi[];
+  updatedAt?: string;
+  totalEvents?: number;
+  totalMessages?: number;
+  hasMore?: boolean;
+}
+
+interface FeedEntryApi extends SessionMessageApi {
+  agentId: string;
+  sessionKey: string;
+}
+
+interface FeedApiResponse {
+  entries?: FeedEntryApi[];
+}
+
+interface AppApi {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  activated?: boolean;
+  skillCount?: number;
+}
+
+interface AppsApiResponse {
+  apps?: AppApi[];
+}
+
 /**
  * List sessions for an agent from session files.
  */
@@ -187,16 +231,19 @@ export async function fetchSessionMessages(
     const url = `/api/sessions/${encodeURIComponent(agentId)}/${encodeURIComponent(sessionKey)}${sinceTs ? `?since=${sinceTs}` : ''}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return { messages: [], updatedAt: '', totalEvents: 0 };
-    const data = await res.json();
+    const data: SessionMessagesApiResponse = await res.json();
     return {
-      messages: data.messages.map((m: any) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-        model: m.model,
-        provider: m.provider,
-        fromRouter: true,
-      })),
+      messages: (data.messages ?? []).map(
+        (m) =>
+          ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+            model: m.model,
+            provider: m.provider,
+            fromRouter: true,
+          }) as ChatMessage,
+      ),
       updatedAt: data.updatedAt || '',
       totalEvents: data.totalEvents || 0,
     };
@@ -220,9 +267,9 @@ export async function fetchSessionMessagesPage(
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!res.ok)
       return { messages: [], updatedAt: '', totalEvents: 0, totalMessages: 0, hasMore: false };
-    const data = await res.json();
+    const data: SessionMessagesApiResponse = await res.json();
     return {
-      messages: data.messages.map((m: any) => ({
+      messages: (data.messages ?? []).map((m) => ({
         role: m.role,
         content: m.content,
         timestamp: m.timestamp,
@@ -234,7 +281,7 @@ export async function fetchSessionMessagesPage(
       totalEvents: data.totalEvents || 0,
       totalMessages: data.totalMessages || 0,
       hasMore: data.hasMore || false,
-    };
+    } as SyncResult;
   } catch {
     return { messages: [], updatedAt: '', totalEvents: 0, totalMessages: 0, hasMore: false };
   }
@@ -324,17 +371,20 @@ export async function fetchFeed(
   try {
     const res = await fetch(`/api/feed?since=${sinceTs}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return [];
-    const data = await res.json();
-    return data.entries.map((e: any) => ({
-      role: e.role,
-      content: e.content,
-      timestamp: e.timestamp,
-      model: e.model,
-      provider: e.provider,
-      agentId: e.agentId,
-      sessionKey: e.sessionKey,
-      fromRouter: true,
-    }));
+    const data: FeedApiResponse = await res.json();
+    return (data.entries ?? []).map(
+      (e) =>
+        ({
+          role: e.role,
+          content: e.content,
+          timestamp: e.timestamp,
+          model: e.model,
+          provider: e.provider,
+          agentId: e.agentId,
+          sessionKey: e.sessionKey,
+          fromRouter: true,
+        }) as ChatMessage & { agentId: string; sessionKey: string },
+    );
   } catch {
     return [];
   }
@@ -463,8 +513,8 @@ export async function fetchAvailableApps(): Promise<RouterApp[]> {
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return [];
-    const data = await res.json();
-    return (data.apps || []).map((a: any) => ({
+    const data: AppsApiResponse = await res.json();
+    return (data.apps ?? []).map((a) => ({
       id: a.id,
       name: a.name,
       description: a.description || '',
@@ -491,17 +541,21 @@ export type ActivityStatus =
   | 'warning'
   | 'error';
 
+// Tool call payloads are tool-specific JSON; the shape is known to the tool
+// that produced it but opaque here. Use `unknown` so consumers must narrow.
+export type ToolPayload = unknown;
+
 export interface ToolResult {
   tool: string;
-  input: any;
-  output: any;
+  input: ToolPayload;
+  output: ToolPayload;
   status: 'success' | 'error';
   duration_ms?: number;
 }
 
 export interface ToolStartEvent {
   tool: string;
-  input: any;
+  input: ToolPayload;
   iteration: number;
 }
 
@@ -527,7 +581,7 @@ export interface StreamCallbacks {
   onApprovalRequired?: (approval: {
     approvalId: string;
     tool: string;
-    input: any;
+    input: ToolPayload;
     reason: string;
   }) => void;
   onToolResult?: (result: ToolResult) => void;

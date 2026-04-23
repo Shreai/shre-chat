@@ -157,7 +157,10 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     const isAndroid = /Android/i.test(navigator.userAgent);
     const SpeechRec = isAndroid
       ? null
-      : window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+      : window.SpeechRecognition ||
+        ((window as Window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition as
+          | { new (): SpeechRecognition }
+          | undefined);
 
     // Haptic feedback
     if (navigator.vibrate) navigator.vibrate(50);
@@ -177,13 +180,14 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       let stream: MediaStream;
       try {
         stream = await getOrRequestStream();
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e = err as { name?: string; message?: string };
         const msg =
-          err?.name === 'NotAllowedError'
+          e.name === 'NotAllowedError'
             ? "Microphone blocked — tap the lock icon in your browser's address bar to allow mic access, then try again."
-            : err?.name === 'NotFoundError'
+            : e.name === 'NotFoundError'
               ? 'No microphone found. Please connect a microphone and try again.'
-              : 'Microphone error: ' + (err?.message || 'unknown');
+              : 'Microphone error: ' + (e.message || 'unknown');
         setInterimTranscript(msg);
         clearInterimAfter(4000);
         setIsRecording(false);
@@ -194,7 +198,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
 
       // Audio level analyser
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioCtx =
+          window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
         const source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
@@ -260,7 +266,9 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       mediaRecorderRef.current = recorder;
 
       if (SpeechRec) {
-        const rec = new SpeechRec();
+        const rec = new SpeechRec() as SpeechRecognition & {
+          onstart: (() => void) | null;
+        };
         rec.continuous = true;
         rec.interimResults = true;
         rec.lang = getSpeechLocale();
@@ -296,7 +304,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
           const live = (voiceFinalTranscriptRef.current + interim).trim();
           setInput(live);
         };
-        rec.onerror = (e: any) => {
+        rec.onerror = (e: Event & { error?: string }) => {
           // Show user that browser speech failed but Whisper is still capturing
           const errType = e?.error || 'unknown';
           if (errType === 'no-speech' || errType === 'network' || errType === 'audio-capture') {
@@ -438,11 +446,16 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       setInterimTranscript('');
     }
 
+    // Release the cached MediaStream when not in hands-free mode to turn off hardware indicator
+    if (!voiceMode) {
+      releaseCachedStream();
+    }
+
     // Auto-send: if we have text after recording, send it automatically
     if (currentText) {
       setVoicePendingSend(currentText);
     }
-  }, [cleanupAudioLevel]);
+  }, [cleanupAudioLevel, voiceMode]);
 
   // Keep ref in sync
   stopRecordingRef.current = stopRecording;
@@ -516,7 +529,11 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       }
       return;
     }
-    const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRec =
+      window.SpeechRecognition ||
+      ((window as Window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition as
+        | typeof window.SpeechRecognition
+        | undefined);
     if (!SpeechRec) {
       // iOS Safari doesn't support SpeechRecognition — use silence-based auto-listen instead.
       // Start recording immediately when hands-free is enabled (user taps to talk, silence auto-stops).
@@ -528,7 +545,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     function startWakeListener() {
       if (!active) return;
       if (recognitionRef.current || mediaRecorderRef.current) return;
-      const w = new SpeechRec() as SpeechRecognition;
+      const w = new SpeechRec!() as SpeechRecognition;
       w.continuous = false;
       w.interimResults = true;
       w.lang = getSpeechLocale();
@@ -679,7 +696,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
   }, [voicePendingSend, voiceMode]);
 
   useEffect(() => {
-    (window as any).isSpeaking = isSpeaking;
+    (window as Window & { isSpeaking?: boolean }).isSpeaking = isSpeaking;
   }, [isSpeaking]);
 
   return {
