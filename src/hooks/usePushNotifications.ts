@@ -14,6 +14,21 @@ export function usePushNotifications() {
   const [loading, setLoading] = useState(false);
   const subscribedRef = useRef(false);
 
+  const registerWithServer = useCallback(async (subscription: PushSubscription) => {
+    try {
+      const res = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      if (!res.ok) {
+        console.warn('[push] Server registration failed:', res.status);
+      }
+    } catch (err) {
+      console.warn('[push] Server registration error:', err);
+    }
+  }, []);
+
   // Check support & current state on mount
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -36,22 +51,7 @@ export function usePushNotifications() {
         }
       });
     });
-  }, []);
-
-  const registerWithServer = useCallback(async (subscription: PushSubscription) => {
-    try {
-      const res = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription: subscription.toJSON() }),
-      });
-      if (!res.ok) {
-        console.warn('[push] Server registration failed:', res.status);
-      }
-    } catch (err) {
-      console.warn('[push] Server registration error:', err);
-    }
-  }, []);
+  }, [registerWithServer]);
 
   const subscribe = useCallback(async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -84,7 +84,7 @@ export function usePushNotifications() {
       setState('subscribed');
       subscribedRef.current = true;
       return true;
-    } catch (err: any) {
+    } catch (err) {
       if (Notification.permission === 'denied') {
         setState('denied');
       } else {

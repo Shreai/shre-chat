@@ -84,53 +84,9 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
   // Cleanup on unmount
   useEffect(() => cleanup, [cleanup]);
 
-  const startRealtime = useCallback(async (persona = 'shre') => {
-    try {
-      setState('connecting');
-
-      // 1. Request voice session from shre-router
-      const res = await fetch(`${ROUTER_BASE}/v1/voice/session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(err.error || `Voice session failed: ${res.status}`);
-      }
-
-      const session = await res.json();
-      setProvider(session.provider);
-      setLatency(session.latencyEstimate || '');
-      // Explicit pickup signal — surface which provider answered so the UI
-      // can show "Ready — speak now" instead of a silent connecting → listening
-      // transition that looks like the agent never picked up.
-      setAiTranscript(
-        session.provider === 'platform'
-          ? 'Ready — speak now (platform, ~1–2s per turn)'
-          : `Ready — speak now (${session.provider})`,
-      );
-
-      if (session.provider === 'personaplex' && session.websocketUrl) {
-        // PersonaPlex: direct WebSocket full-duplex (Shadow PC)
-        await connectPersonaPlex(session.websocketUrl);
-      } else if (session.client_secret?.value) {
-        // OpenAI Realtime: WebRTC with ephemeral token
-        await connectOpenAIRealtime(session.client_secret.value);
-      } else if (session.provider === 'platform') {
-        // Platform-routed fallback: STT → shre-router /v1/chat → TTS
-        await connectPlatformFallback(persona);
-      } else {
-        throw new Error('No valid voice session returned');
-      }
-    } catch (error: any) {
-      console.error('[RealtimeVoice] Start failed:', error);
-      setAiTranscript(`Call failed to start: ${error?.message || 'unknown error'}`);
-      setState('error');
-      setTimeout(() => setState('idle'), 3000);
-    }
-  }, []);
+  const stopRealtime = useCallback(() => {
+    cleanup();
+  }, [cleanup]);
 
   /** Play queued audio chunks sequentially (prevents overlapping playback) */
   const playNextInQueue = useCallback(() => {
@@ -168,238 +124,91 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
   }, []);
 
   /** Connect to PersonaPlex via WebSocket (full-duplex, 70ms) */
-  const connectPersonaPlex = async (wsUrl: string) => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
+  const connectPersonaPlex = useCallback(
+    async (wsUrl: string) => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      setState('listening');
-      console.log('[RealtimeVoice] Connected to PersonaPlex');
+      ws.onopen = () => {
+        setState('listening');
+        console.log('[RealtimeVoice] Connected to PersonaPlex');
 
-      // Set up audio capture → send PCM to PersonaPlex
-      const audioCtx = new AudioContext({ sampleRate: 16000 });
-      audioCtxPPRef.current = audioCtx;
-      const source = audioCtx.createMediaStreamSource(stream);
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        // Set up audio capture → send PCM to PersonaPlex
+        const AudioCtx =
+          window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const audioCtx = new AudioCtx({ sampleRate: 16000 });
+        audioCtxPPRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
 
-      processor.onaudioprocess = (e) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          const pcmData = e.inputBuffer.getChannelData(0);
-          const int16 = new Int16Array(pcmData.length);
-          for (let i = 0; i < pcmData.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, pcmData[i] * 32768));
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            const pcmData = e.inputBuffer.getChannelData(0);
+            const int16 = new Int16Array(pcmData.length);
+            for (let i = 0; i < pcmData.length; i++) {
+              int16[i] = Math.max(-32768, Math.min(32767, pcmData[i] * 32768));
+            }
+            ws.send(int16.buffer);
           }
-          ws.send(int16.buffer);
+        };
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+      };
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+          // Audio data from PersonaPlex — queue and play sequentially
+          const audioBlob =
+            event.data instanceof Blob ? event.data : new Blob([event.data], { type: 'audio/pcm' });
+          audioQueueRef.current.push(audioBlob);
+          playNextInQueue();
+        } else {
+          // JSON events (transcripts, status, end-of-turn)
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'transcript' && msg.speaker === 'user') {
+              setTranscript(msg.text);
+            }
+            if (msg.type === 'transcript' && msg.speaker === 'agent') {
+              setAiTranscript(msg.text);
+            }
+            // end_of_turn: agent finished speaking, clear queue marker
+            if (msg.type === 'end_of_turn' || msg.type === 'response_end') {
+              // Audio chunks may still be in queue — playNextInQueue handles drain
+            }
+            // barge_in: user started speaking while agent was talking
+            if (msg.type === 'barge_in' || msg.type === 'speech_started') {
+              audioQueueRef.current = []; // Clear pending audio
+              isPlayingRef.current = false;
+              setState('listening');
+            }
+          } catch {
+            /* binary data */
+          }
         }
       };
 
-      source.connect(processor);
-      processor.connect(audioCtx.destination);
-    };
-
-    ws.onmessage = (event) => {
-      if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
-        // Audio data from PersonaPlex — queue and play sequentially
-        const audioBlob =
-          event.data instanceof Blob ? event.data : new Blob([event.data], { type: 'audio/pcm' });
-        audioQueueRef.current.push(audioBlob);
-        playNextInQueue();
-      } else {
-        // JSON events (transcripts, status, end-of-turn)
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'transcript' && msg.speaker === 'user') {
-            setTranscript(msg.text);
-          }
-          if (msg.type === 'transcript' && msg.speaker === 'agent') {
-            setAiTranscript(msg.text);
-          }
-          // end_of_turn: agent finished speaking, clear queue marker
-          if (msg.type === 'end_of_turn' || msg.type === 'response_end') {
-            // Audio chunks may still be in queue — playNextInQueue handles drain
-          }
-          // barge_in: user started speaking while agent was talking
-          if (msg.type === 'barge_in' || msg.type === 'speech_started') {
-            audioQueueRef.current = []; // Clear pending audio
-            isPlayingRef.current = false;
-            setState('listening');
-          }
-        } catch {
-          /* binary data */
-        }
-      }
-    };
-
-    ws.onerror = () => {
-      console.error('[RealtimeVoice] PersonaPlex WebSocket error');
-      setState('error');
-      setTimeout(() => cleanup(), 2000);
-    };
-
-    ws.onclose = (e) => {
-      console.log('[RealtimeVoice] PersonaPlex WebSocket closed', e.code, e.reason);
-      cleanup();
-    };
-  };
-
-  /** Platform-routed fallback: record → STT → /v1/chat (tools) → TTS → play */
-  const platformRecordingRef = useRef(false);
-  const platformMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const platformChunksRef = useRef<Blob[]>([]);
-
-  const connectPlatformFallback = async (persona: string) => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    setProvider('platform');
-    setLatency('~1-2s');
-    setState('listening');
-
-    platformRecordingRef.current = true;
-
-    const startPlatformListening = () => {
-      if (!platformRecordingRef.current) return;
-      platformChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
-      const mr = new MediaRecorder(stream, { mimeType });
-      platformMediaRecorderRef.current = mr;
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) platformChunksRef.current.push(e.data);
+      ws.onerror = () => {
+        console.error('[RealtimeVoice] PersonaPlex WebSocket error');
+        setState('error');
+        setTimeout(() => cleanup(), 2000);
       };
-      mr.start(250);
-      setState('listening');
 
-      // Silence detection via AudioContext
-      const audioCtx = new AudioContext();
-      audioCtxPPRef.current = audioCtx;
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      source.connect(analyser);
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-      let silenceStart = 0;
-      const SILENCE_THRESHOLD = 10;
-      const SILENCE_TIMEOUT = 2000;
-      let speechDetected = false;
-
-      const checkSilence = () => {
-        if (!platformRecordingRef.current) return;
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-
-        if (avg > SILENCE_THRESHOLD) {
-          speechDetected = true;
-          silenceStart = 0;
-        } else if (speechDetected) {
-          if (!silenceStart) silenceStart = Date.now();
-          if (Date.now() - silenceStart > SILENCE_TIMEOUT) {
-            // Silence detected after speech — stop recording and process
-            mr.stop();
-            audioCtx.close().catch(() => {});
-            audioCtxPPRef.current = null;
-            return; // Don't continue the loop
-          }
-        }
-        requestAnimationFrame(checkSilence);
+      ws.onclose = (e) => {
+        console.log('[RealtimeVoice] PersonaPlex WebSocket closed', e.code, e.reason);
+        cleanup();
       };
-      requestAnimationFrame(checkSilence);
-
-      mr.onstop = async () => {
-        if (platformChunksRef.current.length === 0) {
-          // No audio captured — restart listening
-          if (platformRecordingRef.current) startPlatformListening();
-          return;
-        }
-
-        const audioBlob = new Blob(platformChunksRef.current, { type: mr.mimeType });
-        platformChunksRef.current = [];
-
-        if (audioBlob.size < 3000) {
-          // Too short — restart listening
-          if (platformRecordingRef.current) startPlatformListening();
-          return;
-        }
-
-        setState('speaking');
-        setTranscript('Processing...');
-
-        try {
-          // Convert audio blob to base64 for /v1/voice/converse JSON API
-          const arrayBuf = await audioBlob.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuf);
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-          const audioBase64 = btoa(binary);
-
-          const res = await fetch(`${ROUTER_BASE}/v1/voice/converse`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audio: audioBase64, persona }),
-          });
-
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: 'Unknown' }));
-            const stage = err.stage ? `[${err.stage}] ` : '';
-            setAiTranscript(`${stage}${err.error || res.status}`);
-            setState('listening');
-            if (platformRecordingRef.current) startPlatformListening();
-            return;
-          }
-
-          // Response is always JSON: { text, transcript, audio (base64), stage?, ttsError? ... }
-          const data = await res.json();
-          if (data.transcript) setTranscript(data.transcript);
-          if (data.spokenText || data.text) setAiTranscript(data.spokenText || data.text);
-          if (data.ttsError) {
-            // TTS failed but text came through — show text, mark absence of audio
-            console.warn('[RealtimeVoice] TTS error:', data.ttsError);
-          }
-
-          if (data.audio) {
-            // Decode base64 audio and play it
-            const binaryStr = atob(data.audio);
-            const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-            const audioResBlob = new Blob([bytes], { type: 'audio/mp3' });
-
-            audioQueueRef.current.push(audioResBlob);
-            playNextInQueue();
-
-            // Wait for audio to finish, then auto-listen
-            const waitForDrain = () => {
-              if (audioQueueRef.current.length === 0 && !isPlayingRef.current) {
-                if (platformRecordingRef.current) startPlatformListening();
-              } else {
-                setTimeout(waitForDrain, 200);
-              }
-            };
-            setTimeout(waitForDrain, 500);
-          } else {
-            // No audio — show text only, return to listening
-            setState('listening');
-            if (platformRecordingRef.current) startPlatformListening();
-          }
-        } catch (err) {
-          console.error('[RealtimeVoice] Platform fallback error:', err);
-          setAiTranscript('Connection error. Retrying...');
-          setState('listening');
-          if (platformRecordingRef.current) {
-            setTimeout(startPlatformListening, 1000);
-          }
-        }
-      };
-    };
-
-    startPlatformListening();
-  };
+    },
+    [cleanup, playNextInQueue],
+  );
 
   /** Connect to OpenAI Realtime via WebRTC (fallback, ~300ms) */
-  const connectOpenAIRealtime = async (ephemeralKey: string) => {
+  const connectOpenAIRealtime = useCallback(async (ephemeralKey: string) => {
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
 
@@ -469,11 +278,218 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
       type: 'answer',
       sdp: await sdpRes.text(),
     });
-  };
+  }, []);
 
-  const stopRealtime = useCallback(() => {
-    cleanup();
-  }, [cleanup]);
+  /** Platform-routed fallback: record → STT → /v1/chat (tools) → TTS → play */
+  const platformRecordingRef = useRef(false);
+  const platformMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const platformChunksRef = useRef<Blob[]>([]);
+
+  const connectPlatformFallback = useCallback(
+    async (persona: string) => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      setProvider('platform');
+      setLatency('~1-2s');
+      setState('listening');
+
+      platformRecordingRef.current = true;
+
+      const startPlatformListening = () => {
+        if (!platformRecordingRef.current) return;
+        platformChunksRef.current = [];
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm';
+        const mr = new MediaRecorder(stream, { mimeType });
+        platformMediaRecorderRef.current = mr;
+        mr.ondataavailable = (e) => {
+          if (e.data.size > 0) platformChunksRef.current.push(e.data);
+        };
+        mr.start(250);
+        setState('listening');
+
+        // Silence detection via AudioContext
+        const AudioCtx =
+          window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        audioCtxPPRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        let silenceStart = 0;
+        const SILENCE_THRESHOLD = 10;
+        const SILENCE_TIMEOUT = 2000;
+        let speechDetected = false;
+
+        const checkSilence = () => {
+          if (!platformRecordingRef.current) return;
+          analyser.getByteFrequencyData(dataArray);
+          const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+
+          if (avg > SILENCE_THRESHOLD) {
+            speechDetected = true;
+            silenceStart = 0;
+          } else if (speechDetected) {
+            if (!silenceStart) silenceStart = Date.now();
+            if (Date.now() - silenceStart > SILENCE_TIMEOUT) {
+              // Silence detected after speech — stop recording and process
+              mr.stop();
+              audioCtx.close().catch(() => {});
+              audioCtxPPRef.current = null;
+              return; // Don't continue the loop
+            }
+          }
+          requestAnimationFrame(checkSilence);
+        };
+        requestAnimationFrame(checkSilence);
+
+        mr.onstop = async () => {
+          if (platformChunksRef.current.length === 0) {
+            // No audio captured — restart listening
+            if (platformRecordingRef.current) startPlatformListening();
+            return;
+          }
+
+          const audioBlob = new Blob(platformChunksRef.current, { type: mr.mimeType });
+          platformChunksRef.current = [];
+
+          if (audioBlob.size < 3000) {
+            // Too short — restart listening
+            if (platformRecordingRef.current) startPlatformListening();
+            return;
+          }
+
+          setState('speaking');
+          setTranscript('Processing...');
+
+          try {
+            // Convert audio blob to base64 for /v1/voice/converse JSON API
+            const arrayBuf = await audioBlob.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuf);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            const audioBase64 = btoa(binary);
+
+            const res = await fetch(`${ROUTER_BASE}/v1/voice/converse`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audio: audioBase64, persona }),
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ error: 'Unknown' }));
+              const stage = err.stage ? `[${err.stage}] ` : '';
+              setAiTranscript(`${stage}${err.error || res.status}`);
+              setState('listening');
+              if (platformRecordingRef.current) startPlatformListening();
+              return;
+            }
+
+            // Response is always JSON: { text, transcript, audio (base64), stage?, ttsError? ... }
+            const data = await res.json();
+            if (data.transcript) setTranscript(data.transcript);
+            if (data.spokenText || data.text) setAiTranscript(data.spokenText || data.text);
+            if (data.ttsError) {
+              // TTS failed but text came through — show text, mark absence of audio
+              console.warn('[RealtimeVoice] TTS error:', data.ttsError);
+            }
+
+            if (data.audio) {
+              // Decode base64 audio and play it
+              const binaryStr = atob(data.audio);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+              const audioResBlob = new Blob([bytes], { type: 'audio/mp3' });
+
+              audioQueueRef.current.push(audioResBlob);
+              playNextInQueue();
+
+              // Wait for audio to finish, then auto-listen
+              const waitForDrain = () => {
+                if (audioQueueRef.current.length === 0 && !isPlayingRef.current) {
+                  if (platformRecordingRef.current) startPlatformListening();
+                } else {
+                  setTimeout(waitForDrain, 200);
+                }
+              };
+              setTimeout(waitForDrain, 500);
+            } else {
+              // No audio — show text only, return to listening
+              setState('listening');
+              if (platformRecordingRef.current) startPlatformListening();
+            }
+          } catch (err) {
+            console.error('[RealtimeVoice] Platform fallback error:', err);
+            setAiTranscript('Connection error. Retrying...');
+            setState('listening');
+            if (platformRecordingRef.current) {
+              setTimeout(startPlatformListening, 1000);
+            }
+          }
+        };
+      };
+
+      startPlatformListening();
+    },
+    [playNextInQueue],
+  );
+
+  const startRealtime = useCallback(
+    async (persona = 'shre') => {
+      try {
+        setState('connecting');
+
+        // 1. Request voice session from shre-router
+        const res = await fetch(`${ROUTER_BASE}/v1/voice/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ persona }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(err.error || `Voice session failed: ${res.status}`);
+        }
+
+        const session = await res.json();
+        setProvider(session.provider);
+        setLatency(session.latencyEstimate || '');
+        // Explicit pickup signal — surface which provider answered so the UI
+        // can show "Ready — speak now" instead of a silent connecting → listening
+        // transition that looks like the agent never picked up.
+        setAiTranscript(
+          session.provider === 'platform'
+            ? 'Ready — speak now (platform, ~1–2s per turn)'
+            : `Ready — speak now (${session.provider})`,
+        );
+
+        if (session.provider === 'personaplex' && session.websocketUrl) {
+          // PersonaPlex: direct WebSocket full-duplex (Shadow PC)
+          await connectPersonaPlex(session.websocketUrl);
+        } else if (session.client_secret?.value) {
+          // OpenAI Realtime: WebRTC with ephemeral token
+          await connectOpenAIRealtime(session.client_secret.value);
+        } else if (session.provider === 'platform') {
+          // Platform-routed fallback: STT → shre-router /v1/chat → TTS
+          await connectPlatformFallback(persona);
+        } else {
+          throw new Error('No valid voice session returned');
+        }
+      } catch (error: unknown) {
+        console.error('[RealtimeVoice] Start failed:', error);
+        const msg = error instanceof Error ? error.message : 'unknown error';
+        setAiTranscript(`Call failed to start: ${msg}`);
+        setState('error');
+        setTimeout(() => setState('idle'), 3000);
+      }
+    },
+    [connectPersonaPlex, connectOpenAIRealtime, connectPlatformFallback],
+  );
 
   return {
     state,

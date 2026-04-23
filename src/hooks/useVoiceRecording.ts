@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { playVoiceCue, MAX_RECORDING_SECONDS } from '../chat-utils';
 import { usePreferences, type TTSProvider } from '../preferences-store';
 
 export interface UseVoiceRecordingReturn {
@@ -50,6 +49,9 @@ export interface UseVoiceRecordingReturn {
   // Helpers
   clearInterimAfter: (ms: number) => void;
   cleanupAudioLevel: () => void;
+  releaseCachedStream: () => void;
+  micToast: boolean;
+  setMicToast: (v: boolean) => void;
 }
 
 // Module-level cached MediaStream to avoid repeated permission prompts on mobile
@@ -72,10 +74,10 @@ export async function getOrRequestStream(): Promise<MediaStream> {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-  } catch (constraintErr: any) {
+  } catch (constraintErr: unknown) {
     if (
-      constraintErr?.name === 'OverconstrainedError' ||
-      constraintErr?.name === 'NotReadableError'
+      constraintErr instanceof Error &&
+      (constraintErr.name === 'OverconstrainedError' || constraintErr.name === 'NotReadableError')
     ) {
       console.warn('[mic] Constraint error, retrying with basic audio:', constraintErr.message);
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -105,7 +107,10 @@ if (typeof window !== 'undefined') {
       // Only release if nobody is actively recording
       const tracks = _cachedStream.getAudioTracks();
       const anyActive = tracks.some(
-        (t) => t.readyState === 'live' && t.enabled && (t as any)._shreRecording,
+        (t) =>
+          t.readyState === 'live' &&
+          t.enabled &&
+          (t as MediaStreamTrack & { _shreRecording?: boolean })._shreRecording,
       );
       if (!anyActive) releaseCachedStream();
     }
@@ -124,6 +129,7 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
   const [voiceAnnouncement, setVoiceAnnouncement] = useState('');
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
   const [isHandsFree, setIsHandsFree] = useState(false);
+  const [micToast, setMicToast] = useState(false);
   const voiceMode = usePreferences((s) => s.voiceMode);
   const setVoiceMode = usePreferences((s) => s.setVoiceMode);
   const ttsVoice = usePreferences((s) => s.ttsVoice);
@@ -131,7 +137,9 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
   const ttsProvider = usePreferences((s) => s.ttsProvider);
   const setTtsProvider = usePreferences((s) => s.setTtsProvider);
   const hasSpeechRecognition = !!(
-    window.SpeechRecognition || (window as any).webkitSpeechRecognition
+    window.SpeechRecognition ||
+    (window as Window & { webkitSpeechRecognition?: typeof window.SpeechRecognition })
+      .webkitSpeechRecognition
   );
   const [speechSupported] = useState(
     () => hasSpeechRecognition || !!navigator.mediaDevices?.getUserMedia,
@@ -253,5 +261,17 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
     hasSpeechRecognition,
     clearInterimAfter,
     cleanupAudioLevel,
+    micToast,
+    setMicToast,
+    releaseCachedStream: useCallback(() => {
+      if (_cachedStream) {
+        _cachedStream.getTracks().forEach((t) => t.stop());
+        _cachedStream = null;
+        // Visual + Haptic feedback for user confirmation
+        if (navigator.vibrate) navigator.vibrate(50);
+        setMicToast(true);
+        setTimeout(() => setMicToast(false), 2000);
+      }
+    }, []),
   };
 }

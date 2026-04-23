@@ -128,16 +128,30 @@ async function queryPermission(name: PermissionName): Promise<PermissionStatus> 
     return 'prompt';
   }
 
-  // Try the Permissions API (not all browsers support all names)
+  // Mobile/Safari often don't support permissions.query for mic/camera
+  // or return incorrect values. We use a heuristic and the API if available.
+  const isApple =
+    isIOS() || (typeof navigator !== 'undefined' && /Macintosh/.test(navigator.userAgent));
+
   try {
     const permName = name === 'clipboard-read' ? 'clipboard-read' : name;
+
+    // Some browsers throw on certain names
     const result = await navigator.permissions.query({ name: permName as any });
+
+    // Log for debugging if needed
+    // console.debug(`[permissions] query ${name}:`, result.state);
+
     if (result.state === 'granted') return 'granted';
     if (result.state === 'denied') return 'denied';
     return 'prompt';
-  } catch {
-    // Permissions API not available for this type — report as prompt (unknown)
-    return 'prompt';
+  } catch (e) {
+    // If query fails, we don't know the state.
+    // On Safari, mic/camera are usually 'prompt' by default unless granted for the session.
+    if (isApple && (name === 'microphone' || name === 'camera')) {
+      return 'prompt';
+    }
+    return 'unknown';
   }
 }
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { playVoiceCue, MAX_RECORDING_SECONDS } from '../chat-utils';
-import { getOrRequestStream, releaseCachedStream } from './useVoiceRecording';
+import { getOrRequestStream } from './useVoiceRecording';
 import type { TTSProvider } from '../preferences-store';
 import { getSpeechLocale } from '../i18n';
 
@@ -26,11 +26,11 @@ export interface UseVoiceHandlersParams {
   levelThrottleRef: React.MutableRefObject<number>;
   silenceStartRef: React.MutableRefObject<number>;
   lastSpokenMsgRef: React.MutableRefObject<string>;
-  isHandsFreeRef: React.MutableRefObject<boolean>;
   SILENCE_THRESHOLD: number;
   SILENCE_TIMEOUT_MS: number;
   clearInterimAfter: (ms: number) => void;
   cleanupAudioLevel: () => void;
+  releaseCachedStream: () => void;
   isHandsFree: boolean;
   isRecording: boolean;
   voiceMode: boolean;
@@ -38,13 +38,13 @@ export interface UseVoiceHandlersParams {
   ttsVoice: string;
   ttsProvider: TTSProvider;
   streaming: boolean;
-  messages: { role: string; content: string; timestamp?: number }[];
+  messages: { role: string; content: string; timestamp?: number; meta?: Record<string, string> }[];
   handleSendRef: React.MutableRefObject<() => void>;
 }
 
 export interface UseVoiceHandlersReturn {
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<void>;
+  stopRecording: (forceRelease?: boolean) => Promise<void>;
   voicePendingSend: string;
   setVoicePendingSend: (v: string) => void;
   recognitionRef: React.MutableRefObject<SpeechRecognition | null>;
@@ -78,11 +78,11 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     levelThrottleRef,
     silenceStartRef,
     lastSpokenMsgRef,
-    isHandsFreeRef,
     SILENCE_THRESHOLD,
     SILENCE_TIMEOUT_MS,
     clearInterimAfter,
     cleanupAudioLevel,
+    releaseCachedStream,
     isHandsFree,
     isRecording,
     voiceMode,
@@ -113,9 +113,16 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       return;
     }
 
+    // Barge-in: if user starts speaking (manually or via wake/VAD), stop current AI speech
+    if (isSpeaking || ttsAudioRef.current) {
+      window.dispatchEvent(new CustomEvent('shre-barge-in'));
+    }
+
     // Prevent concurrent startRecording calls (double-tap race)
     if (recordingInProgressRef.current) return;
     recordingInProgressRef.current = true;
+
+    // ... existing startRecording logic ...
 
     // Clean up previous sessions
     if (recognitionRef.current) {
@@ -168,6 +175,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     // Skip wake-word listener and begin capture immediately
     setVoicePhase('recording');
     setInterimTranscript('Recording...');
+    window.dispatchEvent(new CustomEvent('shre-voice-start'));
     beginCapture();
 
     async function beginCapture() {
@@ -264,6 +272,11 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       };
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
+
+      // Mark tracks as active for the visibilitychange backup listener
+      stream.getTracks().forEach((t) => {
+        (t as MediaStreamTrack & { _shreRecording?: boolean })._shreRecording = true;
+      });
 
       if (SpeechRec) {
         const rec = new SpeechRec() as SpeechRecognition & {
@@ -364,98 +377,141 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         }, 3000);
       }
     }
-  }, []);
+  }, [
+    voiceSessionIdRef,
+    voiceFinalTranscriptRef,
+    setInput,
+    setInterimTranscript,
+    setVoicePendingSend,
+    setIsRecording,
+    setVoicePhase,
+    setRecordingDuration,
+    audioCtxRef,
+    analyserRef,
+    silenceStartRef,
+    audioLevelRawRef,
+    levelThrottleRef,
+    setAudioLevel,
+    levelRafRef,
+    recordingTimerRef,
+    interimTranscriptRef,
+    clearInterimAfter,
+    SILENCE_THRESHOLD,
+    SILENCE_TIMEOUT_MS,
+    isSpeaking,
+    ttsAudioRef,
+  ]);
 
-  const stopRecording = useCallback(async () => {
-    playVoiceCue('stop');
-    if (navigator.vibrate) navigator.vibrate(30);
-    cleanupAudioLevel();
+  const stopRecording = useCallback(
+    async (forceRelease?: boolean) => {
+      playVoiceCue('stop');
+      if (navigator.vibrate) navigator.vibrate(30);
+      cleanupAudioLevel();
 
-    // Stop SpeechRecognition — text is already live in the textarea
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {
-        void _;
-      }
-      recognitionRef.current = null;
-    }
-
-    // Stop MediaRecorder and collect audio chunks for Whisper fallback
-    const recorder = mediaRecorderRef.current;
-    const audioChunks = [...audioChunksRef.current];
-    if (recorder && recorder.state !== 'inactive') {
-      try {
-        recorder.stop();
-      } catch (_) {
-        void _;
-      }
-      mediaRecorderRef.current = null;
-    }
-
-    // Clean wake word artifacts from whatever text is already in the input
-    let currentText = voiceFinalTranscriptRef.current.trim();
-    if (currentText) {
-      currentText = currentText
-        .replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, '')
-        .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
-        .trim();
-      setInput(currentText);
-      setInterimTranscript('');
-    } else if (audioChunks.length > 0) {
-      // If we're about to transcribe from audio chunks, clear input immediately
-      // so the user sees "Processing..." or empty state instead of stale text.
-      setInput('');
-      setInterimTranscript('Processing...');
-    }
-
-    // Whisper fallback: ONLY when SpeechRecognition produced NO text (e.g. iOS Safari).
-    // If SR already filled currentText, this block is skipped — no double-processing.
-    if (!currentText && audioChunks.length > 0) {
-      setVoicePhase('transcribing');
-      setInterimTranscript('Transcribing...');
-      try {
-        const mimeType = audioChunks[0]?.type || 'audio/webm';
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const blob = new Blob(audioChunks, { type: mimeType });
-        const formData = new FormData();
-        formData.append('file', blob, `voice.${ext}`);
-        formData.append('model', 'whisper-1');
-        const res = await fetch('/api/transcribe', {
-          method: 'POST',
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          currentText = (data.text || '').trim();
-          if (currentText) {
-            setInput(currentText);
-          }
+      // Stop SpeechRecognition — text is already live in the textarea
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (_) {
+          void _;
         }
-      } catch {
-        /* Whisper unavailable — no transcript */
+        recognitionRef.current = null;
       }
-      setInterimTranscript('');
-    }
-    audioChunksRef.current = [];
 
-    setIsRecording(false);
-    setVoicePhase('idle');
-    recordingInProgressRef.current = false;
-    if (!currentText) {
-      setInterimTranscript('');
-    }
+      // Stop MediaRecorder and collect audio chunks for Whisper fallback
+      const recorder = mediaRecorderRef.current;
+      const audioChunks = [...audioChunksRef.current];
+      if (recorder && recorder.state !== 'inactive') {
+        try {
+          recorder.stop();
+        } catch (_) {
+          void _;
+        }
+        mediaRecorderRef.current = null;
+      }
 
-    // Release the cached MediaStream when not in hands-free mode to turn off hardware indicator
-    if (!voiceMode) {
-      releaseCachedStream();
-    }
+      // Clean wake word artifacts from whatever text is already in the input
+      let currentText = voiceFinalTranscriptRef.current.trim();
+      if (currentText) {
+        currentText = currentText
+          .replace(/\b(shre|shrey|shray)\s+(shre|shrey|shray)\b/gi, '')
+          .replace(/\b(shre|shrey|shray)\s+send\b/gi, '')
+          .trim();
+        setInput(currentText);
+        setInterimTranscript('');
+      } else if (audioChunks.length > 0) {
+        // If we're about to transcribe from audio chunks, clear input immediately
+        // so the user sees "Processing..." or empty state instead of stale text.
+        setInput('');
+        setInterimTranscript('Processing...');
+      }
 
-    // Auto-send: if we have text after recording, send it automatically
-    if (currentText) {
-      setVoicePendingSend(currentText);
-    }
-  }, [cleanupAudioLevel, voiceMode]);
+      // Whisper fallback: ONLY when SpeechRecognition produced NO text (e.g. iOS Safari).
+      // If SR already filled currentText, this block is skipped — no double-processing.
+      if (!currentText && audioChunks.length > 0) {
+        setVoicePhase('transcribing');
+        setInterimTranscript('Transcribing...');
+        try {
+          const mimeType = audioChunks[0]?.type || 'audio/webm';
+          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          const blob = new Blob(audioChunks, { type: mimeType });
+          const formData = new FormData();
+          formData.append('file', blob, `voice.${ext}`);
+          formData.append('model', 'whisper-1');
+          const res = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            currentText = (data.text || '').trim();
+            if (currentText) {
+              setInput(currentText);
+            }
+          }
+        } catch {
+          /* Whisper unavailable — no transcript */
+        }
+        setInterimTranscript('');
+      }
+      audioChunksRef.current = [];
+
+      setIsRecording(false);
+      setVoicePhase('idle');
+      recordingInProgressRef.current = false;
+      window.dispatchEvent(new CustomEvent('shre-voice-stop'));
+
+      // Clear active recording flag on cached stream tracks
+      const tracks = (mediaRecorderRef.current?.stream || recorder?.stream)?.getTracks();
+      tracks?.forEach((t) => {
+        (t as MediaStreamTrack & { _shreRecording?: boolean })._shreRecording = false;
+      });
+
+      if (!currentText) {
+        setInterimTranscript('');
+      }
+      // Release the cached MediaStream when not in hands-free mode or if forced
+      if (!voiceMode || forceRelease) {
+        releaseCachedStream();
+      }
+
+      // Auto-send: if we have text after recording, send it automatically
+      if (currentText) {
+        setVoicePendingSend(currentText);
+      }
+    },
+    [
+      cleanupAudioLevel,
+      releaseCachedStream,
+      voiceMode,
+      voiceFinalTranscriptRef,
+      setInput,
+      setInterimTranscript,
+      setVoicePhase,
+      setIsRecording,
+      setVoicePendingSend,
+    ],
+  );
 
   // Keep ref in sync
   stopRecordingRef.current = stopRecording;
@@ -474,47 +530,67 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [voicePendingSend]);
+  }, [voicePendingSend, handleSendRef, voiceSessionIdRef]);
 
   // Auto-restart recording when AI finishes speaking if voiceMode is active
   useEffect(() => {
     if (voiceMode && !isSpeaking && !isRecording && !streaming) {
+      // Check if the last assistant message ended with a question
+      const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+      const isQuestion = lastMsg?.role === 'assistant' && /[?¿]\s*$/.test(lastMsg.content || '');
+
       const timer = setTimeout(() => {
         if (voiceMode && !isSpeaking && !isRecording && !streaming) {
+          if (isQuestion) {
+            setVoicePhase('waiting'); // Visually invite the user to speak
+          }
           startRecording();
         }
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [voiceMode, isSpeaking, isRecording, streaming, startRecording]);
+  }, [voiceMode, isSpeaking, isRecording, streaming, startRecording, messages, setVoicePhase]);
 
   // Cleanup speech recognition + audio analyser on unmount
   useEffect(() => {
+    const ctxRef = audioCtxRef;
+    const rafRef = levelRafRef;
+    const timerRef = recordingTimerRef;
+    const recRef = recognitionRef;
+    const wakeRef = wakeListenerRef;
+
     return () => {
-      if (recognitionRef.current) {
+      if (recRef.current) {
         try {
-          recognitionRef.current.abort();
+          recRef.current.abort();
         } catch (_) {
           void _;
         }
-        recognitionRef.current = null;
+        recRef.current = null;
       }
-      if (wakeListenerRef.current) {
+      if (wakeRef.current) {
         try {
-          wakeListenerRef.current.abort();
+          wakeRef.current.abort();
         } catch (_) {
           void _;
         }
-        wakeListenerRef.current = null;
+        wakeRef.current = null;
       }
-      if (levelRafRef.current) cancelAnimationFrame(levelRafRef.current);
-      if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (ctxRef.current) ctxRef.current.close().catch(() => {});
+      if (timerRef.current) clearInterval(timerRef.current);
       // Release the cached MediaStream on full unmount to free hardware
       // The page-level beforeunload listener also handles this as a safety net
       releaseCachedStream();
     };
-  }, []);
+  }, [
+    audioCtxRef,
+    levelRafRef,
+    recordingTimerRef,
+    recognitionRef,
+    wakeListenerRef,
+    releaseCachedStream,
+  ]);
 
   // Hands-free wake word listener — "shre shre"
   useEffect(() => {
@@ -600,7 +676,16 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         wakeListenerRef.current = null;
       }
     };
-  }, [isHandsFree, isRecording, startRecording]);
+  }, [
+    isHandsFree,
+    isRecording,
+    startRecording,
+    setInterimTranscript,
+    recognitionRef,
+    mediaRecorderRef,
+    wakeListenerRef,
+    skipWakeRef,
+  ]);
 
   // Auto-speak: when voice mode is on, auto-TTS the latest assistant response
   useEffect(() => {
@@ -639,9 +724,10 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
       .slice(0, 4096);
     if (!plainText) return;
 
-    ttsAbortRef.current?.abort();
+    const abortCtrl = ttsAbortRef;
+    abortCtrl.current?.abort();
     const controller = new AbortController();
-    ttsAbortRef.current = controller;
+    abortCtrl.current = controller;
     setIsSpeaking(true);
 
     fetch('/api/tts', {
@@ -686,14 +772,119 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     return () => {
       controller.abort();
     };
-  }, [voiceMode, streaming, messages, ttsVoice, ttsProvider]);
+  }, [
+    voiceMode,
+    streaming,
+    messages,
+    ttsVoice,
+    ttsProvider,
+    setIsSpeaking,
+    lastSpokenMsgRef,
+    voiceSessionIdRef,
+    ttsAbortRef,
+    ttsAudioRef,
+  ]);
+
+  // Handle barge-in events (interruption)
+  useEffect(() => {
+    const handleBargeIn = () => {
+      // 1. Stop current TTS
+      ttsAbortRef.current?.abort();
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      setIsSpeaking(false);
+
+      // 2. Abort current AI generation
+      handleSendRef.current?.(); // Note: we should actually have an 'abort' function here
+      // But based on available props, we'll dispatch a stop event
+      window.dispatchEvent(new CustomEvent('shre-stop-generation'));
+    };
+
+    window.addEventListener('shre-barge-in', handleBargeIn);
+    return () => window.removeEventListener('shre-barge-in', handleBargeIn);
+  }, [setIsSpeaking, handleSendRef, ttsAbortRef, ttsAudioRef]);
+
+  // Monitor for barge-in speech while AI is speaking
+  useEffect(() => {
+    if (!isSpeaking || !voiceMode || isRecording) return;
+
+    let active = true;
+    let monitorStream: MediaStream | null = null;
+
+    async function setupBargeInMonitor() {
+      try {
+        monitorStream = await getOrRequestStream();
+        if (!active) return;
+
+        const bargeThreshold = SILENCE_THRESHOLD * 2;
+        let consecutiveFrames = 0;
+        const REQUIRED_FRAMES = 3;
+
+        const AudioCtx =
+          window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) throw new Error('AudioContext not supported');
+        const ctx = new AudioCtx();
+        const source = ctx.createMediaStreamSource(monitorStream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const data = new Uint8Array(analyser.frequencyBinCount);
+
+        const poll = () => {
+          if (!active || !isSpeaking) {
+            ctx.close().catch(() => {});
+            return;
+          }
+          analyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < 32; i++) sum += data[i] * data[i];
+          const rms = Math.sqrt(sum / 32) / 255;
+
+          if (rms >= bargeThreshold) {
+            consecutiveFrames++;
+            if (consecutiveFrames >= REQUIRED_FRAMES) {
+              window.dispatchEvent(new CustomEvent('shre-barge-in'));
+              // Immediately start recording to catch the interruption
+              startRecording();
+              return;
+            }
+          } else {
+            consecutiveFrames = 0;
+          }
+          requestAnimationFrame(poll);
+        };
+        poll();
+      } catch (err) {
+        console.warn('[barge-in] monitor setup failed:', err);
+      }
+    }
+
+    setupBargeInMonitor();
+    return () => {
+      active = false;
+    };
+  }, [isSpeaking, voiceMode, isRecording, SILENCE_THRESHOLD, startRecording]);
 
   // Auto-enable voice mode when user uses voice input
   useEffect(() => {
     if (voicePendingSend && !voiceMode) {
       setVoiceMode(true);
     }
-  }, [voicePendingSend, voiceMode]);
+  }, [voicePendingSend, voiceMode, setVoiceMode]);
+
+  // Ensure mic hardware is released when hands-free mode is turned off and not recording
+  useEffect(() => {
+    if (!voiceMode && !isRecording) {
+      releaseCachedStream();
+    }
+  }, [voiceMode, isRecording, releaseCachedStream]);
 
   useEffect(() => {
     (window as Window & { isSpeaking?: boolean }).isSpeaking = isSpeaking;

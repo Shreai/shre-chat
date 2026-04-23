@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ProcessBar, ProcessDetail, useProcessRun } from './components/process-bar';
 import type { ChatMessage } from './router-client';
-import ports from '../../ports.json';
 import { useApp, generateTitle, getAgent, AGENTS, type Session, type View } from './store';
 import type { TerminalHandle } from './TerminalView';
 const TerminalView = lazy(() =>
@@ -11,9 +10,6 @@ const VoiceAssistant = lazy(() => import('./VoiceAssistant'));
 const RealtimeVoiceOverlay = lazy(() =>
   import('./components/RealtimeVoiceOverlay').then((m) => ({ default: m.RealtimeVoiceOverlay })),
 );
-// ContentCard lazy import moved to PreviewPanel component
-
-// Extracted modules
 import { getModelOverride, setModelOverride } from './chat-utils';
 import { Lightbox } from './components/MessageBubble';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
@@ -22,8 +18,6 @@ import { useWakeWord } from './hooks/useWakeWord';
 import { useStreamState } from './hooks/useStreamState';
 import { useChatSearch } from './hooks/useChatSearch';
 import { useGatewayConnection } from './hooks/useGatewayConnection';
-
-// Extracted custom hooks
 import { useSlashCommands } from './hooks/useSlashCommands';
 import { useMentions } from './hooks/useMentions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -41,8 +35,6 @@ import { useModelList } from './hooks/useModelList';
 import { useAppList } from './hooks/useAppList';
 import { useToolList } from './hooks/useToolList';
 import { useEscalationListener } from './hooks/useEscalationListener';
-
-// Extracted UI components
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { MessageQueue } from './components/MessageQueue';
 import { MessageList } from './components/MessageList';
@@ -60,31 +52,14 @@ import { ChatPanels } from './components/ChatPanels';
 import { TrialBanner } from './components/TrialBanner';
 import { useChatKeydown } from './hooks/useChatKeydown';
 
-// ── Helpers, sub-components, and constants moved to:
-//    ./chat-utils.ts, ./components/MessageBubble.tsx,
-//    ./components/WelcomeScreen.tsx, ./components/LinkPreview.tsx
-
 export function ChatView() {
   const { state, actions } = useApp();
-  const {
-    sessions,
-    activeSessionId,
-    activeAgentId,
-    openTabs,
-    streaming,
-    streamText,
-    statusLine,
-    gatewayUp,
-    syncing,
-    view,
-  } = state;
+  const { sessions, activeSessionId, activeAgentId, streaming, streamText, syncing } = state;
 
   const [input, setInput] = useState(() => {
-    // Check for ?prompt= URL parameter (from MIB007 "Discuss with Shre" link)
     try {
       const urlPrompt = new URLSearchParams(window.location.search).get('prompt');
       if (urlPrompt) {
-        // Clean the URL to prevent re-triggering
         window.history.replaceState({}, '', window.location.pathname);
         return urlPrompt;
       }
@@ -104,11 +79,10 @@ export function ChatView() {
   const [editingMsgText, setEditingMsgText] = useState('');
   const [selectedMsgIndex, setSelectedMsgIndex] = useState<number | null>(null);
   const [branchToast, setBranchToast] = useState(false);
-  // ── Keyboard shortcuts overlay (Cmd+?) ──────────────────────────────
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const pendingEditSendRef = useRef(false);
   const setCliContinueRef = useRef<(v: boolean) => void>(() => {});
-  // ── Stream state (extracted hook) ──
+
   const {
     streamStall,
     setStreamStall,
@@ -131,14 +105,14 @@ export function ChatView() {
     firstTokenTimeRef,
     subscribeStreamStall,
   } = useStreamState(streaming);
-  // Process bar
+
   const { runs, activeRun, startRun, addStep, updateStep, completeRun } = useProcessRun();
   const [processDetailOpen, setProcessDetailOpen] = useState(false);
   const [highlightStepId, setHighlightStepId] = useState<string>();
   const processStepRef = useRef<string>('');
   const processRunIdRef = useRef<string>('');
   const [showEmoji, setShowEmoji] = useState(false);
-  // ── Voice recording (extracted hook) ──
+
   const {
     isRecording,
     setIsRecording,
@@ -182,25 +156,24 @@ export function ChatView() {
     hasSpeechRecognition,
     clearInterimAfter,
     cleanupAudioLevel,
+    releaseCachedStream,
+    micToast,
   } = useVoiceRecording();
-  // ── Wake word listener (extracted hook) ──
+
   useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen, voiceMode);
-
-  // ── Realtime full-duplex voice overlay ──
   const [realtimeVoiceOpen, setRealtimeVoiceOpen] = useState(false);
-
-  // ── Dedicated voice session (isolated from chat) ──
   const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
+
   useEffect(() => {
     if (voiceAssistantOpen && !voiceSessionId) {
       const id = actions.getOrCreateVoiceSession(activeAgentId);
       setVoiceSessionId(id);
     }
   }, [voiceAssistantOpen, voiceSessionId, actions, activeAgentId]);
+
   const voiceSession = sessions.find((s) => s.id === voiceSessionId);
   const voiceMessages = voiceSession?.messages || [];
 
-  // ── Conversation task loop (unified: polling + WS real-time) ──
   const {
     tasks: sessionTasks,
     activeTasks,
@@ -213,14 +186,12 @@ export function ChatView() {
     fetchTrace,
   } = useTaskTracker({ sessionId: activeSessionId });
 
-  // ── Escalation visibility (Ellie escalation WS events → chat) ──
   useEscalationListener({ activeSessionId, addMessage: actions.addMessage });
-
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(() =>
     getModelOverride(activeAgentId),
   );
-  // ── Dynamic model list from shre-router (extracted hook) ──
+
   const {
     dynamicModels,
     setDynamicModels,
@@ -230,28 +201,22 @@ export function ChatView() {
     MODEL_CONTEXT_LIMITS,
   } = useModelList();
 
-  // ── Dynamic app list from shre-skills (extracted hook) ──
   const { appOptions } = useAppList();
-
-  // ── Dynamic tool list from shre-router (extracted hook) ──
   const { toolOptions, systemCount: toolSystemCount, appCount: toolAppCount } = useToolList();
 
-  const [cliMode, setCliMode] = useState(() => {
-    const stored = localStorage.getItem('shre-cli-mode-default');
-    return stored === 'true'; // Default OFF — user enables via /cli or button
-  });
-  // ── Claude CLI mode (auto-route coding tasks to Claude CLI) ──
-  const [claudeCliMode, setClaudeCliMode] = useState(() => {
-    const stored = localStorage.getItem('shre-claude-cli-mode');
-    return stored === 'true';
-  });
-  // ── Identity verification gate ──────────────────────────────────────
-  const [identityVerified, setIdentityVerified] = useState(true); // Gate disabled — only enforce for CLI/sensitive ops
+  const [cliMode, setCliMode] = useState(
+    () => localStorage.getItem('shre-cli-mode-default') === 'true',
+  );
+  const [claudeCliMode, setClaudeCliMode] = useState(
+    () => localStorage.getItem('shre-claude-cli-mode') === 'true',
+  );
+  const [identityVerified, setIdentityVerified] = useState(true);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
-  const [showTerminal, setShowTerminalRaw] = useState(() => {
-    return localStorage.getItem('shre-terminal-open') === 'true';
-  });
+  const [showTerminal, setShowTerminalRaw] = useState(
+    () => localStorage.getItem('shre-terminal-open') === 'true',
+  );
+
   const setShowTerminal = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
     setShowTerminalRaw((prev) => {
       const next = typeof v === 'function' ? v(prev) : v;
@@ -259,16 +224,16 @@ export function ChatView() {
       return next;
     });
   }, []);
+
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [termViewMode, setTermViewMode] = useState<'split' | 'tabs'>('split');
-  const [activeView, setActiveView] = useState<string>('chat'); // "chat" | "terminal" | "preview"
+  const [activeView, setActiveView] = useState<string>('chat');
   const [previewContent, setPreviewContent] = useState<{
     content: string;
     type: string;
     title?: string;
   } | null>(null);
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
-  // ── Shared view (read-only snapshot from /shared/:id) ─────────────
   const [sharedSnapshot, setSharedSnapshot] = useState<{
     title: string;
     messages: ChatMessage[];
@@ -277,56 +242,50 @@ export function ChatView() {
   } | null>(null);
   const [sharedLoading, setSharedLoading] = useState(false);
   const [sharedError, setSharedError] = useState<string | null>(null);
-  // ── Compare mode ──────────────────────────────────────────────────
   const [compareModels, setCompareModels] = useState<string[]>([]);
   const [compareStreams, setCompareStreams] = useState<
     Record<string, { text: string; done: boolean; error?: string }>
   >({});
   const [compareWinner, setCompareWinner] = useState<string | null>(null);
+
   const comparePickerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<TerminalHandle>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const sendingRef = useRef(false); // true while handleSend is executing — prevents cleanup abort on ensureSession switch
+  const sendingRef = useRef(false);
   const emojiRef = useRef<HTMLDivElement>(null);
 
-  // Streaming buffer — batch token updates to reduce re-renders
   const streamBufferRef = useRef('');
   const streamFlushRaf = useRef<number | null>(null);
   const flushStreamBuffer = useCallback(() => {
-    if (streamBufferRef.current) {
-      actions.setStreamText(streamBufferRef.current);
-    }
+    if (streamBufferRef.current) actions.setStreamText(streamBufferRef.current);
     streamFlushRaf.current = null;
   }, [actions]);
 
   const bufferToken = useCallback(
     (fullText: string) => {
       streamBufferRef.current = fullText;
-      if (!streamFlushRaf.current) {
+      if (!streamFlushRaf.current)
         streamFlushRaf.current = requestAnimationFrame(flushStreamBuffer);
-      }
     },
     [flushStreamBuffer],
   );
 
-  // Cleanup buffer RAF on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (streamFlushRaf.current) cancelAnimationFrame(streamFlushRaf.current);
-    };
-  }, []);
+    },
+    [],
+  );
 
   const currentAgent = getAgent(activeAgentId);
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages ?? [];
   const userName = state.userProfile?.name?.split(' ')[0] || 'You';
 
-  // ── File handling (extracted hook) ──
   const {
     pendingFiles,
     setPendingFiles,
@@ -347,7 +306,6 @@ export function ChatView() {
     actions,
   });
 
-  // ── Header actions (extracted hook) ──
   const {
     routerMode,
     setRouterMode,
@@ -397,13 +355,9 @@ export function ChatView() {
     actions,
   });
 
-  // gatewayMode is now synced via Zustand preferences store — no localStorage listener needed
-
-  // ── Filtered messages + virtualizer (extracted hook) ──
   const { filteredMessages, lastAssistantMessage, getRunForMessage, useVirtual, virtualizer } =
     useFilteredMessages({ messages, latestTask, runs, scrollRef });
 
-  // ── Chat search (extracted hook) ──
   const {
     globalSearchOpen,
     setGlobalSearchOpen,
@@ -426,7 +380,6 @@ export function ChatView() {
     closeChatSearch,
   } = useChatSearch(filteredMessages, virtualizer);
 
-  // ── Gateway connection (extracted hook) ──
   const {
     wsConnected,
     setWsConnected,
@@ -442,7 +395,6 @@ export function ChatView() {
     setOfflineQueue,
   } = useGatewayConnection(subscribeStreamStall);
 
-  // ── Chat effects (extracted hook) ──
   const {
     scrollPositionsRef,
     prevMsgCount,
@@ -508,7 +460,6 @@ export function ChatView() {
     return id;
   }, [activeSessionId, actions]);
 
-  // ── Slash commands (extracted hook) ──
   const {
     SLASH_COMMANDS,
     slashOpen,
@@ -529,16 +480,13 @@ export function ChatView() {
     stateCompact: state.compact,
     cliMode,
     setCliMode,
-    setCliContinue: (v: boolean) => {
-      setCliContinueRef.current(v);
-    },
+    setCliContinue: (v: boolean) => setCliContinueRef.current(v),
     ensureSession,
     AVAILABLE_MODELS,
     setSelectedModel,
     setModelOverride,
   });
 
-  // ── @@ Mentions (extracted hook) ──
   const {
     mentionOpen,
     setMentionOpen,
@@ -557,7 +505,6 @@ export function ChatView() {
     inputRef,
   });
 
-  // ── Message handlers (extracted hook) ──
   const {
     handleSend,
     handleSendRef,
@@ -637,10 +584,8 @@ export function ChatView() {
     voiceMode,
   });
 
-  // Wire the real setCliContinue into the ref so useSlashCommands can call it
   setCliContinueRef.current = setCliContinue;
 
-  // ── Voice handlers (extracted hook) ──
   const { startRecording, stopRecording, ttsAudioRef } = useVoiceHandlers({
     setInput,
     setIsRecording,
@@ -662,10 +607,10 @@ export function ChatView() {
     silenceStartRef,
     lastSpokenMsgRef,
     isHandsFreeRef,
-    SILENCE_THRESHOLD,
     SILENCE_TIMEOUT_MS,
     clearInterimAfter,
     cleanupAudioLevel,
+    releaseCachedStream,
     isHandsFree,
     isRecording,
     voiceMode,
@@ -677,14 +622,9 @@ export function ChatView() {
     handleSendRef,
   });
 
-  // ── Header mic → ChatComposer push-to-talk bridge ──
   useEffect(() => {
-    const onMicStart = () => {
-      startRecording();
-    };
-    const onMicStop = () => {
-      stopRecording();
-    };
+    const onMicStart = () => startRecording();
+    const onMicStop = () => stopRecording();
     window.addEventListener('shre-mic-start', onMicStart);
     window.addEventListener('shre-mic-stop', onMicStop);
     return () => {
@@ -693,7 +633,6 @@ export function ChatView() {
     };
   }, [startRecording, stopRecording]);
 
-  // ── Keyboard shortcuts (extracted hook) ──
   const { handleAbort } = useKeyboardShortcuts({
     streaming,
     wsConnected,
@@ -724,7 +663,6 @@ export function ChatView() {
     virtualizer,
   });
 
-  // ── Textarea keydown handler (extracted hook) ──────────────────────
   const handleKeyDown = useChatKeydown({
     slashOpen,
     slashFiltered,
@@ -757,8 +695,6 @@ export function ChatView() {
     HISTORY_KEY,
   });
 
-  // Force tab mode on mobile — split mode is unusable on small screens
-  // Reactive: updates on viewport resize (fold/unfold, orientation change, reconnect)
   const [isMobileLayout, setIsMobileLayout] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 768,
   );
@@ -766,11 +702,7 @@ export function ChatView() {
     const onResize = () => {
       const nowMobile = window.innerWidth <= 768;
       setIsMobileLayout((wasMobile) => {
-        // Transitioning to mobile while terminal is open: switch activeView to terminal
-        // so the tab-mode display shows the terminal panel (not chat)
-        if (nowMobile && !wasMobile && showTerminal) {
-          setActiveView('terminal');
-        }
+        if (nowMobile && !wasMobile && showTerminal) setActiveView('terminal');
         return nowMobile;
       });
     };
@@ -782,737 +714,496 @@ export function ChatView() {
       if (vv) vv.removeEventListener('resize', onResize);
     };
   }, [showTerminal]);
+
   const isTabMode =
     (isMobileLayout || termViewMode === 'tabs') && (showTerminal || activeView === 'preview');
-
-  // When entering tab mode with terminal open, force activeView to 'terminal'.
-  // This catches the race between setShowTerminal(true) and setActiveView('terminal')
-  // that occurs on mobile toggle, fold/unfold, and orientation changes.
-  // Only fires on isTabMode transitions (not when user switches tabs).
   const prevIsTabMode = useRef(false);
   useEffect(() => {
-    if (isTabMode && !prevIsTabMode.current && showTerminal) {
-      setActiveView('terminal');
-    }
+    if (isTabMode && !prevIsTabMode.current && showTerminal) setActiveView('terminal');
     prevIsTabMode.current = isTabMode;
   }, [isTabMode, showTerminal]);
 
-  const showChat = !isTabMode || activeView === 'chat';
-  const showTermPanel = showTerminal && (!isTabMode || activeView === 'terminal');
-  const showPreviewPanel = isTabMode && activeView === 'preview' && previewContent;
-
-  // Re-focus the chat textarea whenever chat view becomes visible
-  useEffect(() => {
-    if (showChat) {
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [showChat]);
-
-  // Handler for content block expand (lego blocks)
-  const handleContentExpand = useCallback(
-    (content: string, type: string, title?: string) => {
-      // Route artifact-worthy types to ArtifactCanvas
-      const artifactTypes = ['html', 'svg', 'mermaid', 'json', 'code', 'table', 'csv'];
-      if (artifactTypes.includes(type)) {
-        setActiveArtifact({
-          id: `expand-${Date.now()}`,
-          type: type as Artifact['type'],
-          title: title ?? `${type.toUpperCase()} Preview`,
-          content,
-          language: type,
-        });
-        return;
-      }
-      // Chart and others → legacy PreviewPanel
-      setPreviewContent({ content, type, title });
-      setActiveView('preview');
-      if (termViewMode !== 'tabs') setTermViewMode('tabs');
-    },
-    [termViewMode],
-  );
-
-  // ── MessageList handlers (extracted hook) ──
   const messageListHandlers = useMessageListHandlers({
     activeSessionId,
-    messages,
-    filteredMessages,
+    activeAgentId,
     actions,
-    setInput,
     setEditingMsgIndex,
     setEditingMsgText,
-    setBranchToast,
-    setShowTerminal,
-    setPendingApproval,
-    pendingEditSendRef,
+    setInput,
     inputRef,
-    terminalRef,
+    setSelectedMsgIndex,
     setLightboxSrc,
-    sendFeedbackToRapidRMS,
-    handleContentExpand,
+    virtualizer,
   });
 
-  // ── Shared snapshot view (read-only) ──────────────────────────────
-  if (sharedSnapshot || sharedLoading || sharedError) {
-    return (
-      <ShareSnapshotView snapshot={sharedSnapshot} loading={sharedLoading} error={sharedError} />
-    );
-  }
+  if (!activeAgentId) return null;
 
   return (
-    <main
-      className="flex-1 flex flex-col min-h-0 min-w-0 relative"
+    <div
+      className={`chat-view-root flex flex-col h-full relative overflow-hidden bg-background-main selection:bg-indigo-500/30 selection:text-indigo-200 ${state.compact ? 'chat-compact' : ''}`}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Image lightbox */}
-      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
-
-      {/* Branch toast */}
-      {branchToast && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-xs font-medium shadow-lg"
-          style={{
-            bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
-            background: 'var(--c-bg-card)',
-            color: 'var(--c-text-1)',
-            border: '1px solid var(--c-accent)',
-            animation: 'branchToastIn 0.2s ease-out',
-          }}
-        >
-          Conversation branched
-        </div>
-      )}
-      <style>{`@keyframes branchToastIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }`}</style>
-
-      {/* Drag-and-drop overlay */}
-      {isDragging && <DragOverlay />}
-      {/* Traffic light safe area — only takes space in Shre desktop */}
-      <div
-        className="shre-drag shrink-0 titlebar-safe"
-        style={{ background: 'var(--c-bg-glass)' }}
-      />
-
-      {/* Top-level view tabs — visible in tab mode when terminal is open */}
-      {isTabMode && (
-        <ViewTabs
+      <DragOverlay isDragging={isDragging} />
+      <TrialBanner />
+      <ViewErrorBoundary>
+        <ChatPanels
+          showTerminal={showTerminal}
+          termViewMode={termViewMode}
           activeView={activeView}
-          setActiveView={setActiveView}
-          setTermViewMode={setTermViewMode}
-          previewContent={previewContent}
-        />
-      )}
-
-      {/* Terminal — persisted across visibility toggles */}
-      <div
-        className={isTabMode ? 'flex-1 min-h-0' : 'shrink-0'}
-        style={{
-          ...(isTabMode
-            ? {}
-            : {
-                height: '40%',
-                minHeight: isMobileLayout ? 140 : 200,
-                borderBottom: '2px solid rgba(255,255,255,0.1)',
-              }),
-          display: (isTabMode ? showTermPanel : showTerminal)
-            ? isTabMode
-              ? 'flex'
-              : 'block'
-            : 'none',
-          // In tab mode, flex column so TerminalView fills full width
-          ...(isTabMode ? { flexDirection: 'column' as const } : {}),
-        }}
-      >
-        <ViewErrorBoundary viewName="Terminal">
-          <Suspense
-            fallback={
-              <div
-                className="flex-1 flex items-center justify-center"
-                style={{ background: 'var(--c-bg-1)', color: 'var(--c-text-4)' }}
-              >
-                Loading terminal...
-              </div>
-            }
-          >
-            <TerminalView
-              ref={terminalRef}
-              visible={showTerminal}
-              onClose={() => {
-                setShowTerminal(false);
-                setActiveView('chat');
-              }}
-              onBackToChat={() => setActiveView('chat')}
-            />
-          </Suspense>
-        </ViewErrorBoundary>
-      </div>
-
-      {/* Preview panel — expanded content block (lego block) */}
-      {showPreviewPanel && previewContent && (
-        <PreviewPanel
-          content={previewContent}
-          onClose={() => {
-            setPreviewContent(null);
-            setActiveView('chat');
-          }}
-        />
-      )}
-
-      {/* Artifact canvas — side panel for code, HTML, diagrams, tables */}
-      {activeArtifact && (
-        <ArtifactCanvas artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
-      )}
-
-      {/* Chat content — hidden in tab mode when terminal is active */}
-      {showChat && (
-        <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
-          {/* Chat column */}
-          <div className="flex-1 flex flex-col min-h-0 min-w-0">
-            {/* Trial status banner */}
-            <TrialBanner />
-
-            {/* Active task indicator — click to open task panel */}
-            {activeTasks.length > 0 && (
-              <div
-                className="flex items-center px-4 py-1 shrink-0"
-                style={{ borderBottom: '1px solid var(--c-border-2)' }}
-              >
-                <TaskIndicatorButton
-                  activeTasks={activeTasks}
-                  onClick={() => setSelectedTaskId(activeTasks[0]?.id ?? null)}
-                />
-                <span className="ml-2 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
-                  {activeTasks.filter((t) => t.status === 'in_progress').length > 0
-                    ? `${activeTasks.filter((t) => t.status === 'in_progress').length} running`
-                    : `${activeTasks.length} pending`}
-                </span>
-              </div>
-            )}
-
-            <ChatPanels
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              activeSession={activeSession}
-              activeAgentId={activeAgentId}
-              editingTabId={editingTabId}
-              editingTabText={editingTabText}
-              setEditingTabId={setEditingTabId}
-              setEditingTabText={setEditingTabText}
-              cliMode={cliMode}
-              actions={actions}
-              conversationMode={conversationMode}
-              activeAppId={activeAppId}
-              setConversationMode={setConversationMode}
-              appOptions={appOptions}
-              toolOptions={toolOptions}
-              toolSystemCount={toolSystemCount}
-              toolAppCount={toolAppCount}
-              showModelPicker={showModelPicker}
-              setShowModelPicker={setShowModelPicker}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              AVAILABLE_MODELS={AVAILABLE_MODELS}
-              MODEL_CONTEXT_LIMITS={MODEL_CONTEXT_LIMITS}
-              dynamicModelsCount={dynamicModels.length}
+          isTabMode={isTabMode}
+          sidebar={state.sidebarOpen}
+          header={
+            <ViewTabs
+              activeView={activeView}
+              setActiveView={setActiveView}
+              showTerminal={showTerminal}
+              termViewMode={termViewMode}
+              isMobile={isMobileLayout}
+              isTabMode={isTabMode}
               currentAgent={currentAgent}
-              modelPickerRef={modelPickerRef}
-              ensureSession={ensureSession}
-              ttsProvider={ttsProvider}
-              setTtsProvider={setTtsProvider}
-              onOpenVoiceChat={() => setVoiceAssistantOpen(true)}
-              onOpenRealtimeVoice={() => setRealtimeVoiceOpen(true)}
-              showHeaderMore={showHeaderMore}
-              setShowHeaderMore={setShowHeaderMore}
-              headerMoreRef={headerMoreRef}
+              agents={AGENTS}
+              onSwitchAgent={(id) => {
+                actions.switchAgent(id);
+                actions.newSession();
+              }}
               routerMode={routerMode}
-              handleToggleRouterMode={handleToggleRouterMode}
+              onToggleRouterMode={handleToggleRouterMode}
               gatewayMode={gatewayMode}
-              handleSetGatewayMode={handleSetGatewayMode}
+              onSetGatewayMode={handleSetGatewayMode}
               compareMode={compareMode}
-              compareModels={compareModels}
-              handleToggleCompare={handleToggleCompare}
-              setCompareStreams={setCompareStreams}
-              setCompareWinner={setCompareWinner}
-              comparePickerRef={comparePickerRef}
-              handleOpenSystemPrompt={handleOpenSystemPrompt}
-              compact={state.compact}
+              onToggleCompare={handleToggleCompare}
+              selectedModel={selectedModel}
+              onShowModelPicker={() => setShowModelPicker(true)}
+              onShowSystemPrompt={handleOpenSystemPrompt}
+              onSummarize={handleSummarize}
+              onShare={handleShare}
+              onToggleNotifSound={handleToggleNotifSound}
               notifSound={notifSound}
-              handleToggleNotifSound={handleToggleNotifSound}
-              messages={messages}
-              userName={userName}
-              summarizing={summarizing}
-              handleSummarize={handleSummarize}
-              showAnalytics={showAnalytics}
-              setShowAnalytics={setShowAnalytics}
-              handleShare={handleShare}
-              handleCopyMarkdown={handleCopyMarkdown}
-              handleDownloadMd={handleDownloadMd}
-              handleDownloadJson={handleDownloadJson}
-              showApps={showApps}
-              setShowApps={setShowApps}
-              view={view}
-              importInputRef={importInputRef}
-              wsFailed={wsFailed}
-              setWsFailed={setWsFailed}
-              setWsConnected={setWsConnected}
-              shareUrl={shareUrl}
-              shareCopied={shareCopied}
-              setShareCopied={setShareCopied}
-              setShareUrl={setShareUrl}
-              offlineQueue={offlineQueue}
-              selectedModelForContext={selectedModel}
-              chatSearchOpen={chatSearchOpen}
-              chatSearchRef={chatSearchRef}
-              chatSearch={chatSearch}
-              setChatSearch={setChatSearch}
-              closeChatSearch={closeChatSearch}
-              chatSearchNavigate={chatSearchNavigate}
-              chatSearchResults={chatSearchResults}
-              chatSearchIndex={chatSearchIndex}
-              showSystemPrompt={showSystemPrompt}
-              setShowSystemPrompt={setShowSystemPrompt}
-              systemPromptDraft={systemPromptDraft}
-              setSystemPromptDraft={setSystemPromptDraft}
-              handleSaveSystemPrompt={handleSaveSystemPrompt}
-              showSummary={showSummary}
-              setShowSummary={setShowSummary}
-              summaryText={summaryText}
-            />
-
-            {/* Messages */}
-            <MessageList
-              filteredMessages={filteredMessages}
-              messages={messages}
-              streaming={streaming}
-              streamText={streamText}
-              syncing={syncing}
-              compact={state.compact}
-              currentAgent={currentAgent}
-              activeAgentId={activeAgentId}
-              userName={userName}
-              activeSessionId={activeSessionId}
-              chatSearchOpen={chatSearchOpen}
-              chatSearch={chatSearch}
-              chatSearchResults={chatSearchResults}
-              chatSearchIndex={chatSearchIndex}
-              selectedMsgIndex={selectedMsgIndex}
-              editingMsgIndex={editingMsgIndex}
-              editingMsgText={editingMsgText}
-              scrollRef={scrollRef}
-              showJumpToLatest={showJumpToLatest}
-              newMsgStartIndex={newMsgStartIndex}
-              pullDistance={pullDistance}
-              pullRefreshing={pullRefreshing}
-              PULL_THRESHOLD={PULL_THRESHOLD}
-              streamStall={streamStall}
-              stallCountdown={stallCountdown}
-              streamElapsed={streamElapsed}
-              streamPhase={streamPhase}
-              activeToolName={activeToolName}
-              compacting={compacting}
-              pendingApproval={pendingApproval}
-              firstTokenReceived={firstTokenReceived}
-              onCancelStream={() => {
-                abortRef.current?.abort();
-                actions.setStreaming(false);
-                actions.setStreamText('');
-                actions.setStatusLine('');
+              onDownloadMd={handleDownloadMd}
+              onDownloadJson={handleDownloadJson}
+              onCopyMarkdown={handleCopyMarkdown}
+              onNewChat={() => {
+                const id = actions.newSession();
+                actions.switchSession(id);
+                setInput('');
               }}
-              runs={runs}
-              getRunForMessage={getRunForMessage}
-              userProfile={state.userProfile}
-              onScroll={handleScroll}
-              onPullStart={handlePullStart}
-              onPullMove={handlePullMove}
-              onPullEnd={handlePullEnd}
-              onJumpToLatest={jumpToLatest}
-              {...messageListHandlers}
-              onModeSwitchRequest={(mode: string) =>
-                setConversationMode(mode as ConversationModeId)
-              }
-              virtualizer={virtualizer}
-              useVirtual={useVirtual}
             />
-
-            {/* Compare mode results */}
-            {compareMode && (
-              <CompareView
-                compareStreams={compareStreams}
-                compareWinner={compareWinner}
-                availableModels={AVAILABLE_MODELS}
-                activeSessionId={activeSessionId}
-                onPickWinner={(modelId, text) => {
-                  setCompareWinner(modelId);
-                  if (activeSessionId) {
-                    const modelInfo = AVAILABLE_MODELS.find((m) => m.id === modelId);
-                    actions.addMessage(activeSessionId, {
-                      role: 'assistant',
-                      content: text,
-                      timestamp: Date.now(),
-                    });
-                    actions.addActivity(
-                      activeSessionId,
-                      'done',
-                      `Compare winner: ${modelInfo?.name || modelId}`,
-                    );
-                    actions.addFeed(
-                      activeSessionId,
-                      'received',
-                      `Winner: ${modelInfo?.name || modelId} (${text.length} chars)`,
-                      { compare: 'true', model: modelId },
-                    );
-                  }
+          }
+          content={
+            <div className="flex flex-col h-full relative">
+              <MessageList
+                messages={filteredMessages}
+                streaming={streaming}
+                streamText={streamText}
+                statusLine={statusLine}
+                selectedMsgIndex={selectedMsgIndex}
+                editingMsgIndex={editingMsgIndex}
+                editingMsgText={editingMsgText}
+                scrollRef={scrollRef}
+                showJumpToLatest={showJumpToLatest}
+                newMsgStartIndex={newMsgStartIndex}
+                pullDistance={pullDistance}
+                pullRefreshing={pullRefreshing}
+                PULL_THRESHOLD={PULL_THRESHOLD}
+                streamStall={streamStall}
+                stallCountdown={stallCountdown}
+                streamElapsed={streamElapsed}
+                streamPhase={streamPhase}
+                activeToolName={activeToolName}
+                compacting={compacting}
+                pendingApproval={pendingApproval}
+                firstTokenReceived={firstTokenReceived}
+                onCancelStream={() => {
+                  abortRef.current?.abort();
+                  actions.setStreaming(false);
+                  actions.setStreamText('');
+                  actions.setStatusLine('');
                 }}
-                onDismiss={() => {
-                  setCompareStreams({});
-                  setCompareWinner(null);
+                runs={runs}
+                getRunForMessage={getRunForMessage}
+                userProfile={state.userProfile}
+                onScroll={handleScroll}
+                onPullStart={handlePullStart}
+                onPullMove={handlePullMove}
+                onPullEnd={handlePullEnd}
+                onJumpToLatest={jumpToLatest}
+                {...messageListHandlers}
+                onModeSwitchRequest={(mode: string) =>
+                  setConversationMode(mode as ConversationModeId)
+                }
+                virtualizer={virtualizer}
+                useVirtual={useVirtual}
+              />
+              {compareMode && (
+                <CompareView
+                  compareStreams={compareStreams}
+                  compareWinner={compareWinner}
+                  availableModels={AVAILABLE_MODELS}
+                  activeSessionId={activeSessionId}
+                  onPickWinner={(modelId, text) => {
+                    setCompareWinner(modelId);
+                    if (activeSessionId) {
+                      const modelInfo = AVAILABLE_MODELS.find((m) => m.id === modelId);
+                      actions.addMessage(activeSessionId, {
+                        role: 'assistant',
+                        content: text,
+                        timestamp: Date.now(),
+                      });
+                      actions.addActivity(
+                        activeSessionId,
+                        'done',
+                        `Compare winner: ${modelInfo?.name || modelId}`,
+                      );
+                      actions.addFeed(
+                        activeSessionId,
+                        'received',
+                        `Winner: ${modelInfo?.name || modelId} (${text.length} chars)`,
+                        { compare: 'true', model: modelId },
+                      );
+                    }
+                  }}
+                  onDismiss={() => {
+                    setCompareStreams({});
+                    setCompareWinner(null);
+                  }}
+                />
+              )}
+              {processDetailOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: '50%',
+                    zIndex: 30,
+                    borderTop: '1px solid var(--c-border-1)',
+                    background: 'var(--c-bg-main)',
+                    boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  <ProcessDetail
+                    run={activeRun ?? runs[runs.length - 1] ?? null}
+                    highlightStepId={highlightStepId}
+                    onClose={() => setProcessDetailOpen(false)}
+                  />
+                </div>
+              )}
+              <MessageQueue
+                queue={queue}
+                editingQueueId={editingQueueId}
+                onReorder={(idx, dir) =>
+                  setQueue((prev) => {
+                    const next = [...prev];
+                    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+                    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+                    return next;
+                  })
+                }
+                onEdit={(item) => {
+                  setEditingQueueId(item.id);
+                  setEditingQueueText(item.text);
+                  setInput(item.text);
+                  setTimeout(() => {
+                    const ta = document.getElementById('shre-chat-textarea');
+                    if (ta) {
+                      ta.focus();
+                      (ta as HTMLTextAreaElement).setSelectionRange(
+                        item.text.length,
+                        item.text.length,
+                      );
+                    }
+                  }, 50);
+                }}
+                onRemove={(id) => setQueue((prev) => prev.filter((q) => q.id !== id))}
+              />
+              <ProcessBar
+                runs={runs}
+                activeRun={activeRun}
+                onStepClick={(_runId, stepId) => {
+                  setHighlightStepId(stepId);
+                  setProcessDetailOpen(true);
                 }}
               />
-            )}
-
-            {/* Process Detail overlay */}
-            {processDetailOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '50%',
-                  zIndex: 30,
-                  borderTop: '1px solid var(--c-border-1)',
-                  background: 'var(--c-bg-main)',
-                  boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+              <SuggestionsBar
+                lastAssistantMessage={lastAssistantMessage}
+                streaming={streaming}
+                messageCount={messages.length}
+                onSelect={(text) => {
+                  setInput(text);
+                  pendingSuggestionSendRef.current = true;
                 }}
-              >
-                <ProcessDetail
-                  run={activeRun ?? runs[runs.length - 1] ?? null}
-                  highlightStepId={highlightStepId}
-                  onClose={() => setProcessDetailOpen(false)}
-                />
-              </div>
-            )}
-
-            {/* Task Queue */}
-            <MessageQueue
-              queue={queue}
-              editingQueueId={editingQueueId}
-              onReorder={(idx, dir) =>
-                setQueue((prev) => {
-                  const next = [...prev];
-                  const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
-                  [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-                  return next;
-                })
-              }
-              onEdit={(item) => {
-                setEditingQueueId(item.id);
-                setEditingQueueText(item.text);
-                setInput(item.text);
-                setTimeout(() => {
-                  const ta = document.getElementById('shre-chat-textarea');
-                  if (ta) {
-                    ta.focus();
-                    (ta as HTMLTextAreaElement).setSelectionRange(
-                      item.text.length,
-                      item.text.length,
-                    );
-                  }
-                }, 50);
-              }}
-              onRemove={(id) => setQueue((prev) => prev.filter((q) => q.id !== id))}
-            />
-
-            {/* Process Bar — between messages and input */}
-            <ProcessBar
-              runs={runs}
-              activeRun={activeRun}
-              onStepClick={(_runId, stepId) => {
-                setHighlightStepId(stepId);
-                setProcessDetailOpen(true);
-              }}
-            />
-
-            {/* Contextual quick-action suggestions from last assistant message */}
-            <SuggestionsBar
-              lastAssistantMessage={lastAssistantMessage}
-              streaming={streaming}
-              messageCount={messages.length}
-              onSelect={(text) => {
-                setInput(text);
-                pendingSuggestionSendRef.current = true;
-              }}
-            />
-
-            <ChatComposer
-              input={input}
-              setInput={setInput}
-              onKeyDown={handleKeyDown}
-              onSend={handleSend}
-              onAbort={handleAbort}
-              streaming={streaming}
-              syncing={syncing}
-              writeEnabled={state.writeEnabled}
-              compareMode={compareMode}
-              compareModelsCount={compareModels.length}
-              cliMode={cliMode}
-              claudeCliMode={claudeCliMode}
-              setClaudeCliMode={(on: boolean) => {
-                setClaudeCliMode(on);
-                localStorage.setItem('shre-claude-cli-mode', String(on));
-                if (on) {
-                  setShowTerminal(true);
-                  if (isMobileLayout || termViewMode === 'tabs') {
-                    setActiveView('terminal');
-                  }
-                } else {
-                  if (cliMode) {
+              />
+              <ChatComposer
+                input={input}
+                setInput={setInput}
+                onKeyDown={handleKeyDown}
+                onSend={handleSend}
+                onAbort={handleAbort}
+                streaming={streaming}
+                syncing={syncing}
+                writeEnabled={state.writeEnabled}
+                compareMode={compareMode}
+                compareModelsCount={compareModels.length}
+                cliMode={cliMode}
+                claudeCliMode={claudeCliMode}
+                setClaudeCliMode={(on: boolean) => {
+                  setClaudeCliMode(on);
+                  localStorage.setItem('shre-claude-cli-mode', String(on));
+                  if (on) {
+                    setShowTerminal(true);
+                    if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
+                  } else if (cliMode) {
                     setCliMode(false);
                     localStorage.setItem('shre-cli-mode-default', 'false');
                   }
-                }
-              }}
-              onOpenClaudeCli={() => {
-                setShowTerminal(true);
-                if (isMobileLayout || termViewMode === 'tabs') {
-                  setActiveView('terminal');
-                }
-                // Open a Claude CLI tab via the terminal ref
-                setTimeout(() => {
-                  terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' });
-                }, 100);
-              }}
-              onOpenShreCli={() => {
-                setShowTerminal(true);
-                if (isMobileLayout || termViewMode === 'tabs') {
-                  setActiveView('terminal');
-                }
-                setTimeout(() => {
-                  terminalRef.current?.openTab({ title: 'Shre CLI', cmd: 'shre' });
-                }, 100);
-              }}
-              currentAgentName={currentAgent.name}
-              activeSessionId={activeSessionId}
-              messages={messages}
-              inputRef={inputRef}
-              fileRef={fileRef}
-              emojiRef={emojiRef}
-              pendingFiles={pendingFiles}
-              onFileSelect={handleFileSelect}
-              onRemovePendingFile={removePendingFile}
-              onImageClick={setLightboxSrc}
-              onPaste={handlePaste}
-              showEmoji={showEmoji}
-              setShowEmoji={setShowEmoji}
-              isRecording={isRecording}
-              voicePhase={voicePhase}
-              audioLevel={audioLevel}
-              recordingDuration={recordingDuration}
-              isSpeaking={isSpeaking}
-              interimTranscript={interimTranscript}
-              isHandsFree={isHandsFree}
-              voiceMode={voiceMode}
-              ttsVoice={ttsVoice}
-              ttsProvider={ttsProvider}
-              speechSupported={speechSupported}
-              hasSpeechRecognition={hasSpeechRecognition}
-              onStartRecording={startRecording}
-              onStopRecording={stopRecording}
-              setIsHandsFree={setIsHandsFree}
-              setVoiceMode={setVoiceMode}
-              setTtsVoice={setTtsVoice}
-              setTtsProvider={setTtsProvider}
-              onStopTTS={() => {
-                if (ttsAudioRef.current) {
-                  ttsAudioRef.current.pause();
-                  ttsAudioRef.current = null;
-                }
-                window.speechSynthesis?.cancel();
-                setIsSpeaking(false);
-              }}
-              showTerminal={showTerminal}
-              termViewMode={termViewMode}
-              onToggleTerminal={() => {
-                if (!showTerminal) {
+                }}
+                onOpenClaudeCli={() => {
                   setShowTerminal(true);
-                  // On mobile/tab mode, switch to terminal view so the panel is visible
-                  if (isMobileLayout || termViewMode === 'tabs') {
-                    setActiveView('terminal');
+                  if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
+                  setTimeout(
+                    () => terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' }),
+                    100,
+                  );
+                }}
+                onOpenShreCli={() => {
+                  setShowTerminal(true);
+                  if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
+                  setTimeout(
+                    () => terminalRef.current?.openTab({ title: 'Shre CLI', cmd: 'shre' }),
+                    100,
+                  );
+                }}
+                currentAgentName={currentAgent.name}
+                activeSessionId={activeSessionId}
+                messages={messages}
+                inputRef={inputRef}
+                fileRef={fileRef}
+                emojiRef={emojiRef}
+                pendingFiles={pendingFiles}
+                onFileSelect={handleFileSelect}
+                onRemovePendingFile={removePendingFile}
+                onImageClick={setLightboxSrc}
+                onPaste={handlePaste}
+                showEmoji={showEmoji}
+                setShowEmoji={setShowEmoji}
+                isRecording={isRecording}
+                voicePhase={voicePhase}
+                audioLevel={audioLevel}
+                recordingDuration={recordingDuration}
+                isSpeaking={isSpeaking}
+                interimTranscript={interimTranscript}
+                isHandsFree={isHandsFree}
+                voiceMode={voiceMode}
+                ttsVoice={ttsVoice}
+                ttsProvider={ttsProvider}
+                speechSupported={speechSupported}
+                hasSpeechRecognition={hasSpeechRecognition}
+                onStartRecording={startRecording}
+                onStopRecording={stopRecording}
+                setIsHandsFree={setIsHandsFree}
+                setVoiceMode={setVoiceMode}
+                setTtsVoice={setTtsVoice}
+                setTtsProvider={setTtsProvider}
+                onStopTTS={() => {
+                  if (ttsAudioRef.current) {
+                    ttsAudioRef.current.pause();
+                    ttsAudioRef.current = null;
                   }
-                } else {
-                  setShowTerminal(false);
-                  setActiveView('chat');
+                  window.speechSynthesis?.cancel();
+                  setIsSpeaking(false);
+                }}
+                showTerminal={showTerminal}
+                termViewMode={termViewMode}
+                onToggleTerminal={() => {
+                  if (!showTerminal) {
+                    setShowTerminal(true);
+                    if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
+                  } else {
+                    setShowTerminal(false);
+                    setActiveView('chat');
+                  }
+                }}
+                onToggleTermViewMode={() => {
+                  const next = termViewMode === 'split' ? 'tabs' : 'split';
+                  setTermViewMode(next);
+                  if (next === 'tabs') setActiveView('chat');
+                }}
+                slashOpen={slashOpen}
+                slashFiltered={slashFiltered}
+                slashIndex={slashIndex}
+                slashRef={slashRef}
+                setSlashIndex={setSlashIndex}
+                onSlashSelect={(cmd) => {
+                  const hasArg = slashFiltered.find((c) => c.name === cmd)?.usage.includes('<');
+                  if (hasArg && !input.includes(' ')) setInput(`/${cmd} `);
+                  else executeSlashCommand(cmd.startsWith('model ') ? cmd : input.slice(1));
+                }}
+                mentionOpen={mentionOpen}
+                mentionFiltered={mentionFiltered}
+                mentionIndex={mentionIndex}
+                mentionRef={mentionRef}
+                setMentionIndex={setMentionIndex}
+                onMentionSelect={onMentionSelect}
+                mentionAgent={mentionAgent}
+                replyToIndex={state.replyToIndex}
+                replyToContent={
+                  state.replyToIndex !== null
+                    ? (filteredMessages[state.replyToIndex]?.content ??
+                      messages[state.replyToIndex]?.content ??
+                      null)
+                    : null
                 }
-              }}
-              onToggleTermViewMode={() => {
-                const next = termViewMode === 'split' ? 'tabs' : 'split';
-                setTermViewMode(next);
-                if (next === 'tabs') setActiveView('chat');
-              }}
-              slashOpen={slashOpen}
-              slashFiltered={slashFiltered}
-              slashIndex={slashIndex}
-              slashRef={slashRef}
-              setSlashIndex={setSlashIndex}
-              onSlashSelect={(cmd) => {
-                const hasArg = slashFiltered.find((c) => c.name === cmd)?.usage.includes('<');
-                if (hasArg && !input.includes(' ')) {
-                  setInput(`/${cmd} `);
-                } else {
-                  executeSlashCommand(cmd.startsWith('model ') ? cmd : input.slice(1));
+                onCancelReply={() => actions.setReplyTo(null)}
+                editingMsgIndex={editingMsgIndex}
+                editingQueueId={editingQueueId}
+                onCancelEdit={() => {
+                  if (editingQueueId) {
+                    setEditingQueueId(null);
+                    setEditingQueueText('');
+                  } else {
+                    setEditingMsgIndex(null);
+                    setEditingMsgText('');
+                  }
+                  setInput('');
+                }}
+                suggestions={suggestions}
+                onSelectSuggestion={(s) => {
+                  setSuggestions([]);
+                  setInput(s);
+                }}
+                voiceAnnouncement={voiceAnnouncement}
+              />
+            </div>
+          }
+          terminal={
+            showTerminal && (
+              <Suspense
+                fallback={
+                  <div className="h-full flex items-center justify-center bg-background-main">
+                    <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                  </div>
                 }
-              }}
-              mentionOpen={mentionOpen}
-              mentionFiltered={mentionFiltered}
-              mentionIndex={mentionIndex}
-              mentionRef={mentionRef}
-              setMentionIndex={setMentionIndex}
-              onMentionSelect={onMentionSelect}
-              mentionAgent={mentionAgent}
-              replyToIndex={state.replyToIndex}
-              replyToContent={
-                state.replyToIndex !== null
-                  ? (filteredMessages[state.replyToIndex]?.content ??
-                    messages[state.replyToIndex]?.content ??
-                    null)
-                  : null
-              }
-              onCancelReply={() => actions.setReplyTo(null)}
-              editingMsgIndex={editingMsgIndex}
-              editingQueueId={editingQueueId}
-              onCancelEdit={() => {
-                if (editingQueueId) {
-                  setEditingQueueId(null);
-                  setEditingQueueText('');
-                } else {
-                  setEditingMsgIndex(null);
-                  setEditingMsgText('');
-                }
-                setInput('');
-              }}
-              suggestions={suggestions}
-              onSelectSuggestion={(s) => {
-                setSuggestions([]);
-                setInput(s);
-              }}
-              voiceAnnouncement={voiceAnnouncement}
-              queueCount={state.queue.length}
-              onInputChange={(val) => {
-                setInput(val);
-                if (activeSessionId) actions.setDraft(activeSessionId, val);
-                if (val && suggestions.length) setSuggestions([]);
-                if (selectedMsgIndex !== null) setSelectedMsgIndex(null);
-              }}
-              filteredMessages={filteredMessages}
-            />
-          </div>
+              >
+                <TerminalView
+                  ref={terminalRef}
+                  active={activeView === 'terminal'}
+                  onExecute={handleSend}
+                />
+              </Suspense>
+            )
+          }
+          preview={
+            activeView === 'preview' &&
+            previewContent && (
+              <PreviewPanel
+                content={previewContent.content}
+                type={previewContent.type}
+                title={previewContent.title}
+                onClose={() => setActiveView('chat')}
+              />
+            )
+          }
+        />
+      </ViewErrorBoundary>
+      {branchToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full shadow-lg z-50 animate-bounce">
+          Branched conversation
+        </div>
+      )}
+      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+      <ShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
-          {/* Task detail drawer — slides in from right when a task is selected */}
-          {selectedTask && (
-            <TaskPanel
-              task={selectedTask}
-              onClose={() => setSelectedTaskId(null)}
-              onUpdateTask={updateTask}
-              fetchSubtasks={fetchSubtasks}
-              fetchTrace={fetchTrace}
-            />
-          )}
+      {/* Mic hardware release confirmation */}
+      {micToast && (
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 px-4 py-2 bg-slate-900/90 backdrop-blur-md text-white/90 text-xs font-bold uppercase tracking-widest rounded-full shadow-2xl border border-white/10 z-[300] flex items-center gap-2 animate-fadeIn">
+          <svg
+            className="w-3 h-3 text-red-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+          >
+            <line x1="1" y1="1" x2="23" y2="23" />
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          Mic Off
         </div>
       )}
 
-      {/* ── Voice Assistant Overlay ──────────────────────────── */}
-      <ViewErrorBoundary viewName="Voice Assistant">
-        <Suspense fallback={null}>
-          <VoiceAssistant
-            open={voiceAssistantOpen}
-            onClose={() => {
-              setVoiceAssistantOpen(false);
-              window.dispatchEvent(new CustomEvent('shre-voice-stop'));
-            }}
-            messages={voiceMessages}
-            agentName={currentAgent.name}
-            agentEmoji={currentAgent.emoji}
-            agentId={activeAgentId}
-            ttsVoice={ttsVoice}
-            ttsProvider={ttsProvider}
-            agents={AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji }))}
-            onSwitchAgent={(id) => actions.setActiveAgent(id)}
-            onVoiceTurn={(turn) => {
-              if (voiceSessionId) {
-                actions.addMessage(voiceSessionId, { role: turn.role, content: turn.content });
-                // Auto-title on first user message
-                if (turn.role === 'user' && voiceSession && voiceSession.messages.length === 0) {
-                  const title =
-                    'Voice: ' +
-                    (turn.content.length > 35 ? turn.content.slice(0, 35) + '…' : turn.content);
-                  actions.updateSessionTitle(voiceSessionId, title);
-                }
-              }
-            }}
-            routerMode={routerMode}
-            models={AVAILABLE_MODELS}
-            selectedModel={selectedModel}
-            onSelectModel={setSelectedModel}
-            onSetTtsProvider={(v: string) => setTtsProvider(v as any)}
-          />
-        </Suspense>
-      </ViewErrorBoundary>
-
-      {/* ── Realtime Full-Duplex Voice Overlay ──────────────────────────── */}
-      {realtimeVoiceOpen && (
-        <ViewErrorBoundary viewName="Realtime Voice">
-          <Suspense fallback={null}>
-            <RealtimeVoiceOverlay
-              onClose={() => setRealtimeVoiceOpen(false)}
-              defaultPersona={currentAgent.id === 'ellie' ? 'ellie' : 'shre'}
-              onVoiceTurn={(turn) => {
-                if (voiceSessionId) {
-                  actions.addMessage(voiceSessionId, { role: turn.role, content: turn.content });
-                  if (turn.role === 'user' && voiceSession && voiceSession.messages.length === 0) {
-                    const title =
-                      'Voice Call: ' +
-                      (turn.content.length > 30 ? turn.content.slice(0, 30) + '…' : turn.content);
-                    actions.updateSessionTitle(voiceSessionId, title);
-                  }
-                }
-              }}
-            />
-          </Suspense>
-        </ViewErrorBoundary>
-      )}
-
-      {/* ── Keyboard Shortcuts Overlay (Cmd+?) ──────────────────────────── */}
-      <ShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-
-      {/* ── Cross-Session Search Modal (Cmd+Shift+F) ───────────────────── */}
       <GlobalSearchModal
-        isOpen={globalSearchOpen}
+        open={globalSearchOpen}
         onClose={() => setGlobalSearchOpen(false)}
         query={globalSearchQuery}
         onQueryChange={setGlobalSearchQuery}
         results={globalSearchResults}
         searching={globalSearching}
-        onSearch={() => {
-          setGlobalSearching(true);
-          fetch(`/api/search?q=${encodeURIComponent(globalSearchQuery.trim())}`)
-            .then((r) => r.json())
-            .then((data) => {
-              setGlobalSearchResults(data.results || []);
-              setGlobalSearching(false);
-            })
-            .catch(() => setGlobalSearching(false));
-        }}
-        onResultClick={(r) => {
-          actions.setActiveAgent(r.agentId);
-          const existing = sessions.find((s) => s.agentId === r.agentId);
-          if (existing) actions.switchSession(existing.id);
+        onSelect={(s, m) => {
+          actions.switchSession(s);
+          setTimeout(() => setSelectedMsgIndex(m), 100);
           setGlobalSearchOpen(false);
-          setChatSearchOpen(true);
-          setChatSearch(globalSearchQuery);
         }}
-        inputRef={globalSearchRef}
       />
-    </main>
+      {sharedSnapshot && (
+        <ShareSnapshotView
+          snapshot={sharedSnapshot}
+          loading={sharedLoading}
+          error={sharedError}
+          onClose={() => setSharedSnapshot(null)}
+        />
+      )}
+      <AppsDrawer
+        open={showApps}
+        onClose={() => setShowApps(false)}
+        activeAgentId={activeAgentId}
+      />
+      <Suspense fallback={null}>
+        <VoiceAssistant
+          open={voiceAssistantOpen}
+          onClose={() => setVoiceAssistantOpen(false)}
+          messages={messages}
+          agentName={currentAgent.name}
+          agentEmoji={currentAgent.emoji}
+          agentId={activeAgentId}
+          ttsVoice={ttsVoice}
+          ttsProvider={ttsProvider}
+          agents={AGENTS}
+          onSwitchAgent={(id) => {
+            actions.switchAgent(id);
+            actions.newSession();
+          }}
+          onVoiceTurn={(t) => {
+            if (voiceSessionId)
+              actions.addMessage(voiceSessionId, { role: t.role, content: t.content });
+          }}
+          routerMode={routerMode}
+          models={AVAILABLE_MODELS}
+          selectedModel={selectedModel}
+          onSelectModel={(id) => {
+            setSelectedModel(id);
+            setModelOverride(activeAgentId, id);
+          }}
+          onSetTtsProvider={setTtsProvider}
+        />
+      </Suspense>
+      <RealtimeVoiceOverlay
+        open={realtimeVoiceOpen}
+        onClose={() => setRealtimeVoiceOpen(false)}
+        agentName={currentAgent.name}
+        agentEmoji={currentAgent.emoji}
+      />
+      <ArtifactCanvas
+        artifact={activeArtifact}
+        artifacts={extractArtifacts(messages)}
+        onClose={() => setActiveArtifact(null)}
+        onArtifactClick={setActiveArtifact}
+      />
+    </div>
   );
 }

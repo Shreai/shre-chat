@@ -71,6 +71,13 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
     abortRef.current?.abort();
   }, [wsConnected, activeAgentId, abortRef]);
 
+  // Handle programatic abort from voice barge-in
+  useEffect(() => {
+    const stopHandler = () => handleAbort();
+    window.addEventListener('shre-stop-generation', stopHandler);
+    return () => window.removeEventListener('shre-stop-generation', stopHandler);
+  }, [handleAbort]);
+
   // Global keyboard shortcuts: Escape=abort, Cmd/Ctrl+K=new chat, Cmd/Ctrl+/=toggle model picker, etc.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

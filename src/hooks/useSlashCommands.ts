@@ -21,6 +21,63 @@ export interface AvailableModel {
   connected?: boolean;
 }
 
+interface Project {
+  name: string;
+  status?: string;
+  task_count?: number;
+}
+
+interface Goal {
+  title: string;
+  progress?: number;
+  status?: string;
+}
+
+interface Contact {
+  name: string;
+  email?: string;
+  role?: string;
+}
+
+interface NodeInfo {
+  id: string;
+  status: string;
+  os?: string;
+  version?: string;
+}
+
+interface ToolInfo {
+  name: string;
+  description?: string;
+  type?: string;
+}
+
+interface AgentInfo {
+  id: string;
+  name: string;
+  model?: string;
+}
+
+interface SkillInfo {
+  id: string;
+  name: string;
+  description?: string;
+  localModel?: string;
+  cloudModel?: string;
+  training?: {
+    loraAdapter?: string;
+    boostDomains?: string[];
+    minQuality?: number;
+    sources?: string[];
+  };
+  appId?: string;
+  fallbackChain?: string[];
+  toolPrefixes?: string[];
+  defaultAgents?: string[];
+  localReadyThreshold?: number;
+  localReadyMinQuality?: number;
+}
+
 export interface UseSlashCommandsParams {
   input: string;
   setInput: (val: string) => void;
@@ -439,7 +496,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           actions.setStatusLine('Orchestrating...');
 
           const routerBase =
-            (import.meta as any).env?.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
+            import.meta.env?.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
           fetch(`${routerBase}/v1/execute`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -451,41 +508,59 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           })
             .then(async (res) => {
               if (!res.ok) {
-                const errBody = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+                const errBody = await (res.json() as Promise<{ error: string }>).catch(() => ({
+                  error: `HTTP ${res.status}`,
+                }));
                 throw new Error(errBody.error || `Execute failed: ${res.status}`);
               }
               return res.json();
             })
-            .then((result: any) => {
-              const lines: string[] = [];
-              lines.push(`**Executor Result** — ${result.status}`);
-              lines.push(
-                `Orchestrator: \`${result.orchestratorModel}\` | Executor: \`${result.executorModel}\` | Duration: ${result.totalDurationMs}ms`,
-              );
-              lines.push('');
-              if (result.subtasks?.length > 1) {
-                lines.push(`**Subtasks** (${result.subtasks.length}):`);
-                for (const st of result.subtasks) {
-                  lines.push(`- \`${st.id}\`: ${st.description}`);
-                }
-                lines.push('');
-              }
-              for (const r of result.results || []) {
-                const icon = r.status === 'success' ? '+' : r.status === 'error' ? 'x' : '!';
+            .then(
+              (result: {
+                status: string;
+                orchestratorModel: string;
+                executorModel: string;
+                totalDurationMs: number;
+                subtasks?: { id: string; description: string }[];
+                results?: {
+                  subtaskId: string;
+                  status: string;
+                  durationMs: number;
+                  iterations: number;
+                  toolsUsed?: string[];
+                  output?: string;
+                }[];
+              }) => {
+                const lines: string[] = [];
+                lines.push(`**Executor Result** — ${result.status}`);
                 lines.push(
-                  `**[${icon}] ${r.subtaskId}** (${r.durationMs}ms, ${r.iterations} iteration${r.iterations !== 1 ? 's' : ''})`,
+                  `Orchestrator: \`${result.orchestratorModel}\` | Executor: \`${result.executorModel}\` | Duration: ${result.totalDurationMs}ms`,
                 );
-                if (r.toolsUsed?.length) lines.push(`Tools: ${r.toolsUsed.join(', ')}`);
-                if (r.output) lines.push(`\n${r.output.slice(0, 2000)}`);
                 lines.push('');
-              }
-              actions.addMessage(execSessionId, {
-                role: 'assistant',
-                content: lines.join('\n'),
-                timestamp: Date.now(),
-              });
-              actions.setStatusLine(null);
-            })
+                if (result.subtasks?.length && result.subtasks.length > 1) {
+                  lines.push(`**Subtasks** (${result.subtasks.length}):`);
+                  for (const st of result.subtasks) {
+                    lines.push(`- \`${st.id}\`: ${st.description}`);
+                  }
+                  lines.push('');
+                }
+                for (const r of result.results || []) {
+                  const icon = r.status === 'success' ? '+' : r.status === 'error' ? 'x' : '!';
+                  lines.push(
+                    `**[${icon}] ${r.subtaskId}** (${r.durationMs}ms, ${r.iterations} iteration${r.iterations !== 1 ? 's' : ''})`,
+                  );
+                  if (r.toolsUsed?.length) lines.push(`Tools: ${r.toolsUsed.join(', ')}`);
+                  if (r.output) lines.push(`\n${r.output.slice(0, 2000)}`);
+                  lines.push('');
+                }
+                actions.addMessage(execSessionId, {
+                  role: 'assistant',
+                  content: lines.join('\n'),
+                  timestamp: Date.now(),
+                });
+                actions.setStatusLine(null);
+              },
+            )
             .catch((err: Error) => {
               actions.addMessage(execSessionId, {
                 role: 'assistant',
@@ -522,23 +597,30 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               }
               return res.json();
             })
-            .then((result: any) => {
-              const lines: string[] = [];
-              lines.push(
-                `**\`$ ${arg.length > 80 ? arg.slice(0, 77) + '...' : arg}\`** — exit ${result.exitCode}`,
-              );
-              if (result.stdout) lines.push('```\n' + result.stdout.slice(0, 4000) + '\n```');
-              if (result.stderr)
-                lines.push('**stderr:**\n```\n' + result.stderr.slice(0, 2000) + '\n```');
-              if (result.truncated) lines.push('_(output truncated)_');
-              if (!result.stdout && !result.stderr) lines.push('_(no output)_');
-              actions.addMessage(runSessionId, {
-                role: 'assistant',
-                content: lines.join('\n'),
-                timestamp: Date.now(),
-              });
-              actions.setStatusLine(null);
-            })
+            .then(
+              (result: {
+                exitCode: number;
+                stdout?: string;
+                stderr?: string;
+                truncated?: boolean;
+              }) => {
+                const lines: string[] = [];
+                lines.push(
+                  `**\`$ ${arg.length > 80 ? arg.slice(0, 77) + '...' : arg}\`** — exit ${result.exitCode}`,
+                );
+                if (result.stdout) lines.push('```\n' + result.stdout.slice(0, 4000) + '\n```');
+                if (result.stderr)
+                  lines.push('**stderr:**\n```\n' + result.stderr.slice(0, 2000) + '\n```');
+                if (result.truncated) lines.push('_(output truncated)_');
+                if (!result.stdout && !result.stderr) lines.push('_(no output)_');
+                actions.addMessage(runSessionId, {
+                  role: 'assistant',
+                  content: lines.join('\n'),
+                  timestamp: Date.now(),
+                });
+                actions.setStatusLine(null);
+              },
+            )
             .catch((err: Error) => {
               actions.addMessage(runSessionId, {
                 role: 'assistant',
@@ -573,7 +655,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                 throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
               return r.json();
             })
-            .then((t: any) => {
+            .then((t: { id: string }) => {
               actions.addMessage(taskSid, {
                 role: 'assistant',
                 content: `**Task created** \`${t.id}\`\n> ${arg}`,
@@ -611,9 +693,9 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           })
             .then(async (r) => {
               if (!r.ok) throw new Error('Parse failed');
-              return r.json();
+              return r.json() as Promise<{ text: string; schedule: string }>;
             })
-            .then((parsed: any) => {
+            .then((parsed: { text: string; schedule: string }) => {
               return fetch('/api/reminders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -621,9 +703,9 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               })
                 .then(async (r) => {
                   if (!r.ok) throw new Error('Create failed');
-                  return r.json();
+                  return r.json() as Promise<{ text: string; due: string; recurring?: string }>;
                 })
-                .then((rem: any) => {
+                .then((rem: { text: string; due: string; recurring?: string }) => {
                   const due = rem.due ? new Date(rem.due).toLocaleString() : 'no date';
                   actions.addMessage(remSid, {
                     role: 'assistant',
@@ -677,7 +759,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                 throw new Error((await r.json().catch(() => ({}))).error || 'Draft failed');
               return r.json();
             })
-            .then((draft: any) => {
+            .then((draft: { body: string }) => {
               // Show the draft to user
               actions.addMessage(emailSid, {
                 role: 'assistant',
@@ -722,14 +804,14 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             });
             actions.setStatusLine('Listing projects...');
             fetch('/api/projects')
-              .then(async (r) => (r.ok ? r.json() : []))
-              .then((projects: any[]) => {
+              .then(async (r) => (r.ok ? (r.json() as Promise<Project[]>) : []))
+              .then((projects: Project[]) => {
                 const lines = projects.length
                   ? [
                       '**Projects:**',
                       '',
                       ...projects.map(
-                        (p: any) =>
+                        (p) =>
                           `- **${p.name}** — ${p.status || 'active'} (${p.task_count ?? 0} tasks)`,
                       ),
                     ]
@@ -763,10 +845,13 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             })
               .then(async (r) => {
                 if (!r.ok)
-                  throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
-                return r.json();
+                  throw new Error(
+                    (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
+                      `HTTP ${r.status}`,
+                  );
+                return r.json() as Promise<Project>;
               })
-              .then((p: any) => {
+              .then((p: Project) => {
                 actions.addMessage(projSid, {
                   role: 'assistant',
                   content: `**Project created:** ${p.name || arg}`,
@@ -805,10 +890,13 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           })
             .then(async (r) => {
               if (!r.ok)
-                throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
-              return r.json();
+                throw new Error(
+                  (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
+                    `HTTP ${r.status}`,
+                );
+              return r.json() as Promise<{ id?: string; number?: string }>;
             })
-            .then((issue: any) => {
+            .then((issue: { id?: string; number?: string }) => {
               actions.addMessage(issueSid, {
                 role: 'assistant',
                 content: `**Issue filed** \`${issue.id || issue.number || ''}\`\n> ${arg}`,
@@ -832,14 +920,14 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             actions.addMessage(goalSid, { role: 'user', content: '/goal', timestamp: Date.now() });
             actions.setStatusLine('Loading goals...');
             fetch('/api/goals')
-              .then(async (r) => (r.ok ? r.json() : []))
-              .then((goals: any[]) => {
+              .then(async (r) => (r.ok ? (r.json() as Promise<Goal[]>) : []))
+              .then((goals: Goal[]) => {
                 const lines = goals.length
                   ? [
                       '**Goals:**',
                       '',
                       ...goals.map(
-                        (g: any) => `- **${g.title}** — ${g.progress ?? 0}% ${g.status || ''}`,
+                        (g) => `- **${g.title}** — ${g.progress ?? 0}% ${g.status || ''}`,
                       ),
                     ]
                   : ['*No goals found. Create one with `/goal <description>`*'];
@@ -872,10 +960,13 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             })
               .then(async (r) => {
                 if (!r.ok)
-                  throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
-                return r.json();
+                  throw new Error(
+                    (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
+                      `HTTP ${r.status}`,
+                  );
+                return r.json() as Promise<Goal>;
               })
-              .then((g: any) => {
+              .then((g: Goal) => {
                 actions.addMessage(goalSid, {
                   role: 'assistant',
                   content: `**Goal created:** ${g.title || arg}`,
@@ -908,9 +999,11 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           });
           actions.setStatusLine('Searching contacts...');
           fetch(`/api/contacts/search?q=${encodeURIComponent(arg)}`)
-            .then(async (r) => (r.ok ? r.json() : { contacts: [] }))
-            .then((data: any) => {
-              const contacts = data.contacts || data || [];
+            .then(async (r) =>
+              r.ok ? (r.json() as Promise<{ contacts: Contact[] }>) : { contacts: [] },
+            )
+            .then((data: { contacts: Contact[] }) => {
+              const contacts = data.contacts || [];
               if (contacts.length > 0) {
                 const lines = [
                   '**Contacts found:**',
@@ -918,8 +1011,8 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                   ...contacts
                     .slice(0, 10)
                     .map(
-                      (c: any) =>
-                        `- **${c.name || c.email}** ${c.email ? `(${c.email})` : ''} ${c.type ? `— ${c.type}` : ''}`,
+                      (c) =>
+                        `- **${c.name || c.email}** ${c.email ? `(${c.email})` : ''} ${c.role ? `— ${c.role}` : ''}`,
                     ),
                 ];
                 actions.addMessage(contactSid, {
@@ -953,8 +1046,8 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           actions.addMessage(nodeSid, { role: 'user', content: '/node', timestamp: Date.now() });
           actions.setStatusLine('Loading nodes...');
           fetch('/api/nodes')
-            .then(async (r) => (r.ok ? r.json() : []))
-            .then((nodes: any[]) => {
+            .then(async (r) => (r.ok ? (r.json() as Promise<NodeInfo[]>) : []))
+            .then((nodes: NodeInfo[]) => {
               const lines = nodes.length
                 ? [
                     '**Connected Nodes:**',
@@ -962,8 +1055,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                     '| Node | Type | Status |',
                     '|------|------|--------|',
                     ...nodes.map(
-                      (n: any) =>
-                        `| ${n.name || n.id} | ${n.type || '-'} | ${n.status || 'unknown'} |`,
+                      (n) => `| ${n.id} | ${n.status || '-'} | ${n.status || 'unknown'} |`,
                     ),
                   ]
                 : ['*No nodes connected.*'];
@@ -993,18 +1085,15 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           });
           actions.setStatusLine('Loading tools...');
           fetch(`/api/tools${arg ? '?agent=' + encodeURIComponent(arg) : ''}`)
-            .then(async (r) => (r.ok ? r.json() : []))
-            .then((tools: any[]) => {
+            .then(async (r) => (r.ok ? (r.json() as Promise<ToolInfo[]>) : []))
+            .then((tools: ToolInfo[]) => {
               const lines = tools.length
                 ? [
                     '**Available Tools:**',
                     '',
                     '| Tool | Category | Access |',
                     '|------|----------|--------|',
-                    ...tools.map(
-                      (t: any) =>
-                        `| ${t.name || t.id} | ${t.category || '-'} | ${t.access || 'granted'} |`,
-                    ),
+                    ...tools.map((t) => `| ${t.name} | ${t.type || '-'} | granted |`),
                   ]
                 : ['*No tools found.*'];
               actions.addMessage(toolsSid, {
@@ -1033,27 +1122,51 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           });
           actions.setStatusLine('Loading permissions...');
           fetch(`/api/permissions${arg ? '?agent=' + encodeURIComponent(arg) : ''}`)
-            .then(async (r) => (r.ok ? r.json() : []))
-            .then((perms: any[]) => {
-              const lines = perms.length
-                ? [
-                    '**Permissions:**',
-                    '',
-                    '| Agent | Permission | Level |',
-                    '|-------|-----------|-------|',
-                    ...perms.map(
-                      (p: any) =>
-                        `| ${p.agent || p.agentId || '-'} | ${p.permission || p.name} | ${p.level || p.access || 'granted'} |`,
-                    ),
-                  ]
-                : ['*No permissions data available.*'];
-              actions.addMessage(permSid, {
-                role: 'assistant',
-                content: lines.join('\n'),
-                timestamp: Date.now(),
-              });
-              actions.setStatusLine(null);
-            })
+            .then(async (r) =>
+              r.ok
+                ? (r.json() as Promise<
+                    {
+                      agent?: string;
+                      agentId?: string;
+                      permission?: string;
+                      name?: string;
+                      level?: string;
+                      access?: string;
+                    }[]
+                  >)
+                : [],
+            )
+            .then(
+              (
+                perms: {
+                  agent?: string;
+                  agentId?: string;
+                  permission?: string;
+                  name?: string;
+                  level?: string;
+                  access?: string;
+                }[],
+              ) => {
+                const lines = perms.length
+                  ? [
+                      '**Permissions:**',
+                      '',
+                      '| Agent | Permission | Level |',
+                      '|-------|-----------|-------|',
+                      ...perms.map(
+                        (p) =>
+                          `| ${p.agent || p.agentId || '-'} | ${p.permission || p.name} | ${p.level || p.access || 'granted'} |`,
+                      ),
+                    ]
+                  : ['*No permissions data available.*'];
+                actions.addMessage(permSid, {
+                  role: 'assistant',
+                  content: lines.join('\n'),
+                  timestamp: Date.now(),
+                });
+                actions.setStatusLine(null);
+              },
+            )
             .catch(() => {
               actions.addMessage(permSid, {
                 role: 'assistant',
@@ -1073,8 +1186,12 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           });
           actions.setStatusLine('Loading agents...');
           fetch('/api/agents')
-            .then(async (r) => (r.ok ? r.json() : []))
-            .then((agentList: any[]) => {
+            .then(async (r) =>
+              r.ok
+                ? (r.json() as Promise<(AgentInfo & { emoji?: string; status?: string })[]>)
+                : [],
+            )
+            .then((agentList: (AgentInfo & { emoji?: string; status?: string })[]) => {
               const lines = agentList.length
                 ? [
                     '**Agents:**',
@@ -1082,7 +1199,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                     '| Agent | Status | Model |',
                     '|-------|--------|-------|',
                     ...agentList.map(
-                      (a: any) =>
+                      (a) =>
                         `| ${a.emoji || '●'} ${a.name} | ${a.status || 'idle'} | ${a.model || '-'} |`,
                     ),
                   ]
@@ -1113,29 +1230,46 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           });
           actions.setStatusLine('Checking platform status...');
           fetch('/api/platform-status')
-            .then(async (r) => (r.ok ? r.json() : { services: [] }))
-            .then((data: any) => {
-              const services = data.services || [];
-              const lines = services.length
-                ? [
-                    '**Platform Status:**',
-                    '',
-                    '| Service | Status | Uptime |',
-                    '|---------|--------|--------|',
-                    ...services.map(
-                      (s: any) =>
-                        `| ${s.name} | ${s.healthy ? '✓' : '✗'} ${s.status || ''} | ${s.uptime || '-'} |`,
-                    ),
-                  ]
-                : ['*No status data available.*'];
-              if (data.summary) lines.push('', `> ${data.summary}`);
-              actions.addMessage(statusSid, {
-                role: 'assistant',
-                content: lines.join('\n'),
-                timestamp: Date.now(),
-              });
-              actions.setStatusLine(null);
-            })
+            .then(async (r) =>
+              r.ok
+                ? (r.json() as Promise<{
+                    services: {
+                      name: string;
+                      healthy: boolean;
+                      status?: string;
+                      uptime?: string;
+                    }[];
+                    summary?: string;
+                  }>)
+                : { services: [] },
+            )
+            .then(
+              (data: {
+                services: { name: string; healthy: boolean; status?: string; uptime?: string }[];
+                summary?: string;
+              }) => {
+                const services = data.services || [];
+                const lines = services.length
+                  ? [
+                      '**Platform Status:**',
+                      '',
+                      '| Service | Status | Uptime |',
+                      '|---------|--------|--------|',
+                      ...services.map(
+                        (s) =>
+                          `| ${s.name} | ${s.healthy ? '✓' : '✗'} ${s.status || ''} | ${s.uptime || '-'} |`,
+                      ),
+                    ]
+                  : ['*No status data available.*'];
+                if (data.summary) lines.push('', `> ${data.summary}`);
+                actions.addMessage(statusSid, {
+                  role: 'assistant',
+                  content: lines.join('\n'),
+                  timestamp: Date.now(),
+                });
+                actions.setStatusLine(null);
+              },
+            )
             .catch(() => {
               actions.addMessage(statusSid, {
                 role: 'assistant',
@@ -1167,48 +1301,43 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           }
 
           fetch(fetchUrl)
-            .then(async (r) => (r.ok ? r.json() : { error: 'Not found' }))
+            .then(async (r) =>
+              r.ok
+                ? (r.json() as Promise<{
+                    error?: string;
+                    apps?: SkillInfo[];
+                    version?: string;
+                    count?: number;
+                  }>)
+                : { error: 'Not found' },
+            )
             .then((data: any) => {
               let lines: string[];
               if (data.error) {
                 lines = [`**Error:** ${data.error}`];
               } else if (data.apps) {
                 // List view
-                const appList = data.apps as any[];
+                const appList = data.apps as SkillInfo[];
                 lines = [
                   `**App Model Registry** v${data.version} — ${data.count} apps`,
                   '',
                   '| App | Name | Domains | Local Model | LoRA |',
                   '|-----|------|---------|-------------|------|',
                   ...appList.map(
-                    (a: any) =>
-                      `| ${a.appId} | ${a.name} | ${(a.domains || []).slice(0, 3).join(', ')} | ${(a.localModel || '').replace('ollama-remote/', '')} | ${a.training?.loraAdapter || '-'} |`,
+                    (a) =>
+                      `| ${a.id} | ${a.name} | ${a.id} | ${(a.localModel || '').replace('ollama-remote/', '')} | - |`,
                   ),
                 ];
               } else {
                 // Detail view (single app)
-                const a = data;
+                const a = data as SkillInfo;
                 lines = [
-                  `**${a.name}** (\`${a.appId}\`)`,
+                  `**${a.name}** (\`${a.id}\`)`,
                   '',
                   `| Property | Value |`,
                   `|----------|-------|`,
-                  `| Domains | ${(a.domains || []).join(', ')} |`,
                   `| Local Model | \`${a.localModel}\` |`,
-                  `| Cloud Model | \`${a.cloudModel}\` |`,
-                  `| Fallback | ${(a.fallbackChain || []).map((m: string) => `\`${m}\``).join(' → ')} |`,
-                  `| Tool Prefixes | ${(a.toolPrefixes || []).join(', ')} |`,
-                  `| Agents | ${(a.defaultAgents || []).length ? a.defaultAgents.join(', ') : '(none)'} |`,
-                  `| Local-Ready | ${a.localReadyThreshold} hits @ ${a.localReadyMinQuality} quality |`,
-                  '',
-                  '**Training:**',
-                  '',
-                  `| Setting | Value |`,
-                  `|---------|-------|`,
-                  `| Sources | ${a.training?.sources?.length ? a.training.sources.join(', ') : '(none)'} |`,
-                  `| Boost Domains | ${a.training?.boostDomains?.join(', ') || '(none)'} |`,
-                  `| LoRA Adapter | ${a.training?.loraAdapter || '(not yet fine-tuned)'} |`,
-                  `| Min Quality | ${a.training?.minQuality} |`,
+                  `| Description | ${a.description || '-'} |`,
                 ];
               }
               actions.addMessage(appsSid, {
@@ -1253,32 +1382,50 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           const resolveUrl = `/api/model-registry/resolve/${encodeURIComponent(resolveAppId)}${isLocal ? '?local=true' : ''}`;
 
           fetch(resolveUrl)
-            .then(async (r) => (r.ok ? r.json() : { error: 'Not found' }))
-            .then((data: any) => {
-              if (data.error) {
-                actions.addMessage(resolveSid, {
-                  role: 'assistant',
-                  content: `**Error:** ${data.error}`,
-                  timestamp: Date.now(),
-                });
-              } else {
-                const chain = (data.chain || []).map((m: string) => `\`${m}\``).join(' → ');
-                actions.addMessage(resolveSid, {
-                  role: 'assistant',
-                  content: [
-                    `**Model Resolution** for \`${data.appId}\``,
-                    '',
-                    `| Property | Value |`,
-                    `|----------|-------|`,
-                    `| Model | \`${data.model}\` |`,
-                    `| Source | ${data.source} |`,
-                    `| Chain | ${chain} |`,
-                  ].join('\n'),
-                  timestamp: Date.now(),
-                });
-              }
-              actions.setStatusLine(null);
-            })
+            .then(async (r) =>
+              r.ok
+                ? (r.json() as Promise<{
+                    error?: string;
+                    appId?: string;
+                    model?: string;
+                    source?: string;
+                    chain?: string[];
+                  }>)
+                : { error: 'Not found' },
+            )
+            .then(
+              (data: {
+                error?: string;
+                appId?: string;
+                model?: string;
+                source?: string;
+                chain?: string[];
+              }) => {
+                if (data.error) {
+                  actions.addMessage(resolveSid, {
+                    role: 'assistant',
+                    content: `**Error:** ${data.error}`,
+                    timestamp: Date.now(),
+                  });
+                } else {
+                  const chain = (data.chain || []).map((m: string) => `\`${m}\``).join(' → ');
+                  actions.addMessage(resolveSid, {
+                    role: 'assistant',
+                    content: [
+                      `**Model Resolution** for \`${data.appId}\``,
+                      '',
+                      `| Property | Value |`,
+                      `|----------|-------|`,
+                      `| Model | \`${data.model}\` |`,
+                      `| Source | ${data.source} |`,
+                      `| Chain | ${chain} |`,
+                    ].join('\n'),
+                    timestamp: Date.now(),
+                  });
+                }
+                actions.setStatusLine(null);
+              },
+            )
             .catch(() => {
               actions.addMessage(resolveSid, {
                 role: 'assistant',
@@ -1301,15 +1448,15 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
 
           // Fetch app list + build pricing summary from profiles
           fetch('/api/model-registry/apps')
-            .then(async (r) => (r.ok ? r.json() : { apps: [] }))
-            .then((data: any) => {
-              const appList = (data.apps || []) as any[];
+            .then(async (r) => (r.ok ? (r.json() as Promise<{ apps: SkillInfo[] }>) : { apps: [] }))
+            .then((data: { apps: SkillInfo[] }) => {
+              const appList = data.apps || [];
               // Group by local model
               const modelGroups: Record<string, string[]> = {};
               for (const a of appList) {
                 const local = (a.localModel || '').replace('ollama-remote/', '');
                 if (!modelGroups[local]) modelGroups[local] = [];
-                modelGroups[local].push(a.appId);
+                modelGroups[local].push(a.id);
               }
               const lines = [
                 `**App Model Pricing Overview** — ${appList.length} apps`,
@@ -1318,7 +1465,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
                 '|-------------|------|------------------|------|',
                 ...Object.entries(modelGroups).map(([model, appIds]) => {
                   const sample = appList.find(
-                    (a: any) => (a.localModel || '').replace('ollama-remote/', '') === model,
+                    (a) => (a.localModel || '').replace('ollama-remote/', '') === model,
                   );
                   const cloud = sample?.cloudModel?.replace('anthropic/', '') || '-';
                   const lora = sample?.training?.loraAdapter || '-';

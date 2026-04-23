@@ -58,7 +58,7 @@ interface ChatComposerProps {
   speechSupported: boolean;
   hasSpeechRecognition: boolean;
   onStartRecording: () => void;
-  onStopRecording: () => void;
+  onStopRecording: (forceRelease?: boolean) => void;
   setIsHandsFree: (val: boolean) => void;
   setVoiceMode: (val: boolean) => void;
   setTtsVoice: (val: string) => void;
@@ -852,7 +852,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     if (nextMode && !isRecording) {
                       onStartRecording();
                     } else if (!nextMode && isRecording) {
-                      onStopRecording();
+                      onStopRecording(true);
                     }
                   }}
                   className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
