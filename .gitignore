@@ -4,3 +4,15 @@ release/
 *.tsbuildinfo
 .DS_Store
 chat.db
+
+# Playwright — run artifacts and reports
+# e2e/results/.gitkeep is tracked so the dir exists for reporters to write into.
+e2e/results/artifacts/
+e2e/results/html-report/
+e2e/results/test-results.json
+e2e/results/failed-tests.json
+e2e/results/qa-report.md
+e2e/results/latest-*.json
+playwright-report/
+test-results/
+playwright/.cache/
