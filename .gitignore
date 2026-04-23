@@ -5,6 +5,11 @@ release/
 .DS_Store
 chat.db
 
+# Playwright visual regression: commit baseline PNGs, ignore diffs
+# (diffs land in e2e/__screenshots__/*-diff.png when a test fails)
+e2e/__screenshots__/**/*-diff.png
+e2e/__screenshots__/**/*-actual.png
+
 # Playwright — run artifacts and reports
 # e2e/results/.gitkeep is tracked so the dir exists for reporters to write into.
 e2e/results/artifacts/

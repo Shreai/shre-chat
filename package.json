@@ -21,6 +21,8 @@
     "build:app": "vite build && tsc -p electron/tsconfig.json && cp electron/dist/main.js electron/dist/main.cjs && electron-builder",
     "start:app": "tsc -p electron/tsconfig.json && cp electron/dist/main.js electron/dist/main.cjs && electron .",
     "test:e2e": "npx playwright test",
+    "test:visual": "npx playwright test --project=visual-regression",
+    "test:visual:update": "npx playwright test --project=visual-regression --update-snapshots",
     "qa": "node scripts/qa-orchestrator.mjs",
     "qa:rerun": "node scripts/qa-orchestrator.mjs --rerun-failed",
     "qa:agent": "node scripts/qa-orchestrator.mjs --agent",

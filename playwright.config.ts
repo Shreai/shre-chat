@@ -164,6 +164,26 @@ export default defineConfig({
       use: { browserName: 'chromium', storageState: AUTH_FILE },
       dependencies: ['setup'],
     },
+
+    // ── Visual regression (baseline screenshots, update with --update-snapshots) ──
+    {
+      name: 'visual-regression',
+      testMatch: /visual-regression\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        storageState: AUTH_FILE,
+        // Fixed viewport for deterministic baselines.
+        viewport: { width: 1280, height: 800 },
+        // Disable animations so screenshots are stable.
+        launchOptions: { args: ['--disable-blink-features=LayoutShift'] },
+      },
+      dependencies: ['setup'],
+      // Opt-in only: baselines go stale fast. Run via:
+      //   npx playwright test --project=visual-regression
+      // or update:
+      //   npx playwright test --project=visual-regression --update-snapshots
+    },
   ],
+  snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}-snapshots/{arg}{ext}',
   // Don't start a web server — assume shre-chat is already running on port 5510
 });
