@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePreferences } from '../preferences-store';
-import { sendMessage, type ChatMessage } from '../router-client';
+import { sendMessage, type ChatMessage, type PreviewGatePayload } from '../router-client';
 import { isWSConnected } from '../gateway-ws';
 import { getAgent, type UploadedFile, type Session, type AppActions } from '../store';
 import { playNotifSound } from '../chat-utils';
@@ -12,6 +12,7 @@ import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handl
 import { anchorContextIfNeeded, fetchContextSources } from './message-handlers/context-builder';
 import { useTaskIntents } from './message-handlers/task-intents';
 import { useMemoryIntents } from './message-handlers/memory-intents';
+import { useCommsIntents } from './message-handlers/comms-intents';
 import { handleWSMessage } from './message-handlers/ws-handler';
 
 // Re-export for backward compatibility
@@ -20,6 +21,7 @@ export { SYSTEM_PROMPT_VERSION };
 export interface UseMessageHandlersParams {
   input: string;
   setInput: (v: string) => void;
+  streaming?: boolean;
   syncing: boolean;
   writeEnabled: boolean;
   activeSessionId: string | null;
@@ -57,11 +59,14 @@ export interface UseMessageHandlersParams {
   setCompareWinner: (v: string | null) => void;
   cliMode: boolean;
   routerMode: boolean;
+  directMode?: boolean;
   gatewayMode: string;
   claudeCliMode: boolean;
   identityVerified: boolean;
   setIdentityVerified: (v: boolean) => void;
+  pendingMessage?: string | null;
   setPendingMessage: (v: string | null) => void;
+  verifying?: boolean;
   setVerifying: (v: boolean) => void;
   ensureSession: () => string;
   executeSlashCommand: (cmd: string) => void;
@@ -81,6 +86,9 @@ export interface UseMessageHandlersParams {
   ) => void;
   setActiveToolName: (v: string | null) => void;
   setCompacting: (v: boolean) => void;
+  setPendingApproval?: (
+    v: { approvalId: string; tool: string; input: any; reason: string } | null,
+  ) => void;
   setFirstTokenReceived: (v: boolean) => void;
   streamStartRef: React.MutableRefObject<number>;
   sendTimeRef: React.MutableRefObject<number>;
@@ -96,8 +104,10 @@ export interface UseMessageHandlersParams {
   streamBufferRef: React.MutableRefObject<string>;
   streamFlushRaf: React.MutableRefObject<number | null>;
   bufferToken: (fullText: string) => void;
+  flushStreamBuffer?: () => void;
   voiceFinalTranscriptRef: React.MutableRefObject<string>;
   wsConnected: boolean;
+  wsReconnecting?: boolean;
   recentWSSendRef: React.MutableRefObject<boolean>;
   virtualizer: { scrollToIndex: (idx: number, opts?: any) => void };
   userNearBottomRef: React.MutableRefObject<boolean>;
@@ -105,6 +115,7 @@ export interface UseMessageHandlersParams {
   setSuggestions: (v: string[]) => void;
   setSelectedMsgIndex: (v: number | null) => void;
   voiceMode: boolean;
+  pendingEditSendRef?: React.MutableRefObject<boolean>;
 }
 
 export interface UseMessageHandlersReturn {
@@ -125,7 +136,7 @@ export interface UseMessageHandlersReturn {
   pendingSuggestionSendRef: React.MutableRefObject<boolean>;
 }
 
-export function useMessageHandlers(params: UseMessageHandlersParams): UseMessageHandlersReturn {
+export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   const {
     input,
     setInput,
@@ -197,10 +208,34 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
   const currentAgent = getAgent(activeAgentId);
   const { detectAndHandleTaskQuery } = useTaskIntents({ actions });
   const { detectAndHandleMemoryIntent } = useMemoryIntents({ actions });
+  const { detectAndHandleCommsIntent } = useCommsIntents({ actions });
 
   const generateSuggestions = useCallback(
     (res: string) => fetchSuggestions(res, setSuggestions),
     [setSuggestions],
+  );
+
+  // Shared 409 preview-gate handler: appends a system message so MessageList
+  // can render PreviewConfirmCard + ProposalFiledCard instead of an error bubble.
+  const emitPreviewRequired = useCallback(
+    (sessionId: string, runId: string, payload: PreviewGatePayload, originalMessage: string) => {
+      actions.addMessage(sessionId, {
+        role: 'assistant',
+        content: `[system] ${payload.message || 'Preview confirmation required'}`,
+        timestamp: Date.now(),
+        meta: {
+          system: 'true',
+          type: 'preview_required',
+          previewPayload: JSON.stringify(payload),
+          originalMessage,
+        },
+      });
+      actions.setStreaming(false);
+      actions.setStreamText('');
+      actions.setStatusLine(null);
+      completeRun(runId);
+    },
+    [actions, completeRun],
   );
   const verifyIdentity = useCallback(
     (code: string) => verifyIdentityCode(code, setVerifying, setIdentityVerified),
@@ -270,36 +305,41 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       actions.setStatusLine('Comparing models...');
       setCompareStreams(() => ({}));
       setCompareWinner(null);
-      const promises = compareModels.map(async (modelId) => {
+      const promises = compareModels.map(async (modelId: string) => {
         try {
           let fullResp = '';
           await sendMessage(
             sendText,
             [],
-            undefined,
+            '',
             {
               onToken: (t) => {
                 fullResp += t;
-                setCompareStreams((p) => ({
-                  ...p,
-                  [modelId]: { text: fullResp, done: false },
-                }));
+                setCompareStreams(
+                  (p: Record<string, { text: string; done: boolean; error?: string }>) => ({
+                    ...p,
+                    [modelId]: { text: fullResp, done: false },
+                  }),
+                );
               },
               onDone: (f) => {
-                setCompareStreams((p) => ({
-                  ...p,
-                  [modelId]: { text: f || fullResp, done: true },
-                }));
+                setCompareStreams(
+                  (p: Record<string, { text: string; done: boolean; error?: string }>) => ({
+                    ...p,
+                    [modelId]: { text: f || fullResp, done: true },
+                  }),
+                );
               },
               onError: (e) => {
-                setCompareStreams((p) => ({
-                  ...p,
-                  [modelId]: { text: fullResp || `Error: ${e}`, done: true, error: String(e) },
-                }));
+                setCompareStreams(
+                  (p: Record<string, { text: string; done: boolean; error?: string }>) => ({
+                    ...p,
+                    [modelId]: { text: fullResp || `Error: ${e}`, done: true, error: String(e) },
+                  }),
+                );
               },
               onStatus: () => {},
             },
-            undefined,
             undefined,
             undefined,
             modelId,
@@ -307,14 +347,16 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             routerMode,
           );
         } catch (err: unknown) {
-          setCompareStreams((p) => ({
-            ...p,
-            [modelId]: {
-              text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-              done: true,
-              error: String(err),
-            },
-          }));
+          setCompareStreams(
+            (p: Record<string, { text: string; done: boolean; error?: string }>) => ({
+              ...p,
+              [modelId]: {
+                text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+                done: true,
+                error: String(err),
+              },
+            }),
+          );
         }
       });
       Promise.all(promises).then(() => {
@@ -327,7 +369,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
 
     sendingRef.current = true;
     const sessionId = ensureSession();
-    const session = sessions.find((s) => s.id === sessionId);
+    const session = sessions.find((s: Session) => s.id === sessionId);
     queueMicrotask(() => {
       sendingRef.current = false;
     });
@@ -375,8 +417,21 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     actions.addActivity(sessionId, 'connecting', 'Sending message');
     actions.addFeed(sessionId, 'sent', text.length > 80 ? text.slice(0, 80) + '\u2026' : text);
 
-    detectAndHandleTaskQuery(text, sessionId);
-    detectAndHandleMemoryIntent(text, sessionId);
+    const [, , commsHandled] = await Promise.all([
+      detectAndHandleTaskQuery(text, sessionId),
+      detectAndHandleMemoryIntent(text, sessionId),
+      detectAndHandleCommsIntent(text, sessionId),
+    ]);
+
+    if (commsHandled) {
+      actions.setStreaming(false);
+      actions.setStreamText('');
+      actions.setStatusLine(null);
+      setStreamPhase('done');
+      actions.addActivity(sessionId, 'done', 'Opened communication channel');
+      playNotifSound();
+      return;
+    }
 
     const runId = `run-${Date.now()}`;
     processRunIdRef.current = runId;
@@ -450,13 +505,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const abortController = new AbortController();
     abortRef.current = abortController;
     const history = messages.slice(-20);
-    const contextSources = await fetchContextSources(text, messages, activeSessionId);
-    const systemPrompt = buildDefaultSystemPrompt(
-      currentAgent,
-      contextSources,
-      activeAppId,
-      conversationMode,
-    );
+    await fetchContextSources(sessionId);
+    const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
 
     try {
       await sendMessage(
@@ -504,6 +554,8 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
             actions.setStatusLine(`Error: ${err}`);
             completeRun(runId);
           },
+          onPreviewRequired: (payload, originalMessage) =>
+            emitPreviewRequired(sessionId, runId, payload, originalMessage),
           onStatus: (status: string) => {
             if (status === 'thinking') setStreamPhase('thinking');
             else if (status === 'writing') setStreamPhase('writing');
@@ -511,7 +563,6 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         },
         abortController.signal,
         sessionId,
-        undefined,
         selectedModel || undefined,
         undefined,
         routerMode,
@@ -560,6 +611,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     sendViaCLI,
     detectAndHandleTaskQuery,
     detectAndHandleMemoryIntent,
+    detectAndHandleCommsIntent,
     virtualizer,
     userNearBottomRef,
     setShowJumpToLatest,
@@ -585,6 +637,124 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
 
   const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;
+
+  // Re-submit the original user prompt with a preview-gate confirmation token.
+  // Triggered by PreviewConfirmCard via a window CustomEvent so cards don't need
+  // to reconstruct agent/session/history context themselves.
+  const confirmPreview = useCallback(
+    async (previewId: string, originalMessage: string) => {
+      if (!previewId || !originalMessage) return;
+      const sessionId = ensureSession();
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+      actions.setStreaming(true);
+      actions.setStreamText('');
+      actions.setStatusLine('Confirming preview...');
+      setStreamPhase('connecting');
+      const runId = `run-${Date.now()}-confirm`;
+      processRunIdRef.current = runId;
+      startRun(runId, sessionId);
+      const stepId = addStep(runId, { kind: 'thinking', label: 'Executing after confirm...' });
+      processStepRef.current = stepId;
+
+      let fullResponse = '';
+      const history = messages.slice(-20);
+      const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
+      try {
+        await sendMessage(
+          originalMessage,
+          history,
+          systemPrompt,
+          {
+            onToken: (token) => {
+              fullResponse += token;
+              bufferToken(fullResponse);
+              actions.setStatusLine(`${currentAgent.name} is writing...`);
+            },
+            onDone: (full) => {
+              const final = full || fullResponse;
+              actions.addMessage(sessionId, {
+                role: 'assistant',
+                content: final,
+                timestamp: Date.now(),
+                meta: {
+                  route: 'http',
+                  model: selectedModel || currentAgent.name,
+                  previewConfirmed: previewId,
+                },
+              });
+              actions.setStreaming(false);
+              actions.setStreamText('');
+              actions.setStatusLine(null);
+              completeRun(runId);
+              generateSuggestions(final);
+              playNotifSound();
+            },
+            onError: (err) => {
+              actions.setStreaming(false);
+              actions.setStatusLine(`Error: ${err}`);
+              completeRun(runId);
+            },
+            // Re-trigger card if gate fires again (e.g. token expired, fresh writes).
+            onPreviewRequired: (payload, msg) =>
+              emitPreviewRequired(sessionId, runId, payload, msg),
+            onStatus: (status: string) => {
+              if (status === 'thinking') setStreamPhase('thinking');
+              else if (status === 'writing') setStreamPhase('writing');
+            },
+          },
+          abortController.signal,
+          sessionId,
+          selectedModel || undefined,
+          undefined,
+          routerMode,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          previewId,
+        );
+      } catch {
+        actions.setStreaming(false);
+        actions.setStatusLine('Failed to resubmit');
+      }
+    },
+    [
+      actions,
+      addStep,
+      bufferToken,
+      completeRun,
+      currentAgent.id,
+      currentAgent.name,
+      emitPreviewRequired,
+      ensureSession,
+      generateSuggestions,
+      messages,
+      processStepRef,
+      processRunIdRef,
+      routerMode,
+      selectedModel,
+      setStreamPhase,
+      startRun,
+      abortRef,
+    ],
+  );
+
+  // Listen for confirm-preview events from PreviewConfirmCard. Using a window
+  // event keeps the card decoupled from the full hook context + prop tree.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ previewId: string; originalMessage: string }>).detail;
+      if (!detail) return;
+      void confirmPreview(detail.previewId, detail.originalMessage);
+    };
+    window.addEventListener('shre-preview-confirm', handler);
+    return () => window.removeEventListener('shre-preview-confirm', handler);
+  }, [confirmPreview]);
 
   return {
     handleSend,

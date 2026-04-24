@@ -3,6 +3,7 @@ import type { ChatMessage } from '../router-client';
 
 interface UseMessageListHandlersOptions {
   activeSessionId: string | null;
+  activeAgentId?: string;
   messages: ChatMessage[];
   filteredMessages: ChatMessage[];
   actions: {
@@ -26,6 +27,8 @@ interface UseMessageListHandlersOptions {
   setPendingApproval: (
     val: { approvalId: string; tool: string; input: any; reason: string } | null,
   ) => void;
+  setSelectedMsgIndex?: (val: number | null) => void;
+  virtualizer?: { scrollToIndex: (idx: number, opts?: any) => void };
   pendingEditSendRef: React.MutableRefObject<boolean>;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   terminalRef: React.RefObject<{ sendCommand: (cmd: string) => void } | null>;
@@ -51,7 +54,7 @@ export function useMessageListHandlers({
   setLightboxSrc,
   sendFeedbackToRapidRMS,
   handleContentExpand,
-}: UseMessageListHandlersOptions) {
+}: any) {
   const onSelectTemplate = useCallback(
     (prompt: string) => {
       setInput(prompt);

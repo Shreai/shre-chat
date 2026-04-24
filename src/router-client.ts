@@ -573,6 +573,28 @@ export interface ToolErrorEvent {
   iteration: number;
 }
 
+/** Payload returned by shre-router when /v1/chat is blocked by the preview gate (HTTP 409).
+ *  Mirrors `PreviewResponseBody` in `shre-router/src/routing-v2/preview-gate.ts`, plus the
+ *  optional `proposal_id` that shadow workspaces attach when they file an owner-review task. */
+export interface PreviewGatePayload {
+  preview_required: true;
+  preview_id: string;
+  mode: 'off' | 'observe' | 'enforce';
+  expires_at: string;
+  domain: string;
+  picked_agent: string;
+  objects: Array<{ object: string; access?: string; reason?: string; [k: string]: unknown }>;
+  destructive_writes: Array<{
+    object: string;
+    access?: string;
+    reason?: string;
+    [k: string]: unknown;
+  }>;
+  suggested_playbook: string | null;
+  message: string;
+  proposal_id?: string;
+}
+
 export interface StreamCallbacks {
   onToken: (token: string) => void;
   onDone: (fullText: string) => void;
@@ -584,6 +606,10 @@ export interface StreamCallbacks {
     input: ToolPayload;
     reason: string;
   }) => void;
+  /** Fired when shre-router gates a destructive-write request (HTTP 409 preview_required).
+   *  The UI should render a confirmation card instead of an error bubble. Re-submitting the
+   *  same prompt with `previewConfirmed=<preview_id>` passes the gate once and executes. */
+  onPreviewRequired?: (payload: PreviewGatePayload, originalMessage: string) => void;
   onToolResult?: (result: ToolResult) => void;
   /** Fired when a tool call begins execution */
   onToolStart?: (event: ToolStartEvent) => void;
@@ -652,6 +678,7 @@ export async function sendMessage(
   traceEnabled?: boolean,
   conversationMode?: string,
   activeAppId?: string | null,
+  previewConfirmed?: string,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -689,6 +716,8 @@ export async function sendMessage(
       traceEnabled,
       conversationMode,
       activeAppId,
+      undefined,
+      previewConfirmed,
     );
   } catch (err) {
     if (done) return;
@@ -751,6 +780,7 @@ async function streamViaFallback(
   conversationMode?: string,
   activeAppId?: string | null,
   _emptyRetry?: boolean,
+  previewConfirmed?: string,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
 
@@ -801,12 +831,33 @@ async function streamViaFallback(
       ...(traceEnabled ? { trace: true } : {}),
       ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
       ...(activeAppId ? { appId: activeAppId } : {}),
+      ...(previewConfirmed ? { previewConfirmed } : {}),
     }),
     signal,
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // Handle preview gate — shre-router returns 409 with a structured preview body
+    // when a request would destructively write business objects. Surface the payload
+    // to the UI so it can render a confirmation card instead of an error bubble.
+    if (res.status === 409) {
+      const parsed = (() => {
+        try {
+          return JSON.parse(text) as PreviewGatePayload;
+        } catch {
+          return null;
+        }
+      })();
+      if (parsed && parsed.preview_required && parsed.preview_id) {
+        callbacks.onPreviewRequired?.(parsed, message);
+        // Silence the default stream-finished handler — no content was produced,
+        // but this isn't an error from the user's perspective.
+        callbacks.onStatus?.('done');
+        return;
+      }
+      // Unknown 409 shape — fall through to generic error
+    }
     // Handle auth errors — session expired or unauthorized
     if (res.status === 401 || res.status === 403) {
       const parsed = (() => {

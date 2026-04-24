@@ -25,11 +25,13 @@ if (!AbortSignal.timeout) {
 
 import {
   type ChatMessage,
+  type PreviewGatePayload,
   checkGateway,
   generateAITitle,
   setAgent,
   listSessions,
   fetchSessionMessages,
+  sendMessage,
 } from '../router-client';
 
 // ── Setup / Teardown ─────────────────────────────────────────────────
@@ -258,5 +260,142 @@ describe('fetchWithRetry behavior (via internal usage)', () => {
     const result = await checkGateway();
     expect(result).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Preview Gate (HTTP 409) detection ────────────────────────────────
+//
+// When shre-router gates a destructive-write request, it replies with 409 + a
+// structured PreviewResponseBody. The client must surface this via
+// onPreviewRequired instead of treating it as a generic error.
+
+describe('sendMessage — preview gate (HTTP 409)', () => {
+  const gateBody: PreviewGatePayload = {
+    preview_required: true,
+    preview_id: 'prv_testtoken1234',
+    mode: 'enforce',
+    expires_at: new Date(Date.now() + 300_000).toISOString(),
+    domain: 'payments',
+    picked_agent: 'payment-agent',
+    objects: [
+      { object: 'Customer', access: 'read' },
+      { object: 'Payment', access: 'write' },
+    ],
+    destructive_writes: [{ object: 'Payment', access: 'write' }],
+    suggested_playbook: 'refund-flow',
+    message: 'This request writes to Payment. Confirm with previewConfirmed=prv_testtoken1234',
+  };
+
+  it('invokes onPreviewRequired for a valid 409 preview body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(gateBody), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const onPreviewRequired = vi.fn();
+    const onError = vi.fn();
+    const onDone = vi.fn();
+
+    await sendMessage('refund payment for order 42', [], '', {
+      onToken: () => {},
+      onDone,
+      onError,
+      onPreviewRequired,
+    });
+
+    expect(onPreviewRequired).toHaveBeenCalledTimes(1);
+    const [payload, originalMessage] = onPreviewRequired.mock.calls[0];
+    expect(payload.preview_id).toBe('prv_testtoken1234');
+    expect(payload.destructive_writes).toHaveLength(1);
+    expect(originalMessage).toBe('refund payment for order 42');
+    // Critical: a 409 gate must NOT surface as an error bubble
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('passes proposal_id through when the gate payload includes one', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ...gateBody, proposal_id: 'task_abc123' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const onPreviewRequired = vi.fn();
+    await sendMessage('refund payment for order 42', [], '', {
+      onToken: () => {},
+      onDone: () => {},
+      onError: () => {},
+      onPreviewRequired,
+    });
+
+    expect(onPreviewRequired).toHaveBeenCalledTimes(1);
+    const payload = onPreviewRequired.mock.calls[0][0] as PreviewGatePayload;
+    expect(payload.proposal_id).toBe('task_abc123');
+  });
+
+  it('forwards previewConfirmed token in the /v1/chat request body on re-submit', async () => {
+    // Always-on mock (not Once) so retry paths don't break the assertion
+    fetchMock.mockResolvedValue(
+      new Response(`data: {"type":"done"}\n\n`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+
+    await sendMessage(
+      'refund payment for order 42',
+      [],
+      '',
+      { onToken: () => {}, onDone: () => {}, onError: () => {} },
+      undefined, // signal
+      undefined, // sessionId
+      undefined, // modelOverride
+      undefined, // attachments
+      undefined, // routerMode
+      undefined, // threadContext
+      undefined, // contextHealth
+      undefined, // claudeCliMode
+      undefined, // directMode
+      undefined, // voiceMode
+      undefined, // traceEnabled
+      undefined, // conversationMode
+      undefined, // activeAppId
+      'prv_testtoken1234', // previewConfirmed
+    );
+
+    // Find the /v1/chat POST among all fetch calls (there may be retries)
+    const chatCall = fetchMock.mock.calls.find((c) => {
+      const url = String(c[0]);
+      const init = c[1] as RequestInit | undefined;
+      return url.includes('/v1/chat') && init?.method === 'POST';
+    });
+    expect(chatCall).toBeTruthy();
+    const init = chatCall![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.previewConfirmed).toBe('prv_testtoken1234');
+  });
+
+  it('falls back to generic error for a 409 with an unexpected body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('{"unrelated": true}', {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const onPreviewRequired = vi.fn();
+    const onError = vi.fn();
+
+    await sendMessage('hello', [], '', {
+      onToken: () => {},
+      onDone: () => {},
+      onError,
+      onPreviewRequired,
+    });
+
+    expect(onPreviewRequired).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalled();
   });
 });

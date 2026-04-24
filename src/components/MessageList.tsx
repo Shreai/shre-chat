@@ -5,6 +5,7 @@ import type { UserProfile } from '../store';
 import type { ProcessRun } from './process-bar/types';
 import MessageBubble, { SystemEventChip, ToolExecutionChip } from './MessageBubble';
 import { BrowserApprovalCard } from './message-parts/BrowserApprovalCard';
+import { PreviewConfirmCard } from './PreviewConfirmCard';
 import type { ToolExecStep } from './MessageBubble';
 import { WelcomeScreen } from './WelcomeScreen';
 import { formatTime } from '../chat-utils';
@@ -53,6 +54,10 @@ function isBrowserApproval(msg: ChatMessage): boolean {
   return isStatusMessage(msg) && !!msg.content?.includes('[browser_approval]');
 }
 
+function isPreviewRequired(msg: ChatMessage): boolean {
+  return isStatusMessage(msg) && msg.meta?.type === 'preview_required';
+}
+
 export interface MessageListProps {
   filteredMessages: ChatMessage[];
   messages: ChatMessage[];
@@ -64,6 +69,7 @@ export interface MessageListProps {
   activeAgentId: string;
   userName: string;
   activeSessionId: string | null;
+  statusLine?: string | null;
 
   // Search
   chatSearchOpen: boolean;
@@ -286,7 +292,7 @@ export function MessageList(props: MessageListProps) {
 
     for (let i = 0; i < filteredMessages.length; i++) {
       const msg = filteredMessages[i];
-      if (isStatusMessage(msg) && !isBrowserApproval(msg)) {
+      if (isStatusMessage(msg) && !isBrowserApproval(msg) && !isPreviewRequired(msg)) {
         if (anchorIdx >= 0) {
           if (!trailMap.has(anchorIdx)) trailMap.set(anchorIdx, []);
           trailMap.get(anchorIdx)!.push(messageToStep(msg));
@@ -436,6 +442,8 @@ export function MessageList(props: MessageListProps) {
                   {isGrouped ? null : msg.content?.includes('[browser_approval]') &&
                     isStatusMessage(msg) ? (
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
+                  ) : isPreviewRequired(msg) ? (
+                    <PreviewConfirmCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : isStatusMessage(msg) ? (
@@ -483,6 +491,8 @@ export function MessageList(props: MessageListProps) {
                 >
                   {msg.content?.includes('[browser_approval]') && isStatusMessage(msg) ? (
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
+                  ) : isPreviewRequired(msg) ? (
+                    <PreviewConfirmCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
                   ) : isStatusMessage(msg) ? (
