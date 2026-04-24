@@ -257,6 +257,9 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
     dc.onopen = () => setState('listening');
 
     // WebRTC offer/answer via OpenAI
+    // GATEWAY-BYPASS — tracked exception. Router has no SDP-negotiation endpoint yet.
+    // See shre-tasks 462fd83d (Viper veto) + 5c963c0d (router realtime-negotiate).
+    // Do not add new direct-provider fetches to this file; wait for the router proxy.
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
