@@ -31,6 +31,9 @@ When autonomous project execution is active, real-time progress events flow via 
 
 Events rendered as inline system messages in chat via `useEscalationListener` hook. Classifications in `chat-utils.ts`.
 
+## Conversation Reopen Events
+Reactive automation rules (shre-cron Phase 3 dispatcher) can resurface a closed thread by firing a `conversation.reopen` action. shre-router handles that at `POST /v1/sessions/:id/reopen` and emits `conversation.reopened` on the bus. serve.js forwards it to WS clients; `useEscalationListener` routes it to the target session BEFORE the active-session filter, so the follow-up message lands in the correct thread even if the user is on a different one. The session's `updatedAt` bumps and the sidebar re-sorts so the reopened thread surfaces.
+
 ## Chat Flow (v2.0)
 All chat messages route through shre-router — no bypass:
 1. Browser → `sendMessage()` in `router-client.ts` → POST `/api/router/v1/chat`

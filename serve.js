@@ -3913,7 +3913,7 @@ async function requestHandler(req, res) {
 
       // Fallback chain: local faster-whisper → shre-voice → shre-router (OpenAI) → browser SpeechRecognition
       const sttEndpoints = [
-        `http://127.0.0.1:5464/v1/audio/transcriptions`,  // local faster-whisper (no API key)
+        `http://127.0.0.1:5525/v1/audio/transcriptions`,  // local faster-whisper (no API key)
         `http://127.0.0.1:5456/v1/audio/transcriptions`,  // shre-voice (ElevenLabs/OpenAI)
         `${serviceUrl("shre-router")}/v1/audio/transcriptions`, // shre-router (OpenAI)
       ];
@@ -6235,6 +6235,30 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Owner Briefing passthrough → shre-tasks (must precede the shre-router /v1/* catch-all)
+  if (
+    (url.pathname === "/v1/briefing/owner" ||
+      url.pathname === "/v1/briefing/owner/history" ||
+      url.pathname === "/v1/briefing/run") &&
+    (req.method === "GET" || req.method === "POST")
+  ) {
+    try {
+      const upstream = `${serviceUrl("shre-tasks")}${url.pathname}${url.search ?? ""}`;
+      const init = { method: req.method, headers: { "content-type": "application/json" } };
+      if (req.method === "POST") {
+        init.body = await collectBody(req).catch(() => "{}");
+      }
+      const upstreamRes = await fetch(upstream, init);
+      const text = await upstreamRes.text();
+      res.statusCode = upstreamRes.status;
+      res.setHeader("content-type", upstreamRes.headers.get("content-type") || "application/json");
+      res.end(text);
+      return;
+    } catch (err) {
+      return json(res, { error: `briefing proxy failed: ${err.message}` }, 502);
+    }
+  }
+
   // ── Proxy /v1/* through shre-router (enforces trust gate, budgets, cost tracking) ──
   // All /v1/ requests route through shre-router — no direct gateway bypass.
 
@@ -7620,6 +7644,27 @@ eventBus.subscribe("approval.denied", async (event) => {
 
 // ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
 const PROGRESS_EVENT_TYPES = ["task.assigned", "task.completed", "task.failed", "project.created", "project.decomposed", "project.completed", "project.quality_gate_failed", "project.pending_approval", "fleet.merge.pr_created", "budget.threshold"];
+
+// Reactive Automation Gateway — shre-cron dispatches `conversation.reopen`
+// actions; shre-router handles them at /v1/sessions/:id/reopen and publishes
+// `conversation.reopened` on the bus. Forward unconditionally to WS clients
+// so the target thread can append the follow-up message even if the user is
+// on a different thread when the event fires.
+eventBus.subscribe("conversation.reopened", async (event) => {
+  const data = event?.data || {};
+  if (!data.sessionId) return;
+  broadcastNotification("conversation.reopened", {
+    sessionId: data.sessionId,
+    agentId: data.agentId || "",
+    reason: data.reason || "",
+    ruleId: data.ruleId || "",
+    mode: data.mode || "",
+    message: data.message || "",
+    priorContextFound: !!data.priorContextFound,
+    reopenedAt: data.reopenedAt || Date.now(),
+    source: data.source || "shre-cron:reactive",
+  });
+});
 
 // Live file diff events from claude_exec sessions
 eventBus.subscribe("diff.file_changed", async (event) => {

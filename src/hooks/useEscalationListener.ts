@@ -3,10 +3,15 @@
  * and injects system messages into the active chat session.
  *
  * Event types handled:
- *   - ellie.escalation   — agent couldn't complete, Ellie investigating
- *   - chat.message        — resolution message appended to session
- *   - escalation.resolved — escalation completed successfully
- *   - escalation.failed   — escalation failed, council notified
+ *   - ellie.escalation        — agent couldn't complete, Ellie investigating
+ *   - chat.message             — resolution message appended to session
+ *   - escalation.resolved      — escalation completed successfully
+ *   - escalation.failed        — escalation failed, council notified
+ *   - conversation.reopened    — reactive automation resuming a thread (targets
+ *                                a specific sessionId; bypasses the
+ *                                active-session filter so the follow-up lands
+ *                                in the correct thread even when the user is
+ *                                on a different one)
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { setPlan, updateTaskStatus, updatePlanStatus, parsePlanTasks } from '../planStore';
@@ -37,6 +42,7 @@ const ESCALATION_TYPES = new Set([
   'file_diff',
   'approval.requested',
   'approval.resolved',
+  'conversation.reopened',
 ]);
 
 interface UseEscalationListenerOptions {
@@ -87,6 +93,31 @@ export function useEscalationListener({
         try {
           const data: EscalationEvent = JSON.parse(event.data);
           if (!data.type || !ESCALATION_TYPES.has(data.type)) return;
+
+          // `conversation.reopened` is routed BEFORE the active-session
+          // filter — reactive automation can resume a thread the user isn't
+          // currently looking at, and the follow-up message must still land
+          // in the correct session's history so it renders on switch-in.
+          if (data.type === 'conversation.reopened') {
+            const targetSession = data.sessionId;
+            if (!targetSession) return;
+            const d = data as unknown as Record<string, unknown>;
+            const reason = String(d.reason || 'resumed');
+            const content = String(d.message || '').trim() || `[Shre follow-up: ${reason}]`;
+            addMessage(targetSession, {
+              role: 'assistant',
+              content,
+              timestamp: Date.now(),
+              meta: {
+                system: 'true',
+                type: 'conversation.reopened',
+                reason,
+                ruleId: String(d.ruleId || ''),
+                source: String(d.source || 'shre-cron:reactive'),
+              },
+            });
+            return;
+          }
 
           const currentSession = activeSessionIdRef.current;
           if (!currentSession) return;
