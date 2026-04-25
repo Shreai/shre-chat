@@ -14,6 +14,7 @@ import pg from "pg";
 import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline, createServiceClient } from "shre-sdk";
+import { isProductionLike as isProductionLikeEnv } from "shre-sdk/environment";
 
 /** Universal service client — retry + circuit breaker for inter-service calls */
 const svc = createServiceClient("shre-chat");
@@ -65,9 +66,9 @@ const GATEWAY_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
-// ── Production safety: block empty passwords ──
-if (process.env.NODE_ENV === "production" && !process.env.CORTEX_PG_PASSWORD) {
-  log.error("CORTEX_PG_PASSWORD is required in production. Exiting.");
+// ── Production safety: block empty passwords (also enforced for beta — paying customers) ──
+if ((isProductionLikeEnv() || process.env.NODE_ENV === "production") && !process.env.CORTEX_PG_PASSWORD) {
+  log.error("CORTEX_PG_PASSWORD is required in production-like envs (production, beta). Exiting.");
   process.exit(1);
 }
 
@@ -1080,8 +1081,8 @@ function checkAuth(req) {
   // DEV_BYPASS_AUTH: allow unauthenticated access in dev/test with demo claims
   // BLOCKED in production to prevent accidental exposure
   if (process.env.DEV_BYPASS_AUTH === "true") {
-    if (process.env.NODE_ENV === "production") {
-      log.error("DEV_BYPASS_AUTH is set but NODE_ENV=production — IGNORING for security");
+    if (isProductionLikeEnv() || process.env.NODE_ENV === "production") {
+      log.error("DEV_BYPASS_AUTH is set in a production-like env (production/beta) — IGNORING for security");
       return null;
     }
     return { sub: "dev-user", username: "dev", name: "Developer", activeWorkspaceId: "dev-workspace", role: "owner", scopes: ["*"] };
