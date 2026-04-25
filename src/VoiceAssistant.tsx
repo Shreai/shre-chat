@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useVoiceAssistantLogic } from './hooks/useVoiceAssistantLogic';
 import { VoiceTurnContent } from './voice/VoiceTurnContent';
 import type { AgentOption } from './voice/voice-utils';
+import type { TTSProvider } from './preferences-store';
 
 interface ModelOption {
   id: string;
@@ -27,7 +28,7 @@ interface Props {
   models?: ModelOption[];
   selectedModel?: string | null;
   onSelectModel?: (id: string | null) => void;
-  onSetTtsProvider?: (v: string) => void;
+  onSetTtsProvider?: (v: TTSProvider) => void;
 }
 
 export default function VoiceAssistant(props: Props) {

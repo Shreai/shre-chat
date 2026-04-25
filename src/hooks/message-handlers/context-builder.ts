@@ -5,6 +5,34 @@
 import type { ChatMessage } from '../../router-client';
 import { mib007Link } from '../../chat-utils';
 
+interface TaskContextItem {
+  id?: string;
+  title?: string;
+  priority?: string;
+  assignee?: string;
+  status?: string;
+}
+
+interface SessionContextData {
+  recentSessions?: Array<{
+    updated_at: string | number;
+    title?: string;
+    agent_id?: string;
+    messageCount?: number;
+  }>;
+  voiceSummaries?: Array<{
+    created_at: string | number;
+    summary?: string;
+    agent_id?: string;
+  }>;
+  recentActions?: Array<{
+    created_at: string | number;
+    action_type?: string;
+    target?: string;
+    result?: string;
+  }>;
+}
+
 /**
  * Anchors short/vague follow-up messages with context from recent conversation.
  * Returns the enriched messageText, or the original if no anchoring is needed.
@@ -95,9 +123,11 @@ export async function fetchContextSources(sessionId: string): Promise<{
   try {
     if (taskResult.status === 'fulfilled' && taskResult.value.ok) {
       const taskData = await taskResult.value.json();
-      const tasks = Array.isArray(taskData) ? taskData : taskData?.tasks || taskData?.data || [];
+      const tasks: TaskContextItem[] = Array.isArray(taskData)
+        ? taskData
+        : taskData?.tasks || taskData?.data || [];
       if (tasks.length > 0) {
-        const byStatus: Record<string, any[]> = {};
+        const byStatus: Record<string, TaskContextItem[]> = {};
         for (const t of tasks) {
           (byStatus[t.status || 'unknown'] ??= []).push(t);
         }
@@ -105,10 +135,12 @@ export async function fetchContextSources(sessionId: string): Promise<{
         for (const [status, items] of Object.entries(byStatus)) {
           const list = items
             .slice(0, 20)
-            .map(
-              (t: any) =>
-                `  - ${t.title}${t.id ? ` (ID: ${t.id})` : ''}${t.priority ? ` [${t.priority}]` : ''}${t.assignee ? ` \u2192 ${t.assignee}` : ''}`,
-            )
+            .map((t) => {
+              const id = t.id ? ` (ID: ${t.id})` : '';
+              const priority = t.priority ? ` [${t.priority}]` : '';
+              const assignee = t.assignee ? ` \u2192 ${t.assignee}` : '';
+              return `  - ${t.title || 'Untitled'}${id}${priority}${assignee}`;
+            })
             .join('\n');
           sections.push(`[${status}] (${items.length}):\n${list}`);
         }
@@ -128,14 +160,14 @@ export async function fetchContextSources(sessionId: string): Promise<{
   // Build cross-session context
   try {
     if (sessionResult.status === 'fulfilled' && sessionResult.value.ok) {
-      const ctxData = await sessionResult.value.json();
+      const ctxData = (await sessionResult.value.json()) as SessionContextData;
       const parts: string[] = [];
       if (ctxData.recentSessions?.length) {
         parts.push(
           'Recent conversations:\n' +
             ctxData.recentSessions
               .map(
-                (s: any) =>
+                (s) =>
                   `  - [${new Date(s.updated_at).toLocaleDateString()}] "${s.title}" (${s.agent_id || 'shre'}, ${s.messageCount || '?'} messages)`,
               )
               .join('\n'),
@@ -146,7 +178,7 @@ export async function fetchContextSources(sessionId: string): Promise<{
           'Recent voice sessions:\n' +
             ctxData.voiceSummaries
               .map(
-                (v: any) =>
+                (v) =>
                   `  - [${new Date(v.created_at).toLocaleDateString()}] ${v.summary || 'No summary'} (${v.agent_id || 'shre'})`,
               )
               .join('\n'),
@@ -157,7 +189,7 @@ export async function fetchContextSources(sessionId: string): Promise<{
           'Recent actions taken:\n' +
             ctxData.recentActions
               .map(
-                (a: any) =>
+                (a) =>
                   `  - [${new Date(a.created_at).toLocaleDateString()}] ${a.action_type}: ${a.target || a.result || ''}`,
               )
               .join('\n'),

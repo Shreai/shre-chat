@@ -4,7 +4,7 @@ export interface ToolExecStep {
   id: string;
   tool: string;
   status: 'running' | 'success' | 'error';
-  input?: any;
+  input?: unknown;
   outputPreview?: string;
   error?: string;
   latencyMs?: number;
@@ -18,23 +18,25 @@ function formatToolName(name: string): string {
 }
 
 /** Format a short input summary for display */
-function formatInput(tool: string, input: any): string {
+function formatInput(tool: string, input: unknown): string {
   if (!input) return '';
   if (typeof input === 'string') return input.slice(0, 80);
+  if (typeof input !== 'object') return String(input).slice(0, 80);
+  const record = input as Record<string, unknown>;
   // shell_exec: show command
-  if (input.command) return `\`${String(input.command).slice(0, 80)}\``;
+  if (record.command) return `\`${String(record.command).slice(0, 80)}\``;
   // file tools: show path
-  if (input.path) return String(input.path).slice(0, 80);
-  if (input.file_path) return String(input.file_path).slice(0, 80);
+  if (record.path) return String(record.path).slice(0, 80);
+  if (record.file_path) return String(record.file_path).slice(0, 80);
   // query tools: show query
-  if (input.query) return String(input.query).slice(0, 80);
-  if (input.sql) return `\`${String(input.sql).slice(0, 80)}\``;
+  if (record.query) return String(record.query).slice(0, 80);
+  if (record.sql) return `\`${String(record.sql).slice(0, 80)}\``;
   // browser tools: show url
-  if (input.url) return String(input.url).slice(0, 80);
+  if (record.url) return String(record.url).slice(0, 80);
   // fallback: first key=value
-  const keys = Object.keys(input);
+  const keys = Object.keys(record);
   if (keys.length > 0) {
-    const v = String(input[keys[0]]).slice(0, 60);
+    const v = String(record[keys[0]]).slice(0, 60);
     return `${keys[0]}: ${v}`;
   }
   return '';

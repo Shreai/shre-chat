@@ -38,7 +38,6 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
   },
   { key: 'openai', label: 'OpenAI', icon: '\uD83D\uDFE2', providerKeys: ['openai'] },
   { key: 'google', label: 'Google', icon: '\uD83D\uDD35', providerKeys: ['google'] },
-  { key: 'floodpipe', label: 'Floodpipe', icon: '\uD83C\uDF0A', providerKeys: ['floodpipe'] },
   { key: 'other', label: 'Other', icon: '\u26AA', providerKeys: [] }, // catch-all
 ];
 
@@ -72,7 +71,7 @@ interface ModelPickerProps {
   onSelectModel: (modelId: string | null) => void;
   models: ModelInfo[];
   agentName: string;
-  pickerRef: React.RefObject<HTMLDivElement | null>;
+  pickerRef: React.RefObject<HTMLDivElement>;
 }
 
 /** Get short display name for the selected model */

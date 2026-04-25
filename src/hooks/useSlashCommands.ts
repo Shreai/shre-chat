@@ -78,6 +78,13 @@ interface SkillInfo {
   localReadyMinQuality?: number;
 }
 
+interface AppRegistryResponse {
+  error?: string;
+  apps?: SkillInfo[];
+  version?: string;
+  count?: number;
+}
+
 export interface UseSlashCommandsParams {
   input: string;
   setInput: (val: string) => void;
@@ -846,7 +853,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               .then(async (r) => {
                 if (!r.ok)
                   throw new Error(
-                    (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
+                    ((await r.json().catch(() => ({}))) as { error?: string } | undefined)?.error ||
                       `HTTP ${r.status}`,
                   );
                 return r.json() as Promise<Project>;
@@ -891,7 +898,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             .then(async (r) => {
               if (!r.ok)
                 throw new Error(
-                  (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
+                  ((await r.json().catch(() => ({}))) as { error?: string } | undefined)?.error ||
                     `HTTP ${r.status}`,
                 );
               return r.json() as Promise<{ id?: string; number?: string }>;
@@ -961,7 +968,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               .then(async (r) => {
                 if (!r.ok)
                   throw new Error(
-                    (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
+                    ((await r.json().catch(() => ({}))) as { error?: string } | undefined)?.error ||
                       `HTTP ${r.status}`,
                   );
                 return r.json() as Promise<Goal>;
@@ -1303,15 +1310,10 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           fetch(fetchUrl)
             .then(async (r) =>
               r.ok
-                ? (r.json() as Promise<{
-                    error?: string;
-                    apps?: SkillInfo[];
-                    version?: string;
-                    count?: number;
-                  }>)
-                : { error: 'Not found' },
+                ? (r.json() as Promise<AppRegistryResponse>)
+                : Promise.resolve({ error: 'Not found' } as AppRegistryResponse),
             )
-            .then((data: any) => {
+            .then((data) => {
               let lines: string[];
               if (data.error) {
                 lines = [`**Error:** ${data.error}`];

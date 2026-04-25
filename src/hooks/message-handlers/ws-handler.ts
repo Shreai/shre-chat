@@ -2,6 +2,7 @@ import { sendChatWS } from '../../gateway-ws';
 import { generateAITitle, type ChatMessage } from '../../router-client';
 import { generateTitle, type Session, type AppActions } from '../../store';
 import { playNotifSound } from '../../chat-utils';
+import type { ProcessStep, ProcessStepKind } from '../../components/process-bar/types';
 
 export interface WSHandlerProps {
   effectiveAgentId: string;
@@ -38,9 +39,12 @@ export interface WSHandlerProps {
   updateStep: (
     runId: string,
     stepId: string,
-    update: { status?: string; completedAt?: number; [key: string]: any },
+    update: Partial<ProcessStep> & { status?: string; completedAt?: number },
   ) => void;
-  addStep: (runId: string, step: { kind: string; label: string; [key: string]: any }) => string;
+  addStep: (
+    runId: string,
+    step: { kind: ProcessStepKind; label: string } & Record<string, unknown>,
+  ) => string;
   completeRun: (runId: string) => void;
   processStepRef: React.MutableRefObject<string>;
   firstTokenTimeRef: React.MutableRefObject<number>;
@@ -244,11 +248,8 @@ export async function handleWSMessage(
           } else if (status === 'connecting') setStreamPhase('connecting');
         },
       },
-      undefined,
-      undefined,
       selectedModel || undefined,
       undefined,
-      routerMode,
     );
   });
 }

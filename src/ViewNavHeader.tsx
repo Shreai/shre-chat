@@ -44,7 +44,19 @@ export const NAV_VIEWS: { key: View; label: string; section: string }[] = [
   { key: 'agent-trace', label: 'Agent Trace', section: 'Tools' },
 ];
 
-export function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: View) => void }) {
+type ViewNavHeaderProps =
+  | {
+      view: View;
+      onSwitch: (v: View) => void;
+      title?: never;
+    }
+  | {
+      title: string;
+      view?: View;
+      onSwitch?: (v: View) => void;
+    };
+
+export function ViewNavHeader(props: ViewNavHeaderProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -56,6 +68,29 @@ export function ViewNavHeader({ view, onSwitch }: { view: View; onSwitch: (v: Vi
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  if ('title' in props && !props.view) {
+    return (
+      <header
+        className="flex items-center gap-2 px-3 py-2 md:py-1.5 shrink-0"
+        style={{
+          background: 'var(--c-bg-2)',
+          borderBottom: '1px solid var(--c-border-2)',
+          zIndex: 40,
+          position: 'relative',
+          minHeight: 40,
+        }}
+      >
+        <div
+          className="flex items-center gap-2 text-[13px] font-medium"
+          style={{ color: 'var(--c-text-1)' }}
+        >
+          {props.title}
+        </div>
+      </header>
+    );
+  }
+
+  const { view, onSwitch } = props as { view: View; onSwitch: (v: View) => void };
   let lastSection = '';
 
   return (

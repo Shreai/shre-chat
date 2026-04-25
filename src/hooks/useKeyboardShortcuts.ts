@@ -14,23 +14,28 @@ export interface UseKeyboardShortcutsParams {
   setSelectedMsgIndex: React.Dispatch<React.SetStateAction<number | null>>;
   chatSearchOpen: boolean;
   setChatSearchOpen: (v: boolean) => void;
-  chatSearchRef: React.RefObject<HTMLInputElement | null>;
+  chatSearchRef: React.RefObject<HTMLInputElement>;
   closeChatSearch: () => void;
   globalSearchOpen: boolean;
   setGlobalSearchOpen: (v: boolean) => void;
-  globalSearchRef: React.RefObject<HTMLInputElement | null>;
+  globalSearchRef: React.RefObject<HTMLInputElement>;
   shortcutsOpen: boolean;
   setShortcutsOpen: (v: boolean) => void;
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean | ((prev: boolean) => boolean)) => void;
   abortRef: React.MutableRefObject<AbortController | null>;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
   pendingEditSendRef: React.MutableRefObject<boolean>;
   setInput: (v: string) => void;
   setEditingMsgIndex: (v: number | null) => void;
   setEditingMsgText: (v: string) => void;
   actions: Pick<AppActions, 'newSession' | 'switchSession' | 'replaceSessionMessages'>;
-  virtualizer: { scrollToIndex: (idx: number, opts?: any) => void };
+  virtualizer: {
+    scrollToIndex: (
+      idx: number,
+      opts?: ScrollIntoViewOptions & { align?: 'start' | 'center' | 'end' | 'auto' },
+    ) => void;
+  };
 }
 
 export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {

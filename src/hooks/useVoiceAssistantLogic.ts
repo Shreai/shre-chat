@@ -611,7 +611,7 @@ export function useVoiceAssistantLogic(params: UseVoiceAssistantLogicParams) {
             console.debug('rec abort before new', err);
           }
         }
-        const rec = new SR();
+        const rec = new SR() as SpeechRecognition & { maxAlternatives?: number };
         rec.continuous = true;
         rec.interimResults = true;
         rec.lang = getSpeechLocale();
@@ -643,7 +643,7 @@ export function useVoiceAssistantLogic(params: UseVoiceAssistantLogicParams) {
             }
           }
         };
-        rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+        rec.onerror = (e: Event & { error?: string }) => {
           if (e.error === 'no-speech' || e.error === 'aborted') return;
           if (e.error === 'not-allowed') {
             dispatch({

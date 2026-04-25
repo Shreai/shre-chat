@@ -1,5 +1,7 @@
 import type React from 'react';
 import { useCallback } from 'react';
+import type { MentionItem } from './useMentions';
+import type { ChatMessage } from '../router-client';
 
 export interface UseChatKeydownParams {
   // Slash commands
@@ -11,11 +13,11 @@ export interface UseChatKeydownParams {
   executeSlashCommand: (cmd: string) => void;
   // Mentions
   mentionOpen: boolean;
-  mentionFiltered: { id: string; name: string; emoji: string; [key: string]: any }[];
+  mentionFiltered: MentionItem[];
   mentionIndex: number;
   setMentionIndex: (v: number | ((prev: number) => number)) => void;
   setMentionOpen: (v: boolean) => void;
-  onMentionSelect: (agent: any) => void;
+  onMentionSelect: (agent: MentionItem) => void;
   // Editing
   editingQueueId: string | null;
   setEditingQueueId: (v: string | null) => void;
@@ -29,9 +31,9 @@ export interface UseChatKeydownParams {
   // Queue
   setQueue: React.Dispatch<React.SetStateAction<{ id: string; text: string }[]>>;
   // Messages + sessions
-  messages: { role: string; content: string }[];
+  messages: ChatMessage[];
   activeSessionId: string | null;
-  replaceSessionMessages: (sessionId: string, messages: any[]) => void;
+  replaceSessionMessages: (sessionId: string, messages: ChatMessage[]) => void;
   // Send
   handleSend: () => void;
   // Streaming state

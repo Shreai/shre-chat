@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { ECOSYSTEM_APPS, MARKETPLACE_EMBED_APPS } from '../chat-utils';
 
 interface AppsDrawerProps {
+  open?: boolean;
   onClose: () => void;
+  activeAgentId?: string;
 }
 
 interface AppEntry {
@@ -15,7 +17,7 @@ interface AppEntry {
   embed?: boolean;
 }
 
-export function AppsDrawer({ onClose }: AppsDrawerProps) {
+export function AppsDrawer({ open = true, onClose }: AppsDrawerProps) {
   const [embedApp, setEmbedApp] = useState<{
     id: string;
     name: string;
@@ -40,6 +42,8 @@ export function AppsDrawer({ onClose }: AppsDrawerProps) {
   }, []);
 
   const allApps: AppEntry[] = [...ECOSYSTEM_APPS, ...marketplaceApps];
+
+  if (!open) return null;
 
   // ── Fullscreen iframe for embeddable apps ──
   if (embedApp) {

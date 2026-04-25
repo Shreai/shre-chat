@@ -31,6 +31,7 @@ export interface UseVoiceHandlersParams {
   clearInterimAfter: (ms: number) => void;
   cleanupAudioLevel: () => void;
   releaseCachedStream: () => void;
+  isHandsFreeRef?: React.MutableRefObject<boolean>;
   isHandsFree: boolean;
   isRecording: boolean;
   voiceMode: boolean;

@@ -154,8 +154,8 @@ export function MessageActions({
         URL.revokeObjectURL(audioUrl);
       });
       await audio.play();
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') {
+    } catch (err: unknown) {
+      if ((err as { name?: string } | null)?.name !== 'AbortError') {
         if (window.speechSynthesis) {
           const utter = new SpeechSynthesisUtterance(content.slice(0, 1000));
           utter.rate = 1.0;

@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface ChatSearchBarProps {
-  chatSearchRef: React.RefObject<HTMLInputElement | null>;
+  chatSearchRef: React.RefObject<HTMLInputElement>;
   chatSearch: string;
   onSearchChange: (value: string) => void;
   onClose: () => void;

@@ -7,6 +7,12 @@ interface AgentStatus {
   status: 'active' | 'idle' | 'offline';
 }
 
+interface StatusBarAgent {
+  id?: string;
+  name?: string;
+  status?: string;
+}
+
 export default function ActiveAgentsPanel({ size }: ChatWidgetProps) {
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,11 +25,13 @@ export default function ActiveAgentsPanel({ size }: ChatWidgetProps) {
         if (!res.ok) throw new Error('fetch failed');
         const data = await res.json();
         if (cancelled) return;
-        const list: AgentStatus[] = (data.agents ?? []).map((a: any) => ({
-          id: a.id ?? a.name,
-          name: a.name ?? a.id ?? 'Unknown',
-          status: a.status === 'active' ? 'active' : a.status === 'idle' ? 'idle' : 'offline',
-        }));
+        const list: AgentStatus[] = (Array.isArray(data.agents) ? data.agents : []).map(
+          (a: StatusBarAgent) => ({
+            id: a.id ?? a.name ?? 'unknown',
+            name: a.name ?? a.id ?? 'Unknown',
+            status: a.status === 'active' ? 'active' : a.status === 'idle' ? 'idle' : 'offline',
+          }),
+        );
         setAgents(list);
       } catch {
         if (!cancelled) setAgents([]);

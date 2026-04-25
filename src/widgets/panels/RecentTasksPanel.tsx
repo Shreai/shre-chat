@@ -8,6 +8,15 @@ interface TaskEntry {
   agent: string | null;
 }
 
+interface RecentTaskPayload {
+  id?: string;
+  title?: string;
+  description?: string;
+  status?: string;
+  agent?: string | null;
+  assigned_to?: string | null;
+}
+
 const STATUS_DOT: Record<string, string> = {
   done: 'bg-emerald-400',
   completed: 'bg-emerald-400',
@@ -32,8 +41,8 @@ export default function RecentTasksPanel({ size }: ChatWidgetProps) {
         if (cancelled) return;
         const list = (Array.isArray(data) ? data : (data.tasks ?? []))
           .slice(0, 5)
-          .map((t: any) => ({
-            id: t.id,
+          .map((t: RecentTaskPayload) => ({
+            id: t.id ?? crypto.randomUUID(),
             title: t.title ?? t.description ?? 'Untitled',
             status: t.status ?? 'pending',
             agent: t.agent ?? t.assigned_to ?? null,

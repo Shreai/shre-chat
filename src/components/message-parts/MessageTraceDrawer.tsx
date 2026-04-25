@@ -16,6 +16,16 @@ interface TraceRecord {
   totalMs?: number;
   status: 'ok' | 'error' | 'partial';
   spans: TraceSpan[];
+  executionPlan?: Array<{
+    stepId: string;
+    order: number;
+    type: string;
+    title: string;
+    status: string;
+    taskId?: string;
+    error?: string;
+    queryText?: string;
+  }>;
   request?: {
     agentId?: string;
     model?: string;
@@ -33,6 +43,26 @@ const SPAN_ICONS: Record<string, string> = {
   ok: '\u2713',
   error: '\u2717',
   skipped: '\u2014',
+};
+
+const STEP_COLORS: Record<string, string> = {
+  done: '#22c55e',
+  failed: '#ef4444',
+  delegated: '#3b82f6',
+  skipped: '#6b7280',
+  running: '#f59e0b',
+  pending: '#a855f7',
+  in_progress: '#f59e0b',
+};
+
+const STEP_ICONS: Record<string, string> = {
+  done: '\u2713',
+  failed: '\u2717',
+  delegated: '\u2197',
+  skipped: '\u2014',
+  running: '\u25cf',
+  pending: '\u2022',
+  in_progress: '\u25cf',
 };
 
 function formatMs(ms?: number): string {
@@ -125,6 +155,81 @@ function SpanNode({ span, isLast }: { span: TraceSpan; isLast: boolean }) {
   );
 }
 
+function humanizeStatus(status: string): string {
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function ExecutionPlanRow({ step }: { step: NonNullable<TraceRecord['executionPlan']>[number] }) {
+  const color = STEP_COLORS[step.status] || '#6b7280';
+  const icon = STEP_ICONS[step.status] || '?';
+  const isError = step.status === 'failed';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '8px 10px',
+        borderRadius: 8,
+        border: `1px solid ${color}22`,
+        background: `${color}08`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: color,
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-text-2)' }}>
+          {step.order}. {step.title}
+        </span>
+        <span
+          style={{
+            fontSize: 9,
+            padding: '1px 6px',
+            borderRadius: 999,
+            background: `${color}20`,
+            color,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: 0.4,
+          }}
+        >
+          {humanizeStatus(step.status)}
+        </span>
+        <span style={{ fontSize: 9, color: 'var(--c-text-4)' }}>{step.type}</span>
+        {step.taskId && (
+          <span style={{ fontSize: 9, color: 'var(--c-text-4)', fontFamily: 'monospace' }}>
+            task {step.taskId.slice(0, 8)}
+          </span>
+        )}
+      </div>
+      {step.queryText && (
+        <div style={{ fontSize: 10, color: 'var(--c-text-4)', lineHeight: 1.35 }}>
+          {step.queryText}
+        </div>
+      )}
+      {isError && step.error && (
+        <div style={{ fontSize: 10, color: '#ef4444', lineHeight: 1.35 }}>{step.error}</div>
+      )}
+    </div>
+  );
+}
+
 export function MessageTraceDrawer({
   traceId,
   traceRecord,
@@ -154,6 +259,7 @@ export function MessageTraceDrawer({
         ? '#ef4444'
         : '#f59e0b'
     : '#6b7280';
+  const executionPlan = trace?.executionPlan || [];
 
   return (
     <div style={{ marginTop: 4 }}>
@@ -262,6 +368,43 @@ export function MessageTraceDrawer({
                 ))}
               </div>
 
+              {executionPlan.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 8,
+                      fontSize: 10,
+                      color: 'var(--c-text-4)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>Execution plan</span>
+                    <span
+                      style={{
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        background: `${statusColor}18`,
+                        color: statusColor,
+                        fontSize: 9,
+                      }}
+                    >
+                      {executionPlan.length} step{executionPlan.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {executionPlan
+                      .slice()
+                      .sort((a, b) => a.order - b.order)
+                      .map((step) => (
+                        <ExecutionPlanRow key={step.stepId} step={step} />
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Agent/model info */}
               {trace.request && (
                 <div
@@ -271,10 +414,31 @@ export function MessageTraceDrawer({
                     color: 'var(--c-text-5)',
                     display: 'flex',
                     gap: 12,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
                   }}
                 >
                   {trace.request.agentId && <span>Agent: {trace.request.agentId}</span>}
-                  {trace.request.model && <span>Model: {trace.request.model}</span>}
+                  {trace.request.model && (
+                    <>
+                      <span>Model: {trace.request.model}</span>
+                      <span
+                        style={{
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          background: 'rgba(34,197,94,0.12)',
+                          color: '#16a34a',
+                          fontSize: 9,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.4,
+                        }}
+                        title="This model is backed by a rotating provider key pool"
+                      >
+                        rotating keys
+                      </span>
+                    </>
+                  )}
                   {trace.request.promptLen && <span>Prompt: {trace.request.promptLen} chars</span>}
                 </div>
               )}

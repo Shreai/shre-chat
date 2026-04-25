@@ -6,6 +6,7 @@ import { getAgent, type UploadedFile, type Session, type AppActions } from '../s
 import { playNotifSound } from '../chat-utils';
 import { streamViaCLI } from './cli-streaming';
 import { fetchSuggestions, verifyIdentityCode, sendFeedbackToServer } from './message-utils';
+import type { ProcessStep } from '../components/process-bar/types';
 
 // ── Extracted modules ──
 import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handlers/handler-utils';
@@ -14,6 +15,7 @@ import { useTaskIntents } from './message-handlers/task-intents';
 import { useMemoryIntents } from './message-handlers/memory-intents';
 import { useCommsIntents } from './message-handlers/comms-intents';
 import { handleWSMessage } from './message-handlers/ws-handler';
+import type { ProcessStepKind } from '../components/process-bar/types';
 
 // Re-export for backward compatibility
 export { SYSTEM_PROMPT_VERSION };
@@ -60,7 +62,7 @@ export interface UseMessageHandlersParams {
   cliMode: boolean;
   routerMode: boolean;
   directMode?: boolean;
-  gatewayMode: string;
+  gatewayMode?: string;
   claudeCliMode: boolean;
   identityVerified: boolean;
   setIdentityVerified: (v: boolean) => void;
@@ -87,15 +89,26 @@ export interface UseMessageHandlersParams {
   setActiveToolName: (v: string | null) => void;
   setCompacting: (v: boolean) => void;
   setPendingApproval?: (
-    v: { approvalId: string; tool: string; input: any; reason: string } | null,
+    v: { approvalId: string; tool: string; input: Record<string, unknown>; reason: string } | null,
   ) => void;
   setFirstTokenReceived: (v: boolean) => void;
   streamStartRef: React.MutableRefObject<number>;
   sendTimeRef: React.MutableRefObject<number>;
   firstTokenTimeRef: React.MutableRefObject<number>;
   startRun: (id: string, sessionId: string) => void;
-  addStep: (runId: string, step: any) => string;
-  updateStep: (runId: string, stepId: string, update: any) => void;
+  addStep: (
+    runId: string,
+    step: {
+      kind: ProcessStepKind;
+      label: string;
+      [key: string]: unknown;
+    } & Record<string, unknown>,
+  ) => string;
+  updateStep: (
+    runId: string,
+    stepId: string,
+    update: Record<string, unknown> & { status?: string; completedAt?: number },
+  ) => void;
   completeRun: (runId: string) => void;
   processStepRef: React.MutableRefObject<string>;
   processRunIdRef: React.MutableRefObject<string>;
@@ -109,7 +122,12 @@ export interface UseMessageHandlersParams {
   wsConnected: boolean;
   wsReconnecting?: boolean;
   recentWSSendRef: React.MutableRefObject<boolean>;
-  virtualizer: { scrollToIndex: (idx: number, opts?: any) => void };
+  virtualizer: {
+    scrollToIndex: (
+      idx: number,
+      opts?: ScrollIntoViewOptions & { align?: 'start' | 'center' | 'end' | 'auto' },
+    ) => void;
+  };
   userNearBottomRef: React.MutableRefObject<boolean>;
   setShowJumpToLatest: (v: boolean) => void;
   setSuggestions: (v: string[]) => void;
@@ -158,7 +176,6 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     setCompareWinner,
     cliMode,
     routerMode,
-    gatewayMode,
     claudeCliMode,
     identityVerified,
     setIdentityVerified,
@@ -589,7 +606,6 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     compareModels,
     cliMode,
     routerMode,
-    gatewayMode,
     claudeCliMode,
     setVerifying,
     setIdentityVerified,

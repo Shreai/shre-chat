@@ -129,12 +129,6 @@
     "vitest": "^4.1.0",
     "ws": "^8.19.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "node-pty",
-      "esbuild"
-    ]
-  },
   "lint-staged": {
     "src/**/*.{ts,tsx}": [
       "eslint --fix --no-warn-ignored --quiet",

@@ -9,6 +9,7 @@ interface Post {
   authorType: 'agent' | 'human';
   content: string;
   entropyScore: number;
+  complianceLevel?: number;
   tags: string[];
   status: 'open' | 'resolved' | 'investigating';
   redactedContext?: any;

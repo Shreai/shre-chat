@@ -351,7 +351,7 @@ export function StatusBar() {
   const navigateToTask = useCallback(
     (taskId: string) => {
       setBellOpen(false);
-      actions.setView('tasks' as any);
+      actions.setView('tasks');
       window.dispatchEvent(new CustomEvent('shre-navigate', { detail: { view: 'tasks', taskId } }));
     },
     [actions],
@@ -496,27 +496,28 @@ export function StatusBar() {
       setRecording(true);
       setMicEnabled(true);
       window.dispatchEvent(new CustomEvent('shre-mic-start'));
-    } catch (err: any) {
-      console.error('[StatusBar] Mic error:', err?.name, err?.message, err);
+    } catch (err: unknown) {
+      const micError = err instanceof Error ? err : null;
+      console.error('[StatusBar] Mic error:', micError?.name, micError?.message, err);
 
       const isIOS =
         /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       const isAndroid = /Android/i.test(navigator.userAgent);
       let msg: string;
 
-      if (err?.name === 'NotAllowedError') {
+      if (micError?.name === 'NotAllowedError') {
         msg = isIOS
           ? 'Mic blocked. Go to Settings \u2192 Safari \u2192 Microphone to enable.'
           : isAndroid
             ? 'Mic blocked by browser. Tap \u22ee (3 dots) \u2192 Settings \u2192 Site settings \u2192 Microphone \u2192 find this site \u2192 Allow. Then reload.'
             : 'Mic blocked. Click the lock icon in the address bar \u2192 Site settings \u2192 Microphone \u2192 Allow.';
-      } else if (err?.name === 'NotFoundError') {
+      } else if (micError?.name === 'NotFoundError') {
         msg = 'No microphone found on this device.';
-      } else if (err?.name === 'NotReadableError') {
+      } else if (micError?.name === 'NotReadableError') {
         msg = 'Mic is in use by another app. Close other apps using the mic and try again.';
       } else {
-        msg = `Mic error: ${err?.name || 'Unknown'} \u2014 ${err?.message || ''}`;
+        msg = `Mic error: ${micError?.name || 'Unknown'} \u2014 ${micError?.message || ''}`;
       }
 
       // Show in both status line (visible in-app) and as a system message in chat

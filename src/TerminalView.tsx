@@ -368,6 +368,8 @@ interface TerminalViewProps {
   visible: boolean;
   onClose: () => void;
   onBackToChat?: () => void;
+  active?: boolean;
+  onExecute?: () => Promise<void> | void;
 }
 
 export interface TerminalHandle {

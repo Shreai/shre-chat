@@ -54,7 +54,8 @@ import { useChatKeydown } from './hooks/useChatKeydown';
 
 export function ChatView() {
   const { state, actions } = useApp();
-  const { sessions, activeSessionId, activeAgentId, streaming, streamText, syncing } = state;
+  const { sessions, activeSessionId, activeAgentId, streaming, streamText, syncing, statusLine } =
+    state;
 
   const [input, setInput] = useState(() => {
     try {
@@ -607,6 +608,7 @@ export function ChatView() {
     silenceStartRef,
     lastSpokenMsgRef,
     isHandsFreeRef,
+    SILENCE_THRESHOLD,
     SILENCE_TIMEOUT_MS,
     clearInterimAfter,
     cleanupAudioLevel,
@@ -766,7 +768,7 @@ export function ChatView() {
               currentAgent={currentAgent}
               agents={AGENTS}
               onSwitchAgent={(id) => {
-                actions.switchAgent(id);
+                actions.setActiveAgent(id);
                 actions.newSession();
               }}
               routerMode={routerMode}
@@ -795,9 +797,20 @@ export function ChatView() {
           content={
             <div className="flex flex-col h-full relative">
               <MessageList
-                messages={filteredMessages}
+                filteredMessages={filteredMessages}
+                messages={messages}
                 streaming={streaming}
                 streamText={streamText}
+                syncing={syncing}
+                compact={state.compact}
+                currentAgent={currentAgent}
+                activeAgentId={activeAgentId}
+                userName={userName}
+                activeSessionId={activeSessionId}
+                chatSearchOpen={chatSearchOpen}
+                chatSearch={chatSearch}
+                chatSearchResults={chatSearchResults}
+                chatSearchIndex={chatSearchIndex}
                 statusLine={statusLine}
                 selectedMsgIndex={selectedMsgIndex}
                 editingMsgIndex={editingMsgIndex}
@@ -1090,6 +1103,11 @@ export function ChatView() {
               >
                 <TerminalView
                   ref={terminalRef}
+                  visible={showTerminal}
+                  onClose={() => {
+                    setShowTerminal(false);
+                    setActiveView('chat');
+                  }}
                   active={activeView === 'terminal'}
                   onExecute={handleSend}
                 />
@@ -1099,12 +1117,7 @@ export function ChatView() {
           preview={
             activeView === 'preview' &&
             previewContent && (
-              <PreviewPanel
-                content={previewContent.content}
-                type={previewContent.type}
-                title={previewContent.title}
-                onClose={() => setActiveView('chat')}
-              />
+              <PreviewPanel content={previewContent} onClose={() => setActiveView('chat')} />
             )
           }
         />
@@ -1175,7 +1188,7 @@ export function ChatView() {
           ttsProvider={ttsProvider}
           agents={AGENTS}
           onSwitchAgent={(id) => {
-            actions.switchAgent(id);
+            actions.setActiveAgent(id);
             actions.newSession();
           }}
           onVoiceTurn={(t) => {

@@ -12,6 +12,7 @@ import { useState, useMemo, useCallback, lazy, Suspense, useRef, useEffect } fro
 import DOMPurify from 'dompurify';
 import { copyToClipboard } from '../chat-utils';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
+import type { ChatMessage } from '../router-client';
 
 const JsonViewer = lazy(() => import('./JsonViewer'));
 
@@ -36,7 +37,9 @@ export interface Artifact {
 
 interface Props {
   artifact: Artifact | null;
+  artifacts?: Artifact[];
   onClose: () => void;
+  onArtifactClick?: (artifact: Artifact | null) => void;
 }
 
 // Detect artifact type from code fence language
@@ -53,13 +56,24 @@ export function detectArtifactType(lang: string, content: string): ArtifactType 
 }
 
 // Extract artifacts from message content (code fences)
-export function extractArtifacts(content: string, messageIndex: number): Artifact[] {
+export function extractArtifacts(content: string, messageIndex: number): Artifact[];
+export function extractArtifacts(messages: ChatMessage[]): Artifact[];
+export function extractArtifacts(
+  contentOrMessages: string | ChatMessage[],
+  messageIndex?: number,
+): Artifact[] {
+  if (Array.isArray(contentOrMessages)) {
+    return contentOrMessages.flatMap((msg, idx) => extractArtifacts(msg.content, idx));
+  }
+
+  if (messageIndex == null) return [];
+
   const artifacts: Artifact[] = [];
   const fenceRegex = /```(\w+)?\s*\n([\s\S]*?)```/g;
   let match;
   let idx = 0;
 
-  while ((match = fenceRegex.exec(content)) !== null) {
+  while ((match = fenceRegex.exec(contentOrMessages)) !== null) {
     const lang = match[1] ?? 'text';
     const code = match[2].trim();
     if (code.length < 20) continue; // skip tiny snippets

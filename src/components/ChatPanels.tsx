@@ -26,6 +26,15 @@ import { SummaryModal } from './SummaryModal';
 import { SessionAnalyticsModal } from './SessionAnalyticsModal';
 
 interface ChatPanelsProps {
+  showTerminal?: boolean;
+  termViewMode?: 'split' | 'tabs';
+  activeView?: string;
+  isTabMode?: boolean;
+  sidebar?: boolean;
+  header?: React.ReactNode;
+  content?: React.ReactNode;
+  terminal?: React.ReactNode;
+  preview?: React.ReactNode;
   // Session
   sessions: Session[];
   activeSessionId: string | null;
@@ -61,7 +70,7 @@ interface ChatPanelsProps {
   MODEL_CONTEXT_LIMITS: Record<string, number>;
   dynamicModelsCount: number;
   currentAgent: { name: string; id: string; emoji: string };
-  modelPickerRef: React.RefObject<HTMLDivElement | null>;
+  modelPickerRef: React.RefObject<HTMLDivElement>;
   ensureSession: () => string;
   // Voice provider
   ttsProvider: TTSProvider;
@@ -72,7 +81,7 @@ interface ChatPanelsProps {
   // Header more menu
   showHeaderMore: boolean;
   setShowHeaderMore: (v: boolean) => void;
-  headerMoreRef: React.RefObject<HTMLDivElement | null>;
+  headerMoreRef: React.RefObject<HTMLDivElement>;
   routerMode: boolean;
   handleToggleRouterMode: () => void;
   gatewayMode: GatewayMode;
@@ -82,7 +91,7 @@ interface ChatPanelsProps {
   handleToggleCompare: (len: number) => void;
   setCompareStreams: (v: Record<string, any>) => void;
   setCompareWinner: (v: string | null) => void;
-  comparePickerRef: React.RefObject<HTMLDivElement | null>;
+  comparePickerRef: React.RefObject<HTMLDivElement>;
   handleOpenSystemPrompt: () => void;
   compact: boolean;
   notifSound: boolean;
@@ -100,7 +109,7 @@ interface ChatPanelsProps {
   showApps: boolean;
   setShowApps: (v: boolean) => void;
   view: View;
-  importInputRef: React.RefObject<HTMLInputElement | null>;
+  importInputRef: React.RefObject<HTMLInputElement>;
   // WS state
   wsFailed: boolean;
   setWsFailed: (v: boolean) => void;
@@ -116,7 +125,7 @@ interface ChatPanelsProps {
   selectedModelForContext: string | null;
   // Search
   chatSearchOpen: boolean;
-  chatSearchRef: React.RefObject<HTMLInputElement | null>;
+  chatSearchRef: React.RefObject<HTMLInputElement>;
   chatSearch: string;
   setChatSearch: (v: string) => void;
   closeChatSearch: () => void;
@@ -135,7 +144,7 @@ interface ChatPanelsProps {
   summaryText: string;
 }
 
-export function ChatPanels(props: ChatPanelsProps) {
+export function ChatPanels(props: any) {
   const {
     sessions,
     activeSessionId,
@@ -258,6 +267,18 @@ export function ChatPanels(props: ChatPanelsProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [voicePickerOpen, langPickerOpen]);
 
+  const { header, content, terminal, preview } = props;
+  if (header || content || terminal || preview) {
+    return (
+      <>
+        {header}
+        {content}
+        {terminal}
+        {preview}
+      </>
+    );
+  }
+
   return (
     <>
       {/* Compact toolbar -- model picker + options */}
@@ -272,7 +293,7 @@ export function ChatPanels(props: ChatPanelsProps) {
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 shre-no-drag">
           {(() => {
-            const s = sessions.find((x) => x.id === activeSessionId);
+            const s = sessions.find((x: Session) => x.id === activeSessionId);
             if (!s) return null;
             return editingTabId === s.id ? (
               <input
@@ -346,7 +367,8 @@ export function ChatPanels(props: ChatPanelsProps) {
               };
               const prevName =
                 providerLabels[selectedModel ?? ''] ??
-                AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name ??
+                AVAILABLE_MODELS.find((m: { id: string; name: string }) => m.id === selectedModel)
+                  ?.name ??
                 selectedModel ??
                 'Auto';
               setSelectedModel(modelId);
@@ -354,7 +376,8 @@ export function ChatPanels(props: ChatPanelsProps) {
               const sid = ensureSession();
               const newName =
                 providerLabels[modelId ?? ''] ??
-                AVAILABLE_MODELS.find((m) => m.id === modelId)?.name ??
+                AVAILABLE_MODELS.find((m: { id: string; name: string }) => m.id === modelId)
+                  ?.name ??
                 modelId ??
                 'Auto';
               actions.addMessage(sid, {

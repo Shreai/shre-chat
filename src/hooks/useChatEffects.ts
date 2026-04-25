@@ -19,6 +19,13 @@ import {
 import { loadScrollPositions, saveScrollPositions, type Session, type AppActions } from '../store';
 import { showDesktopNotification, getModelOverride, setModelOverride } from '../chat-utils';
 
+export interface SharedSnapshot {
+  title: string;
+  messages: ChatMessage[];
+  model: string | null;
+  createdAt: string;
+}
+
 export interface UseChatEffectsParams {
   activeSessionId: string | null;
   activeAgentId: string;
@@ -43,8 +50,8 @@ export interface UseChatEffectsParams {
     | 'getDraft'
     | 'setStatusLine'
   >;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  scrollRef: React.RefObject<HTMLDivElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
   streamFlushRaf: React.MutableRefObject<number | null>;
   streamBufferRef: React.MutableRefObject<string>;
   sendingRef: React.MutableRefObject<boolean>;
@@ -56,15 +63,15 @@ export interface UseChatEffectsParams {
   setCompareModels: (v: string[] | ((prev: string[]) => string[])) => void;
   showEmoji: boolean;
   setShowEmoji: (v: boolean) => void;
-  emojiRef: React.RefObject<HTMLDivElement | null>;
+  emojiRef: React.RefObject<HTMLDivElement>;
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
-  modelPickerRef: React.RefObject<HTMLDivElement | null>;
+  modelPickerRef: React.RefObject<HTMLDivElement>;
   comparePickerOpen: boolean;
   setComparePickerOpen: (v: boolean) => void;
-  comparePickerRef: React.RefObject<HTMLDivElement | null>;
+  comparePickerRef: React.RefObject<HTMLDivElement>;
   setShareUrl: (v: string | null) => void;
-  setSharedSnapshot: (v: any) => void;
+  setSharedSnapshot: (v: SharedSnapshot | null) => void;
   setSharedLoading: (v: boolean) => void;
   setSharedError: (v: string | null) => void;
   generateTitle: (text: string) => string;

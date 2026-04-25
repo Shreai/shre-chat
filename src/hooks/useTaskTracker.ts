@@ -41,6 +41,99 @@ export interface TraceStep {
   timestamp?: number;
 }
 
+export interface TraceExecutionStep {
+  stepId: string;
+  order: number;
+  type: string;
+  title: string;
+  status: string;
+  taskId?: string;
+  error?: string;
+  queryText?: string;
+}
+
+export interface TaskTraceDetails {
+  steps: TraceStep[];
+  executionPlan: TraceExecutionStep[];
+}
+
+interface RawTaskRecord {
+  id?: string;
+  title?: string;
+  status?: string;
+  agent?: string;
+  agent_id?: string;
+  priority?: string;
+  project_id?: string;
+  parent_id?: string;
+  session_id?: string;
+  quality_score?: number;
+  completion_ratio?: number;
+  description?: string;
+  source?: string;
+  depends_on?: string[];
+  metadata?: { message_index?: number; trace_id?: string };
+  created_at?: number;
+  updated_at?: number;
+  trace_id?: string;
+}
+
+interface RequiredTaskFields {
+  id: string;
+  title: string;
+  status: string;
+  created_at: number;
+}
+
+interface RawTraceSpan {
+  name?: string;
+  step?: string;
+  error?: string;
+  endTime?: number;
+  startTime?: number;
+  duration_ms?: number;
+  timestamp?: number;
+}
+
+interface RawTraceExecutionStep {
+  stepId?: string;
+  id?: string;
+  order?: number;
+  type?: string;
+  kind?: string;
+  title?: string;
+  name?: string;
+  status?: string;
+  taskId?: string | number;
+  error?: string;
+  queryText?: string;
+}
+
+function isRawTaskRecord(value: unknown): value is RawTaskRecord {
+  return !!value && typeof value === 'object';
+}
+
+function isTaskRecord(value: unknown): value is RawTaskRecord & RequiredTaskFields {
+  return (
+    isRawTaskRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.status === 'string' &&
+    typeof value.created_at === 'number'
+  );
+}
+
+function isArrayOfRecords(value: unknown): value is Array<RawTaskRecord & RequiredTaskFields> {
+  return Array.isArray(value) && value.every(isTaskRecord);
+}
+
+function toTaskArray(data: unknown): Array<RawTaskRecord & RequiredTaskFields> {
+  if (Array.isArray(data)) return data.filter(isTaskRecord);
+  if (!data || typeof data !== 'object') return [];
+  const tasks = (data as { tasks?: unknown }).tasks;
+  return isArrayOfRecords(tasks) ? tasks : [];
+}
+
 interface UseTaskTrackerOptions {
   sessionId: string | null;
   /** Polling interval in ms (default 30s, reduced to 10s when tasks are active) */
@@ -62,8 +155,9 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return;
-      const data = await res.json();
-      const list: TrackedTask[] = (Array.isArray(data) ? data : data.tasks || []).map((t: any) => ({
+      const data: unknown = await res.json();
+      const rawTasks = toTaskArray(data);
+      const list: TrackedTask[] = rawTasks.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status,
@@ -200,8 +294,9 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return [];
-      const data = await res.json();
-      return (Array.isArray(data) ? data : data.tasks || []).map((t: any) => ({
+      const data: unknown = await res.json();
+      const rawTasks = toTaskArray(data);
+      return rawTasks.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status,
@@ -218,23 +313,40 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
   }, []);
 
   // ── Fetch trace steps for a task ──
-  const fetchTrace = useCallback(async (traceId: string): Promise<TraceStep[]> => {
+  const fetchTrace = useCallback(async (traceId: string): Promise<TaskTraceDetails> => {
     try {
       const res = await fetch(`/api/router/v1/traces/${encodeURIComponent(traceId)}`, {
         signal: AbortSignal.timeout(5000),
       });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (data.spans || data.steps || []).map((s: any) => ({
-        name: s.name || s.step,
-        status: s.error ? 'fail' : s.endTime ? 'ok' : s.startTime ? 'running' : 'pending',
-        duration_ms:
-          s.duration_ms ?? (s.endTime && s.startTime ? s.endTime - s.startTime : undefined),
-        error: s.error,
-        timestamp: s.startTime || s.timestamp,
-      }));
+      if (!res.ok) return { steps: [], executionPlan: [] };
+      const data: unknown = await res.json();
+      const trace = (data && typeof data === 'object' ? data : {}) as {
+        spans?: RawTraceSpan[];
+        steps?: RawTraceSpan[];
+        executionPlan?: RawTraceExecutionStep[];
+      };
+      return {
+        steps: (trace.spans || trace.steps || []).map((s) => ({
+          name: String(s.name || s.step || 'step'),
+          status: s.error ? 'fail' : s.endTime ? 'ok' : s.startTime ? 'running' : 'pending',
+          duration_ms:
+            s.duration_ms ?? (s.endTime && s.startTime ? s.endTime - s.startTime : undefined),
+          error: s.error,
+          timestamp: s.startTime || s.timestamp,
+        })),
+        executionPlan: (trace.executionPlan || []).map((step) => ({
+          stepId: String(step.stepId || step.id || `${step.order ?? 0}-${step.title || 'step'}`),
+          order: Number(step.order ?? 0),
+          type: String(step.type || step.kind || 'step'),
+          title: String(step.title || step.name || 'Untitled step'),
+          status: String(step.status || 'pending'),
+          taskId: step.taskId ? String(step.taskId) : undefined,
+          error: step.error ? String(step.error) : undefined,
+          queryText: step.queryText ? String(step.queryText) : undefined,
+        })),
+      };
     } catch {
-      return [];
+      return { steps: [], executionPlan: [] };
     }
   }, []);
 

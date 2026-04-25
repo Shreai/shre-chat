@@ -10,19 +10,22 @@ interface SearchResult {
 }
 
 interface GlobalSearchModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
+  open?: boolean;
   onClose: () => void;
   query: string;
   onQueryChange: (value: string) => void;
   results: SearchResult[];
   searching: boolean;
-  onSearch: () => void;
-  onResultClick: (result: SearchResult) => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  onSearch?: () => void;
+  onResultClick?: (result: SearchResult) => void;
+  onSelect?: (sessionId: string, resultIndex: number) => void;
+  inputRef?: React.RefObject<HTMLInputElement>;
 }
 
 export function GlobalSearchModal({
   isOpen,
+  open,
   onClose,
   query,
   onQueryChange,
@@ -30,11 +33,13 @@ export function GlobalSearchModal({
   searching,
   onSearch,
   onResultClick,
+  onSelect,
   inputRef,
 }: GlobalSearchModalProps) {
+  const resolvedOpen = isOpen ?? open ?? false;
   return (
     <SDialog
-      open={isOpen}
+      open={resolvedOpen}
       onOpenChange={(open: boolean) => {
         if (!open) onClose();
       }}
@@ -63,7 +68,7 @@ export function GlobalSearchModal({
                 return;
               }
               if (e.key === 'Enter' && query.trim().length >= 2) {
-                onSearch();
+                onSearch?.();
               }
             }}
             placeholder="Search across all sessions... (Enter to search)"
@@ -97,7 +102,7 @@ export function GlobalSearchModal({
                 background: 'var(--color-surface-raised, var(--c-bg-3))',
                 color: 'var(--color-text-secondary, var(--c-text-2))',
               }}
-              onClick={() => onResultClick(r)}
+              onClick={() => onResultClick?.(r) || onSelect?.(r.sessionId, 0)}
             >
               <div className="flex items-center gap-2 mb-0.5">
                 <span

@@ -12,9 +12,10 @@ interface ShareSnapshotViewProps {
   } | null;
   loading: boolean;
   error: string | null;
+  onClose?: () => void;
 }
 
-export function ShareSnapshotView({ snapshot, loading, error }: ShareSnapshotViewProps) {
+export function ShareSnapshotView({ snapshot, loading, error, onClose }: ShareSnapshotViewProps) {
   if (!snapshot && !loading && !error) return null;
 
   return (
@@ -24,13 +25,23 @@ export function ShareSnapshotView({ snapshot, loading, error }: ShareSnapshotVie
         className="px-4 py-3 flex items-center gap-3 shrink-0"
         style={{ background: 'var(--c-bg-2)', borderBottom: '1px solid var(--c-border-1)' }}
       >
-        <a
-          href="/"
-          className="text-[11px] px-2 py-1 rounded-lg transition-colors"
-          style={{ color: 'var(--c-text-3)', border: '1px solid var(--c-border-1)' }}
-        >
-          &larr; Back to Shre Chat
-        </a>
+        {onClose ? (
+          <button
+            onClick={onClose}
+            className="text-[11px] px-2 py-1 rounded-lg transition-colors"
+            style={{ color: 'var(--c-text-3)', border: '1px solid var(--c-border-1)' }}
+          >
+            &larr; Back to Shre Chat
+          </button>
+        ) : (
+          <a
+            href="/"
+            className="text-[11px] px-2 py-1 rounded-lg transition-colors"
+            style={{ color: 'var(--c-text-3)', border: '1px solid var(--c-border-1)' }}
+          >
+            &larr; Back to Shre Chat
+          </a>
+        )}
         <div className="flex-1 min-w-0">
           <div className="text-xs font-medium truncate" style={{ color: 'var(--c-text-1)' }}>
             {snapshot?.title || 'Shared Conversation'}

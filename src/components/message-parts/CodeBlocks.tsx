@@ -87,7 +87,7 @@ export function HtmlCodeBlock({
   codeText: string;
   isShell: boolean;
   onRunCommand?: (cmd: string) => void;
-  props: any;
+  props: React.HTMLAttributes<HTMLElement>;
   children: React.ReactNode;
 }) {
   const canPreview = PREVIEW_LANGS.has(lang);
@@ -100,8 +100,10 @@ export function HtmlCodeBlock({
     const entry = { id: `prev_${Date.now()}`, title, html: codeText, savedAt: Date.now(), type };
     sessionStorage.setItem('shre-preview-html', JSON.stringify(entry));
     try {
-      const lib = JSON.parse(localStorage.getItem('shre-preview-library') || '[]');
-      const deduped = lib.filter((e: any) => e.html !== codeText);
+      const lib = JSON.parse(localStorage.getItem('shre-preview-library') || '[]') as Array<{
+        html?: string;
+      }>;
+      const deduped = lib.filter((entry) => entry.html !== codeText);
       deduped.unshift(entry);
       localStorage.setItem('shre-preview-library', JSON.stringify(deduped.slice(0, 20)));
     } catch (err) {

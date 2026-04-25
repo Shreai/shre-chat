@@ -11,7 +11,7 @@ export interface UseMentionsParams {
   input: string;
   setInput: (val: string) => void;
   agents: MentionItem[];
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
 }
 
 export interface UseMentionsReturn {

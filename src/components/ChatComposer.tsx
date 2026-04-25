@@ -29,9 +29,9 @@ interface ChatComposerProps {
   messages: { role: string; content: string }[];
 
   // Refs
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  fileRef: React.RefObject<HTMLInputElement | null>;
-  emojiRef: React.RefObject<HTMLDivElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
+  fileRef: React.RefObject<HTMLInputElement>;
+  emojiRef: React.RefObject<HTMLDivElement>;
 
   // File handling
   pendingFiles: UploadedFile[];
@@ -75,7 +75,7 @@ interface ChatComposerProps {
   slashOpen: boolean;
   slashFiltered: { name: string; description: string; usage: string; category?: string }[];
   slashIndex: number;
-  slashRef: React.RefObject<HTMLDivElement | null>;
+  slashRef: React.RefObject<HTMLDivElement>;
   setSlashIndex: (val: number) => void;
   onSlashSelect: (cmd: string) => void;
 
@@ -83,7 +83,7 @@ interface ChatComposerProps {
   mentionOpen: boolean;
   mentionFiltered: { id: string; name: string; emoji: string; group: string }[];
   mentionIndex: number;
-  mentionRef: React.RefObject<HTMLDivElement | null>;
+  mentionRef: React.RefObject<HTMLDivElement>;
   setMentionIndex: (val: number) => void;
   onMentionSelect: (agent: { id: string; name: string; emoji: string; group: string }) => void;
   mentionAgent: { id: string; name: string; emoji: string } | null;
@@ -106,13 +106,13 @@ interface ChatComposerProps {
   voiceAnnouncement: string;
 
   // Queue
-  queueCount: number;
+  queueCount?: number;
 
   // Draft
-  onInputChange: (val: string) => void;
+  onInputChange?: (val: string) => void;
 
   // Filtered messages for reply preview
-  filteredMessages: { content: string }[];
+  filteredMessages?: { content: string }[];
 
   // Claude CLI mode — auto-routes coding tasks to Claude Code CLI
   claudeCliMode: boolean;
@@ -196,9 +196,9 @@ export function ChatComposer(props: ChatComposerProps) {
     suggestions,
     onSelectSuggestion,
     voiceAnnouncement,
-    queueCount,
+    queueCount = 0,
     onInputChange,
-    filteredMessages,
+    filteredMessages = [],
     claudeCliMode,
     setClaudeCliMode,
     onOpenClaudeCli,
@@ -590,7 +590,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     <span className="text-yellow-400 animate-pulse">Stopping soon...</span>
                   )}
                   <button
-                    onClick={onStopRecording}
+                    onClick={() => onStopRecording?.()}
                     className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
                     style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
                   >
@@ -661,7 +661,9 @@ export function ChatComposer(props: ChatComposerProps) {
             id="shre-chat-textarea"
             ref={inputRef}
             value={input}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={(e) =>
+              onInputChange ? onInputChange(e.target.value) : setInput(e.target.value)
+            }
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             placeholder={

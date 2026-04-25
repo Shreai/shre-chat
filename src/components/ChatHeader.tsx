@@ -1,6 +1,6 @@
 import React from 'react';
-import type { AgentOption } from './voice/voice-utils';
-import type { AvailableModel } from './hooks/useSlashCommands';
+import type { AgentOption } from '../voice/voice-utils';
+import type { AvailableModel } from '../hooks/useSlashCommands';
 
 interface ChatHeaderProps {
   currentAgent: { id: string; name: string; emoji: string };

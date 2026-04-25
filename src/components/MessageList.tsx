@@ -85,7 +85,7 @@ export interface MessageListProps {
   editingMsgText: string;
 
   // Scroll
-  scrollRef: React.RefObject<HTMLDivElement | null>;
+  scrollRef: React.RefObject<HTMLDivElement>;
   showJumpToLatest: boolean;
   newMsgStartIndex: React.MutableRefObject<number | null>;
 

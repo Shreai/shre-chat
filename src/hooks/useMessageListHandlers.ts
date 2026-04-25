@@ -25,13 +25,23 @@ interface UseMessageListHandlersOptions {
   setBranchToast: (val: boolean) => void;
   setShowTerminal: (val: boolean) => void;
   setPendingApproval: (
-    val: { approvalId: string; tool: string; input: any; reason: string } | null,
+    val: {
+      approvalId: string;
+      tool: string;
+      input: Record<string, unknown>;
+      reason: string;
+    } | null,
   ) => void;
   setSelectedMsgIndex?: (val: number | null) => void;
-  virtualizer?: { scrollToIndex: (idx: number, opts?: any) => void };
+  virtualizer?: {
+    scrollToIndex: (
+      idx: number,
+      opts?: ScrollIntoViewOptions & { align?: 'start' | 'center' | 'end' | 'auto' },
+    ) => void;
+  };
   pendingEditSendRef: React.MutableRefObject<boolean>;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  terminalRef: React.RefObject<{ sendCommand: (cmd: string) => void } | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
+  terminalRef: React.RefObject<{ sendCommand: (cmd: string) => void }>;
   setLightboxSrc: (src: string | null) => void;
   sendFeedbackToRapidRMS: (msgIndex: number, feedback: 'like' | 'dislike') => void;
   handleContentExpand: (content: string, type: string, title?: string) => void;

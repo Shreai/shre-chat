@@ -79,8 +79,8 @@ export function AgentFeedView() {
       const data = await res.json();
       setPosts(data.posts || []);
       setTotal(data.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load feed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load feed');
       setPosts([]);
     } finally {
       setLoading(false);

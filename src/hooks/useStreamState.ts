@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { onStreamStall, type StreamStallState } from '../gateway-ws';
 
+export interface PendingApproval {
+  approvalId: string;
+  tool: string;
+  input: Record<string, unknown>;
+  reason: string;
+}
+
 export interface UseStreamStateReturn {
   streamStall: StreamStallState | null;
   setStreamStall: React.Dispatch<React.SetStateAction<StreamStallState | null>>;
@@ -35,10 +42,8 @@ export interface UseStreamStateReturn {
   setCompacting: React.Dispatch<React.SetStateAction<boolean>>;
   activeToolName: string | null;
   setActiveToolName: React.Dispatch<React.SetStateAction<string | null>>;
-  pendingApproval: { approvalId: string; tool: string; input: any; reason: string } | null;
-  setPendingApproval: React.Dispatch<
-    React.SetStateAction<{ approvalId: string; tool: string; input: any; reason: string } | null>
-  >;
+  pendingApproval: PendingApproval | null;
+  setPendingApproval: React.Dispatch<React.SetStateAction<PendingApproval | null>>;
   /** True once the first content token has been received (TTFT boundary) */
   firstTokenReceived: boolean;
   setFirstTokenReceived: React.Dispatch<React.SetStateAction<boolean>>;
@@ -65,12 +70,7 @@ export function useStreamState(streaming: boolean): UseStreamStateReturn {
   >('connecting');
   const [compacting, setCompacting] = useState(false);
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
-  const [pendingApproval, setPendingApproval] = useState<{
-    approvalId: string;
-    tool: string;
-    input: any;
-    reason: string;
-  } | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [firstTokenReceived, setFirstTokenReceived] = useState(false);
   const streamStartRef = useRef(0);
   const sendTimeRef = useRef(0);

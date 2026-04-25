@@ -13,7 +13,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useRealtimeVoice, type RealtimeVoiceState } from '../hooks/useRealtimeVoice';
 
 interface RealtimeVoiceOverlayProps {
+  open?: boolean;
   onClose: () => void;
+  agentName?: string;
+  agentEmoji?: string;
   defaultPersona?: string;
   onVoiceTurn?: (turn: { role: 'user' | 'assistant'; content: string }) => void;
 }
@@ -34,7 +37,10 @@ const stateLabels: Record<RealtimeVoiceState, string> = {
 };
 
 export function RealtimeVoiceOverlay({
+  open = true,
   onClose,
+  agentName,
+  agentEmoji,
   defaultPersona = 'shre',
   onVoiceTurn,
 }: RealtimeVoiceOverlayProps) {
@@ -69,6 +75,8 @@ export function RealtimeVoiceOverlay({
       onVoiceTurn?.({ role: 'assistant', content: aiTranscript });
     }
   }, [aiTranscript, onVoiceTurn]);
+
+  if (!open) return null;
 
   const handleToggle = () => {
     if (isActive) {

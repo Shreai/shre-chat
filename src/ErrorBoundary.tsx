@@ -45,8 +45,8 @@ export class ErrorBoundary extends Component<Props, State> {
   handleCopyError = () => {
     const { error } = this.state;
     if (!error) return;
-    const msg = (error as any)?.message ?? String(error) ?? 'Unknown error';
-    const text = `${msg}\n\n${(error as any)?.stack || ''}`;
+    const msg = error.message ?? String(error) ?? 'Unknown error';
+    const text = `${msg}\n\n${error.stack || ''}`;
     navigator.clipboard
       .writeText(text)
       .then(() => {
@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
     }
 
     const { error } = this.state;
-    const msg = (error as any)?.message ?? String(error) ?? 'Unknown error';
+    const msg = error.message ?? String(error) ?? 'Unknown error';
     const truncated = msg.length > 200 ? msg.slice(0, 200) + '...' : msg;
 
     return (

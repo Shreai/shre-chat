@@ -23,7 +23,7 @@ export interface HeaderMoreMenuProps {
   // Compare
   compareMode: boolean;
   onToggleCompare: () => void;
-  comparePickerRef: React.RefObject<HTMLDivElement | null>;
+  comparePickerRef: React.RefObject<HTMLDivElement>;
   // System prompt
   activeSession: Session | undefined;
   onOpenSystemPrompt: () => void;
@@ -56,7 +56,7 @@ export interface HeaderMoreMenuProps {
   onSetView: (v: string) => void;
   // Export/Import
   sessions: Session[];
-  importInputRef: React.RefObject<HTMLInputElement | null>;
+  importInputRef: React.RefObject<HTMLInputElement>;
   onImportSessions: () => void;
 }
 

@@ -15,7 +15,7 @@ interface ToolPickerProps {
   tools: ToolOption[];
   systemCount: number;
   appCount: number;
-  pickerRef: React.RefObject<HTMLDivElement | null>;
+  pickerRef: React.RefObject<HTMLDivElement>;
 }
 
 type TabFilter = 'all' | 'system' | 'app';

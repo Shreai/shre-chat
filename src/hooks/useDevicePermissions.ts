@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-export type PermissionName =
+export type DevicePermissionName =
   | 'microphone'
   | 'camera'
   | 'notifications'
@@ -25,7 +25,7 @@ interface PermissionEntry {
   deniedCount: number;
 }
 
-type PermissionsMap = Record<PermissionName, PermissionEntry>;
+type PermissionsMap = Record<DevicePermissionName, PermissionEntry>;
 
 const STORAGE_KEY = 'shre-device-permissions';
 const CHECK_INTERVAL_MS = 300_000; // Re-check every 5 min
@@ -37,7 +37,7 @@ const DEFAULT_ENTRY: PermissionEntry = {
 };
 
 /** Messages to show users explaining WHY we need the permission */
-export const PERMISSION_RATIONALE: Record<PermissionName, string> = {
+export const PERMISSION_RATIONALE: Record<DevicePermissionName, string> = {
   microphone: 'Shre needs your microphone to hear your voice commands and transcribe speech.',
   camera: 'Camera access enables scanning documents and QR codes.',
   notifications: 'Notifications keep you updated on task completions and agent activity.',
@@ -46,7 +46,7 @@ export const PERMISSION_RATIONALE: Record<PermissionName, string> = {
 };
 
 /** Friendly names for UI */
-export const PERMISSION_LABELS: Record<PermissionName, string> = {
+export const PERMISSION_LABELS: Record<DevicePermissionName, string> = {
   microphone: 'Microphone',
   camera: 'Camera',
   notifications: 'Notifications',
@@ -55,7 +55,7 @@ export const PERMISSION_LABELS: Record<PermissionName, string> = {
 };
 
 /** Icons as SVG paths (24x24 viewBox) */
-export const PERMISSION_ICONS: Record<PermissionName, string> = {
+export const PERMISSION_ICONS: Record<DevicePermissionName, string> = {
   microphone:
     'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8',
   camera:
@@ -99,7 +99,7 @@ function isMobile(): boolean {
 }
 
 /** Check if a specific API is available */
-function isAPISupported(name: PermissionName): boolean {
+function isAPISupported(name: DevicePermissionName): boolean {
   switch (name) {
     case 'microphone':
       return !!navigator.mediaDevices?.getUserMedia;
@@ -117,7 +117,7 @@ function isAPISupported(name: PermissionName): boolean {
 }
 
 /** Query current browser permission state without triggering a prompt */
-async function queryPermission(name: PermissionName): Promise<PermissionStatus> {
+async function queryPermission(name: DevicePermissionName): Promise<PermissionStatus> {
   if (!isAPISupported(name)) return 'unsupported';
 
   // Notifications have their own API
@@ -137,7 +137,9 @@ async function queryPermission(name: PermissionName): Promise<PermissionStatus> 
     const permName = name === 'clipboard-read' ? 'clipboard-read' : name;
 
     // Some browsers throw on certain names
-    const result = await navigator.permissions.query({ name: permName as any });
+    const result = await navigator.permissions.query({
+      name: permName as globalThis.PermissionName,
+    });
 
     // Log for debugging if needed
     // console.debug(`[permissions] query ${name}:`, result.state);
@@ -179,7 +181,7 @@ export function useDevicePermissions() {
   // Check all permissions on mount
   useEffect(() => {
     const checkAll = async () => {
-      const names: PermissionName[] = [
+      const names: DevicePermissionName[] = [
         'microphone',
         'camera',
         'notifications',
@@ -212,7 +214,7 @@ export function useDevicePermissions() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Request a specific permission. Returns true if granted. */
-  const requestPermission = useCallback(async (name: PermissionName): Promise<boolean> => {
+  const requestPermission = useCallback(async (name: DevicePermissionName): Promise<boolean> => {
     if (!isAPISupported(name)) {
       setPermissions((prev) => {
         const next = {
@@ -276,8 +278,9 @@ export function useDevicePermissions() {
       });
 
       return granted;
-    } catch (err: any) {
-      const isDenied = err?.name === 'NotAllowedError' || err?.code === 1;
+    } catch (err: unknown) {
+      const error = err as { name?: string; code?: number } | null;
+      const isDenied = error?.name === 'NotAllowedError' || error?.code === 1;
 
       setPermissions((prev) => {
         const entry: PermissionEntry = {
@@ -298,7 +301,7 @@ export function useDevicePermissions() {
 
   /** Get the status of a specific permission */
   const getStatus = useCallback(
-    (name: PermissionName): PermissionStatus => {
+    (name: DevicePermissionName): PermissionStatus => {
       return permissions[name]?.status ?? 'unknown';
     },
     [permissions],
@@ -306,7 +309,7 @@ export function useDevicePermissions() {
 
   /** Check if permission is permanently denied (denied 2+ times) */
   const isPermanentlyDenied = useCallback(
-    (name: PermissionName): boolean => {
+    (name: DevicePermissionName): boolean => {
       const entry = permissions[name];
       return entry?.status === 'denied' && (entry?.deniedCount ?? 0) >= 2;
     },
@@ -314,7 +317,7 @@ export function useDevicePermissions() {
   );
 
   /** Get instructions for enabling in device settings */
-  const getSettingsInstructions = useCallback((name: PermissionName): string => {
+  const getSettingsInstructions = useCallback((name: DevicePermissionName): string => {
     const label = PERMISSION_LABELS[name];
     if (isIOS()) {
       return `Open Settings → Safari → scroll to ${label} → Allow. Or Settings → Privacy & Security → ${label} and enable for this site.`;

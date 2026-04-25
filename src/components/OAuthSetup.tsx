@@ -71,8 +71,8 @@ export function OAuthSetup({ onClose }: OAuthSetupProps) {
       if (!r.ok) throw new Error('Could not reach OAuth service');
       const data: OAuthStatusResponse = await r.json();
       setStatusData(data);
-    } catch (e: any) {
-      setError(e.message || 'Failed to check OAuth status');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to check OAuth status');
     } finally {
       setLoading(false);
     }
@@ -174,8 +174,8 @@ function ProviderCard({
       }
       setApiKey('');
       onStatusChange();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to store key');
     } finally {
       setSaving(false);
     }
@@ -204,8 +204,8 @@ function ProviderCard({
       }
       // Start OAuth flow
       await startOAuthFlow();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Registration failed');
     } finally {
       setSaving(false);
     }
@@ -234,8 +234,8 @@ function ProviderCard({
         }, 1000);
         setTimeout(() => clearInterval(iv), 5 * 60 * 1000);
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not start OAuth flow');
     }
   }
 

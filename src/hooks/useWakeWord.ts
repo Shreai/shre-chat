@@ -45,10 +45,9 @@ export function useWakeWord(
   // SpeechRecognition wake word detection ("shre shre", "hey shre", etc.)
   useEffect(() => {
     if (!wakeListenerReady || !micEnabled || voiceAssistantOpen || isRecording || voiceMode) return;
-    const SR =
-      window.SpeechRecognition ||
+    const SR = (window.SpeechRecognition ||
       (window as Window & { webkitSpeechRecognition?: typeof window.SpeechRecognition })
-        .webkitSpeechRecognition;
+        .webkitSpeechRecognition) as typeof window.SpeechRecognition | undefined;
     if (!SR) {
       // iOS Safari doesn't support SpeechRecognition — wake word unavailable.
       // Users can still tap the mic button to start voice input.
@@ -61,7 +60,9 @@ export function useWakeWord(
 
     function startWake() {
       if (!active) return;
-      const w = new SR();
+      const SpeechRecognitionCtor = SR;
+      if (!SpeechRecognitionCtor) return;
+      const w = new SpeechRecognitionCtor();
       w.continuous = false;
       w.interimResults = true;
       w.lang = getSpeechLocale();
@@ -91,7 +92,7 @@ export function useWakeWord(
           setTimeout(startWake, 300);
         }
       };
-      w.onerror = (e: SpeechRecognitionErrorEvent) => {
+      w.onerror = (e: Event & { error?: string }) => {
         if (!active) return;
         if (e.error === 'not-allowed' || retryCount > 5) return;
         retryCount++;

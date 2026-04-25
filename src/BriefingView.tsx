@@ -61,8 +61,8 @@ export function BriefingView() {
       setLastRefresh(Date.now());
       // Mark briefing as shown today (so auto-show doesn't repeat)
       localStorage.setItem('shre-last-briefing-date', new Date().toDateString());
-    } catch (e: any) {
-      setError(e.message || 'Failed to load briefing');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load briefing');
     } finally {
       setLoading(false);
     }

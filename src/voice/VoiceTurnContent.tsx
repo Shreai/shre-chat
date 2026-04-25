@@ -12,13 +12,22 @@ remarkGfmPromise.then((p) => {
   remarkGfmPlugin = p;
 });
 
-export const VoiceTurnContent = memo(function VoiceTurnContent({
-  text,
-  role,
-}: {
-  text: string;
-  role: string;
-}) {
+type VoiceTurnContentProps =
+  | {
+      text: string;
+      role: string;
+    }
+  | {
+      turn: {
+        text?: string;
+        content?: string;
+        role: string;
+      };
+    };
+
+export const VoiceTurnContent = memo(function VoiceTurnContent(props: VoiceTurnContentProps) {
+  const text = 'turn' in props ? props.turn.text || props.turn.content || '' : props.text;
+  const role = 'turn' in props ? props.turn.role : props.role;
   if (role === 'user') return <>{text}</>;
 
   return (

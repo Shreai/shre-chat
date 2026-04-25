@@ -24,6 +24,12 @@ const STAGES: Record<ProcessStepKind, StageConfig> = {
     color: 'var(--c-purple, #a78bfa)',
     glow: 'rgba(167,139,250,0.3)',
   },
+  model_call: {
+    icon: '🤖',
+    label: 'Model',
+    color: 'var(--c-indigo, #818cf8)',
+    glow: 'rgba(129,140,248,0.3)',
+  },
   tool_use: {
     icon: '⚡',
     label: 'Tool',
@@ -35,6 +41,12 @@ const STAGES: Record<ProcessStepKind, StageConfig> = {
     label: 'Result',
     color: 'var(--c-cyan, #22d3ee)',
     glow: 'rgba(34,211,238,0.3)',
+  },
+  handoff: {
+    icon: '🤝',
+    label: 'Handoff',
+    color: 'var(--c-fuchsia, #e879f9)',
+    glow: 'rgba(232,121,249,0.3)',
   },
   generating: {
     icon: '✍️',

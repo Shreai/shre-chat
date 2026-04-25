@@ -25,7 +25,7 @@ interface ModePickerProps {
   selectedMode: ConversationModeId;
   onSelectMode: (mode: ConversationModeId, appId?: string | null) => void;
   activeAppId?: string | null;
-  pickerRef: React.RefObject<HTMLDivElement | null>;
+  pickerRef: React.RefObject<HTMLDivElement>;
   appOptions?: AppOption[];
 }
 

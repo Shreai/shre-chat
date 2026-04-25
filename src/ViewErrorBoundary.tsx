@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface Props {
-  viewName: string;
+  viewName?: string;
   children: ReactNode;
 }
 
@@ -23,7 +23,11 @@ export class ViewErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(`[ViewErrorBoundary:${this.props.viewName}]`, error, info.componentStack);
+    console.error(
+      `[ViewErrorBoundary:${this.props.viewName || 'View'}]`,
+      error,
+      info.componentStack,
+    );
   }
 
   handleRetry = () => {
@@ -37,12 +41,13 @@ export class ViewErrorBoundary extends Component<Props, State> {
 
     const msg = this.state.error?.message || 'Unknown error';
     const truncated = msg.length > 120 ? msg.slice(0, 120) + '...' : msg;
-    const isOverlay = this.props.viewName === 'Voice Assistant';
+    const viewName = this.props.viewName || 'View';
+    const isOverlay = viewName === 'Voice Assistant';
 
     return (
       <div style={isOverlay ? styles.overlayContainer : styles.container}>
         <div style={styles.icon}>!</div>
-        <div style={styles.title}>{this.props.viewName}</div>
+        <div style={styles.title}>{viewName}</div>
         <div style={styles.subtitle}>Something went wrong</div>
         <pre style={styles.code}>{truncated}</pre>
         <button style={styles.btn} onClick={this.handleRetry}>

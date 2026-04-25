@@ -1,10 +1,35 @@
 import React from 'react';
+import type { GatewayMode } from '../preferences-store';
 
 interface ViewTabsProps {
   activeView: string;
   setActiveView: (view: string) => void;
-  setTermViewMode: (mode: 'split' | 'tabs') => void;
-  previewContent: { content: string; type: string; title?: string } | null;
+  setTermViewMode?: (mode: 'split' | 'tabs') => void;
+  previewContent?: { content: string; type: string; title?: string } | null;
+  showTerminal?: boolean;
+  termViewMode?: string;
+  isMobile?: boolean;
+  isTabMode?: boolean;
+  currentAgent?: { id: string; name: string; emoji: string };
+  agents?: { id: string; name: string; emoji: string; group?: string }[];
+  onSwitchAgent?: (id: string) => void;
+  routerMode?: boolean;
+  onToggleRouterMode?: () => void;
+  gatewayMode?: GatewayMode;
+  onSetGatewayMode?: (mode: GatewayMode) => void;
+  compareMode?: boolean;
+  onToggleCompare?: (len: number) => void;
+  selectedModel?: string | null;
+  onShowModelPicker?: () => void;
+  onShowSystemPrompt?: () => void;
+  onSummarize?: () => void;
+  onShare?: () => void;
+  onToggleNotifSound?: () => void;
+  notifSound?: boolean;
+  onDownloadMd?: () => void;
+  onDownloadJson?: () => void;
+  onCopyMarkdown?: () => void;
+  onNewChat?: () => void;
 }
 
 export function ViewTabs({
@@ -104,7 +129,7 @@ export function ViewTabs({
       {/* View mode toggle -- switch back to split */}
       <button
         onClick={() => {
-          setTermViewMode('split');
+          setTermViewMode?.('split');
           if (activeView === 'preview') setActiveView('chat');
         }}
         className="ml-auto flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors hover:brightness-125"

@@ -3,7 +3,12 @@
  * with interactive checkboxes for approving/completing/cancelling tasks.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import type { TrackedTask, TraceStep } from '../hooks/useTaskTracker';
+import type {
+  TrackedTask,
+  TraceExecutionStep,
+  TaskTraceDetails,
+  TraceStep,
+} from '../hooks/useTaskTracker';
 import { mib007Link } from '../chat-utils';
 
 // ── Status & Priority styling ──
@@ -45,9 +50,9 @@ function relativeTime(ts: number): string {
 interface TaskPanelProps {
   task: TrackedTask;
   onClose: () => void;
-  onUpdateTask: (id: string, patch: Record<string, unknown>) => Promise<any>;
+  onUpdateTask: (id: string, patch: Record<string, unknown>) => Promise<unknown>;
   fetchSubtasks: (parentId: string) => Promise<TrackedTask[]>;
-  fetchTrace: (traceId: string) => Promise<TraceStep[]>;
+  fetchTrace: (traceId: string) => Promise<TaskTraceDetails>;
 }
 
 export function TaskPanel({
@@ -59,6 +64,7 @@ export function TaskPanel({
 }: TaskPanelProps) {
   const [subtasks, setSubtasks] = useState<TrackedTask[]>([]);
   const [traceSteps, setTraceSteps] = useState<TraceStep[]>([]);
+  const [executionPlan, setExecutionPlan] = useState<TraceExecutionStep[]>([]);
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [loadingTrace, setLoadingTrace] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -78,8 +84,9 @@ export function TaskPanel({
   useEffect(() => {
     if (task.trace_id) {
       setLoadingTrace(true);
-      fetchTrace(task.trace_id).then((steps) => {
-        setTraceSteps(steps);
+      fetchTrace(task.trace_id).then((details) => {
+        setTraceSteps(details.steps);
+        setExecutionPlan(details.executionPlan);
         setLoadingTrace(false);
       });
     }
@@ -226,7 +233,12 @@ export function TaskPanel({
           />
         )}
         {activeTab === 'trace' && (
-          <TraceTab steps={traceSteps} loading={loadingTrace} traceId={task.trace_id} />
+          <TraceTab
+            steps={traceSteps}
+            executionPlan={executionPlan}
+            loading={loadingTrace}
+            traceId={task.trace_id}
+          />
         )}
       </div>
 
@@ -480,10 +492,12 @@ function SubtasksTab({
 
 function TraceTab({
   steps,
+  executionPlan,
   loading,
   traceId,
 }: {
   steps: TraceStep[];
+  executionPlan: TraceExecutionStep[];
   loading: boolean;
   traceId?: string;
 }) {
@@ -503,7 +517,7 @@ function TraceTab({
     );
   }
 
-  if (steps.length === 0) {
+  if (steps.length === 0 && executionPlan.length === 0) {
     return (
       <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
         Trace data not available yet.
@@ -513,97 +527,183 @@ function TraceTab({
   }
 
   return (
-    <div className="relative">
-      {/* Vertical line */}
-      <div
-        className="absolute left-[7px] top-2 bottom-2 w-px"
-        style={{ background: 'var(--c-border-2)' }}
-      />
+    <div className="space-y-4">
+      {steps.length > 0 && (
+        <div className="relative">
+          {/* Vertical line */}
+          <div
+            className="absolute left-[7px] top-2 bottom-2 w-px"
+            style={{ background: 'var(--c-border-2)' }}
+          />
 
-      <div className="space-y-0.5">
-        {steps.map((step, i) => {
-          const icon =
-            step.status === 'ok'
-              ? 'check'
-              : step.status === 'fail'
-                ? 'x'
-                : step.status === 'running'
-                  ? 'pulse'
-                  : 'dot';
-          const color =
-            step.status === 'ok'
-              ? '#22c55e'
-              : step.status === 'fail'
-                ? '#ef4444'
-                : step.status === 'running'
-                  ? '#8b5cf6'
-                  : '#6b7280';
+          <div className="space-y-0.5">
+            {steps.map((step, i) => {
+              const icon =
+                step.status === 'ok'
+                  ? 'check'
+                  : step.status === 'fail'
+                    ? 'x'
+                    : step.status === 'running'
+                      ? 'pulse'
+                      : 'dot';
+              const color =
+                step.status === 'ok'
+                  ? '#22c55e'
+                  : step.status === 'fail'
+                    ? '#ef4444'
+                    : step.status === 'running'
+                      ? '#8b5cf6'
+                      : '#6b7280';
 
-          return (
-            <div key={i} className="flex items-start gap-3 py-1.5 pl-0 relative">
-              {/* Icon */}
-              <div
-                className="shrink-0 h-[14px] w-[14px] rounded-full flex items-center justify-center z-10"
-                style={{ background: 'var(--c-bg-1)' }}
-              >
-                {icon === 'check' && (
-                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill={color}>
-                    <circle cx="6" cy="6" r="6" />
-                    <path d="M3.5 6l2 2 3-3.5" fill="none" stroke="white" strokeWidth="1.5" />
-                  </svg>
-                )}
-                {icon === 'x' && (
-                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill={color}>
-                    <circle cx="6" cy="6" r="6" />
-                    <path d="M4 4l4 4M8 4l-4 4" fill="none" stroke="white" strokeWidth="1.5" />
-                  </svg>
-                )}
-                {icon === 'pulse' && (
-                  <span
-                    className="h-3 w-3 rounded-full animate-pulse"
-                    style={{ background: color }}
-                  />
-                )}
-                {icon === 'dot' && (
-                  <span
-                    className="h-2.5 w-2.5 rounded-full border-2"
-                    style={{ borderColor: color }}
-                  />
-                )}
-              </div>
+              return (
+                <div key={i} className="flex items-start gap-3 py-1.5 pl-0 relative">
+                  {/* Icon */}
+                  <div
+                    className="shrink-0 h-[14px] w-[14px] rounded-full flex items-center justify-center z-10"
+                    style={{ background: 'var(--c-bg-1)' }}
+                  >
+                    {icon === 'check' && (
+                      <svg className="h-3 w-3" viewBox="0 0 12 12" fill={color}>
+                        <circle cx="6" cy="6" r="6" />
+                        <path d="M3.5 6l2 2 3-3.5" fill="none" stroke="white" strokeWidth="1.5" />
+                      </svg>
+                    )}
+                    {icon === 'x' && (
+                      <svg className="h-3 w-3" viewBox="0 0 12 12" fill={color}>
+                        <circle cx="6" cy="6" r="6" />
+                        <path d="M4 4l4 4M8 4l-4 4" fill="none" stroke="white" strokeWidth="1.5" />
+                      </svg>
+                    )}
+                    {icon === 'pulse' && (
+                      <span
+                        className="h-3 w-3 rounded-full animate-pulse"
+                        style={{ background: color }}
+                      />
+                    )}
+                    {icon === 'dot' && (
+                      <span
+                        className="h-2.5 w-2.5 rounded-full border-2"
+                        style={{ borderColor: color }}
+                      />
+                    )}
+                  </div>
 
-              {/* Label */}
-              <div className="flex-1 min-w-0">
-                <div
-                  className="text-[12px]"
-                  style={{
-                    color: step.status === 'pending' ? 'var(--c-text-4)' : 'var(--c-text-1)',
-                  }}
-                >
-                  {step.name}
+                  {/* Label */}
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="text-[12px]"
+                      style={{
+                        color: step.status === 'pending' ? 'var(--c-text-4)' : 'var(--c-text-1)',
+                      }}
+                    >
+                      {step.name}
+                    </div>
+                    <div
+                      className="flex items-center gap-2 text-[10px]"
+                      style={{ color: 'var(--c-text-4)' }}
+                    >
+                      {step.duration_ms != null && (
+                        <span>
+                          {step.duration_ms < 1000
+                            ? `${step.duration_ms}ms`
+                            : `${(step.duration_ms / 1000).toFixed(1)}s`}
+                        </span>
+                      )}
+                      {step.error && (
+                        <span style={{ color: '#ef4444' }} className="truncate max-w-[200px]">
+                          {step.error}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div
-                  className="flex items-center gap-2 text-[10px]"
-                  style={{ color: 'var(--c-text-4)' }}
-                >
-                  {step.duration_ms != null && (
-                    <span>
-                      {step.duration_ms < 1000
-                        ? `${step.duration_ms}ms`
-                        : `${(step.duration_ms / 1000).toFixed(1)}s`}
-                    </span>
-                  )}
-                  {step.error && (
-                    <span style={{ color: '#ef4444' }} className="truncate max-w-[200px]">
-                      {step.error}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {executionPlan.length > 0 && (
+        <div
+          className="space-y-2 rounded-lg border px-3 py-3"
+          style={{ borderColor: 'var(--c-border-2)' }}
+        >
+          <div
+            className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide"
+            style={{ color: 'var(--c-text-4)' }}
+          >
+            <span>Execution plan</span>
+            <span
+              className="rounded-full px-2 py-0.5"
+              style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}
+            >
+              {executionPlan.length} step{executionPlan.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {executionPlan
+              .slice()
+              .sort((a, b) => a.order - b.order)
+              .map((step) => {
+                const color =
+                  step.status === 'done'
+                    ? '#22c55e'
+                    : step.status === 'failed'
+                      ? '#ef4444'
+                      : step.status === 'delegated'
+                        ? '#3b82f6'
+                        : step.status === 'running'
+                          ? '#f59e0b'
+                          : '#6b7280';
+
+                return (
+                  <div
+                    key={step.stepId}
+                    className="rounded-md border px-3 py-2"
+                    style={{ borderColor: `${color}33`, background: `${color}08` }}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                        style={{ background: `${color}20`, color }}
+                      >
+                        {step.status.replace(/_/g, ' ')}
+                      </span>
+                      <span
+                        className="text-[12px] font-semibold"
+                        style={{ color: 'var(--c-text-1)' }}
+                      >
+                        {step.order}. {step.title}
+                      </span>
+                      <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                        {step.type}
+                      </span>
+                      {step.taskId && (
+                        <span
+                          className="font-mono text-[10px]"
+                          style={{ color: 'var(--c-text-4)' }}
+                        >
+                          task {step.taskId.slice(0, 8)}
+                        </span>
+                      )}
+                    </div>
+                    {step.queryText && (
+                      <div className="mt-1 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                        {step.queryText}
+                      </div>
+                    )}
+                    {step.error && (
+                      <div className="mt-1 text-[10px]" style={{ color: '#ef4444' }}>
+                        {step.error}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
