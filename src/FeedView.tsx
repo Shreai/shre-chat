@@ -2,6 +2,29 @@ import { useEffect, useRef } from 'react';
 import { useApp, getAgent, type FeedEntry } from './store';
 import { fetchFeed } from './router-client';
 
+type FeedRoutingInsight = {
+  selectedAgent: string;
+  selectedModel?: string;
+  requestedAgent?: string;
+  reason?: string;
+  floor?: number;
+  floorMet?: boolean;
+  authoritative?: boolean;
+  vetoReason?: string;
+  alternativeAgent?: string;
+  learnedPrior?: {
+    agentId: string;
+    sampleSize: number;
+    successRate: number;
+    reason: string;
+  } | null;
+  candidates?: Array<{
+    agentId: string;
+    compositeScore: number;
+    reason?: string;
+  }>;
+};
+
 const TYPE_CONFIG: Record<FeedEntry['type'], { icon: string; color: string; label: string }> = {
   sent: { icon: '↑', color: 'text-blue-400', label: 'Sent' },
   routed: { icon: '⇢', color: 'text-amber-400', label: 'Routed' },
@@ -43,6 +66,15 @@ export function FeedView() {
     const iv = setInterval(syncFeed, 5000);
     return () => clearInterval(iv);
   }, [actions]);
+
+  const parseRoutingInsight = (raw?: string): FeedRoutingInsight | null => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as FeedRoutingInsight;
+    } catch {
+      return null;
+    }
+  };
 
   const grouped = new Map<string, { title: string; entries: FeedEntry[] }>();
   for (const entry of [...feed].reverse()) {
@@ -166,6 +198,71 @@ export function FeedView() {
                             {entry.message}
                           </p>
 
+                          {entry.meta?.routingInsight &&
+                            (() => {
+                              const insight = parseRoutingInsight(entry.meta?.routingInsight);
+                              if (!insight) return null;
+                              return (
+                                <div
+                                  className="mt-1 rounded-md px-2 py-1.5 text-[10px]"
+                                  style={{
+                                    background: 'var(--c-bg-2)',
+                                    border: '1px solid var(--c-border-2)',
+                                    color: 'var(--c-text-3)',
+                                  }}
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className="font-semibold"
+                                      style={{ color: 'var(--c-text-2)' }}
+                                    >
+                                      Route
+                                    </span>
+                                    <span>
+                                      winner{' '}
+                                      <strong style={{ color: 'var(--c-text-1)' }}>
+                                        {insight.selectedAgent}
+                                      </strong>
+                                    </span>
+                                    {insight.floor != null && (
+                                      <span>floor {(insight.floor * 100).toFixed(0)}%</span>
+                                    )}
+                                    {insight.learnedPrior && (
+                                      <span title={insight.learnedPrior.reason}>
+                                        prior {insight.learnedPrior.agentId} ·{' '}
+                                        {(insight.learnedPrior.successRate * 100).toFixed(0)}%
+                                      </span>
+                                    )}
+                                    {insight.vetoReason && <span>{insight.vetoReason}</span>}
+                                  </div>
+                                  {insight.candidates && insight.candidates.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {insight.candidates.slice(0, 3).map((candidate) => (
+                                        <span
+                                          key={candidate.agentId}
+                                          className="rounded-full px-1.5 py-0.5"
+                                          style={{
+                                            background:
+                                              candidate.agentId === insight.selectedAgent
+                                                ? 'rgba(34,197,94,0.14)'
+                                                : 'rgba(148,163,184,0.12)',
+                                            color:
+                                              candidate.agentId === insight.selectedAgent
+                                                ? 'rgb(74,222,128)'
+                                                : 'var(--c-text-2)',
+                                          }}
+                                          title={candidate.reason || ''}
+                                        >
+                                          {candidate.agentId}{' '}
+                                          {(candidate.compositeScore * 100).toFixed(0)}%
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                           {entry.meta && Object.keys(entry.meta).length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {entry.meta.ttft_ms && (
@@ -191,7 +288,10 @@ export function FeedView() {
                                 </span>
                               )}
                               {Object.entries(entry.meta)
-                                .filter(([k]) => k !== 'ttft_ms' && k !== 'total_ms')
+                                .filter(
+                                  ([k]) =>
+                                    k !== 'ttft_ms' && k !== 'total_ms' && k !== 'routingInsight',
+                                )
                                 .map(([k, v]) => (
                                   <span
                                     key={k}

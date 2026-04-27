@@ -377,6 +377,87 @@ describe('sendMessage — preview gate (HTTP 409)', () => {
     expect(body.previewConfirmed).toBe('prv_testtoken1234');
   });
 
+  it('uses the provided agent override in the /v1/chat request body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(`data: {"type":"done"}\n\n`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+
+    await sendMessage(
+      'what are my sales at party liquor today?',
+      [],
+      '',
+      { onToken: () => {}, onDone: () => {}, onError: () => {} },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'nova',
+    );
+
+    const chatCall = fetchMock.mock.calls.find((c) => {
+      const url = String(c[0]);
+      const init = c[1] as RequestInit | undefined;
+      return url.includes('/v1/chat') && init?.method === 'POST';
+    });
+    expect(chatCall).toBeTruthy();
+    const init = chatCall![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.agentId).toBe('nova');
+  });
+
+  it('forwards agent routing insight events to callbacks', async () => {
+    const streamBody = [
+      'data: {"type":"route","model":"claude-sonnet-4-6"}',
+      '',
+      'data: {"type":"agent_route","selectedAgent":"storepulse","selectedModel":"claude-sonnet-4-6","reason":"auction-enforced pick=storepulse score=0.82","learnedPrior":{"agentId":"storepulse","sampleSize":12,"successRate":0.92,"reason":"learned-prior storepulse=92% over 12 samples"},"candidates":[{"agentId":"storepulse","compositeScore":0.82,"reason":"domain=retail"}]}',
+      '',
+      'data: {"type":"delta","text":"okay"}',
+      '',
+      'data: {"type":"done"}',
+      '',
+    ].join('\n');
+    fetchMock.mockImplementation((url: any) => {
+      const target = String(url);
+      if (target.includes('/v1/record-usage')) {
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }
+      return Promise.resolve(
+        new Response(streamBody, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+      );
+    });
+
+    const onAgentRoute = vi.fn();
+    const onDone = vi.fn();
+
+    await sendMessage('hello', [], '', {
+      onToken: () => {},
+      onDone,
+      onError: () => {},
+      onAgentRoute,
+    });
+
+    expect(onAgentRoute).toHaveBeenCalledTimes(1);
+    expect(onAgentRoute.mock.calls[0][0].selectedAgent).toBe('storepulse');
+    expect(onAgentRoute.mock.calls[0][0].learnedPrior?.agentId).toBe('storepulse');
+    expect(onDone).toHaveBeenCalled();
+  });
+
   it('falls back to generic error for a 409 with an unexpected body', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('{"unrelated": true}', {

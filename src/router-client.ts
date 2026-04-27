@@ -8,6 +8,7 @@
  */
 
 import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
+import { getStoredWorkspaceId } from './workspace-context';
 
 const RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
@@ -25,16 +26,7 @@ let currentAgentModel = 'claude-sonnet-4-6';
 /** Get the active tenant/workspace ID from the stored auth workspace (set at login/workspace switch).
  *  Falls back to "default" when no workspace is selected. */
 export function getTenantId(): string {
-  try {
-    const ws = localStorage.getItem('shre-auth-workspace');
-    if (ws) {
-      const parsed = JSON.parse(ws);
-      if (parsed?.id) return parsed.id;
-    }
-  } catch {
-    /* fallback */
-  }
-  return 'default';
+  return getStoredWorkspaceId() || 'default';
 }
 
 /** Get user's preferred language from localStorage (set via profile or chat settings) */
@@ -97,6 +89,7 @@ function reportUsage(
   model: string,
   usage: { input_tokens?: number; output_tokens?: number; total_tokens?: number },
   latencyMs?: number,
+  agentId: string = currentAgentId,
 ): void {
   if (!usage.input_tokens && !usage.output_tokens) return;
   fetch(`${SHRE_ROUTER_URL}/v1/record-usage`, {
@@ -109,7 +102,7 @@ function reportUsage(
         output_tokens: usage.output_tokens ?? 0,
         total_tokens: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
       },
-      agentId: currentAgentId,
+      agentId,
       sessionId: activeSessionKey,
       source: 'shre-chat',
       latencyMs,
@@ -141,6 +134,36 @@ export interface ChatMessage {
   replyTo?: number;
   meta?: Record<string, string>;
   attachments?: MessageAttachment[];
+}
+
+export interface AgentRouteCandidate {
+  agentId: string;
+  compositeScore: number;
+  capabilityScore?: number;
+  outcomeMultiplier?: number;
+  costTier?: string;
+  reason?: string;
+}
+
+export interface AgentRouteInsight {
+  selectedAgent: string;
+  selectedModel?: string;
+  requestedAgent?: string;
+  domain?: string;
+  taskType?: string;
+  reason?: string;
+  floor?: number;
+  floorMet?: boolean;
+  authoritative?: boolean;
+  vetoReason?: string;
+  alternativeAgent?: string;
+  learnedPrior?: {
+    agentId: string;
+    sampleSize: number;
+    successRate: number;
+    reason: string;
+  } | null;
+  candidates?: AgentRouteCandidate[];
 }
 
 // ── Session Sync (reads JSONL sessions via serve.js API) ────
@@ -645,6 +668,8 @@ export interface StreamCallbacks {
     reason: string;
     confidence: number;
   }) => void;
+  /** Fired when shre-router emits the agent-routing competition payload. */
+  onAgentRoute?: (insight: AgentRouteInsight) => void;
   /** Fired when trace ID is received from shre-router */
   onTrace?: (traceId: string) => void;
   /** Fired when full trace record is received (when trace mode is on) */
@@ -679,6 +704,7 @@ export async function sendMessage(
   conversationMode?: string,
   activeAppId?: string | null,
   previewConfirmed?: string,
+  agentIdOverride?: string,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -718,6 +744,7 @@ export async function sendMessage(
       activeAppId,
       undefined,
       previewConfirmed,
+      agentIdOverride,
     );
   } catch (err) {
     if (done) return;
@@ -781,6 +808,7 @@ async function streamViaFallback(
   activeAppId?: string | null,
   _emptyRetry?: boolean,
   previewConfirmed?: string,
+  agentIdOverride?: string,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
 
@@ -803,6 +831,7 @@ async function streamViaFallback(
 
   // Direct mode bypasses shre-router — sends to local Ollama via serve.js proxy
   const chatUrl = directMode ? '/api/direct/v1/chat' : `${SHRE_ROUTER_URL}/v1/chat`;
+  const requestAgentId = agentIdOverride || currentAgentId;
   const res = await fetchWithRetry(chatUrl, {
     method: 'POST',
     headers: {
@@ -816,7 +845,7 @@ async function streamViaFallback(
       systemPrompt,
       model: modelOverride || 'auto',
       stream: true,
-      agentId: currentAgentId,
+      agentId: requestAgentId,
       sessionId: activeSessionKey,
       tenantId: getTenantId(),
       companyId: getTenantId(),
@@ -985,9 +1014,11 @@ async function streamViaFallback(
           } else if (evt.type === 'response.completed') {
             const usage = evt.response?.usage;
             if (usage && routedModel) {
-              reportUsage(routedModel, usage, Date.now() - fallbackStart);
+              reportUsage(routedModel, usage, Date.now() - fallbackStart, requestAgentId);
             }
             callbacks.onStatus?.('done');
+          } else if (evt.type === 'agent_route') {
+            callbacks.onAgentRoute?.(evt as AgentRouteInsight);
           } else if (evt.type === 'done') {
             callbacks.onStatus?.('done');
             // Report usage — estimate tokens from text if no usage in event
@@ -996,6 +1027,7 @@ async function streamViaFallback(
                 routedModel || modelOverride || 'auto',
                 evt.usage,
                 Date.now() - fallbackStart,
+                requestAgentId,
               );
             } else if (fullText && routedModel) {
               const estInput = Math.ceil(message.length / 4);
@@ -1004,6 +1036,7 @@ async function streamViaFallback(
                 routedModel,
                 { input_tokens: estInput, output_tokens: estOutput },
                 Date.now() - fallbackStart,
+                requestAgentId,
               );
             }
           } else if (evt.type === 'tool_status') {
@@ -1078,6 +1111,8 @@ async function streamViaFallback(
             callbacks.onTrace?.(evt.traceId);
           } else if (evt.type === 'trace_complete') {
             callbacks.onTraceComplete?.(evt.trace);
+          } else if (evt.type === 'agent_route') {
+            callbacks.onAgentRoute?.(evt as AgentRouteInsight);
           } else if (evt.type === 'error') {
             const errMsg = evt.error || 'Gateway error';
             // Tool loop exhaustion is not a gateway failure — surface it accurately
@@ -1134,6 +1169,8 @@ async function streamViaFallback(
         conversationMode,
         activeAppId,
         true,
+        previewConfirmed,
+        agentIdOverride,
       );
     }
 

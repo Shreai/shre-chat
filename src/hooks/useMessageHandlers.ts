@@ -1,6 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePreferences } from '../preferences-store';
-import { sendMessage, type ChatMessage, type PreviewGatePayload } from '../router-client';
+import {
+  sendMessage,
+  type AgentRouteInsight,
+  type ChatMessage,
+  type PreviewGatePayload,
+} from '../router-client';
 import { isWSConnected } from '../gateway-ws';
 import { getAgent, type UploadedFile, type Session, type AppActions } from '../store';
 import { playNotifSound } from '../chat-utils';
@@ -9,7 +14,11 @@ import { fetchSuggestions, verifyIdentityCode, sendFeedbackToServer } from './me
 import type { ProcessStep } from '../components/process-bar/types';
 
 // ── Extracted modules ──
-import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handlers/handler-utils';
+import {
+  buildDefaultSystemPrompt,
+  isRetailPosPrompt,
+  SYSTEM_PROMPT_VERSION,
+} from './message-handlers/handler-utils';
 import { anchorContextIfNeeded, fetchContextSources } from './message-handlers/context-builder';
 import { useTaskIntents } from './message-handlers/task-intents';
 import { useMemoryIntents } from './message-handlers/memory-intents';
@@ -46,6 +55,7 @@ export interface UseMessageHandlersParams {
     | 'newSession'
     | 'switchSession'
     | 'setReplyTo'
+    | 'setActiveAgent'
   >;
   replyToIndex: number | null;
   pendingFiles: UploadedFile[];
@@ -223,6 +233,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   const pendingSuggestionSendRef = useRef(false);
 
   const currentAgent = getAgent(activeAgentId);
+  const routeRetailPrompt = (text: string, fallbackAgentId: string) =>
+    isRetailPosPrompt(text) && fallbackAgentId !== 'storepulse' ? 'storepulse' : fallbackAgentId;
   const { detectAndHandleTaskQuery } = useTaskIntents({ actions });
   const { detectAndHandleMemoryIntent } = useMemoryIntents({ actions });
   const { detectAndHandleCommsIntent } = useCommsIntents({ actions });
@@ -231,6 +243,14 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     (res: string) => fetchSuggestions(res, setSuggestions),
     [setSuggestions],
   );
+  const routeInsightRef = useRef<string | null>(null);
+  const captureAgentRoute = useCallback((insight: AgentRouteInsight) => {
+    try {
+      routeInsightRef.current = JSON.stringify(insight);
+    } catch {
+      routeInsightRef.current = null;
+    }
+  }, []);
 
   // Shared 409 preview-gate handler: appends a system message so MessageList
   // can render PreviewConfirmCard + ProposalFiledCard instead of an error bubble.
@@ -300,6 +320,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
 
   const handleSend = useCallback(async () => {
     setSelectedMsgIndex(null);
+    routeInsightRef.current = null;
     const text = input.trim();
     if (!text || syncing || !writeEnabled) return;
 
@@ -313,6 +334,12 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       ? extractMention(text).agentId || activeAgentId
       : activeAgentId;
     const sendText = extractMention ? extractMention(text).cleanText : text;
+    const routedAgentId = routeRetailPrompt(sendText, effectiveAgentId);
+    const sendAgent = getAgent(routedAgentId);
+
+    if (routedAgentId !== activeAgentId) {
+      actions.setActiveAgent(routedAgentId);
+    }
 
     if (compareMode && compareModels.length > 0) {
       const cmpSid = ensureSession();
@@ -356,6 +383,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                 );
               },
               onStatus: () => {},
+              onAgentRoute: captureAgentRoute,
             },
             undefined,
             undefined,
@@ -523,7 +551,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     abortRef.current = abortController;
     const history = messages.slice(-20);
     await fetchContextSources(sessionId);
-    const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
+    const systemPrompt = buildDefaultSystemPrompt(sendAgent.name, sendAgent.id);
 
     try {
       await sendMessage(
@@ -538,7 +566,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             }
             fullResponse += token;
             bufferToken(fullResponse);
-            actions.setStatusLine(`${currentAgent.name} is writing...`);
+            actions.setStatusLine(`${sendAgent.name} is writing...`);
             if (processStepRef.current !== 'writing') {
               if (processStepRef.current)
                 updateStep(runId, processStepRef.current, {
@@ -557,7 +585,11 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
               role: 'assistant',
               content: final,
               timestamp: Date.now(),
-              meta: { route: 'http', model: selectedModel || currentAgent.name },
+              meta: {
+                route: 'http',
+                model: selectedModel || sendAgent.name,
+                ...(routeInsightRef.current ? { routingInsight: routeInsightRef.current } : {}),
+              },
             });
             actions.setStreaming(false);
             actions.setStreamText('');
@@ -573,6 +605,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           },
           onPreviewRequired: (payload, originalMessage) =>
             emitPreviewRequired(sessionId, runId, payload, originalMessage),
+          onAgentRoute: captureAgentRoute,
           onStatus: (status: string) => {
             if (status === 'thinking') setStreamPhase('thinking');
             else if (status === 'writing') setStreamPhase('writing');
@@ -583,6 +616,16 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
         selectedModel || undefined,
         undefined,
         routerMode,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        routedAgentId,
       );
     } catch (err) {
       actions.setStreaming(false);
@@ -620,6 +663,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     setFirstTokenReceived,
     bufferToken,
     generateSuggestions,
+    captureAgentRoute,
     startRun,
     addStep,
     updateStep,
@@ -660,6 +704,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   const confirmPreview = useCallback(
     async (previewId: string, originalMessage: string) => {
       if (!previewId || !originalMessage) return;
+      routeInsightRef.current = null;
       const sessionId = ensureSession();
       const abortController = new AbortController();
       abortRef.current = abortController;
@@ -675,7 +720,12 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
 
       let fullResponse = '';
       const history = messages.slice(-20);
-      const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
+      const routedAgentId = routeRetailPrompt(originalMessage, activeAgentId);
+      const sendAgent = getAgent(routedAgentId);
+      if (routedAgentId !== activeAgentId) {
+        actions.setActiveAgent(routedAgentId);
+      }
+      const systemPrompt = buildDefaultSystemPrompt(sendAgent.name, sendAgent.id);
       try {
         await sendMessage(
           originalMessage,
@@ -685,7 +735,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             onToken: (token) => {
               fullResponse += token;
               bufferToken(fullResponse);
-              actions.setStatusLine(`${currentAgent.name} is writing...`);
+              actions.setStatusLine(`${sendAgent.name} is writing...`);
             },
             onDone: (full) => {
               const final = full || fullResponse;
@@ -695,8 +745,9 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                 timestamp: Date.now(),
                 meta: {
                   route: 'http',
-                  model: selectedModel || currentAgent.name,
+                  model: selectedModel || sendAgent.name,
                   previewConfirmed: previewId,
+                  ...(routeInsightRef.current ? { routingInsight: routeInsightRef.current } : {}),
                 },
               });
               actions.setStreaming(false);
@@ -733,6 +784,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           undefined,
           undefined,
           previewId,
+          routedAgentId,
         );
       } catch {
         actions.setStreaming(false);
@@ -757,6 +809,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       setStreamPhase,
       startRun,
       abortRef,
+      captureAgentRoute,
     ],
   );
 

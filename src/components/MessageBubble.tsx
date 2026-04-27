@@ -46,6 +46,34 @@ export { Lightbox, StableMarkdownBlock, SystemEventChip } from './message-parts/
 export { ToolExecutionChip, ToolExecutionGroup } from './message-parts/ToolExecutionChip';
 export type { ToolExecStep } from './message-parts/ToolExecutionChip';
 
+type RoutingInsight = {
+  selectedAgent: string;
+  selectedModel?: string;
+  requestedAgent?: string;
+  domain?: string;
+  taskType?: string;
+  reason?: string;
+  floor?: number;
+  floorMet?: boolean;
+  authoritative?: boolean;
+  vetoReason?: string;
+  alternativeAgent?: string;
+  learnedPrior?: {
+    agentId: string;
+    sampleSize: number;
+    successRate: number;
+    reason: string;
+  } | null;
+  candidates?: Array<{
+    agentId: string;
+    compositeScore: number;
+    capabilityScore?: number;
+    outcomeMultiplier?: number;
+    costTier?: string;
+    reason?: string;
+  }>;
+};
+
 // ── MessageBubble ───────────────────────────────────────────────────
 const MessageBubble = memo(function MessageBubble({
   message,
@@ -182,6 +210,15 @@ const MessageBubble = memo(function MessageBubble({
     isCliResponse && summaryViewMode === 'summary' && summaryText ? summaryText : displayContent;
 
   const meta = message.meta;
+  const routingInsight = useMemo<RoutingInsight | null>(() => {
+    const raw = meta?.routingInsight;
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as RoutingInsight;
+    } catch {
+      return null;
+    }
+  }, [meta?.routingInsight]);
   const shortModel = meta?.model
     ? meta.model
         .replace(/^.*\//, '')
@@ -699,6 +736,76 @@ const MessageBubble = memo(function MessageBubble({
                     {(Number(meta.total_ms) / 1000).toFixed(1)}s
                   </span>
                 )}
+              </div>
+            )}
+            {routingInsight && (
+              <div
+                className="mt-1 w-full rounded-md px-2 py-1.5"
+                style={{
+                  background: 'var(--c-bg-2)',
+                  border: '1px solid var(--c-border-2)',
+                  color: 'var(--c-text-3)',
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span style={{ color: 'var(--c-text-2)', fontWeight: 600 }}>Agent routing</span>
+                  {routingInsight.floor != null && (
+                    <span title="Routing floor">
+                      floor {(routingInsight.floor * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 space-y-1">
+                  <div>
+                    <span style={{ color: 'var(--c-text-2)' }}>Winner:</span>{' '}
+                    <span style={{ color: 'var(--c-text-1)', fontWeight: 600 }}>
+                      {routingInsight.selectedAgent}
+                    </span>
+                    {routingInsight.reason && (
+                      <span className="ml-1" title={routingInsight.reason}>
+                        {routingInsight.reason}
+                      </span>
+                    )}
+                  </div>
+                  {routingInsight.learnedPrior && (
+                    <div title={routingInsight.learnedPrior.reason}>
+                      <span style={{ color: 'var(--c-text-2)' }}>Learned prior:</span>{' '}
+                      {routingInsight.learnedPrior.agentId} ·{' '}
+                      {(routingInsight.learnedPrior.successRate * 100).toFixed(0)}% over{' '}
+                      {routingInsight.learnedPrior.sampleSize} samples
+                    </div>
+                  )}
+                  {routingInsight.candidates && routingInsight.candidates.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {routingInsight.candidates.slice(0, 3).map((candidate, idx) => (
+                        <span
+                          key={`${candidate.agentId}-${idx}`}
+                          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px]"
+                          style={{
+                            background:
+                              candidate.agentId === routingInsight.selectedAgent
+                                ? 'rgba(34,197,94,0.14)'
+                                : 'rgba(148,163,184,0.12)',
+                            color:
+                              candidate.agentId === routingInsight.selectedAgent
+                                ? 'rgb(74,222,128)'
+                                : 'var(--c-text-2)',
+                          }}
+                          title={candidate.reason || ''}
+                        >
+                          <span>{candidate.agentId}</span>
+                          <span>{(candidate.compositeScore * 100).toFixed(0)}%</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {routingInsight.vetoReason && (
+                    <div title={routingInsight.vetoReason}>
+                      <span style={{ color: 'var(--c-text-2)' }}>Constraint:</span>{' '}
+                      {routingInsight.vetoReason}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
