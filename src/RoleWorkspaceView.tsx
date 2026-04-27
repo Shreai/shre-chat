@@ -1,8 +1,9 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   CheckCircle2,
   Clock3,
+  ChevronDown,
   FileText,
   Files,
   FolderKanban,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp, uid, type FeedEntry, type ActivityEvent } from './store';
 import { ChatView } from './ChatView';
+import { FloatingMenu } from './components/FloatingMenu';
 import {
   getLoginTypeAccent,
   getLoginTypeCopy,
@@ -209,7 +211,8 @@ export function RoleWorkspaceView({
     const initial = params.get('shellLoginType');
     return initial ? normalizeLoginType(initial) : null;
   });
-  const [menuPanel, setMenuPanel] = useState<'sessions' | 'tasks' | 'feed' | 'agents'>('sessions');
+  const [menuPanel, setMenuPanel] = useState<'tasks' | 'feed' | 'agents' | 'mode'>('tasks');
+  const [leftRailMenuOpen, setLeftRailMenuOpen] = useState(false);
   const [workspaceTasks, setWorkspaceTasks] = useState<WorkspaceTask[]>(() =>
     loadStoredWorkspaceTasks(),
   );
@@ -223,6 +226,7 @@ export function RoleWorkspaceView({
     pendingTasks: number;
     gatewayConnected: boolean;
   } | null>(null);
+  const leftRailMenuRef = useRef<HTMLButtonElement | null>(null);
   const loginType = resolveLoginType(authUser, activeWorkspace, shellLoginTypeOverride);
   const shellMode = getShellMode(loginType);
   const copy = getLoginTypeCopy(loginType);
@@ -230,7 +234,7 @@ export function RoleWorkspaceView({
   const isCustomerFacing = shellMode === 'customer';
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < 900,
+    () => typeof window !== 'undefined' && window.innerWidth < 1024,
   );
 
   useEffect(() => {
@@ -267,7 +271,7 @@ export function RoleWorkspaceView({
 
   useEffect(() => {
     const updateCompact = () => {
-      setIsCompactViewport(window.innerWidth < 900);
+      setIsCompactViewport(window.innerWidth < 1024);
     };
     updateCompact();
     window.addEventListener('resize', updateCompact);
@@ -497,20 +501,19 @@ export function RoleWorkspaceView({
   );
   const menuItems = isCustomerFacing
     ? [
-        { key: 'sessions', label: 'Sessions', value: sessions.length },
         { key: 'tasks', label: 'Tasks', value: pendingTasksCount },
         { key: 'agents', label: 'Agents', value: activeAgentsCount },
       ]
     : [
-        { key: 'sessions', label: 'Sessions', value: sessions.length },
         { key: 'tasks', label: 'Tasks', value: pendingTasksCount },
         { key: 'feed', label: 'Feed', value: sessionFeed.length },
         { key: 'agents', label: 'Agents', value: activeAgentsCount },
+        { key: 'mode', label: 'Mode', value: loginType.toUpperCase() },
       ];
 
   useEffect(() => {
-    if (isCustomerFacing && menuPanel === 'feed') {
-      setMenuPanel('sessions');
+    if (isCustomerFacing && (menuPanel === 'feed' || menuPanel === 'mode')) {
+      setMenuPanel('tasks');
     }
   }, [isCustomerFacing, menuPanel]);
 
@@ -562,7 +565,7 @@ export function RoleWorkspaceView({
         >
           {showLeftRail && (
             <aside className="hidden lg:flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 pb-1">
-              <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
+              <div className="rounded-[28px] border border-black/5 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
@@ -571,74 +574,355 @@ export function RoleWorkspaceView({
                     <h1 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">{shellTitle}</h1>
                     <p className="mt-1 text-sm text-slate-600">{copy.description}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={() => actions.toggleTheme()}
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                    title={themeLabel}
+                    aria-label={themeLabel}
+                  >
+                    {theme === 'dark' ? (
+                      <SunMedium className="h-3.5 w-3.5" />
+                    ) : (
+                      <Moon className="h-3.5 w-3.5" />
+                    )}
+                    {theme === 'dark' ? 'Light' : 'Dark'}
+                  </button>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-black/5 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                    {isCustomerFacing ? 'Beta / Production' : copy.label}
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                    {activeWorkspace?.name || 'Default workspace'}
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                    {sessions.length} cases
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-center gap-2">
+                  <button
+                    onClick={onNewCase}
+                    type="button"
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] transition hover:bg-slate-800"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New case
+                  </button>
+                  <button
+                    onClick={onLogout}
+                    type="button"
+                    className="rounded-2xl border border-black/5 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-black/5 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl flex min-h-0 flex-1 flex-col">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Active sessions</div>
+                    <div className="text-xs text-slate-500">Communication first</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-black/5 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
+                      {sessions.length}
+                    </span>
                     <button
-                      onClick={() => actions.toggleTheme()}
+                      ref={leftRailMenuRef}
+                      onClick={() => setLeftRailMenuOpen((value) => !value)}
                       type="button"
                       className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
-                      title={themeLabel}
-                      aria-label={themeLabel}
+                      aria-expanded={leftRailMenuOpen}
+                      aria-haspopup="menu"
                     >
-                      {theme === 'dark' ? (
-                        <SunMedium className="h-3.5 w-3.5" />
-                      ) : (
-                        <Moon className="h-3.5 w-3.5" />
-                      )}
-                      {theme === 'dark' ? 'Light' : 'Dark'}
-                    </button>
-                    <button
-                      onClick={onLogout}
-                      type="button"
-                      className="rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
-                    >
-                      Logout
+                      More
+                      <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {isCustomerFacing ? (
-                  <div className="mt-4 rounded-3xl border border-black/5 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
-                      Access
+                <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-auto pr-1">
+                  {recentSessions.map((session) => {
+                    const lastMessage = session.messages[session.messages.length - 1];
+                    const preview =
+                      lastMessage?.content?.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim() ||
+                      'No activity yet';
+                    const isActive = session.id === activeSession?.id;
+                    return (
+                      <button
+                        key={session.id}
+                        onClick={() => {
+                          actions.switchSession(session.id);
+                          actions.setView('chat');
+                        }}
+                        className={[
+                          'group w-full rounded-3xl border p-4 text-left transition',
+                          isActive
+                            ? 'border-transparent bg-slate-950 text-white shadow-[0_20px_40px_rgba(15,23,42,0.22)]'
+                            : 'border-black/5 bg-slate-50/90 text-slate-800 hover:bg-white',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-xs font-semibold text-slate-700">
+                                {session.title.slice(0, 1).toUpperCase()}
+                              </span>
+                              <div className="truncate text-sm font-semibold">{session.title}</div>
+                            </div>
+                            <p
+                              className={[
+                                'mt-2 line-clamp-2 text-xs leading-5',
+                                isActive ? 'text-slate-200' : 'text-slate-500',
+                              ].join(' ')}
+                            >
+                              {preview}
+                            </p>
+                          </div>
+                          <span
+                            className={[
+                              'shrink-0 rounded-full px-2 py-1 text-[10px] font-medium',
+                              isActive ? 'bg-white/15 text-white' : 'bg-white text-slate-500',
+                            ].join(' ')}
+                          >
+                            {formatRelativeTime(session.updatedAt)}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-black/5 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                    Tasks {pendingTasksCount}
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                    Agents {activeAgentsCount}
+                  </span>
+                  {!isCustomerFacing && (
+                    <span className="rounded-full border border-black/5 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                      Feed {sessionFeed.length}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </aside>
+          )}
+
+          <FloatingMenu
+            open={leftRailMenuOpen}
+            onClose={() => setLeftRailMenuOpen(false)}
+            anchorRef={leftRailMenuRef}
+            width={320}
+            minWidth={300}
+            maxHeight={420}
+            alignment="end"
+            className="rounded-[28px] border border-black/5 bg-white/95 p-3 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Menu</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">Workspace tools</div>
+              </div>
+              <div className="rounded-full border border-black/5 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
+                {menuPanel}
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {menuItems.map((item) => {
+                const active = menuPanel === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setMenuPanel(item.key as typeof menuPanel)}
+                    className={[
+                      'rounded-2xl border px-3 py-3 text-left transition',
+                      active
+                        ? 'border-transparent text-white shadow-sm'
+                        : 'border-black/5 bg-slate-50 text-slate-700 hover:bg-white',
+                    ].join(' ')}
+                    style={{ backgroundColor: active ? accent : undefined }}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.22em] opacity-70">
+                      {item.label}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
-                      <span>Beta / Production</span>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                        {activeWorkspace?.name || 'Default workspace'}
+                    <div className="mt-1 text-base font-semibold">{item.value}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {menuPanel === 'tasks' && (
+                <div className="space-y-3">
+                  <div className="rounded-3xl border border-black/5 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                          Create task
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          Live task list
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-black/5 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
+                        {tasksLoading ? '...' : recentTasks.length}
                       </span>
                     </div>
+                    <div className="mt-3 space-y-2">
+                      <input
+                        value={taskDraftTitle}
+                        onChange={(e) => setTaskDraftTitle(e.target.value)}
+                        placeholder="Add a task"
+                        className="w-full rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-sm outline-none transition focus:border-black/10 focus:bg-white"
+                      />
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={taskDraftPriority}
+                          onChange={(e) =>
+                            setTaskDraftPriority(e.target.value as 'low' | 'medium' | 'high')
+                          }
+                          className="min-w-0 flex-1 rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-sm outline-none transition focus:border-black/10 focus:bg-white"
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!taskDraftTitle.trim() || taskSavingId === 'new'}
+                          onClick={() => void createWorkspaceTask()}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                        Mode
-                      </div>
-                      <div className="mt-1 text-sm font-semibold">{copy.label}</div>
+                  {tasksError && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700">
+                      {tasksError}
                     </div>
-                    <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                        Workspace
+                  )}
+                  <div className="space-y-2">
+                    {recentTasks.length === 0 && !tasksLoading && (
+                      <div className="rounded-2xl border border-dashed border-black/10 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                        No tasks yet. Add one to start the list.
                       </div>
-                      <div className="mt-1 truncate text-sm font-semibold">
-                        {activeWorkspace?.name || 'Default'}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                        Cases
-                      </div>
-                      <div className="mt-1 text-sm font-semibold">{sessions.length}</div>
-                    </div>
+                    )}
+                    {recentTasks.slice(0, 2).map((task) => {
+                      const busy = taskSavingId === task.id;
+                      return (
+                        <div
+                          key={task.id}
+                          className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold">{task.title}</div>
+                              <div className="mt-1 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                                <span>{task.status}</span>
+                                {task.priority && <span>{task.priority}</span>}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void deleteWorkspaceTask(task.id)}
+                              className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={busy || task.status === 'in_progress'}
+                              onClick={() =>
+                                void updateWorkspaceTask(task.id, { status: 'in_progress' })
+                              }
+                              className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Start
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy || task.status === 'done'}
+                              onClick={() => void updateWorkspaceTask(task.id, { status: 'done' })}
+                              className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Mark done
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+              )}
 
-                {!isCustomerFacing && (
-                  <div className="mt-4 rounded-3xl border border-black/5 bg-slate-50 px-3 py-3">
-                    <label className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+              {menuPanel === 'feed' &&
+                sessionFeed.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                            {feedTypeLabel(entry.type)}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {formatRelativeTime(entry.timestamp)}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-sm font-medium">{entry.message}</div>
+                      </div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+                    </div>
+                  </div>
+                ))}
+
+              {menuPanel === 'agents' && (
+                <div className="space-y-3">
+                  <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
+                    <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                      Active agents
+                    </div>
+                    <div className="mt-1 text-2xl font-semibold">{activeAgentsCount}</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {statusSummary?.gatewayConnected
+                        ? 'Gateway is connected and routing is live.'
+                        : 'Gateway is disconnected. Some live panels may lag.'}
+                    </p>
+                  </div>
+                  <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
+                    <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                      Current agent
+                    </div>
+                    <div className="mt-1 text-base font-semibold">{currentAgent.name}</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {shellMode === 'customer' ? 'Customer-facing surface' : copy.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {menuPanel === 'mode' && (
+                <div className="space-y-3">
+                  <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
+                    <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
                       Login mode
-                    </label>
-                    <div className="mt-2">
+                    </div>
+                    <div className="mt-3">
                       <select
                         value={loginType}
                         onChange={(event) => setShellLoginType(event.target.value as LoginType)}
@@ -652,301 +936,19 @@ export function RoleWorkspaceView({
                       </select>
                     </div>
                   </div>
-                )}
-
-                <button
-                  onClick={onNewCase}
-                  type="button"
-                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] transition hover:bg-slate-800"
-                >
-                  <Plus className="h-4 w-4" />
-                  New case
-                </button>
-              </div>
-
-              <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4 min-h-0 flex-1 flex flex-col">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Menu</div>
-                    <div className="text-xs text-slate-500">Communication first</div>
+                  <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
+                    <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                      Workspace
+                    </div>
+                    <div className="mt-1 text-base font-semibold">
+                      {activeWorkspace?.name || 'Default'}
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{copy.description}</p>
                   </div>
-                  <span className="rounded-full border border-black/5 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
-                    {menuPanel}
-                  </span>
                 </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {menuItems.map((item) => {
-                    const active = menuPanel === item.key;
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setMenuPanel(item.key as typeof menuPanel)}
-                        className={[
-                          'rounded-2xl border px-3 py-3 text-left transition',
-                          active
-                            ? 'border-transparent text-white shadow-sm'
-                            : 'border-black/5 bg-slate-50 text-slate-700 hover:bg-white',
-                        ].join(' ')}
-                        style={{ backgroundColor: active ? accent : undefined }}
-                      >
-                        <div className="text-[10px] uppercase tracking-[0.22em] opacity-70">
-                          {item.label}
-                        </div>
-                        <div className="mt-1 text-base font-semibold">{item.value}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-auto pr-1">
-                  {menuPanel === 'sessions' &&
-                    recentSessions.map((session) => {
-                      const lastMessage = session.messages[session.messages.length - 1];
-                      const preview =
-                        lastMessage?.content?.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim() ||
-                        'No activity yet';
-                      const isActive = session.id === activeSession?.id;
-                      return (
-                        <button
-                          key={session.id}
-                          onClick={() => {
-                            actions.switchSession(session.id);
-                            actions.setView('chat');
-                          }}
-                          className={[
-                            'group w-full rounded-3xl border p-4 text-left transition',
-                            isActive
-                              ? 'border-transparent bg-slate-950 text-white shadow-[0_20px_40px_rgba(15,23,42,0.22)]'
-                              : 'border-black/5 bg-slate-50/90 text-slate-800 hover:bg-white',
-                          ].join(' ')}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-xs font-semibold text-slate-700">
-                                  {session.title.slice(0, 1).toUpperCase()}
-                                </span>
-                                <div className="truncate text-sm font-semibold">
-                                  {session.title}
-                                </div>
-                              </div>
-                              <p
-                                className={[
-                                  'mt-2 line-clamp-2 text-xs leading-5',
-                                  isActive ? 'text-slate-200' : 'text-slate-500',
-                                ].join(' ')}
-                              >
-                                {preview}
-                              </p>
-                            </div>
-                            <span
-                              className={[
-                                'shrink-0 rounded-full px-2 py-1 text-[10px] font-medium',
-                                isActive ? 'bg-white/15 text-white' : 'bg-white text-slate-500',
-                              ].join(' ')}
-                            >
-                              {formatRelativeTime(session.updatedAt)}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-
-                  {menuPanel === 'tasks' && (
-                    <div className="space-y-3">
-                      <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
-                        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                          Task list
-                        </div>
-                        <div className="mt-1 text-2xl font-semibold">
-                          {tasksLoading ? '...' : recentTasks.length}
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          Create and update the live task list without leaving the conversation.
-                        </p>
-                      </div>
-                      <div className="rounded-3xl border border-black/5 bg-white p-4">
-                        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                          Create task
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          <input
-                            value={taskDraftTitle}
-                            onChange={(e) => setTaskDraftTitle(e.target.value)}
-                            placeholder="Add a task"
-                            className="w-full rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-sm outline-none transition focus:border-black/10 focus:bg-white"
-                          />
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={taskDraftPriority}
-                              onChange={(e) =>
-                                setTaskDraftPriority(e.target.value as 'low' | 'medium' | 'high')
-                              }
-                              className="min-w-0 flex-1 rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-sm outline-none transition focus:border-black/10 focus:bg-white"
-                            >
-                              <option value="low">Low</option>
-                              <option value="medium">Medium</option>
-                              <option value="high">High</option>
-                            </select>
-                            <button
-                              type="button"
-                              disabled={!taskDraftTitle.trim() || taskSavingId === 'new'}
-                              onClick={() => void createWorkspaceTask()}
-                              className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Add
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      {tasksError && (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700">
-                          {tasksError}
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        {recentTasks.length === 0 && !tasksLoading && (
-                          <div className="rounded-2xl border border-dashed border-black/10 bg-slate-50 px-3 py-4 text-sm text-slate-500">
-                            No tasks yet. Add one to start the list.
-                          </div>
-                        )}
-                        {recentTasks.map((task) => {
-                          const busy = taskSavingId === task.id;
-                          return (
-                            <div
-                              key={task.id}
-                              className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-semibold">{task.title}</div>
-                                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                                    <span>{task.status}</span>
-                                    {task.priority && <span>{task.priority}</span>}
-                                    {task.updated_at && (
-                                      <span>
-                                        {formatRelativeTime(new Date(task.updated_at).getTime())}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => void deleteWorkspaceTask(task.id)}
-                                  className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  disabled={busy || task.status === 'in_progress'}
-                                  onClick={() =>
-                                    void updateWorkspaceTask(task.id, { status: 'in_progress' })
-                                  }
-                                  className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Start
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={busy || task.status === 'done'}
-                                  onClick={() =>
-                                    void updateWorkspaceTask(task.id, { status: 'done' })
-                                  }
-                                  className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Mark done
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
-                        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                          Shortcuts
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          {quickActions.map((action) => {
-                            const Icon = action.icon;
-                            return (
-                              <button
-                                key={action.label}
-                                type="button"
-                                disabled={!activeSession}
-                                onClick={() => runQuickAction(action.label, action.status)}
-                                className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-white px-3 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <span className="flex items-center gap-2">
-                                  <Icon className="h-4 w-4" />
-                                  {action.label}
-                                </span>
-                                <ArrowRight className="h-4 w-4 text-slate-400" />
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {menuPanel === 'feed' &&
-                    sessionFeed.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                                {feedTypeLabel(entry.type)}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                {formatRelativeTime(entry.timestamp)}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-sm font-medium">{entry.message}</div>
-                          </div>
-                          <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
-                        </div>
-                      </div>
-                    ))}
-
-                  {menuPanel === 'agents' && (
-                    <div className="space-y-3">
-                      <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
-                        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                          Active agents
-                        </div>
-                        <div className="mt-1 text-2xl font-semibold">{activeAgentsCount}</div>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {statusSummary?.gatewayConnected
-                            ? 'Gateway is connected and routing is live.'
-                            : 'Gateway is disconnected. Some live panels may lag.'}
-                        </p>
-                      </div>
-                      <div className="rounded-3xl border border-black/5 bg-slate-50 p-4">
-                        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                          Current agent
-                        </div>
-                        <div className="mt-1 text-base font-semibold">{currentAgent.name}</div>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {shellMode === 'customer' ? 'Customer-facing surface' : copy.description}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </aside>
-          )}
+              )}
+            </div>
+          </FloatingMenu>
 
           <main className="min-h-0 min-w-0 flex flex-col gap-4">
             <div className="lg:hidden rounded-[24px] border border-black/5 bg-white/90 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
