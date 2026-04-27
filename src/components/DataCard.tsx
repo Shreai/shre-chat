@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
+
+const ChartRenderer = lazy(() => import('./ChartRenderer'));
 
 // ── Types ───────────────────────────────────────────────────────────
 interface KPI {
@@ -24,6 +26,37 @@ interface ParsedData {
   comparisons: Comparison[];
   trends: TrendItem[];
   hasMarkdownTable: boolean;
+}
+
+interface RapidRmsContract {
+  ok?: boolean;
+  summary?: string;
+  metadata?: {
+    source?: string;
+    endpoint?: string;
+    method?: string;
+    store?: string;
+    generatedAt?: string;
+    parsedAs?: string;
+    recordCount?: number;
+    contentType?: string;
+    columns?: string[];
+  };
+  table?: {
+    columns?: string[];
+    rows?: string[][];
+    rowCount?: number;
+  };
+  chart?: {
+    type?: 'bar' | 'line' | 'pie';
+    title?: string;
+    labels?: string[];
+    values?: number[];
+  };
+  raw?: {
+    preview?: string;
+    truncated?: boolean;
+  };
 }
 
 // ── Detection regexes ───────────────────────────────────────────────
@@ -67,6 +100,33 @@ function extractLabel(text: string): string {
 
 /** Grid columns: 1=full, 2=two, 3+=three */
 const gridCols = (n: number) => (n <= 1 ? '1fr' : n === 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)');
+
+function parseRapidRmsContract(text: string): RapidRmsContract | null {
+  const candidates = [text];
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch?.[1]) candidates.unshift(fenceMatch[1]);
+
+  const braceStart = text.indexOf('{');
+  const braceEnd = text.lastIndexOf('}');
+  if (braceStart >= 0 && braceEnd > braceStart) {
+    candidates.push(text.slice(braceStart, braceEnd + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as RapidRmsContract;
+      if (parsed?.metadata?.source === 'RapidRMS') return parsed;
+    } catch {
+      // keep trying other shapes
+    }
+  }
+
+  return null;
+}
+
+function isNumericCell(value: string): boolean {
+  return value !== '' && !Number.isNaN(Number(value));
+}
 
 // ── Parser ──────────────────────────────────────────────────────────
 function parse(text: string): ParsedData {
@@ -282,7 +342,206 @@ interface DataCardProps {
 
 export function DataCard({ content }: DataCardProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const rapidrms = useMemo(() => parseRapidRmsContract(content ?? ''), [content]);
   const parsed = useMemo(() => parse(content ?? ''), [content]);
+  if (rapidrms) {
+    const columns = rapidrms.table?.columns ?? [];
+    const rows = rapidrms.table?.rows ?? [];
+    const chart =
+      rapidrms.chart && rapidrms.chart.labels && rapidrms.chart.values
+        ? {
+            type: rapidrms.chart.type || 'bar',
+            title: rapidrms.chart.title,
+            labels: rapidrms.chart.labels,
+            datasets: [{ data: rapidrms.chart.values, label: rapidrms.chart.title || 'Value' }],
+            options: { showValues: true, currency: false },
+          }
+        : null;
+
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <div
+          style={{
+            ...cardBg,
+            padding: 0,
+            overflow: 'hidden',
+            borderColor: 'rgba(34,211,238,0.28)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 12px',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              background: 'linear-gradient(135deg, rgba(34,211,238,0.08), rgba(59,130,246,0.04))',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(96,165,250,0.95)' }}>
+                RAPIDRMS
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-text-1, #eee)' }}>
+                {rapidrms.summary || 'RapidRMS response'}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', fontSize: 10, color: 'var(--c-text-4, #888)' }}>
+              <div>{rapidrms.metadata?.endpoint}</div>
+              <div>
+                {rapidrms.metadata?.method}
+                {rapidrms.metadata?.store ? ` · ${rapidrms.metadata.store}` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: 12, display: 'grid', gap: 10 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 8,
+              }}
+            >
+              {[
+                ['Source', rapidrms.metadata?.source || 'RapidRMS'],
+                ['Records', String(rapidrms.metadata?.recordCount ?? rows.length ?? 0)],
+                ['Format', rapidrms.metadata?.contentType || 'json'],
+                ['Parsed', rapidrms.metadata?.parsedAs || 'json'],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div style={{ fontSize: 10, color: 'var(--c-text-4, #888)' }}>{label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-1, #eee)' }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {columns.length > 0 && rows.length > 0 && (
+              <div
+                style={{
+                  overflowX: 'auto',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: 12,
+                    minWidth: Math.max(columns.length * 120, 360),
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {columns.map((column) => (
+                        <th
+                          key={column}
+                          style={{
+                            textAlign: 'left',
+                            padding: '8px 10px',
+                            background: 'rgba(255,255,255,0.03)',
+                            color: 'var(--c-text-2)',
+                            borderBottom: '1px solid rgba(255,255,255,0.08)',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 20).map((row, rowIndex) => (
+                      <tr
+                        key={rowIndex}
+                        style={{
+                          background:
+                            rowIndex % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                        }}
+                      >
+                        {columns.map((column, colIndex) => (
+                          <td
+                            key={column}
+                            style={{
+                              padding: '8px 10px',
+                              borderBottom: '1px solid rgba(255,255,255,0.06)',
+                              color: 'var(--c-text-2)',
+                              textAlign: isNumericCell(row[colIndex] ?? '') ? 'right' : 'left',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {row[colIndex] ?? ''}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {chart && (
+              <div style={{ borderRadius: 8, overflow: 'hidden' }}>
+                <Suspense
+                  fallback={
+                    <div style={{ padding: 12, color: 'var(--c-text-4)', fontSize: 12 }}>
+                      Loading chart...
+                    </div>
+                  }
+                >
+                  <ChartRenderer data={chart} height={220} />
+                </Suspense>
+              </div>
+            )}
+
+            {rapidrms.raw?.preview && (
+              <details>
+                <summary
+                  style={{
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    color: 'var(--c-text-4, #888)',
+                    marginBottom: 6,
+                  }}
+                >
+                  Raw preview
+                </summary>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 10,
+                    borderRadius: 8,
+                    background: 'rgba(0,0,0,0.2)',
+                    color: 'var(--c-text-3)',
+                    fontSize: 11,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: 220,
+                    overflow: 'auto',
+                  }}
+                >
+                  {rapidrms.raw.preview}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const hasData =
     parsed.kpis.length > 0 || parsed.comparisons.length > 0 || parsed.trends.length > 0;
   if (!hasData) return null; // Empty content → render nothing, not an empty card
