@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { getStoredWorkspaceId, RAPIDRMS_WORKSPACE_KEY } from '../workspace-context';
 
 export interface Anomaly {
   type: 'low_stock' | 'labor_overrun' | 'sales_drop' | 'high_voids' | 'clear';
@@ -76,7 +77,7 @@ export function useAnomalyStream({
   const [dismissed, setDismissed] = useState(false);
   // Resolved workspace: prop > localStorage > discovered from session endpoint
   const [workspaceId, setWorkspaceId] = useState<string | null>(
-    workspaceIdProp ?? localStorage.getItem('rapidrms-workspace'),
+    workspaceIdProp ?? getStoredWorkspaceId(),
   );
 
   const esRef = useRef<EventSource | null>(null);
@@ -88,14 +89,19 @@ export function useAnomalyStream({
 
   // Auto-discover workspaceId from RapidRMS session if not provided
   useEffect(() => {
+    if (workspaceIdProp) {
+      setWorkspaceId(workspaceIdProp);
+      localStorage.setItem(RAPIDRMS_WORKSPACE_KEY, workspaceIdProp);
+      return;
+    }
     if (workspaceId) return; // already have it
     discoverWorkspaceId(baseUrl).then((id) => {
       if (id && mountedRef.current) {
         setWorkspaceId(id);
-        localStorage.setItem('rapidrms-workspace', id);
+        localStorage.setItem(RAPIDRMS_WORKSPACE_KEY, id);
       }
     });
-  }, [baseUrl, workspaceId]);
+  }, [baseUrl, workspaceId, workspaceIdProp]);
 
   const connect = useCallback(() => {
     if (!workspaceId || !mountedRef.current) return;

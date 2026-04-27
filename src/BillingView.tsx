@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from './store';
 import { UsageDashboard } from './components/UsageDashboard';
+import { getStoredWorkspaceId } from './workspace-context';
 
 interface BillingInfo {
   plan: string;
@@ -61,7 +62,7 @@ export function BillingView() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const workspaceId = sessionStorage.getItem('shre-workspace-id');
+  const workspaceId = getStoredWorkspaceId();
 
   useEffect(() => {
     async function load() {

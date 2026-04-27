@@ -99,10 +99,16 @@ describe('POST /api/tasks/create — successful creation', () => {
   it('forwards cleaned title to shre-tasks', async () => {
     mockTaskServiceSuccess();
     await createTask({ title: 'Buy groceries' });
-    const callBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://mock-shre-tasks:9999/v1/tasks');
+    const callInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(callInit.headers).toMatchObject({
+      Authorization: expect.stringMatching(/^Bearer\s+/),
+      'Content-Type': 'application/json',
+    });
+    const callBody = JSON.parse(callInit.body as string);
     expect(callBody.title).toBe('Buy groceries');
     expect(callBody.created_by).toBe('shre-chat');
-    expect(callBody.status).toBe('created');
+    expect(callBody.priority).toBe('medium');
   });
 });
 

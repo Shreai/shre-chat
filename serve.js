@@ -62,7 +62,7 @@ heartbeat.registerDependency("cortexdb", `${infraUrl("cortexservice-api")}/healt
 heartbeat.registerDependency("shre-router", `${serviceUrl("shre-router")}/health`);
 const DIST = join(import.meta.dirname, "dist");
 const ROUTER_PORT = Number(new URL(serviceUrl("shre-router")).port);
-const GATEWAY_HOME = join(homedir(), ".openclaw");
+const SHRE_HOME = join(homedir(), ".shre");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
@@ -86,13 +86,15 @@ const cortexPool = new pg.Pool({
 });
 cortexPool.on("error", (err) => log.warn("[cortexPool] Idle client error", { error: err.message }));
 
-// ── Gateway token — read from config server-side (never expose in bundle) ──
-let GATEWAY_TOKEN = "";
-try {
-  const ocConfig = JSON.parse(readFileSync(join(GATEWAY_HOME, "openclaw.json"), "utf8")); // legacy config file path
-  // Token lives at gateway.auth.token in config
-  GATEWAY_TOKEN = ocConfig?.gateway?.auth?.token || ocConfig?.auth?.token || "";
-} catch { /* will fail gracefully — gateway calls won't auth */ }
+// ── Gateway token — read from env or Shre router admin token file ──
+let GATEWAY_TOKEN = process.env.SHRE_GATEWAY_TOKEN || "";
+if (!GATEWAY_TOKEN) {
+  try {
+    GATEWAY_TOKEN = readFileSync(join(SHRE_HOME, "router", "admin-token"), "utf8").trim();
+  } catch {
+    GATEWAY_TOKEN = "";
+  }
+}
 
 // ── MIB007 service token — for loopback API calls to MIB007 ──
 let MIB007_SERVICE_TOKEN = "";
@@ -115,9 +117,9 @@ let ANTHROPIC_API_KEY = "";
 let OPENAI_API_KEY = "";
 try {
   // Try auth-profiles first, then env
-  const agentDirs = readdirSync(join(GATEWAY_HOME, "agents"));
+  const agentDirs = readdirSync(join(SHRE_HOME, "agents"));
   for (const dir of agentDirs) {
-    const authPath = join(GATEWAY_HOME, "agents", dir, "agent", "auth-profiles.json");
+    const authPath = join(SHRE_HOME, "agents", dir, "agent", "auth-profiles.json");
     if (existsSync(authPath)) {
       const profiles = JSON.parse(readFileSync(authPath, "utf8"));
       if (!ANTHROPIC_API_KEY) {
@@ -140,8 +142,8 @@ try {
 // ─── Chat Session DB (SQLite) ────────────────────────────────────
 import Database from 'better-sqlite3';
 
-const CHAT_DB_PATH = join(homedir(), '.shre', 'chat-sessions.db');
-mkdirSync(join(homedir(), '.shre'), { recursive: true });
+const CHAT_DB_PATH = join(SHRE_HOME, 'chat-sessions.db');
+mkdirSync(SHRE_HOME, { recursive: true });
 const chatDb = new Database(CHAT_DB_PATH);
 chatDb.pragma('journal_mode = WAL');
 chatDb.pragma('busy_timeout = 5000');
@@ -1044,8 +1046,10 @@ async function isJtiRevoked(jti) {
       return revoked;
     } catch (err) {
       // DB unreachable — fail open (accept token) so an auth-DB outage
-      // doesn't lock all authenticated users out.
+      // doesn't lock all authenticated users out. Cache the fail-open result
+      // briefly so we do not hammer the DB on every auth check while it is down.
       log.warn("[checkAuth] jti revocation lookup failed", { jti: jti.slice(0, 8), error: err.message });
+      _revokedJtiCache.set(jti, { revoked: false, fetchedAt: Date.now() });
       return false;
     } finally {
       _revokedJtiPending.delete(jti);
@@ -1465,7 +1469,7 @@ function json(res, data, status = 200) {
 // ── Session reading from JSONL files ──────────────────────────────────
 
 function getSessionsDir(agentId) {
-  return join(GATEWAY_HOME, "agents", agentId, "sessions");
+  return join(SHRE_HOME, "agents", agentId, "sessions");
 }
 
 function readSessionIndex(agentId) {
@@ -1555,7 +1559,7 @@ function getOrCreateCliSession(agentId) {
     version: 3,
     id: sessionId,
     timestamp: new Date().toISOString(),
-    cwd: join(GATEWAY_HOME, "workspace"),
+    cwd: join(SHRE_HOME, "workspace"),
     source: "shre-chat-cli",
   };
   appendFileSync(filePath, JSON.stringify(initEvt) + "\n");
@@ -1695,7 +1699,7 @@ async function requestHandler(req, res) {
   // Paths under these prefixes are forwarded to upstream apps (storepulse, city,
   // cortexdb-ui, etc.). Shared by security-header relaxation, CSRF exemption,
   // and the proxy dispatch below.
-  const EMBED_PREFIXES = ["/openclaw", "/shre-dashboard", "/cortexdb-ui", "/storepulse", "/storepulse-hq", "/app-marketplace", "/city"];
+  const EMBED_PREFIXES = ["/shre-dashboard", "/cortexdb-ui", "/storepulse", "/storepulse-hq", "/app-marketplace", "/city"];
   const isEmbedPath = EMBED_PREFIXES.some(p => url.pathname === p || url.pathname.startsWith(p + "/"));
 
   // ── Security headers middleware ────────────────────────────────
@@ -2192,6 +2196,21 @@ async function requestHandler(req, res) {
       const { userId, name, businessName, industry, size } = body;
       if (!userId || !name) return json(res, { error: "Missing userId or name" }, 400);
 
+      function inferWorkspaceType(industryName = "", business = "") {
+        const source = `${industryName} ${business}`.toLowerCase();
+        if (source.includes("liquor")) return "retail-liquor";
+        if (source.includes("retail") || source.includes("c-store") || source.includes("c store")) {
+          return "retail";
+        }
+        if (source.includes("saas") || source.includes("software") || source.includes("tech")) {
+          return "saas";
+        }
+        if (source.includes("marketing")) return "marketing";
+        if (source.includes("security")) return "security";
+        if (source.includes("finance")) return "finance";
+        return "custom";
+      }
+
       // Try marketplace API first, fall back to local script
       let workspaceId = null;
       try {
@@ -2214,8 +2233,9 @@ async function requestHandler(req, res) {
         try {
           const scriptPath = join(import.meta.dirname, "..", "scripts", "provision-workspace.mjs");
           if (existsSync(scriptPath)) {
+            const workspaceType = inferWorkspaceType(industry, businessName);
             const result = execSync(
-              `node ${scriptPath} --user-id="${userId}" --name="${name.replace(/"/g, '\\"')}" --business="${(businessName || "").replace(/"/g, '\\"')}" --industry="${(industry || "").replace(/"/g, '\\"')}" --size="${size || "solo"}"`,
+              `node ${scriptPath} --type="${workspaceType}" --name="${name.replace(/"/g, '\\"')}" --tenant="${userId}" --policy="read-write"`,
               { timeout: 30000, encoding: "utf-8" }
             );
             const parsed = JSON.parse(result.trim().split("\n").pop() || "{}");
@@ -2248,8 +2268,9 @@ async function requestHandler(req, res) {
     try {
       const ctx = getUserContext(req);
       const userId = url.searchParams.get("userId") || ctx.userId;
+      const tenantId = url.searchParams.get("tenantId") || ctx.tenantId || userId;
       const upstream = await mib007Fetch(
-        `/api/aros/onboarding/status?userId=${encodeURIComponent(userId)}&tenantId=${encodeURIComponent(userId)}`,
+        `/api/aros/onboarding/status?userId=${encodeURIComponent(userId)}&tenantId=${encodeURIComponent(tenantId)}`,
         { signal: AbortSignal.timeout(5000), headers: userContextHeadersNoAuth(req) }
       );
       const data = await upstream.text();
@@ -2267,7 +2288,7 @@ async function requestHandler(req, res) {
       const body = await collectBody(req);
       const parsed = JSON.parse(body);
       const ctx = getUserContext(req);
-      if (!parsed.tenantId) parsed.tenantId = ctx.userId;
+      if (!parsed.tenantId) parsed.tenantId = ctx.tenantId || ctx.userId;
       if (!parsed.userId) parsed.userId = ctx.userId;
       const upstream = await mib007Fetch("/api/aros/onboarding/state", {
         method: "POST",
@@ -2312,8 +2333,9 @@ async function requestHandler(req, res) {
     try {
       const ctx = getUserContext(req);
       const userId = url.searchParams.get("userId") || ctx.userId;
+      const tenantId = url.searchParams.get("tenantId") || ctx.tenantId || userId;
       const upstream = await mib007Fetch(
-        `/api/aros/onboarding/landing-target?userId=${encodeURIComponent(userId)}`,
+        `/api/aros/onboarding/landing-target?userId=${encodeURIComponent(userId)}&tenantId=${encodeURIComponent(tenantId)}`,
         { signal: AbortSignal.timeout(5000), headers: userContextHeadersNoAuth(req) }
       );
       const data = await upstream.text();
@@ -4319,7 +4341,7 @@ async function requestHandler(req, res) {
 
   // GET /api/agents — list all agents
   if (url.pathname === "/api/agents" && req.method === "GET") {
-    const agentsDir = join(GATEWAY_HOME, "agents");
+    const agentsDir = join(SHRE_HOME, "agents");
     if (!existsSync(agentsDir)) return json(res, []);
     const agents = readdirSync(agentsDir).filter((d) => {
       const p = join(agentsDir, d);
@@ -4473,7 +4495,7 @@ async function requestHandler(req, res) {
     const query = (url.searchParams.get("q") || "").trim().toLowerCase();
     if (query.length < 2) return json(res, { results: [] });
 
-    const agentsDir = join(GATEWAY_HOME, "agents");
+    const agentsDir = join(SHRE_HOME, "agents");
     if (!existsSync(agentsDir)) return json(res, { results: [] });
 
     const results = [];
@@ -4528,7 +4550,7 @@ async function requestHandler(req, res) {
   // GET /api/feed?since=<timestamp> — get events across ALL agents for feed
   if (url.pathname === "/api/feed" && req.method === "GET") {
     const since = Number(url.searchParams.get("since") || "0");
-    const agentsDir = join(GATEWAY_HOME, "agents");
+    const agentsDir = join(SHRE_HOME, "agents");
     if (!existsSync(agentsDir)) return json(res, { entries: [] });
 
     const entries = [];
@@ -5321,27 +5343,29 @@ async function requestHandler(req, res) {
         res.end(JSON.stringify({ ok: false, error: "agentId and modelId required" }));
         return;
       }
-      const configPath = join(GATEWAY_HOME, "openclaw.json");
-      const config = JSON.parse(readFileSync(configPath, "utf8"));
-      const list = config?.agents?.list;
-      if (!Array.isArray(list)) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "agents.list not found in config" }));
+      const routerBase = serviceUrl("shre-router");
+      const adminToken = process.env.ROUTER_ADMIN_TOKEN || (() => {
+        try {
+          return readFileSync(join(SHRE_HOME, "router", "admin-token"), "utf-8").trim();
+        } catch {
+          return "";
+        }
+      })();
+      const upstream = await fetch(`${routerBase}/v1/agents/${encodeURIComponent(agentId)}/model-routing`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+        },
+        body: JSON.stringify({ primary: modelId, fallbacks: [] }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const payload = await upstream.text();
+      if (!upstream.ok) {
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(payload || JSON.stringify({ ok: false, error: "router model update failed" }));
         return;
       }
-      const agent = list.find((a) => a.id === agentId);
-      if (!agent) {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: `agent ${agentId} not found` }));
-        return;
-      }
-      // Update the agent's primary model
-      if (agent.model && typeof agent.model === "object") {
-        agent.model.primary = modelId;
-      } else {
-        agent.model = { primary: modelId };
-      }
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
       log.info(`[model-sync] ${agentId} → ${modelId}`);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, agentId, modelId }));
@@ -5355,10 +5379,17 @@ async function requestHandler(req, res) {
   if (url.pathname === "/api/model" && req.method === "GET") {
     try {
       const agentId = url.searchParams.get("agentId") || "main";
-      const configPath = join(GATEWAY_HOME, "openclaw.json");
-      const config = JSON.parse(readFileSync(configPath, "utf8"));
-      const agent = config?.agents?.list?.find((a) => a.id === agentId);
-      const primary = agent?.model?.primary || agent?.model || config?.agents?.defaults?.model?.primary || null;
+      const routerBase = serviceUrl("shre-router");
+      const upstream = await fetch(`${routerBase}/v1/agents/${encodeURIComponent(agentId)}/model-routing`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!upstream.ok) {
+        res.writeHead(upstream.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `router returned ${upstream.status}` }));
+        return;
+      }
+      const routing = await upstream.json();
+      const primary = routing?.primary || routing?.model?.primary || null;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ agentId, model: primary }));
     } catch (err) {
@@ -5437,7 +5468,7 @@ async function requestHandler(req, res) {
   // Gateway pushes outbound messages here when shre-chat is
   // registered as a channel. We forward them to all connected WS clients.
 
-  if (url.pathname === "/webhook/openclaw" && req.method === "POST") {
+  if (url.pathname === "/webhook/shre" && req.method === "POST") {
     let body;
     try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
@@ -5457,8 +5488,8 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // GET /webhook/openclaw — health probe for the channel (URL path kept for backward compat)
-  if (url.pathname === "/webhook/openclaw" && req.method === "GET") {
+  // GET /webhook/shre — health probe for the channel
+  if (url.pathname === "/webhook/shre" && req.method === "GET") {
     return json(res, {
       ok: true,
       channel: "shre-chat",
@@ -6346,7 +6377,7 @@ async function requestHandler(req, res) {
       })(),
       // 2. Agent activity — scan recent sessions (tail-read optimization)
       (async () => {
-        const agentsDir = join(GATEWAY_HOME, "agents");
+        const agentsDir = join(SHRE_HOME, "agents");
         if (!existsSync(agentsDir)) return null;
         const allEntries = await readdir(agentsDir);
         const agents = [];
@@ -6406,7 +6437,7 @@ async function requestHandler(req, res) {
             if (agentMsgCount > 0) {
               let name = agentId;
               try {
-                const profilePath = join(GATEWAY_HOME, "agents", agentId, "agent", "profile.json");
+                const profilePath = join(SHRE_HOME, "agents", agentId, "agent", "profile.json");
                 if (existsSync(profilePath)) {
                   const profile = JSON.parse(readFileSync(profilePath, "utf8"));
                   name = profile.name || profile.displayName || agentId;

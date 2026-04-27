@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 
-const LEDGER_ROOT = join(homedir(), ".openclaw", "sessions", "cli");
+const LEDGER_ROOT = join(homedir(), ".shre", "sessions", "cli");
 
 // ── Session types ──────────────────────────────────────────────────────
 // chat     — single conversation, auto-closes on idle

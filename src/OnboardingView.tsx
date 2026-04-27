@@ -5,9 +5,11 @@
  */
 import { useState, useEffect } from 'react';
 import type { UserProfile } from './store';
+import { persistWorkspaceContext } from './workspace-context';
 
 interface Props {
   profile: UserProfile;
+  userId: string;
   onComplete: (
     profile: UserProfile,
     selectedAgents?: string[],
@@ -80,7 +82,7 @@ const COMM_STYLES = [
 
 const PHASE_LABELS = ['Identity', 'Connect', 'Activate'];
 
-export function OnboardingView({ profile, onComplete, onSkip }: Props) {
+export function OnboardingView({ profile, userId, onComplete, onSkip }: Props) {
   const [phase, setPhase] = useState(0);
   const [p, setP] = useState<UserProfile>({ ...profile });
   const [saving, setSaving] = useState(false);
@@ -103,7 +105,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
 
   // Resume from server state if user previously completed some phases
   useEffect(() => {
-    fetch('/api/onboarding/status')
+    fetch(`/api/onboarding/status?userId=${encodeURIComponent(userId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data?.started) return;
@@ -211,6 +213,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            userId,
             name: p.name,
             role: p.role,
             businessName: p.business.name,
@@ -225,7 +228,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           await fetch('/api/onboarding/unified/skip-connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ userId }),
           });
         } else {
           // Save selected connectors and their configs to server
@@ -237,6 +240,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              userId,
               onboardingPhase: 'activate',
               selectedNodes,
               nodeConfigs: connectorConfigs,
@@ -253,6 +257,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            userId,
             selectedAgents: bundle?.agents || [],
             selectedBundle: selectedBundle,
             chatPreferences: {
@@ -278,7 +283,13 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           });
           if (wsRes.ok) {
             const wsData = await wsRes.json();
-            if (wsData.workspaceId) sessionStorage.setItem('shre-workspace-id', wsData.workspaceId);
+            if (wsData.workspaceId) {
+              persistWorkspaceContext({
+                id: wsData.workspaceId,
+                name: wsData.workspaceName || wsData.workspaceId,
+                role: 'owner',
+              });
+            }
           } else {
             setWarning('Workspace setup incomplete — you can configure it later in Settings.');
           }
@@ -587,10 +598,10 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen flex items-start justify-center overflow-y-auto px-4 py-8 md:items-center"
       style={{ background: 'var(--c-bg-1)' }}
     >
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-lg my-auto">
         {/* Phase indicator */}
         <div className="flex justify-center gap-3 mb-6">
           {PHASE_LABELS.map((label, i) => (

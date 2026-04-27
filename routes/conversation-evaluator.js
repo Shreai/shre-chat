@@ -13,9 +13,10 @@
  *   evaluator.evaluate(sessionId, userMessage, assistantResponse, agentId, model).catch(() => {});
  */
 
-import { randomUUID } from "node:crypto";
-import { serviceUrl } from "shre-sdk";
-import { writeConversation } from "shre-sdk/training";
+import { randomUUID } from 'node:crypto';
+import { serviceUrl } from 'shre-sdk';
+import { writeConversation } from 'shre-sdk/training';
+import { buildTaskIntakeHeaders } from './task-intake-auth.js';
 
 // ── Scoring constants (exported for tuning) ─────────────────────────────────
 
@@ -28,7 +29,7 @@ export const SEVERITY_WEIGHTS = {
 
 export const QUALITY_PATTERNS = {
   refusalWithTools: {
-    severity: "high",
+    severity: 'high',
     patterns: [
       /I don'?t have access/i,
       /I can'?t retrieve/i,
@@ -38,17 +39,17 @@ export const QUALITY_PATTERNS = {
     ],
   },
   garbledOutput: {
-    severity: "critical",
+    severity: 'critical',
     patterns: [
-      /[\u4e00-\u9fff]{3,}/,           // CJK runs (3+ chars — aligned with shre-router threshold)
-      /[\u0400-\u04ff]{5,}/,           // Cyrillic runs (5+ chars — aligned with shre-router threshold)
-      /[\u2800-\u28ff]{3,}/,           // Braille patterns
-      /[\ufffd]{3,}/,                  // Unicode replacement chars
+      /[\u4e00-\u9fff]{3,}/, // CJK runs (3+ chars — aligned with shre-router threshold)
+      /[\u0400-\u04ff]{5,}/, // Cyrillic runs (5+ chars — aligned with shre-router threshold)
+      /[\u2800-\u28ff]{3,}/, // Braille patterns
+      /[\ufffd]{3,}/, // Unicode replacement chars
       /[^\x00-\x7f\u00a0-\u024f]{20,}/, // long non-Latin runs
     ],
   },
   thinkLeak: {
-    severity: "critical",
+    severity: 'critical',
     patterns: [
       /<think>[\s\S]{10,}<\/think>/i,
       /\[internal(?: reasoning| thought)\]/i,
@@ -57,20 +58,18 @@ export const QUALITY_PATTERNS = {
     ],
   },
   dataPromiseFail: {
-    severity: "high",
+    severity: 'high',
     patterns: [
       /(?:I'll|Let me|I will) (?:fetch|get|retrieve|pull|look up).*(?:\.|!)\s*$/i,
       /(?:I'll|Let me) (?:check|query) (?:that|this) for you\.?\s*$/i,
     ],
   },
   timezoneFailure: {
-    severity: "medium",
-    patterns: [
-      /\bUTC\b(?!.*(?:local|EST|CST|MST|PST|ET|CT|MT|PT))/i,
-    ],
+    severity: 'medium',
+    patterns: [/\bUTC\b(?!.*(?:local|EST|CST|MST|PST|ET|CT|MT|PT))/i],
   },
   contextAmnesia: {
-    severity: "medium",
+    severity: 'medium',
     patterns: [
       /I don'?t have (?:access to |any )?previous conversation/i,
       /I don'?t have (?:the )?context (?:of|from) (?:our |your )?(?:previous|earlier|prior)/i,
@@ -78,11 +77,9 @@ export const QUALITY_PATTERNS = {
     ],
   },
   excessiveApology: {
-    severity: "low",
+    severity: 'low',
     // Not a regex array — checked via count logic in evaluateResponse()
-    patterns: [
-      /\b(?:sorry|apologize|my apologies|apologies)\b/gi,
-    ],
+    patterns: [/\b(?:sorry|apologize|my apologies|apologies)\b/gi],
   },
 };
 
@@ -96,7 +93,7 @@ const TASK_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 function canCreateRemediationTask(agentId) {
   const now = Date.now();
-  const key = agentId || "unknown";
+  const key = agentId || 'unknown';
   const entry = _taskRateMap.get(key);
   if (!entry || now - entry.windowStart > TASK_RATE_WINDOW_MS) {
     _taskRateMap.set(key, { count: 1, windowStart: now });
@@ -133,15 +130,20 @@ export function createConversationEvaluator(deps) {
     // 30-day retention cleanup (council condition: Whale + Viper)
     try {
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const deleted = chatDb.prepare(`DELETE FROM chat_evaluations WHERE created_at < ?`).run(thirtyDaysAgo);
+      const deleted = chatDb
+        .prepare(`DELETE FROM chat_evaluations WHERE created_at < ?`)
+        .run(thirtyDaysAgo);
       if (deleted.changes > 0) {
-        log.info("Cleaned up old chat evaluations", { deleted: deleted.changes, cutoff: new Date(thirtyDaysAgo).toISOString() });
+        log.info('Cleaned up old chat evaluations', {
+          deleted: deleted.changes,
+          cutoff: new Date(thirtyDaysAgo).toISOString(),
+        });
       }
     } catch (cleanupErr) {
-      log.warn("Failed to clean up old evaluations", {}, cleanupErr);
+      log.warn('Failed to clean up old evaluations', {}, cleanupErr);
     }
   } catch (err) {
-    log.warn("Failed to create chat_evaluations table", {}, err);
+    log.warn('Failed to create chat_evaluations table', {}, err);
   }
 
   /**
@@ -154,92 +156,94 @@ export function createConversationEvaluator(deps) {
 
       // ── Persist evaluation to SQLite ──
       try {
-        chatDb.prepare(
-          `INSERT INTO chat_evaluations (id, session_id, user_message, assistant_response, agent_id, model, score, issues, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(
-          randomUUID(),
-          sessionId || "unknown",
-          (userMessage || "").slice(0, 5000),
-          (assistantResponse || "").slice(0, 10000),
-          agentId || "unknown",
-          model || "unknown",
-          score,
-          JSON.stringify(issues),
-          Date.now()
-        );
+        chatDb
+          .prepare(
+            `INSERT INTO chat_evaluations (id, session_id, user_message, assistant_response, agent_id, model, score, issues, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            randomUUID(),
+            sessionId || 'unknown',
+            (userMessage || '').slice(0, 5000),
+            (assistantResponse || '').slice(0, 10000),
+            agentId || 'unknown',
+            model || 'unknown',
+            score,
+            JSON.stringify(issues),
+            Date.now(),
+          );
       } catch (dbErr) {
-        log.warn("Failed to persist chat evaluation", { sessionId }, dbErr);
+        log.warn('Failed to persist chat evaluation', { sessionId }, dbErr);
       }
 
       // ── Write negative training example for critical failures ──
       if (score < 0.5 && issues.length > 0) {
         try {
           writeConversation({
-            source: "conversation-evaluator",
-            agentId: agentId || "unknown",
+            source: 'conversation-evaluator',
+            agentId: agentId || 'unknown',
             messages: [
-              { role: "user", content: userMessage },
-              { role: "assistant", content: assistantResponse },
+              { role: 'user', content: userMessage },
+              { role: 'assistant', content: assistantResponse },
             ],
             quality: Math.round(score * 5) || 1, // convert 0-1 to 1-5, floor to 1
-            model: model || "unknown",
-            tenantId: "platform",
+            model: model || 'unknown',
+            tenantId: 'platform',
             meta: { evaluationIssues: issues, autoEvaluated: true },
           });
         } catch (trainErr) {
-          log.warn("Failed to write training example from evaluation", { sessionId }, trainErr);
+          log.warn('Failed to write training example from evaluation', { sessionId }, trainErr);
         }
       }
 
       // ── Create remediation task for severe failures (rate-limited) ──
       if (score < 0.3 && issues.length > 0 && canCreateRemediationTask(agentId)) {
         try {
-          const tasksUrl = serviceUrl("shre-tasks");
+          const tasksUrl = serviceUrl('shre-tasks');
           await fetch(`${tasksUrl}/v1/intake`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: 'POST',
+            headers: buildTaskIntakeHeaders('/v1/intake'),
             body: JSON.stringify({
-              title: `Chat quality issue: ${issues[0]?.pattern || "unknown"}`,
-              description: `Agent ${agentId || "unknown"} produced a ${issues[0]?.severity || "unknown"} quality response.\n\nUser: ${(userMessage || "").slice(0, 200)}\nIssue: ${issues.map(i => i.detail).join("; ")}`,
-              priority: issues[0]?.severity === "critical" ? "critical" : "high",
-              source: "conversation-evaluator",
-              tags: ["chat-quality", "auto-evaluated", agentId || "unknown"],
+              title: `Chat quality issue: ${issues[0]?.pattern || 'unknown'}`,
+              description: `Agent ${agentId || 'unknown'} produced a ${issues[0]?.severity || 'unknown'} quality response.\n\nUser: ${(userMessage || '').slice(0, 200)}\nIssue: ${issues.map((i) => i.detail).join('; ')}`,
+              priority: issues[0]?.severity === 'critical' ? 'critical' : 'high',
+              source: 'conversation-evaluator',
+              tags: ['chat-quality', 'auto-evaluated', agentId || 'unknown'],
               skip_decompose: true,
             }),
             signal: AbortSignal.timeout(5000),
           });
         } catch (taskErr) {
-          log.warn("Failed to create remediation task", { sessionId, score }, taskErr);
+          log.warn('Failed to create remediation task', { sessionId, score }, taskErr);
         }
       }
 
       // ── Emit evaluation event to CortexDB ──
       try {
         await fetch(`http://localhost:${CORTEX_BRIDGE_PORT}/v1/write`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            data_type: "chat_evaluation",
+            data_type: 'chat_evaluation',
             payload: {
-              sessionId: sessionId || "unknown",
-              agentId: agentId || "unknown",
+              sessionId: sessionId || 'unknown',
+              agentId: agentId || 'unknown',
               score,
               issues,
-              model: model || "unknown",
+              model: model || 'unknown',
               timestamp: new Date().toISOString(),
             },
-            actor: "conversation-evaluator",
+            actor: 'conversation-evaluator',
           }),
           signal: AbortSignal.timeout(3000),
         });
       } catch (eventErr) {
-        log.warn("Failed to emit evaluation event", { sessionId }, eventErr);
+        log.warn('Failed to emit evaluation event', { sessionId }, eventErr);
       }
 
       return { score, issues };
     } catch (err) {
-      log.warn("Conversation evaluation failed", { sessionId }, err);
+      log.warn('Conversation evaluation failed', { sessionId }, err);
       return { score: 1.0, issues: [] };
     }
   }
@@ -250,7 +254,7 @@ export function createConversationEvaluator(deps) {
 // ── Heuristic scoring engine ─────────────────────────────────────────────────
 
 function evaluateResponse(response) {
-  if (!response || typeof response !== "string") {
+  if (!response || typeof response !== 'string') {
     return { score: 1.0, issues: [] };
   }
 
@@ -258,7 +262,7 @@ function evaluateResponse(response) {
 
   // Check each pattern category (except excessiveApology, handled separately)
   for (const [patternName, config] of Object.entries(QUALITY_PATTERNS)) {
-    if (patternName === "excessiveApology") continue;
+    if (patternName === 'excessiveApology') continue;
 
     for (const regex of config.patterns) {
       const match = response.match(regex);
@@ -278,7 +282,7 @@ function evaluateResponse(response) {
   const apologyMatches = response.match(apologyRegex);
   if (apologyMatches && apologyMatches.length >= 3) {
     issues.push({
-      pattern: "excessiveApology",
+      pattern: 'excessiveApology',
       severity: QUALITY_PATTERNS.excessiveApology.severity,
       detail: `Found ${apologyMatches.length} apology phrases`,
     });

@@ -618,6 +618,12 @@ h1, h2, h3, h4, h5, h6 {
   #root { overflow-x: hidden; }
 }
 
+@media (min-width: 769px) {
+  #shre-input-box {
+    min-height: 120px;
+  }
+}
+
 /* ── Landscape orientation on small devices ────────────────────── */
 @media (orientation: landscape) and (max-height: 500px) {
   .status-bar { min-height: 32px !important; }

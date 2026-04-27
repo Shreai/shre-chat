@@ -303,7 +303,7 @@ async function testModelRouting() {
 }
 
 // ─── 7. Notifications WebSocket ────────────────────────────────────────────
-// The legacy OpenClaw gateway (ws://127.0.0.1:18789) was retired on 2026-04-06.
+// The legacy gateway (ws://127.0.0.1:18789) was retired on 2026-04-06.
 // This test now exercises shre-chat's own notifications upgrade path, which is
 // what the browser actually uses.
 

@@ -166,7 +166,7 @@ export async function fetchAgentCapabilities(): Promise<void> {
 
 const DEFAULT_MODEL = 'ollama/qwen3:8b';
 
-const ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? 'https://127.0.0.1:5497';
+const ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? 'http://127.0.0.1:5497';
 
 // Cached agent model assignments from shre-router config API
 let agentModelMap: Record<string, string> = {};

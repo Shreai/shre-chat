@@ -47,6 +47,22 @@ export function validateCustomPrompt(prompt: string): string | null {
   return prompt;
 }
 
+/**
+ * Detect retail/POS prompts that should be routed through Nova in the chat UI.
+ * Keep this intentionally broad for item lookup, sales, discount, refund, and PO planning.
+ */
+export function isRetailPosPrompt(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    /\b(?:sales?|revenue|transactions?|tickets?|orders?|items?|item lookup|lookup item|search item|search product|price lookup|discount|refund|return|void|po|purchase order|reorder|vendor|department|inventory|stock|sell[- ]?through|last purchase|sold in the last|last two weeks)\b/i.test(
+      normalized,
+    ) ||
+    /\b(?:what are my sales|how are sales|show sales|look up item|find item|add item|apply discount|process refund|generate po|preview po)\b/i.test(
+      normalized,
+    )
+  );
+}
+
 /** Build the default system prompt for an agent. */
 export function buildDefaultSystemPrompt(agentName: string, agentId: string): string {
   return `[prompt-version: ${SYSTEM_PROMPT_VERSION}] You are ${agentName}, an AI agent (${agentId}) in the Nirlab ecosystem. You serve Nir, the founder of Nirlab Inc. Be intelligent, concise, and proactive. Keep responses focused and actionable. Use markdown when helpful.

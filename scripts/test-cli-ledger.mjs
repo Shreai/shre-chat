@@ -78,7 +78,7 @@ const {
   setSummary,
 } = ledger;
 
-const LEDGER_ROOT = join(homedir(), ".openclaw", "sessions", "cli");
+const LEDGER_ROOT = join(homedir(), ".shre", "sessions", "cli");
 const TEST_AGENT = `test-agent-${Date.now()}`;
 
 // ── Unit Tests ──────────────────────────────────────────────────────────

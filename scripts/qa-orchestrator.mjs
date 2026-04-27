@@ -21,6 +21,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildTaskIntakeHeaders } from '../routes/task-intake-auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
@@ -91,14 +92,16 @@ function ensureFixtures() {
   // Minimal valid JPEG (1x1 pixel JFIF)
   const jpegPath = join(fixtureDir, 'test.jpg');
   if (!existsSync(jpegPath)) {
-    const jpegHex = 'ffd8ffe000104a46494600010100000100010000ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434271f3d38323c2e333434ffc0000b08000100010101110 0ffc4001f0000010501010101010100000000000000000102030405060708090a0bffda00080101003f0054db9ea7a3ffd9';
+    const jpegHex =
+      'ffd8ffe000104a46494600010100000100010000ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434271f3d38323c2e333434ffc0000b08000100010101110 0ffc4001f0000010501010101010100000000000000000102030405060708090a0bffda00080101003f0054db9ea7a3ffd9';
     writeFileSync(jpegPath, Buffer.from(jpegHex, 'hex'));
   }
 
   // Minimal valid PNG (1x1 red pixel)
   const pngPath = join(fixtureDir, 'test.png');
   if (!existsSync(pngPath)) {
-    execSync(`python3 -c "
+    execSync(
+      `python3 -c "
 import struct, zlib
 sig = b'\\x89PNG\\r\\n\\x1a\\n'
 def chunk(t, d):
@@ -108,13 +111,17 @@ ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
 raw = zlib.compress(b'\\x00\\xff\\x00\\x00')
 with open('${pngPath}','wb') as f:
     f.write(sig + chunk(b'IHDR', ihdr) + chunk(b'IDAT', raw) + chunk(b'IEND', b''))
-"`, { stdio: 'pipe' });
+"`,
+      { stdio: 'pipe' },
+    );
   }
 
   // Minimal valid PDF
   const pdfPath = join(fixtureDir, 'test.pdf');
   if (!existsSync(pdfPath)) {
-    writeFileSync(pdfPath, `%PDF-1.0
+    writeFileSync(
+      pdfPath,
+      `%PDF-1.0
 1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj
@@ -127,7 +134,8 @@ xref
 trailer<</Size 4/Root 1 0 R>>
 startxref
 190
-%%EOF`);
+%%EOF`,
+    );
   }
 }
 
@@ -285,7 +293,7 @@ async function createBugTasks(results) {
     try {
       const res = await fetch(`${TASKS_URL}/v1/intake`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildTaskIntakeHeaders('/v1/intake'),
         body: JSON.stringify({
           title: `QA Bug: ${failure.title}`,
           description: [
@@ -320,7 +328,7 @@ async function createBugTasks(results) {
     try {
       const res = await fetch(`${TASKS_URL}/v1/intake`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildTaskIntakeHeaders('/v1/intake'),
         body: JSON.stringify({
           title: `QA Gap: ${gap.message.slice(0, 80)}`,
           description: [

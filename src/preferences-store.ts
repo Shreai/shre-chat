@@ -122,7 +122,7 @@ export interface PreferencesState {
  * Migrate legacy localStorage keys into the Zustand persist store on first load.
  * After migration, the persist middleware owns these values.
  */
-const LEGACY_ROUTER_MODE_KEY = 'shre-openclaw-mode'; // legacy localStorage key — value kept for backward-compat migration
+const LEGACY_ROUTER_MODE_KEY = 'shre-router-mode-legacy'; // legacy localStorage key — value kept for backward-compat migration
 
 function migrateFromLegacyKeys(): Partial<PreferencesState> {
   const migrated: Partial<PreferencesState> = {};

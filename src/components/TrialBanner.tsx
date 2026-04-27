@@ -3,6 +3,7 @@
  * Fetches from shre-stripe via /api/trial-status proxy.
  */
 import { useState, useEffect } from 'react';
+import { getStoredWorkspaceId } from '../workspace-context';
 
 interface TrialStatus {
   active: boolean;
@@ -25,7 +26,7 @@ export function TrialBanner() {
   const [showPlans, setShowPlans] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const workspaceId = sessionStorage.getItem('shre-workspace-id');
+  const workspaceId = getStoredWorkspaceId();
 
   useEffect(() => {
     if (!workspaceId) return;

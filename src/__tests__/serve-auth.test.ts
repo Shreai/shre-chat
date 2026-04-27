@@ -15,6 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { shouldFallbackToLocalAuth } from '../../routes/auth.js';
 import {
   createMockReq,
   createMockRes,
@@ -275,5 +276,17 @@ describe('PUBLIC_PATHS — sync check with real serve.js', () => {
 
   it('REAL_PUBLIC_PATHS has exactly 7 entries (update if serve.js changes)', () => {
     expect(REAL_PUBLIC_PATHS.size).toBe(7);
+  });
+});
+
+describe('Auth fallback behavior', () => {
+  it('falls back to local auth for upstream 5xx failures', () => {
+    expect(shouldFallbackToLocalAuth(500)).toBe(true);
+    expect(shouldFallbackToLocalAuth(503)).toBe(true);
+  });
+
+  it('does not fall back to local auth for upstream client failures', () => {
+    expect(shouldFallbackToLocalAuth(401)).toBe(false);
+    expect(shouldFallbackToLocalAuth(429)).toBe(false);
   });
 });
