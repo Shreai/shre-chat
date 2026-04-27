@@ -5,7 +5,7 @@
  * starts/stops. Replaces the fixed 5s silence timer with adaptive detection.
  */
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useMemo } from 'react';
 
 interface VADOptions {
   /** RMS threshold to consider as speech. Default 0.015. */
@@ -232,5 +232,8 @@ export function useVAD(options: VADOptions = {}) {
     }
   }, [stop]);
 
-  return { start, stop, destroy, checkEnergy, getAudioContext, startBargeInMonitor };
+  return useMemo(
+    () => ({ start, stop, destroy, checkEnergy, getAudioContext, startBargeInMonitor }),
+    [start, stop, destroy, checkEnergy, getAudioContext, startBargeInMonitor],
+  );
 }

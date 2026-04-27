@@ -1,23 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LoginView } from './LoginView';
-
-// ── Auth state ──
-const AUTH_TOKEN_KEY = 'shre-auth-token';
-const AUTH_USER_KEY = 'shre-auth-user';
-const AUTH_WORKSPACE_KEY = 'shre-auth-workspace';
-const AUTH_WORKSPACES_KEY = 'shre-auth-workspaces';
+import {
+  AUTH_TOKEN_KEY,
+  AUTH_USER_KEY,
+  AUTH_WORKSPACE_KEY,
+  AUTH_WORKSPACES_KEY,
+  clearWorkspaceContext,
+  getStoredWorkspaceId,
+  persistWorkspaceContext,
+  readStoredWorkspace,
+} from './workspace-context';
 
 export interface AuthWorkspace {
   id: string;
   name: string;
   role: string;
   isDefault?: boolean;
+  loginType?: string;
 }
 
 export interface AuthUser {
   username: string;
   name: string;
   role: string;
+  loginType?: string;
   id?: string;
   isSuperAdmin?: boolean;
 }
@@ -29,6 +35,29 @@ export interface AuthState {
   workspaces?: AuthWorkspace[];
 }
 
+function normalizeWorkspaces(value: unknown): AuthWorkspace[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { id: item, name: item, role: 'member' };
+      }
+      if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+        const ws = item as Partial<AuthWorkspace>;
+        return {
+          id: ws.id!,
+          name: ws.name || ws.id!,
+          role: ws.role || 'member',
+          isDefault: ws.isDefault,
+          loginType: ws.loginType,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as AuthWorkspace[];
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 export function getStoredAuth(): AuthState | null {
   try {
     const token = sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
@@ -36,8 +65,19 @@ export function getStoredAuth(): AuthState | null {
     if (token && user) {
       sessionStorage.setItem(AUTH_TOKEN_KEY, token);
       localStorage.setItem(AUTH_TOKEN_KEY, token);
-      const workspace = JSON.parse(localStorage.getItem(AUTH_WORKSPACE_KEY) || 'null');
-      const workspaces = JSON.parse(localStorage.getItem(AUTH_WORKSPACES_KEY) || 'null');
+      const storedWorkspaceId = getStoredWorkspaceId();
+      const workspace =
+        readStoredWorkspace() ??
+        (storedWorkspaceId
+          ? {
+              id: storedWorkspaceId,
+              name: storedWorkspaceId,
+              role: 'member',
+            }
+          : JSON.parse(localStorage.getItem(AUTH_WORKSPACE_KEY) || 'null'));
+      const workspaces = normalizeWorkspaces(
+        JSON.parse(localStorage.getItem(AUTH_WORKSPACES_KEY) || 'null'),
+      );
       return { token, user, workspace, workspaces };
     }
   } catch (err) {
@@ -146,6 +186,15 @@ function isReplayableBody(body: BodyInit | null | undefined): boolean {
   return false;
 }
 
+function clearShellLoginTypeQueryParam() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has('shellLoginType')) return;
+  params.delete('shellLoginType');
+  const search = params.toString();
+  const nextUrl = `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`;
+  window.history.replaceState({}, '', nextUrl);
+}
+
 /** Install the auth-aware fetch interceptor. Idempotent — safe to call on login/logout. */
 export function installAuthFetch() {
   // Already installed? No need to re-wrap.
@@ -244,15 +293,17 @@ export function useAuth(devBypass: boolean) {
             sessionStorage.removeItem(AUTH_TOKEN_KEY);
             localStorage.removeItem(AUTH_TOKEN_KEY);
             localStorage.removeItem(AUTH_USER_KEY);
-            localStorage.removeItem(AUTH_WORKSPACE_KEY);
-            localStorage.removeItem(AUTH_WORKSPACES_KEY);
+            clearWorkspaceContext();
             setAuthState(null);
             tryGateSSO();
           } else {
             try {
               const data = await r.json();
               if (data.workspace) {
-                localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(data.workspace));
+                persistWorkspaceContext(
+                  data.workspace,
+                  normalizeWorkspaces(data.workspaces) || null,
+                );
               }
             } catch (err) {
               console.debug('auth check workspace parse', err);
@@ -282,8 +333,35 @@ export function useAuth(devBypass: boolean) {
             sessionStorage.setItem(AUTH_TOKEN_KEY, data.token);
             localStorage.setItem(AUTH_TOKEN_KEY, data.token);
             localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
-            setAuthState({ token: data.token, user: data.user });
+            persistWorkspaceContext(data.workspace, normalizeWorkspaces(data.workspaces) || null);
             installAuthFetch();
+            setAuthState({ token: data.token, user: data.user });
+            fetch('/api/auth/check', {
+              headers: { Authorization: `Bearer ${data.token}` },
+            })
+              .then(async (checkRes) => {
+                if (!checkRes.ok) return null;
+                return checkRes.json();
+              })
+              .then((checkData) => {
+                if (!checkData) return;
+                persistWorkspaceContext(
+                  checkData.workspace,
+                  normalizeWorkspaces(checkData.workspaces) || null,
+                );
+                if (checkData.workspace || checkData.workspaces) {
+                  setAuthState((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          workspace: checkData.workspace || prev.workspace,
+                          workspaces: normalizeWorkspaces(checkData.workspaces) || prev.workspaces,
+                        }
+                      : prev,
+                  );
+                }
+              })
+              .catch(() => {});
           }
           clearTimeout(timeout);
           setAuthChecking(false);
@@ -308,15 +386,14 @@ export function useAuth(devBypass: boolean) {
     sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     localStorage.setItem(AUTH_TOKEN_KEY, token);
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-    if (loginData?.workspace) {
-      localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(loginData.workspace));
-    }
-    if (loginData?.workspaces) {
-      localStorage.setItem(AUTH_WORKSPACES_KEY, JSON.stringify(loginData.workspaces));
-    }
+    persistWorkspaceContext(
+      loginData?.workspace,
+      normalizeWorkspaces(loginData?.workspaces) || null,
+    );
     resetCsrfToken();
     installAuthFetch();
     ensureCsrfToken().catch(() => {});
+    clearShellLoginTypeQueryParam();
     setAuthState({
       token,
       user,
@@ -371,14 +448,17 @@ export function useAuth(devBypass: boolean) {
         sessionStorage.setItem(AUTH_TOKEN_KEY, data.token);
         localStorage.setItem(AUTH_TOKEN_KEY, data.token);
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
-        if (data.workspace)
-          localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(data.workspace));
+        persistWorkspaceContext(
+          data.workspace,
+          normalizeWorkspaces(data.workspaces) || authState?.workspaces || null,
+        );
         installAuthFetch();
+        clearShellLoginTypeQueryParam();
         setAuthState({
           token: data.token,
           user: data.user,
           workspace: data.workspace,
-          workspaces: authState?.workspaces,
+          workspaces: normalizeWorkspaces(data.workspaces) || authState?.workspaces,
         });
         sessionStorage.removeItem('shre-identity-verified');
         window.location.reload();
@@ -397,9 +477,9 @@ export function useAuth(devBypass: boolean) {
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
-    localStorage.removeItem(AUTH_WORKSPACE_KEY);
-    localStorage.removeItem(AUTH_WORKSPACES_KEY);
+    clearWorkspaceContext();
     resetCsrfToken();
+    clearShellLoginTypeQueryParam();
     setAuthState(null);
     setPendingWorkspaceSelection(null);
   }, [devBypass]);

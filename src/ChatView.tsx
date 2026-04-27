@@ -52,7 +52,7 @@ import { ChatPanels } from './components/ChatPanels';
 import { TrialBanner } from './components/TrialBanner';
 import { useChatKeydown } from './hooks/useChatKeydown';
 
-export function ChatView() {
+export function ChatView({ simplified = false }: { simplified?: boolean } = {}) {
   const { state, actions } = useApp();
   const { sessions, activeSessionId, activeAgentId, streaming, streamText, syncing, statusLine } =
     state;
@@ -635,6 +635,26 @@ export function ChatView() {
     };
   }, [startRecording, stopRecording]);
 
+  useEffect(() => {
+    if (!simplified) return;
+    if (showTerminal) setShowTerminal(false);
+    if (voiceMode) setVoiceMode(false);
+    if (isHandsFree) setIsHandsFree(false);
+    if (isRecording) {
+      void stopRecording(true);
+    }
+  }, [
+    simplified,
+    showTerminal,
+    setShowTerminal,
+    voiceMode,
+    setVoiceMode,
+    isHandsFree,
+    setIsHandsFree,
+    isRecording,
+    stopRecording,
+  ]);
+
   const { handleAbort } = useKeyboardShortcuts({
     streaming,
     wsConnected,
@@ -763,6 +783,7 @@ export function ChatView() {
               setActiveView={setActiveView}
               showTerminal={showTerminal}
               termViewMode={termViewMode}
+              simplified={simplified}
               isMobile={isMobileLayout}
               isTabMode={isTabMode}
               currentAgent={currentAgent}
@@ -963,6 +984,7 @@ export function ChatView() {
                 compareModelsCount={compareModels.length}
                 cliMode={cliMode}
                 claudeCliMode={claudeCliMode}
+                simplified={simplified}
                 setClaudeCliMode={(on: boolean) => {
                   setClaudeCliMode(on);
                   localStorage.setItem('shre-claude-cli-mode', String(on));
@@ -1093,6 +1115,7 @@ export function ChatView() {
             </div>
           }
           terminal={
+            !simplified &&
             showTerminal && (
               <Suspense
                 fallback={
@@ -1205,12 +1228,14 @@ export function ChatView() {
           onSetTtsProvider={setTtsProvider}
         />
       </Suspense>
-      <RealtimeVoiceOverlay
-        open={realtimeVoiceOpen}
-        onClose={() => setRealtimeVoiceOpen(false)}
-        agentName={currentAgent.name}
-        agentEmoji={currentAgent.emoji}
-      />
+      <Suspense fallback={null}>
+        <RealtimeVoiceOverlay
+          open={realtimeVoiceOpen}
+          onClose={() => setRealtimeVoiceOpen(false)}
+          agentName={currentAgent.name}
+          agentEmoji={currentAgent.emoji}
+        />
+      </Suspense>
       <ArtifactCanvas
         artifact={activeArtifact}
         artifacts={extractArtifacts(messages)}

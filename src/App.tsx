@@ -40,6 +40,8 @@ import { loadUserProfile, saveUserProfile, createDefaultProfile, type UserProfil
 import { OnboardingView } from './OnboardingView';
 import { useAnomalyStream } from './hooks/useAnomalyStream';
 import InstallBanner from './components/InstallBanner';
+import { getStoredWorkspaceId } from './workspace-context';
+import { getShellMode, normalizeLoginType } from './login-types';
 
 // ── Extracted modules ──
 import {
@@ -51,6 +53,7 @@ import {
 } from './AppAuth';
 import { ViewNavHeader } from './ViewNavHeader';
 import { buildActions, type ActionDeps } from './AppActions';
+import { RoleWorkspaceView } from './RoleWorkspaceView';
 import {
   useThemeEffect,
   useThemeCustomEffect,
@@ -215,6 +218,27 @@ export function App() {
     );
   }
 
+  if (pendingWorkspaceSelection) {
+    return (
+      <WorkspaceSelectionScreen
+        pending={pendingWorkspaceSelection}
+        onSelect={handleWorkspaceSelected}
+      />
+    );
+  }
+
+  if (authState) {
+    return (
+      <AuthenticatedApp
+        authUser={authState.user}
+        onLogout={handleLogout}
+        activeWorkspace={authState.workspace}
+        workspaces={authState.workspaces}
+        onWorkspaceSwitch={handleWorkspaceSwitch}
+      />
+    );
+  }
+
   if (authChecking) {
     return (
       <div
@@ -232,28 +256,11 @@ export function App() {
     );
   }
 
-  if (pendingWorkspaceSelection) {
-    return (
-      <WorkspaceSelectionScreen
-        pending={pendingWorkspaceSelection}
-        onSelect={handleWorkspaceSelected}
-      />
-    );
-  }
-
   if (!authState) {
     return <LoginView onLogin={handleLogin} />;
   }
 
-  return (
-    <AuthenticatedApp
-      authUser={authState.user}
-      onLogout={handleLogout}
-      activeWorkspace={authState.workspace}
-      workspaces={authState.workspaces}
-      onWorkspaceSwitch={handleWorkspaceSwitch}
-    />
-  );
+  return null;
 }
 
 function AuthenticatedApp({
@@ -269,23 +276,38 @@ function AuthenticatedApp({
   workspaces?: AuthWorkspace[];
   onWorkspaceSwitch: (workspaceId: string) => void;
 }) {
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
+  const currentUserKey = authUser.username;
+  const onboardingCompletionKey = `shre-onboarding-complete:${currentUserKey}`;
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+    const stored = loadUserProfile();
+    return stored && stored.id === currentUserKey ? stored : null;
+  });
   const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done' | 'welcome'>(
     'loading',
   );
-  const [landingTarget, setLandingTarget] = useState<'chat' | 'home'>('chat');
-  const checkedRef = useRef(false);
 
   useEffect(() => {
-    if (checkedRef.current) return;
-    checkedRef.current = true;
     const ac = new AbortController();
+    let settled = false;
+    const settle = (phase: 'needed' | 'done') => {
+      if (settled || ac.signal.aborted) return;
+      settled = true;
+      setOnboardingPhase(phase);
+    };
+    const fallbackTimer = setTimeout(() => {
+      const completedLocally = localStorage.getItem(onboardingCompletionKey) === '1';
+      const profileComplete = !!(userProfile?.onboardedAt && userProfile.onboardedAt > 0);
+      settle(completedLocally || profileComplete ? 'done' : 'needed');
+    }, 2500);
 
-    fetch('/api/onboarding/status', { signal: ac.signal })
+    fetch(`/api/onboarding/status?userId=${encodeURIComponent(authUser.id || authUser.username)}`, {
+      signal: ac.signal,
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (ac.signal.aborted) return;
+        if (ac.signal.aborted || settled) return;
         if (data?.phase === 'complete') {
+          localStorage.setItem(onboardingCompletionKey, '1');
           // Server says onboarding is done — sync identity to local profile if needed
           if (!userProfile || userProfile.onboardedAt === 0) {
             const completed = {
@@ -305,8 +327,13 @@ function AuthenticatedApp({
             saveUserProfile(completed);
             setUserProfile(completed);
           }
-          setOnboardingPhase('done');
+          settle('done');
         } else {
+          const completedLocally = localStorage.getItem(onboardingCompletionKey) === '1';
+          if (completedLocally) {
+            settle('done');
+            return;
+          }
           // Server says not complete — check for local migration
           const migrated = localStorage.getItem('shre-onboarding-migrated');
           if (!migrated && userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
@@ -315,6 +342,7 @@ function AuthenticatedApp({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
+                userId: authUser.id || authUser.username,
                 onboardingPhase: 'complete',
                 step: 'dashboard',
                 completedSteps: [
@@ -347,22 +375,34 @@ function AuthenticatedApp({
               .catch(() => {
                 /* non-fatal */
               });
-            setOnboardingPhase('done');
+            localStorage.setItem(onboardingCompletionKey, '1');
+            settle('done');
           } else {
-            setOnboardingPhase('needed');
+            settle('needed');
           }
         }
       })
       .catch((err) => {
-        if (err?.name === 'AbortError') return;
+        if (ac.signal.aborted || err?.name === 'AbortError') {
+          const completedLocally = localStorage.getItem(onboardingCompletionKey) === '1';
+          const profileComplete = !!(userProfile?.onboardedAt && userProfile.onboardedAt > 0);
+          settle(completedLocally || profileComplete ? 'done' : 'needed');
+          return;
+        }
         // MIB007 unreachable — fall back to localStorage
-        if (userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
-          setOnboardingPhase('done');
+        if (
+          localStorage.getItem(onboardingCompletionKey) === '1' ||
+          (userProfile?.onboardedAt && userProfile.onboardedAt > 0)
+        ) {
+          settle('done');
         } else {
-          setOnboardingPhase('needed');
+          settle('needed');
         }
       });
-    return () => ac.abort();
+    return () => {
+      clearTimeout(fallbackTimer);
+      ac.abort();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (onboardingPhase === 'loading') {
@@ -385,12 +425,14 @@ function AuthenticatedApp({
     return (
       <OnboardingView
         profile={userProfile || createDefaultProfile(authUser)}
+        userId={authUser.id || authUser.username}
         onComplete={(completed, selectedAgents, selectedBundle) => {
           // Persist to server with selected agents from wizard
           fetch('/api/onboarding/unified/activate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              userId: authUser.id || authUser.username,
               selectedAgents: selectedAgents || [],
               selectedBundle: selectedBundle || undefined,
               chatPreferences: completed.preferences
@@ -406,14 +448,8 @@ function AuthenticatedApp({
           });
           saveUserProfile(completed);
           setUserProfile(completed);
-          // Check smart landing target
-          fetch('/api/onboarding/landing-target')
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data) => {
-              if (data?.target === 'home') setLandingTarget('home');
-            })
-            .catch(() => {});
-          setOnboardingPhase('welcome');
+          localStorage.setItem(onboardingCompletionKey, '1');
+          setOnboardingPhase('done');
         }}
         onSkip={() => {
           const skipped = {
@@ -424,58 +460,19 @@ function AuthenticatedApp({
           fetch('/api/onboarding/state', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ onboardingPhase: 'complete' }),
+            body: JSON.stringify({
+              userId: authUser.id || authUser.username,
+              onboardingPhase: 'complete',
+            }),
           }).catch(() => {
             /* non-fatal */
           });
           saveUserProfile(skipped);
           setUserProfile(skipped);
+          localStorage.setItem(onboardingCompletionKey, '1');
           setOnboardingPhase('done');
         }}
       />
-    );
-  }
-
-  if (onboardingPhase === 'welcome') {
-    const mib007Url = 'https://mib007.nirtek.net';
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: 'var(--c-bg-1)' }}
-      >
-        <div className="w-full max-w-md text-center space-y-6">
-          <h2 className="text-2xl font-semibold" style={{ color: 'var(--c-text-1)' }}>
-            You're all set!
-          </h2>
-          <p className="text-sm" style={{ color: 'var(--c-text-4)' }}>
-            Your AI workspace is ready. Where would you like to start?
-          </p>
-          <div className="space-y-3">
-            <button
-              onClick={() => setOnboardingPhase('done')}
-              className="w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors"
-              style={{ background: 'var(--c-accent)', color: '#fff' }}
-            >
-              Start Chatting
-            </button>
-            {landingTarget === 'home' && (
-              <a
-                href={mib007Url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors text-center"
-                style={{
-                  border: '1px solid var(--c-border-2)',
-                  color: 'var(--c-text-2)',
-                  background: 'var(--c-bg-card)',
-                }}
-              >
-                Go to Dashboard
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
     );
   }
 
@@ -509,6 +506,10 @@ function MainApp({
   userProfile: UserProfile;
   setUserProfile: (p: UserProfile) => void;
 }) {
+  const loginType = normalizeLoginType(
+    authUser.loginType || activeWorkspace?.loginType || authUser.role,
+  );
+  const simplifiedChrome = getShellMode(loginType) === 'customer';
   const [sessions, setSessions] = useState<Session[]>(() => {
     const loaded = loadSessions();
     if (loaded.length === 0) {
@@ -565,13 +566,17 @@ function MainApp({
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [syncing, setSyncing] = useState(false);
   const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(THEME_KEY) as Theme) || 'dark',
+    () => (localStorage.getItem(THEME_KEY) as Theme) || 'light',
   );
+  const useLegacyShell = new URLSearchParams(window.location.search).get('legacy') === 'true';
+
+  useEffect(() => {
+    if (localStorage.getItem(THEME_KEY)) return;
+    setTheme('light');
+  }, []);
 
   // ── RapidRMS live anomaly stream ──
-  const [rapidrmsWorkspace] = useState<string | null>(() =>
-    localStorage.getItem('rapidrms-workspace'),
-  );
+  const rapidrmsWorkspace = activeWorkspace?.id || getStoredWorkspaceId();
   const {
     anomalies: rmsAnomalies,
     criticalCount: rmsCriticalCount,
@@ -801,7 +806,7 @@ function MainApp({
               }}
             />
           )}
-          <StatusBar />
+          <StatusBar customerFacing={simplifiedChrome} />
           <InstallBanner />
           {workspaces && workspaces.length > 1 && (
             <WorkspaceSwitcher
@@ -870,207 +875,215 @@ function MainApp({
               </button>
             </div>
           )}
-          <div className="flex flex-1 min-h-0">
-            <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
-            <Sidebar />
-            <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
-              <Suspense fallback={<LazyFallback />}>
-                <ChatView />
-              </Suspense>
-            </div>
-            {view !== 'chat' && (
-              <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                <ViewNavHeader view={view} onSwitch={actions.setView} />
+          {!useLegacyShell ? (
+            <RoleWorkspaceView
+              authUser={authUser}
+              activeWorkspace={activeWorkspace ?? null}
+              onLogout={onLogout}
+            />
+          ) : (
+            <div className="flex flex-1 min-h-0">
+              <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
+              <Sidebar />
+              <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
                 <Suspense fallback={<LazyFallback />}>
-                  {view === 'activity' && (
-                    <ViewErrorBoundary viewName="Activity">
-                      <ActivityView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'files' && (
-                    <ViewErrorBoundary viewName="Files">
-                      <FilesView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'cron' && (
-                    <ViewErrorBoundary viewName="Cron">
-                      <CronView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'feed' && (
-                    <ViewErrorBoundary viewName="Feed">
-                      <FeedView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'agent-feed' && (
-                    <ViewErrorBoundary viewName="Agent Feed">
-                      <AgentFeedView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'agent-social' && (
-                    <ViewErrorBoundary viewName="Agent Social">
-                      <AgentSocialView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'preview' && (
-                    <ViewErrorBoundary viewName="Preview">
-                      <PreviewView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'spend' && (
-                    <ViewErrorBoundary viewName="Spend">
-                      <SpendView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'briefing' && (
-                    <ViewErrorBoundary viewName="Briefing">
-                      <BriefingView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'reminders' && (
-                    <ViewErrorBoundary viewName="Reminders">
-                      <RemindersView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'cost-dashboard' && (
-                    <ViewErrorBoundary viewName="Cost Dashboard">
-                      <CostDashboardView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'marketplace' && (
-                    <ViewErrorBoundary viewName="Marketplace">
-                      <MarketplaceView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'admin' && (
-                    <ViewErrorBoundary viewName="Admin">
-                      <AdminView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'feed-analytics' && (
-                    <ViewErrorBoundary viewName="Feed Analytics">
-                      <FeedAnalyticsView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'task-timeline' && (
-                    <ViewErrorBoundary viewName="Task Timeline">
-                      <TaskTimelineView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'finetune' && (
-                    <ViewErrorBoundary viewName="Fine-Tuning">
-                      <FinetuneView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'reports' && (
-                    <ViewErrorBoundary viewName="Reports">
-                      <ReportsView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'employee-activity' && (
-                    <ViewErrorBoundary viewName="Employee Activity">
-                      <EmployeeActivityView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'tasks' && (
-                    <ViewErrorBoundary viewName="Tasks">
-                      <TasksView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'projects' && (
-                    <ViewErrorBoundary viewName="Projects">
-                      <ProjectsView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'email' && (
-                    <ViewErrorBoundary viewName="Email">
-                      <EmailView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'billing' && (
-                    <ViewErrorBoundary viewName="Billing">
-                      <BillingView />
-                    </ViewErrorBoundary>
-                  )}
-                  {__SHRE_INTERNAL__ && view === 'investor' && (
-                    <ViewErrorBoundary viewName="Investor Dashboard">
-                      <InvestorView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'agent-trace' && (
-                    <ViewErrorBoundary viewName="Agent Trace">
-                      <AgentTraceView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'router-gateway' && (
-                    <ViewErrorBoundary viewName="Router Gateway">
-                      <RouterGatewayEmbed />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'shre-dashboard' && (
-                    <ViewErrorBoundary viewName="Shre Dashboard">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/shre-dashboard/"
-                          className="flex-1 w-full border-0"
-                          title="Shre AI Dashboard"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'cortexdb' && (
-                    <ViewErrorBoundary viewName="CortexDB">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/cortexdb-ui/"
-                          className="flex-1 w-full border-0"
-                          title="CortexDB Dashboard"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'storepulse' && (
-                    <ViewErrorBoundary viewName="StorePulse">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/storepulse/"
-                          className="flex-1 w-full border-0"
-                          title="StorePulse"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'app-marketplace' && (
-                    <ViewErrorBoundary viewName="Marketplace">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/app-marketplace/"
-                          className="flex-1 w-full border-0"
-                          title="Marketplace"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
+                  <ChatView />
                 </Suspense>
               </div>
-            )}
-          </div>
+              {view !== 'chat' && (
+                <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                  <ViewNavHeader view={view} onSwitch={actions.setView} />
+                  <Suspense fallback={<LazyFallback />}>
+                    {view === 'activity' && (
+                      <ViewErrorBoundary viewName="Activity">
+                        <ActivityView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'files' && (
+                      <ViewErrorBoundary viewName="Files">
+                        <FilesView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'cron' && (
+                      <ViewErrorBoundary viewName="Cron">
+                        <CronView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'feed' && (
+                      <ViewErrorBoundary viewName="Feed">
+                        <FeedView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'agent-feed' && (
+                      <ViewErrorBoundary viewName="Agent Feed">
+                        <AgentFeedView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'agent-social' && (
+                      <ViewErrorBoundary viewName="Agent Social">
+                        <AgentSocialView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'preview' && (
+                      <ViewErrorBoundary viewName="Preview">
+                        <PreviewView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'spend' && (
+                      <ViewErrorBoundary viewName="Spend">
+                        <SpendView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'briefing' && (
+                      <ViewErrorBoundary viewName="Briefing">
+                        <BriefingView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'reminders' && (
+                      <ViewErrorBoundary viewName="Reminders">
+                        <RemindersView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'cost-dashboard' && (
+                      <ViewErrorBoundary viewName="Cost Dashboard">
+                        <CostDashboardView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'marketplace' && (
+                      <ViewErrorBoundary viewName="Marketplace">
+                        <MarketplaceView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'admin' && (
+                      <ViewErrorBoundary viewName="Admin">
+                        <AdminView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'feed-analytics' && (
+                      <ViewErrorBoundary viewName="Feed Analytics">
+                        <FeedAnalyticsView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'task-timeline' && (
+                      <ViewErrorBoundary viewName="Task Timeline">
+                        <TaskTimelineView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'finetune' && (
+                      <ViewErrorBoundary viewName="Fine-Tuning">
+                        <FinetuneView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'reports' && (
+                      <ViewErrorBoundary viewName="Reports">
+                        <ReportsView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'employee-activity' && (
+                      <ViewErrorBoundary viewName="Employee Activity">
+                        <EmployeeActivityView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'tasks' && (
+                      <ViewErrorBoundary viewName="Tasks">
+                        <TasksView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'projects' && (
+                      <ViewErrorBoundary viewName="Projects">
+                        <ProjectsView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'email' && (
+                      <ViewErrorBoundary viewName="Email">
+                        <EmailView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'billing' && (
+                      <ViewErrorBoundary viewName="Billing">
+                        <BillingView />
+                      </ViewErrorBoundary>
+                    )}
+                    {__SHRE_INTERNAL__ && view === 'investor' && (
+                      <ViewErrorBoundary viewName="Investor Dashboard">
+                        <InvestorView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'agent-trace' && (
+                      <ViewErrorBoundary viewName="Agent Trace">
+                        <AgentTraceView />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'router-gateway' && (
+                      <ViewErrorBoundary viewName="Router Gateway">
+                        <RouterGatewayEmbed />
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'shre-dashboard' && (
+                      <ViewErrorBoundary viewName="Shre Dashboard">
+                        <div
+                          className="flex-1 w-full h-full flex flex-col"
+                          style={{ background: 'var(--c-bg-1)' }}
+                        >
+                          <iframe
+                            src="/shre-dashboard/"
+                            className="flex-1 w-full border-0"
+                            title="Shre AI Dashboard"
+                            style={{ background: '#1a1a2e', minHeight: 0 }}
+                          />
+                        </div>
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'cortexdb' && (
+                      <ViewErrorBoundary viewName="CortexDB">
+                        <div
+                          className="flex-1 w-full h-full flex flex-col"
+                          style={{ background: 'var(--c-bg-1)' }}
+                        >
+                          <iframe
+                            src="/cortexdb-ui/"
+                            className="flex-1 w-full border-0"
+                            title="CortexDB Dashboard"
+                            style={{ background: '#1a1a2e', minHeight: 0 }}
+                          />
+                        </div>
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'storepulse' && (
+                      <ViewErrorBoundary viewName="StorePulse">
+                        <div
+                          className="flex-1 w-full h-full flex flex-col"
+                          style={{ background: 'var(--c-bg-1)' }}
+                        >
+                          <iframe
+                            src="/storepulse/"
+                            className="flex-1 w-full border-0"
+                            title="StorePulse"
+                            style={{ background: '#1a1a2e', minHeight: 0 }}
+                          />
+                        </div>
+                      </ViewErrorBoundary>
+                    )}
+                    {view === 'app-marketplace' && (
+                      <ViewErrorBoundary viewName="Marketplace">
+                        <div
+                          className="flex-1 w-full h-full flex flex-col"
+                          style={{ background: 'var(--c-bg-1)' }}
+                        >
+                          <iframe
+                            src="/app-marketplace/"
+                            className="flex-1 w-full border-0"
+                            title="Marketplace"
+                            style={{ background: '#1a1a2e', minHeight: 0 }}
+                          />
+                        </div>
+                      </ViewErrorBoundary>
+                    )}
+                  </Suspense>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </AppContext.Provider>
     </ErrorBoundary>

@@ -123,6 +123,9 @@ interface ChatComposerProps {
 
   // Open Shre CLI as terminal tab
   onOpenShreCli?: () => void;
+
+  // Customer-facing mode trims developer-centric controls
+  simplified?: boolean;
 }
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -203,14 +206,16 @@ export function ChatComposer(props: ChatComposerProps) {
     setClaudeCliMode,
     onOpenClaudeCli,
     onOpenShreCli,
+    simplified,
   } = props;
 
   const features = usePreferences((s) => s.features);
+  const MIN_TEXTAREA_HEIGHT = 44;
 
   // Reset textarea height when input is cleared (e.g. after send)
   useEffect(() => {
     if (!input && inputRef.current) {
-      inputRef.current.style.height = '36px';
+      inputRef.current.style.height = `${MIN_TEXTAREA_HEIGHT}px`;
     }
   }, [input, inputRef]);
 
@@ -566,80 +571,81 @@ export function ChatComposer(props: ChatComposerProps) {
           )}
 
           {/* Voice status mini toolbar */}
-          {(isRecording ||
-            voicePhase === 'transcribing' ||
-            (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
-              style={{
-                background: 'var(--c-bg-3)',
-                borderBottom: '1px solid var(--c-border-1)',
-              }}
-            >
-              {isRecording && voicePhase === 'recording' && (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                  <span style={{ color: '#f87171' }} className="font-medium">
-                    Recording
-                  </span>
-                  <span className="tabular-nums" style={{ color: 'var(--c-text-3)' }}>
-                    {Math.floor(recordingDuration / 60)}:
-                    {String(recordingDuration % 60).padStart(2, '0')}
-                  </span>
-                  {recordingDuration >= MAX_RECORDING_SECONDS - 30 && (
-                    <span className="text-yellow-400 animate-pulse">Stopping soon...</span>
-                  )}
-                  <button
-                    onClick={() => onStopRecording?.()}
-                    className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
-                    style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
-                  >
-                    Stop
-                  </button>
-                </>
-              )}
-              {isRecording && voicePhase === 'waiting' && (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                  <span style={{ color: '#facc15' }}>Listening for voice...</span>
-                </>
-              )}
-              {voicePhase === 'transcribing' && (
-                <>
-                  <svg
-                    className="h-3 w-3 animate-spin text-blue-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <circle cx="12" cy="12" r="10" opacity="0.3" />
-                    <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-                  </svg>
-                  <span style={{ color: '#60a5fa' }}>Transcribing...</span>
-                </>
-              )}
-              {/* Speaking indicator only shown when mic was used (hands-free or recording) */}
-              {!isRecording &&
-                !voicePhase.startsWith('trans') &&
-                !isSpeaking &&
-                interimTranscript && (
-                  <span
-                    className="truncate"
-                    style={{
-                      color:
-                        interimTranscript.includes('failed') ||
-                        interimTranscript.includes('blocked') ||
-                        interimTranscript.includes('timed') ||
-                        interimTranscript.includes('error')
-                          ? '#f87171'
-                          : 'var(--c-text-4)',
-                    }}
-                  >
-                    {interimTranscript}
-                  </span>
+          {!simplified &&
+            (isRecording ||
+              voicePhase === 'transcribing' ||
+              (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
+                style={{
+                  background: 'var(--c-bg-3)',
+                  borderBottom: '1px solid var(--c-border-1)',
+                }}
+              >
+                {isRecording && voicePhase === 'recording' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                    <span style={{ color: '#f87171' }} className="font-medium">
+                      Recording
+                    </span>
+                    <span className="tabular-nums" style={{ color: 'var(--c-text-3)' }}>
+                      {Math.floor(recordingDuration / 60)}:
+                      {String(recordingDuration % 60).padStart(2, '0')}
+                    </span>
+                    {recordingDuration >= MAX_RECORDING_SECONDS - 30 && (
+                      <span className="text-yellow-400 animate-pulse">Stopping soon...</span>
+                    )}
+                    <button
+                      onClick={() => onStopRecording?.()}
+                      className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
+                      style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
+                    >
+                      Stop
+                    </button>
+                  </>
                 )}
-              {/* Hands-free disabled for now
+                {isRecording && voicePhase === 'waiting' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                    <span style={{ color: '#facc15' }}>Listening for voice...</span>
+                  </>
+                )}
+                {voicePhase === 'transcribing' && (
+                  <>
+                    <svg
+                      className="h-3 w-3 animate-spin text-blue-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <circle cx="12" cy="12" r="10" opacity="0.3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                    </svg>
+                    <span style={{ color: '#60a5fa' }}>Transcribing...</span>
+                  </>
+                )}
+                {/* Speaking indicator only shown when mic was used (hands-free or recording) */}
+                {!isRecording &&
+                  !voicePhase.startsWith('trans') &&
+                  !isSpeaking &&
+                  interimTranscript && (
+                    <span
+                      className="truncate"
+                      style={{
+                        color:
+                          interimTranscript.includes('failed') ||
+                          interimTranscript.includes('blocked') ||
+                          interimTranscript.includes('timed') ||
+                          interimTranscript.includes('error')
+                            ? '#f87171'
+                            : 'var(--c-text-4)',
+                      }}
+                    >
+                      {interimTranscript}
+                    </span>
+                  )}
+                {/* Hands-free disabled for now
               {isHandsFree && !isRecording && !interimTranscript && !isSpeaking && (
                 <>
                   <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -653,8 +659,8 @@ export function ChatComposer(props: ChatComposerProps) {
                   </button>
                 </>
               )} */}
-            </div>
-          )}
+              </div>
+            )}
 
           {/* Textarea */}
           <textarea
@@ -698,9 +704,12 @@ export function ChatComposer(props: ChatComposerProps) {
             }}
             onInput={(e) => {
               const el = e.currentTarget;
-              el.style.height = '36px';
+              el.style.height = 'auto';
               const maxH = window.innerWidth <= 768 ? 160 : 240;
-              el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
+              el.style.height = `${Math.max(
+                MIN_TEXTAREA_HEIGHT,
+                Math.min(el.scrollHeight, maxH),
+              )}px`;
             }}
           />
 
@@ -789,7 +798,7 @@ export function ChatComposer(props: ChatComposerProps) {
               </div>
 
               {/* Mic button — tap = push-to-talk */}
-              {speechSupported && (
+              {speechSupported && !simplified && (
                 <button
                   tabIndex={-1}
                   onClick={() => {
@@ -845,7 +854,7 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
 
               {/* Hands-free toggle — auto-starts listening when AI finishes speaking */}
-              {speechSupported && (
+              {speechSupported && !simplified && (
                 <button
                   tabIndex={-1}
                   onClick={() => {
@@ -879,7 +888,7 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
 
               {/* Claude CLI — opens as terminal tab */}
-              {features['claudeCli'] && (
+              {!simplified && features['claudeCli'] && (
                 <button
                   tabIndex={-1}
                   onClick={() => {
@@ -905,7 +914,7 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
 
               {/* Shre CLI — opens shre REPL as terminal tab */}
-              {features['shreCli'] && (
+              {!simplified && features['shreCli'] && (
                 <button
                   tabIndex={-1}
                   onClick={() => {
@@ -936,7 +945,7 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
 
               {/* Terminal toggle */}
-              {features['terminal'] && (
+              {!simplified && features['terminal'] && (
                 <button
                   tabIndex={-1}
                   onClick={onToggleTerminal}
@@ -959,7 +968,7 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
 
               {/* View mode toggle */}
-              {showTerminal && (
+              {!simplified && showTerminal && (
                 <button
                   tabIndex={-1}
                   onClick={onToggleTermViewMode}

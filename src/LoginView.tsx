@@ -84,6 +84,35 @@ export function LoginView({ onLogin }: LoginProps) {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (data?.code === 'NO_ACCOUNT' || res.status === 404) {
+          setMode('signup');
+          setSignupEmail((prev) => prev || username.trim());
+          setError('No account found. Create one to continue.');
+          setLoading(false);
+          return;
+        }
+        if (res.status === 401 || data?.code === 'INVALID_CREDENTIALS') {
+          try {
+            const existsRes = await fetch(
+              `/api/auth/account-exists?username=${encodeURIComponent(username.trim())}`,
+            );
+            if (!existsRes.ok) {
+              setError(data.error || 'Login failed');
+              setLoading(false);
+              return;
+            }
+            const existsData = await existsRes.json();
+            if (!existsData?.exists) {
+              setMode('signup');
+              setSignupEmail((prev) => prev || username.trim());
+              setError('No account found. Create one to continue.');
+              setLoading(false);
+              return;
+            }
+          } catch {
+            // fall through to generic invalid credentials
+          }
+        }
         setError(data.error || 'Login failed');
         setLoading(false);
         return;
@@ -179,6 +208,12 @@ export function LoginView({ onLogin }: LoginProps) {
     setError('');
   };
 
+  const openSignup = () => {
+    setMode('signup');
+    setSignupEmail((prev) => prev || username.trim());
+    setError('');
+  };
+
   const EyeIcon = ({ open }: { open: boolean }) => (
     <svg
       width="18"
@@ -208,13 +243,13 @@ export function LoginView({ onLogin }: LoginProps) {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center"
+      className="min-h-screen flex items-start justify-center overflow-y-auto py-8"
       style={{
         background: 'var(--c-bg-main, #0d0d0f)',
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      <div className="w-full max-w-[380px] px-5">
+      <div className="w-full max-w-[380px] px-5 my-auto">
         <div className="text-center mb-8">
           <div
             className="w-14 h-14 rounded-2xl inline-flex items-center justify-center text-2xl font-bold text-white mb-4"
@@ -264,7 +299,7 @@ export function LoginView({ onLogin }: LoginProps) {
                     cursor: 'pointer',
                   }}
                 >
-                  {m === 'login' ? 'Sign In' : 'Create Account'}
+                  {m === 'login' ? 'Login' : 'Create Account'}
                 </button>
               ))}
             </div>
@@ -550,6 +585,20 @@ export function LoginView({ onLogin }: LoginProps) {
               >
                 {loading ? 'Signing in...' : 'Sign In'}
               </SButton>
+
+              <div className="mt-3 text-center">
+                <span className="text-xs" style={{ color: 'var(--c-text-4)' }}>
+                  New here?
+                </span>{' '}
+                <button
+                  type="button"
+                  onClick={openSignup}
+                  className="text-xs font-semibold bg-transparent border-none p-0 cursor-pointer"
+                  style={{ color: 'var(--c-accent)' }}
+                >
+                  Create account
+                </button>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleVerify2FA}>

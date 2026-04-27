@@ -16,7 +16,11 @@ import type {
 import { EMPTY_DATA, IMPORTANT_TYPES } from './status-bar/constants';
 import { formatCountdown } from './status-bar/helpers';
 
-export function StatusBar() {
+interface StatusBarProps {
+  customerFacing?: boolean;
+}
+
+export function StatusBar({ customerFacing = false }: StatusBarProps) {
   const { state, actions } = useApp();
   const [data, setData] = useState<StatusBarData>(EMPTY_DATA);
   const micEnabled = usePreferences((s) => s.micEnabled);
@@ -561,6 +565,185 @@ export function StatusBar() {
 
   // Connection status color
   const connColor = data.gatewayConnected ? '#22c55e' : '#ef4444';
+
+  if (customerFacing) {
+    return (
+      <div className="status-bar" style={styles.bar}>
+        <button
+          onClick={() => actions.setSidebarOpen(!state.sidebarOpen)}
+          className="shrink-0 p-2 md:p-1 rounded-lg transition-colors hover:bg-white/5"
+          style={{
+            color: 'var(--c-text-3)',
+            minWidth: 36,
+            minHeight: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          aria-label={state.sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        >
+          <svg
+            className="h-[18px] w-[18px] md:h-[16px] md:w-[16px]"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          >
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+          </svg>
+        </button>
+
+        <div className="status-bar-item flex items-center" style={{ ...styles.item, gap: 6 }}>
+          <span
+            className="shrink-0"
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: connColor,
+              boxShadow: data.gatewayConnected ? `0 0 6px ${connColor}` : 'none',
+            }}
+            title={data.gatewayConnected ? 'Connected' : 'Disconnected'}
+          />
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text-1)', lineHeight: 1 }}>
+            {currentAgent.name}
+          </span>
+          <svg
+            className="shrink-0"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--c-text-3)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        <div ref={bellRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => {
+              setBellOpen(!bellOpen);
+              if (!bellOpen) fetchNotifications();
+            }}
+            className="status-bar-item flex"
+            style={{
+              ...styles.iconBtn,
+              position: 'relative',
+              minWidth: 36,
+              minHeight: 36,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title={`${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}`}
+            aria-label="Notifications"
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -4,
+                  minWidth: 14,
+                  height: 14,
+                  borderRadius: 7,
+                  background: 'var(--c-danger, #ef4444)',
+                  color: '#fff',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  lineHeight: 1,
+                  boxShadow: '0 0 4px rgba(239,68,68,0.5)',
+                }}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        <NotificationPanel
+          bellOpen={bellOpen}
+          panelRef={panelRef}
+          notifications={notifications}
+          notifFilter={notifFilter}
+          liveTasks={liveTasks}
+          liveTasksLoading={liveTasksLoading}
+          liveAgents={liveAgents}
+          liveAgentsLoading={liveAgentsLoading}
+          liveServices={liveServices}
+          liveServicesLoading={liveServicesLoading}
+          taskActionMenu={taskActionMenu}
+          taskActionPending={taskActionPending}
+          showAssignDropdown={showAssignDropdown}
+          panelSearch={panelSearch}
+          restartingService={restartingService}
+          setBellOpen={setBellOpen}
+          setNotifFilter={setNotifFilter}
+          setTaskActionMenu={setTaskActionMenu}
+          setShowAssignDropdown={setShowAssignDropdown}
+          setPanelSearch={setPanelSearch}
+          clearAll={clearAll}
+          markRead={markRead}
+          dismissNotif={dismissNotif}
+          navigateToTask={navigateToTask}
+          fetchLiveTasks={fetchLiveTasks}
+          fetchLiveAgents={fetchLiveAgents}
+          fetchLiveServices={fetchLiveServices}
+          taskAction={taskAction}
+          reassignTask={reassignTask}
+          restartService={restartService}
+        />
+
+        <style>{`
+          .status-bar {
+            position: relative;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 38px;
+            padding: 0 10px;
+            padding-top: env(safe-area-inset-top, 0px);
+            flex-shrink: 0;
+            background: color-mix(in srgb, var(--c-bg-2, #0f0f1a) 80%, transparent);
+            backdrop-filter: blur(16px) saturate(1.4);
+            -webkit-backdrop-filter: blur(16px) saturate(1.4);
+            border-bottom: 1px solid var(--c-border-1, rgba(255,255,255,0.06));
+            font-family: inherit;
+            color: var(--c-text-2, #a1a1aa);
+            user-select: none;
+          }
+          .pwa-mode .status-bar { padding-top: 0; }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="status-bar" style={styles.bar}>
