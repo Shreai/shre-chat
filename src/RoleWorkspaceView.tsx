@@ -14,7 +14,7 @@ import {
   UserRound,
   WandSparkles,
 } from 'lucide-react';
-import { useApp, type FeedEntry, type ActivityEvent } from './store';
+import { useApp, uid, type FeedEntry, type ActivityEvent } from './store';
 import { ChatView } from './ChatView';
 import {
   getLoginTypeAccent,
@@ -48,6 +48,25 @@ type WorkspaceTask = {
   created_at?: string;
   assignee?: string;
 };
+
+const WORKSPACE_TASKS_KEY = 'shre-workspace-tasks';
+
+function loadStoredWorkspaceTasks(): WorkspaceTask[] {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_TASKS_KEY);
+    return raw ? (JSON.parse(raw) as WorkspaceTask[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredWorkspaceTasks(tasks: WorkspaceTask[]) {
+  try {
+    localStorage.setItem(WORKSPACE_TASKS_KEY, JSON.stringify(tasks));
+  } catch {
+    /* quota */
+  }
+}
 
 function resolveLoginType(
   authUser: AuthLike,
@@ -189,7 +208,9 @@ export function RoleWorkspaceView({
     return initial ? normalizeLoginType(initial) : null;
   });
   const [menuPanel, setMenuPanel] = useState<'sessions' | 'tasks' | 'feed' | 'agents'>('sessions');
-  const [workspaceTasks, setWorkspaceTasks] = useState<WorkspaceTask[]>([]);
+  const [workspaceTasks, setWorkspaceTasks] = useState<WorkspaceTask[]>(() =>
+    loadStoredWorkspaceTasks(),
+  );
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [taskDraftTitle, setTaskDraftTitle] = useState('');
@@ -207,7 +228,7 @@ export function RoleWorkspaceView({
   const isCustomerFacing = shellMode === 'customer';
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < 1280,
+    () => typeof window !== 'undefined' && window.innerWidth < 900,
   );
 
   useEffect(() => {
@@ -244,7 +265,7 @@ export function RoleWorkspaceView({
 
   useEffect(() => {
     const updateCompact = () => {
-      setIsCompactViewport(window.innerWidth < 1280);
+      setIsCompactViewport(window.innerWidth < 900);
     };
     updateCompact();
     window.addEventListener('resize', updateCompact);
@@ -287,6 +308,7 @@ export function RoleWorkspaceView({
   const queueCount = state.queue.length;
   const activeAgentsCount = statusSummary?.activeAgents ?? 0;
   const pendingTasksCount = statusSummary?.pendingTasks ?? queueCount;
+  const showLeftRail = !isCompactViewport;
   const showContextRail = !isCustomerFacing && !isCompactViewport;
 
   const recentSessions = useMemo(() => {
@@ -314,22 +336,25 @@ export function RoleWorkspaceView({
   const loadWorkspaceTasks = useCallback(async () => {
     setTasksLoading(true);
     setTasksError(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4000);
     try {
       const res = await fetch('/api/tasks?limit=8', {
         headers: authHeaders(),
+        signal: controller.signal,
       });
       if (!res.ok) {
         setTasksError('Could not load tasks');
-        setWorkspaceTasks([]);
         return;
       }
       const json = await res.json();
       const list = Array.isArray(json) ? json : json.tasks || [];
       setWorkspaceTasks(list);
+      saveStoredWorkspaceTasks(list);
     } catch {
-      setTasksError('Could not load tasks');
-      setWorkspaceTasks([]);
+      setTasksError(null);
     } finally {
+      window.clearTimeout(timeout);
       setTasksLoading(false);
     }
   }, [authHeaders]);
@@ -346,6 +371,24 @@ export function RoleWorkspaceView({
     const title = taskDraftTitle.trim();
     if (!title || !activeSession) return;
     setTaskSavingId('new');
+    const tempTask: WorkspaceTask = {
+      id: uid(),
+      title,
+      status: 'todo',
+      priority: taskDraftPriority,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setWorkspaceTasks((prev) => {
+      const next = [tempTask, ...prev].slice(0, 8);
+      saveStoredWorkspaceTasks(next);
+      return next;
+    });
+    actions.addFeed(activeSession.id, 'system', `Task created: ${title}`, {
+      loginType: shellMode,
+      surface: shellMode === 'customer' ? 'beta-production' : shellMode,
+    });
+    actions.setStatusLine(`Task created: ${title}`);
     try {
       const res = await fetch('/api/tasks/create', {
         method: 'POST',
@@ -360,20 +403,29 @@ export function RoleWorkspaceView({
           description: `Created from ${activeSession.title}`,
         }),
       });
-      if (!res.ok) {
-        setTasksError('Could not create task');
-        return;
+      if (!res.ok) return;
+      const payload = await res.json().catch(() => null);
+      const remoteId = payload?.task?.id;
+      if (remoteId) {
+        setWorkspaceTasks((prev) => {
+          const next = prev.map((task) =>
+            task.id === tempTask.id
+              ? {
+                  ...task,
+                  id: String(remoteId),
+                  status: payload?.task?.status || task.status,
+                }
+              : task,
+          );
+          saveStoredWorkspaceTasks(next);
+          return next;
+        });
       }
       setTaskDraftTitle('');
       setTaskDraftPriority('medium');
-      actions.addFeed(activeSession.id, 'system', `Task created: ${title}`, {
-        loginType: shellMode,
-        surface: shellMode === 'customer' ? 'beta-production' : shellMode,
-      });
-      actions.setStatusLine(`Task created: ${title}`);
       await loadWorkspaceTasks();
     } catch {
-      setTasksError('Could not create task');
+      /* keep local optimistic task */
     } finally {
       setTaskSavingId(null);
     }
@@ -393,6 +445,11 @@ export function RoleWorkspaceView({
       updates: Partial<Pick<WorkspaceTask, 'status' | 'priority' | 'title'>>,
     ) => {
       setTaskSavingId(taskId);
+      setWorkspaceTasks((prev) => {
+        const next = prev.map((task) => (task.id === taskId ? { ...task, ...updates } : task));
+        saveStoredWorkspaceTasks(next);
+        return next;
+      });
       try {
         const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
           method: 'PATCH',
@@ -402,13 +459,10 @@ export function RoleWorkspaceView({
           },
           body: JSON.stringify(updates),
         });
-        if (!res.ok) {
-          setTasksError('Could not update task');
-          return;
-        }
+        if (!res.ok) return;
         await loadWorkspaceTasks();
       } catch {
-        setTasksError('Could not update task');
+        /* keep local update */
       } finally {
         setTaskSavingId(null);
       }
@@ -419,18 +473,20 @@ export function RoleWorkspaceView({
   const deleteWorkspaceTask = useCallback(
     async (taskId: string) => {
       setTaskSavingId(taskId);
+      setWorkspaceTasks((prev) => {
+        const next = prev.filter((task) => task.id !== taskId);
+        saveStoredWorkspaceTasks(next);
+        return next;
+      });
       try {
         const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
           method: 'DELETE',
           headers: authHeaders(),
         });
-        if (!res.ok) {
-          setTasksError('Could not delete task');
-          return;
-        }
+        if (!res.ok) return;
         await loadWorkspaceTasks();
       } catch {
-        setTasksError('Could not delete task');
+        /* keep local delete */
       } finally {
         setTaskSavingId(null);
       }
@@ -501,7 +557,7 @@ export function RoleWorkspaceView({
               : 'lg:grid-cols-[320px_minmax(0,1fr)]',
           ].join(' ')}
         >
-          {showContextRail && (
+          {showLeftRail && (
             <aside className="hidden lg:flex min-h-0 flex-col gap-4">
               <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -1235,145 +1291,147 @@ export function RoleWorkspaceView({
             </div>
           </main>
 
-          <aside className="hidden lg:flex min-h-0 flex-col gap-4">
-            <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
-                    Case details
+          {showContextRail && (
+            <aside className="hidden lg:flex min-h-0 flex-col gap-4">
+              <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+                      Case details
+                    </div>
+                    <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em]">
+                      {activeSession?.title || 'New chat'}
+                    </h2>
                   </div>
-                  <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em]">
-                    {activeSession?.title || 'New chat'}
-                  </h2>
-                </div>
-                <div
-                  className="rounded-full px-3 py-1 text-xs font-medium text-white shadow-sm"
-                  style={{ backgroundColor: accent }}
-                >
-                  {copy.label}
-                </div>
-              </div>
-              <div className="mt-4 rounded-3xl border border-black/5 bg-slate-50 p-4">
-                <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                  Audience
-                </div>
-                <div className="mt-1 text-sm font-semibold">
-                  {shellMode === 'customer' ? 'Beta / Production' : copy.label}
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{copy.description}</p>
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold">Quick actions</div>
-                  <div className="text-xs text-slate-500">Role-aware shortcuts</div>
-                </div>
-                <WandSparkles className="h-4 w-4 text-slate-500" />
-              </div>
-              <div className="mt-3 space-y-2">
-                {quickActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <button
-                      key={action.label}
-                      type="button"
-                      disabled={!activeSession}
-                      onClick={() => runQuickAction(action.label, action.status)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        {action.label}
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-slate-400" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {shellMode !== 'customer' && (
-              <>
-                <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4 min-h-0 flex-1 flex flex-col">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold">Session summary</div>
-                      <div className="text-xs text-slate-500">Current conversation context</div>
-                    </div>
-                    <UserRound className="h-4 w-4 text-slate-500" />
-                  </div>
-
-                  <div className="mt-4 space-y-3 overflow-auto pr-1">
-                    <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                        Owner
-                      </div>
-                      <div className="mt-1 text-sm font-medium">
-                        {authUser.name}{' '}
-                        <span className="text-slate-500">({authUser.username})</span>
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                        Conversations
-                      </div>
-                      <div className="mt-1 text-sm font-medium">{sessions.length}</div>
-                    </div>
-                    <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                        Latest update
-                      </div>
-                      <div className="mt-1 text-sm font-medium">
-                        {activeSession
-                          ? formatClock(activeSession.updatedAt)
-                          : 'No session selected'}
-                      </div>
-                    </div>
+                  <div
+                    className="rounded-full px-3 py-1 text-xs font-medium text-white shadow-sm"
+                    style={{ backgroundColor: accent }}
+                  >
+                    {copy.label}
                   </div>
                 </div>
-
-                <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold">Recent feed</div>
-                      <div className="text-xs text-slate-500">Operational events</div>
-                    </div>
-                    <FolderKanban className="h-4 w-4 text-slate-500" />
+                <div className="mt-4 rounded-3xl border border-black/5 bg-slate-50 p-4">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                    Audience
                   </div>
-                  <div className="mt-4 space-y-3">
-                    {sessionFeed.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-black/10 bg-slate-50 px-3 py-4 text-sm text-slate-500">
-                        Activity cards will appear here once the conversation starts moving.
-                      </div>
-                    )}
-                    {sessionFeed.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3"
+                  <div className="mt-1 text-sm font-semibold">
+                    {shellMode === 'customer' ? 'Beta / Production' : copy.label}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{copy.description}</p>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Quick actions</div>
+                    <div className="text-xs text-slate-500">Role-aware shortcuts</div>
+                  </div>
+                  <WandSparkles className="h-4 w-4 text-slate-500" />
+                </div>
+                <div className="mt-3 space-y-2">
+                  {quickActions.map((action) => {
+                    const Icon = action.icon;
+                    return (
+                      <button
+                        key={action.label}
+                        type="button"
+                        disabled={!activeSession}
+                        onClick={() => runQuickAction(action.label, action.status)}
+                        className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                                {feedTypeLabel(entry.type)}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                {formatRelativeTime(entry.timestamp)}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-sm font-medium">{entry.message}</div>
-                          </div>
-                          <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+                        <span className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          {action.label}
+                        </span>
+                        <ArrowRight className="h-4 w-4 text-slate-400" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {shellMode !== 'customer' && (
+                <>
+                  <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4 min-h-0 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">Session summary</div>
+                        <div className="text-xs text-slate-500">Current conversation context</div>
+                      </div>
+                      <UserRound className="h-4 w-4 text-slate-500" />
+                    </div>
+
+                    <div className="mt-4 space-y-3 overflow-auto pr-1">
+                      <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                          Owner
+                        </div>
+                        <div className="mt-1 text-sm font-medium">
+                          {authUser.name}{' '}
+                          <span className="text-slate-500">({authUser.username})</span>
                         </div>
                       </div>
-                    ))}
+                      <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                          Conversations
+                        </div>
+                        <div className="mt-1 text-sm font-medium">{sessions.length}</div>
+                      </div>
+                      <div className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                          Latest update
+                        </div>
+                        <div className="mt-1 text-sm font-medium">
+                          {activeSession
+                            ? formatClock(activeSession.updatedAt)
+                            : 'No session selected'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </aside>
+
+                  <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">Recent feed</div>
+                        <div className="text-xs text-slate-500">Operational events</div>
+                      </div>
+                      <FolderKanban className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {sessionFeed.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-black/10 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                          Activity cards will appear here once the conversation starts moving.
+                        </div>
+                      )}
+                      {sessionFeed.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                                  {feedTypeLabel(entry.type)}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {formatRelativeTime(entry.timestamp)}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-sm font-medium">{entry.message}</div>
+                            </div>
+                            <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </aside>
+          )}
         </div>
       </div>
     </div>
