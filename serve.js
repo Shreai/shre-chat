@@ -1674,6 +1674,18 @@ async function requestHandler(req, res) {
   const url = new URL(req.url ?? "/", `${SCHEME}://localhost:${PORT}`);
   const correlationId = extractCorrelationId(req.headers);
   res.setHeader("x-correlation-id", correlationId);
+  const requestHost = (req.headers["x-forwarded-host"] || req.headers["host"] || "").split(":")[0].toLowerCase();
+
+  // chat.nirtek.net has been superseded by the Ellie framework in MIB.
+  // Keep only health/version probes here and redirect all user-facing traffic.
+  if (
+    requestHost === "chat.nirtek.net" &&
+    !["/api/health", "/api/readyz", "/health", "/readyz", "/api/version"].includes(url.pathname)
+  ) {
+    res.writeHead(302, { Location: "https://mib.nirtek.net/ellie" });
+    res.end();
+    return;
+  }
 
   // ── AI crawler blocking — reject known bot user-agents ────────
   const ua = (req.headers["user-agent"] || "").toLowerCase();
