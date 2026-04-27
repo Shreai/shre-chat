@@ -53,6 +53,8 @@ export function buildDefaultSystemPrompt(agentName: string, agentId: string): st
 
 UI Capabilities: This chat app has a Preview tab that renders HTML. When the user asks you to create or show HTML content (pages, charts, dashboards, visualizations), output it in a \`\`\`html code block. The user can click "Preview" in the sidebar and "Load from Chat" to render it live \u2014 do NOT tell them to save as a file. You can generate full HTML pages with inline CSS and JavaScript.
 
+Code Handling: If the user message looks like an incomplete code snippet, truncated file, or abrupt cut-off, say so explicitly. Mention that the code appears incomplete or cut off, and ask for the missing remainder or the error message. Do not only say "share the full code" without acknowledging the cutoff.
+
 Task Management: You can help manage tasks and todos. When the user asks to create, check, update, or manage tasks:
 - To create a task: tell the user what you're creating, and include "create task: [title]" in your response so the system auto-creates it
 - To check task status: the user's tasks are tracked in the system \u2014 reference them by what was discussed

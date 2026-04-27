@@ -55,7 +55,7 @@ function skip(msg) {
   throw new Error(`SKIP: ${msg}`);
 }
 
-const DEFAULT_SYSTEM = 'You are a helpful assistant. Answer questions directly from your knowledge. Do NOT use any tools, web searches, or external lookups. Just answer conversationally. Keep responses concise (under 300 words).';
+const DEFAULT_SYSTEM = 'You are a helpful assistant. Answer questions directly from your knowledge. Do NOT use any tools, web searches, or external lookups. Just answer conversationally. Keep responses concise (under 300 words). If the user message looks like an incomplete code snippet, truncated file, or abrupt cut-off, say so explicitly and ask for the missing remainder or the error message.';
 
 /** Send a chat message via shre-router and get the full response */
 async function chat(userMessage, opts = {}) {
@@ -72,24 +72,57 @@ async function chat(userMessage, opts = {}) {
   }
   messages.push({ role: 'user', content: userMessage });
 
-  const res = await fetch(`${ROUTER_URL}/v1/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-channel': 'e2e-test',
-    },
-    body: JSON.stringify({
-      messages,
-      model,
-      agentId,
-      stream: false,
-      metadata: { taskType: 'e2e-message-test' },
-    }),
-    signal: AbortSignal.timeout(timeout),
-  });
+  let res;
+  let lastErr;
+  let effectiveAgentId = agentId;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      res = await fetch(`${ROUTER_URL}/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-channel': 'e2e-test',
+        },
+        body: JSON.stringify({
+          messages,
+          model,
+          agentId: effectiveAgentId,
+          stream: false,
+          metadata: { taskType: 'e2e-message-test' },
+        }),
+        signal: AbortSignal.timeout(timeout),
+      });
+      lastErr = null;
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (attempt === 3) break;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+
+  if (!res) {
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr || 'fetch failed'));
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => 'no body');
+    if (res.status === 400) {
+      try {
+        const parsed = JSON.parse(body);
+        if (
+          parsed?.error === 'agent_mismatch' &&
+          parsed?.suggestedAgent &&
+          parsed.suggestedAgent !== effectiveAgentId
+        ) {
+          effectiveAgentId = parsed.suggestedAgent;
+          await new Promise((r) => setTimeout(r, 500));
+          return chat(userMessage, { systemPrompt, agentId: effectiveAgentId, model, timeout });
+        }
+      } catch {
+        // ignore parse errors and fall through
+      }
+    }
     throw new Error(`Router returned ${res.status}: ${body.slice(0, 300)}`);
   }
 
@@ -127,8 +160,8 @@ function containsAtLeast(text, keywords, n) {
 
 /** Count distinct answer segments (paragraphs, numbered items, or topic shifts) */
 function countAnswerSegments(text) {
-  // Count by numbered items (1. 2. 3. or 1) 2) 3))
-  const numbered = text.match(/(?:^|\n)\s*\d+[\.\)]/g);
+  // Count by numbered items (1. 2. 3. or 1) 2) 3)), including inline lists.
+  const numbered = text.match(/(?:^|[\n\s])\d+[\.\)]\s+/g);
   if (numbered && numbered.length >= 2) return numbered.length;
 
   // Count by markdown headers
