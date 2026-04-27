@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { FloatingMenu } from './FloatingMenu';
 
 export interface ModelInfo {
   id: string;
@@ -98,29 +99,12 @@ export function ModelPicker({
   agentName,
   pickerRef,
 }: ModelPickerProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   // Reset expanded group when closing
   useEffect(() => {
     if (!open) setExpandedGroup(null);
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(e.target as Node) &&
-        pickerRef.current &&
-        !pickerRef.current.contains(e.target as Node)
-      ) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose, pickerRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -179,290 +163,282 @@ export function ModelPicker({
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={onClose} />
-
+        <FloatingMenu
+          open={open}
+          onClose={onClose}
+          anchorRef={pickerRef}
+          width={300}
+          maxHeight={480}
+          alignment="end"
+          placement="bottom"
+          className="model-picker-dropdown flex flex-col rounded-xl overflow-hidden shadow-2xl"
+          style={{
+            background: 'var(--c-bg-2)',
+            border: '1px solid var(--c-border-1)',
+            animation: 'picker-fade-in 150ms ease-out forwards',
+          }}
+        >
+          {/* Header */}
           <div
-            ref={panelRef}
-            className="absolute right-0 z-50 flex flex-col rounded-xl overflow-hidden shadow-2xl model-picker-dropdown"
-            style={{
-              width: 300,
-              top: '100%',
-              marginTop: 4,
-              maxHeight: 'min(480px, calc(var(--vv-height, 100dvh) - 100px))',
-              background: 'var(--c-bg-2)',
-              border: '1px solid var(--c-border-1)',
-              animation: 'picker-fade-in 150ms ease-out forwards',
-            }}
+            className="px-3 pt-3 pb-2 shrink-0"
+            style={{ borderBottom: '1px solid var(--c-border-2)' }}
           >
-            {/* Header */}
-            <div
-              className="px-3 pt-3 pb-2 shrink-0"
-              style={{ borderBottom: '1px solid var(--c-border-2)' }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-semibold" style={{ color: 'var(--c-text-1)' }}>
-                  {expandedGroup ? (
-                    <button
-                      onClick={() => setExpandedGroup(null)}
-                      className="flex items-center gap-1"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--c-text-1)',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        padding: 0,
-                      }}
-                    >
-                      <svg
-                        className="h-3 w-3"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <polyline points="15 18 9 12 15 6" />
-                      </svg>
-                      {PROVIDER_GROUPS.find((g) => g.key === expandedGroup)?.label} Models
-                    </button>
-                  ) : (
-                    'AI Model'
-                  )}
-                </span>
-                <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                  for {agentName}
-                </span>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto overscroll-contain py-1">
-              {expandedGroup ? (
-                /* ── Individual models for expanded provider ── */
-                <>
-                  {/* Provider-level lock option — only for known providers, not the catch-all "other" group */}
-                  {expandedGroup !== 'other' && (
-                    <>
-                      <button
-                        onClick={() => {
-                          onSelectModel(`provider:${expandedGroup}`);
-                          onClose();
-                        }}
-                        className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
-                        style={{
-                          color: isProviderSelected(expandedGroup)
-                            ? 'var(--c-accent)'
-                            : 'var(--c-text-2)',
-                          background: isProviderSelected(expandedGroup)
-                            ? 'var(--c-accent-soft)'
-                            : 'transparent',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isProviderSelected(expandedGroup))
-                            e.currentTarget.style.background = 'var(--c-bg-hover)';
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isProviderSelected(expandedGroup))
-                            e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        <span className="text-[13px] w-5 text-center opacity-60">*</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-medium">Auto (best from provider)</div>
-                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                            Router picks optimal model
-                          </div>
-                        </div>
-                        {isProviderSelected(expandedGroup) && <CheckIcon />}
-                      </button>
-
-                      <div
-                        className="mx-3 my-1"
-                        style={{ borderTop: '1px solid var(--c-border-2)' }}
-                      />
-                    </>
-                  )}
-
-                  {/* Individual models */}
-                  {(grouped.get(expandedGroup) || []).map((m) => {
-                    const active = isModelSelected(m.id);
-                    const offline = m.connected === false;
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => {
-                          if (offline) return;
-                          onSelectModel(m.id);
-                          onClose();
-                        }}
-                        className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
-                        style={{
-                          color: active
-                            ? 'var(--c-accent)'
-                            : offline
-                              ? 'var(--c-text-4)'
-                              : 'var(--c-text-2)',
-                          background: active ? 'var(--c-accent-soft)' : 'transparent',
-                          opacity: offline ? 0.4 : 1,
-                          cursor: offline ? 'not-allowed' : 'pointer',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!active && !offline)
-                            e.currentTarget.style.background = 'var(--c-bg-hover)';
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!active) e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        <span className="text-[13px] w-5 text-center">{m.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-medium truncate">{m.name}</div>
-                          <div
-                            className="text-[10px] truncate"
-                            style={{ color: 'var(--c-text-4)' }}
-                          >
-                            {m.id}
-                          </div>
-                        </div>
-                        {offline && (
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
-                            style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
-                          >
-                            offline
-                          </span>
-                        )}
-                        {active && <CheckIcon />}
-                      </button>
-                    );
-                  })}
-                </>
-              ) : (
-                /* ── Top-level: Auto + provider groups ── */
-                <>
-                  {/* Auto option */}
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold" style={{ color: 'var(--c-text-1)' }}>
+                {expandedGroup ? (
                   <button
-                    onClick={() => {
-                      onSelectModel(null);
-                      onClose();
-                    }}
-                    className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
+                    onClick={() => setExpandedGroup(null)}
+                    className="flex items-center gap-1"
                     style={{
-                      color: isAutoSelected ? 'var(--c-accent)' : 'var(--c-text-2)',
-                      background: isAutoSelected ? 'var(--c-accent-soft)' : 'transparent',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isAutoSelected) e.currentTarget.style.background = 'var(--c-bg-hover)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isAutoSelected) e.currentTarget.style.background = 'transparent';
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--c-text-1)',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      padding: 0,
                     }}
                   >
-                    <span className="text-lg w-7 text-center">{'\u26A1'}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium">Auto</div>
-                      <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                        Best model per task
-                        {' \u00B7 '}
-                        {models.filter((m) => m.connected !== false).length} models online
-                      </div>
-                    </div>
-                    {isAutoSelected && <CheckIcon />}
+                    <svg
+                      className="h-3 w-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    {PROVIDER_GROUPS.find((g) => g.key === expandedGroup)?.label} Models
                   </button>
-
-                  <div className="mx-3 my-1" style={{ borderTop: '1px solid var(--c-border-2)' }} />
-
-                  {/* Provider groups */}
-                  {PROVIDER_GROUPS.map((group) => {
-                    const groupModels = grouped.get(group.key);
-                    if (!groupModels || groupModels.length === 0) return null;
-
-                    const onlineCount = groupModels.filter((m) => m.connected !== false).length;
-                    const allOffline = onlineCount === 0;
-                    const providerActive = isProviderSelected(group.key);
-                    // Check if a specific model from this group is selected
-                    const hasModelSelected = groupModels.some((m) => isModelSelected(m.id));
-                    const highlighted = providerActive || hasModelSelected;
-
-                    return (
-                      <button
-                        key={group.key}
-                        onClick={() => {
-                          if (allOffline) return;
-                          setExpandedGroup(group.key);
-                        }}
-                        className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
-                        style={{
-                          color: highlighted
-                            ? 'var(--c-accent)'
-                            : allOffline
-                              ? 'var(--c-text-4)'
-                              : 'var(--c-text-2)',
-                          background: highlighted ? 'var(--c-accent-soft)' : 'transparent',
-                          opacity: allOffline ? 0.4 : 1,
-                          cursor: allOffline ? 'not-allowed' : 'pointer',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!highlighted && !allOffline)
-                            e.currentTarget.style.background = 'var(--c-bg-hover)';
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!highlighted) e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        <span className="text-lg w-7 text-center">{group.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-medium">{group.label}</div>
-                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                            {onlineCount} model{onlineCount !== 1 ? 's' : ''} online
-                            {hasModelSelected && (
-                              <span style={{ color: 'var(--c-accent)' }}>
-                                {' \u00B7 '}
-                                {models.find((m) => isModelSelected(m.id))?.name}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {allOffline ? (
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
-                            style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
-                          >
-                            offline
-                          </span>
-                        ) : (
-                          <svg
-                            className="h-3.5 w-3.5 shrink-0 opacity-40"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <polyline points="9 6 15 12 9 18" />
-                          </svg>
-                        )}
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div
-              className="px-3 py-2 shrink-0"
-              style={{ borderTop: '1px solid var(--c-border-2)' }}
-            >
-              <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                {expandedGroup
-                  ? 'Pick a specific model or let the router choose the best one from this provider.'
-                  : 'Auto picks the best model per task. Expand a provider to pick a specific model.'}
-              </div>
+                ) : (
+                  'AI Model'
+                )}
+              </span>
+              <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                for {agentName}
+              </span>
             </div>
           </div>
-        </>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto overscroll-contain py-1">
+            {expandedGroup ? (
+              /* ── Individual models for expanded provider ── */
+              <>
+                {/* Provider-level lock option — only for known providers, not the catch-all "other" group */}
+                {expandedGroup !== 'other' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        onSelectModel(`provider:${expandedGroup}`);
+                        onClose();
+                      }}
+                      className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
+                      style={{
+                        color: isProviderSelected(expandedGroup)
+                          ? 'var(--c-accent)'
+                          : 'var(--c-text-2)',
+                        background: isProviderSelected(expandedGroup)
+                          ? 'var(--c-accent-soft)'
+                          : 'transparent',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isProviderSelected(expandedGroup))
+                          e.currentTarget.style.background = 'var(--c-bg-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isProviderSelected(expandedGroup))
+                          e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <span className="text-[13px] w-5 text-center opacity-60">*</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium">Auto (best from provider)</div>
+                        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                          Router picks optimal model
+                        </div>
+                      </div>
+                      {isProviderSelected(expandedGroup) && <CheckIcon />}
+                    </button>
+
+                    <div
+                      className="mx-3 my-1"
+                      style={{ borderTop: '1px solid var(--c-border-2)' }}
+                    />
+                  </>
+                )}
+
+                {/* Individual models */}
+                {(grouped.get(expandedGroup) || []).map((m) => {
+                  const active = isModelSelected(m.id);
+                  const offline = m.connected === false;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        if (offline) return;
+                        onSelectModel(m.id);
+                        onClose();
+                      }}
+                      className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors"
+                      style={{
+                        color: active
+                          ? 'var(--c-accent)'
+                          : offline
+                            ? 'var(--c-text-4)'
+                            : 'var(--c-text-2)',
+                        background: active ? 'var(--c-accent-soft)' : 'transparent',
+                        opacity: offline ? 0.4 : 1,
+                        cursor: offline ? 'not-allowed' : 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active && !offline)
+                          e.currentTarget.style.background = 'var(--c-bg-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <span className="text-[13px] w-5 text-center">{m.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium truncate">{m.name}</div>
+                        <div className="text-[10px] truncate" style={{ color: 'var(--c-text-4)' }}>
+                          {m.id}
+                        </div>
+                      </div>
+                      {offline && (
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
+                        >
+                          offline
+                        </span>
+                      )}
+                      {active && <CheckIcon />}
+                    </button>
+                  );
+                })}
+              </>
+            ) : (
+              /* ── Top-level: Auto + provider groups ── */
+              <>
+                {/* Auto option */}
+                <button
+                  onClick={() => {
+                    onSelectModel(null);
+                    onClose();
+                  }}
+                  className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
+                  style={{
+                    color: isAutoSelected ? 'var(--c-accent)' : 'var(--c-text-2)',
+                    background: isAutoSelected ? 'var(--c-accent-soft)' : 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isAutoSelected) e.currentTarget.style.background = 'var(--c-bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isAutoSelected) e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <span className="text-lg w-7 text-center">{'\u26A1'}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium">Auto</div>
+                    <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                      Best model per task
+                      {' \u00B7 '}
+                      {models.filter((m) => m.connected !== false).length} models online
+                    </div>
+                  </div>
+                  {isAutoSelected && <CheckIcon />}
+                </button>
+
+                <div className="mx-3 my-1" style={{ borderTop: '1px solid var(--c-border-2)' }} />
+
+                {/* Provider groups */}
+                {PROVIDER_GROUPS.map((group) => {
+                  const groupModels = grouped.get(group.key);
+                  if (!groupModels || groupModels.length === 0) return null;
+
+                  const onlineCount = groupModels.filter((m) => m.connected !== false).length;
+                  const allOffline = onlineCount === 0;
+                  const providerActive = isProviderSelected(group.key);
+                  // Check if a specific model from this group is selected
+                  const hasModelSelected = groupModels.some((m) => isModelSelected(m.id));
+                  const highlighted = providerActive || hasModelSelected;
+
+                  return (
+                    <button
+                      key={group.key}
+                      onClick={() => {
+                        if (allOffline) return;
+                        setExpandedGroup(group.key);
+                      }}
+                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
+                      style={{
+                        color: highlighted
+                          ? 'var(--c-accent)'
+                          : allOffline
+                            ? 'var(--c-text-4)'
+                            : 'var(--c-text-2)',
+                        background: highlighted ? 'var(--c-accent-soft)' : 'transparent',
+                        opacity: allOffline ? 0.4 : 1,
+                        cursor: allOffline ? 'not-allowed' : 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!highlighted && !allOffline)
+                          e.currentTarget.style.background = 'var(--c-bg-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!highlighted) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <span className="text-lg w-7 text-center">{group.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium">{group.label}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                          {onlineCount} model{onlineCount !== 1 ? 's' : ''} online
+                          {hasModelSelected && (
+                            <span style={{ color: 'var(--c-accent)' }}>
+                              {' \u00B7 '}
+                              {models.find((m) => isModelSelected(m.id))?.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {allOffline ? (
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
+                        >
+                          offline
+                        </span>
+                      ) : (
+                        <svg
+                          className="h-3.5 w-3.5 shrink-0 opacity-40"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <polyline points="9 6 15 12 9 18" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-3 py-2 shrink-0" style={{ borderTop: '1px solid var(--c-border-2)' }}>
+            <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+              {expandedGroup
+                ? 'Pick a specific model or let the router choose the best one from this provider.'
+                : 'Auto picks the best model per task. Expand a provider to pick a specific model.'}
+            </div>
+          </div>
+        </FloatingMenu>
       )}
 
       <style>{`

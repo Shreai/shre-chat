@@ -39,6 +39,7 @@ const THEME_KEY = 'shre-theme';
 export function useThemeEffect(theme: Theme) {
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light');
+    document.documentElement.style.colorScheme = theme;
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 }

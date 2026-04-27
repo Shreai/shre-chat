@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { FloatingMenu } from './FloatingMenu';
 
 interface Props {
   data: Record<string, unknown>[];
@@ -7,6 +8,7 @@ interface Props {
 
 export function ExportButton({ data, filename = 'export' }: Props) {
   const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   function downloadBlob(content: string, ext: string, mime: string) {
     const blob = new Blob([content], { type: mime });
@@ -40,7 +42,7 @@ export function ExportButton({ data, filename = 'export' }: Props) {
   if (!data.length) return null;
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={wrapperRef}>
       <button
         onClick={() => setOpen(!open)}
         className="px-2 py-1 rounded text-[11px] font-medium flex items-center gap-1 transition-colors"
@@ -63,43 +65,49 @@ export function ExportButton({ data, filename = 'export' }: Props) {
         </svg>
         Export
       </button>
-      {open && (
-        <div
-          className="absolute right-0 top-full mt-1 rounded-lg shadow-lg z-50 py-1"
-          style={{
-            background: 'var(--c-bg-2)',
-            border: '1px solid var(--c-border-1)',
-            minWidth: 100,
+      <FloatingMenu
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={wrapperRef}
+        width={112}
+        maxHeight={160}
+        alignment="end"
+        placement="bottom"
+        style={{
+          background: 'var(--c-bg-2)',
+          border: '1px solid var(--c-border-1)',
+          borderRadius: 12,
+          boxShadow: '0 16px 32px rgba(0,0,0,0.18)',
+          padding: '4px 0',
+        }}
+      >
+        <button
+          onClick={exportCSV}
+          className="w-full text-left px-3 py-1.5 text-[11px] transition-colors"
+          style={{ color: 'var(--c-text-2)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--c-bg-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
           }}
         >
-          <button
-            onClick={exportCSV}
-            className="w-full text-left px-3 py-1.5 text-[11px] transition-colors"
-            style={{ color: 'var(--c-text-2)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--c-bg-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            CSV
-          </button>
-          <button
-            onClick={exportJSON}
-            className="w-full text-left px-3 py-1.5 text-[11px] transition-colors"
-            style={{ color: 'var(--c-text-2)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--c-bg-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            JSON
-          </button>
-        </div>
-      )}
+          CSV
+        </button>
+        <button
+          onClick={exportJSON}
+          className="w-full text-left px-3 py-1.5 text-[11px] transition-colors"
+          style={{ color: 'var(--c-text-2)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--c-bg-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          JSON
+        </button>
+      </FloatingMenu>
     </div>
   );
 }

@@ -11,7 +11,9 @@ import {
   Sparkles,
   ShieldCheck,
   TriangleAlert,
+  Moon,
   UserRound,
+  SunMedium,
   WandSparkles,
 } from 'lucide-react';
 import { useApp, uid, type FeedEntry, type ActivityEvent } from './store';
@@ -201,7 +203,7 @@ export function RoleWorkspaceView({
   onLogout: () => void;
 }) {
   const { state, actions } = useApp();
-  const { sessions, activeSessionId, activity, feed, files } = state;
+  const { sessions, activeSessionId, activity, feed, files, theme } = state;
   const [shellLoginTypeOverride, setShellLoginTypeOverride] = useState<LoginType | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const initial = params.get('shellLoginType');
@@ -538,6 +540,7 @@ export function RoleWorkspaceView({
   };
 
   const shellTitle = shellMode === 'customer' ? 'Customer' : copy.label;
+  const themeLabel = theme === 'dark' ? 'Light mode' : 'Dark mode';
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden">
@@ -558,7 +561,7 @@ export function RoleWorkspaceView({
           ].join(' ')}
         >
           {showLeftRail && (
-            <aside className="hidden lg:flex min-h-0 flex-col gap-4">
+            <aside className="hidden lg:flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 pb-1">
               <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -568,13 +571,29 @@ export function RoleWorkspaceView({
                     <h1 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">{shellTitle}</h1>
                     <p className="mt-1 text-sm text-slate-600">{copy.description}</p>
                   </div>
-                  <button
-                    onClick={onLogout}
-                    type="button"
-                    className="rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
-                  >
-                    Logout
-                  </button>
+                  <div className="flex flex-col items-end gap-2">
+                    <button
+                      onClick={() => actions.toggleTheme()}
+                      type="button"
+                      className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                      title={themeLabel}
+                      aria-label={themeLabel}
+                    >
+                      {theme === 'dark' ? (
+                        <SunMedium className="h-3.5 w-3.5" />
+                      ) : (
+                        <Moon className="h-3.5 w-3.5" />
+                      )}
+                      {theme === 'dark' ? 'Light' : 'Dark'}
+                    </button>
+                    <button
+                      onClick={onLogout}
+                      type="button"
+                      className="rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                    >
+                      Logout
+                    </button>
+                  </div>
                 </div>
 
                 {isCustomerFacing ? (
@@ -615,34 +634,23 @@ export function RoleWorkspaceView({
                 )}
 
                 {!isCustomerFacing && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {(['dev', 'qa', 'beta', 'production'] as LoginType[]).map((type) => {
-                      const active = type === loginType;
-                      const isCustomer = type === 'beta' || type === 'production';
-                      const label = isCustomer
-                        ? type[0].toUpperCase() + type.slice(1)
-                        : type.toUpperCase();
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => setShellLoginType(type)}
-                          className={[
-                            'rounded-full border px-3.5 py-2 text-[12px] font-medium tracking-wide transition',
-                            active
-                              ? 'border-transparent text-white shadow-sm'
-                              : 'border-black/5 bg-white text-slate-500 hover:bg-slate-100',
-                          ].join(' ')}
-                          style={{
-                            minHeight: 44,
-                            backgroundColor: active ? accent : undefined,
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
+                  <div className="mt-4 rounded-3xl border border-black/5 bg-slate-50 px-3 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                      Login mode
+                    </label>
+                    <div className="mt-2">
+                      <select
+                        value={loginType}
+                        onChange={(event) => setShellLoginType(event.target.value as LoginType)}
+                        className="w-full rounded-2xl border border-black/5 bg-white px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-black/10 focus:bg-white"
+                        style={{ minHeight: 44 }}
+                      >
+                        <option value="dev">Dev</option>
+                        <option value="qa">QA</option>
+                        <option value="beta">Beta</option>
+                        <option value="production">Production</option>
+                      </select>
+                    </div>
                   </div>
                 )}
 
@@ -958,6 +966,21 @@ export function RoleWorkspaceView({
                   <Plus className="h-3.5 w-3.5" />
                   New case
                 </button>
+                <button
+                  onClick={() => actions.toggleTheme()}
+                  type="button"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-black/5 bg-slate-50 px-4 py-2.5 text-xs font-medium text-slate-700"
+                  style={{ minHeight: 44 }}
+                  title={themeLabel}
+                  aria-label={themeLabel}
+                >
+                  {theme === 'dark' ? (
+                    <SunMedium className="h-3.5 w-3.5" />
+                  ) : (
+                    <Moon className="h-3.5 w-3.5" />
+                  )}
+                  {theme === 'dark' ? 'Light' : 'Dark'}
+                </button>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {isCustomerFacing ? (
@@ -1044,6 +1067,25 @@ export function RoleWorkspaceView({
                 </div>
               </div>
 
+              {!isCustomerFacing && (
+                <div className="mt-3 rounded-[20px] border border-black/5 bg-white p-3 shadow-sm">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+                    Login mode
+                  </div>
+                  <select
+                    value={loginType}
+                    onChange={(event) => setShellLoginType(event.target.value as LoginType)}
+                    className="mt-2 w-full rounded-2xl border border-black/5 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-black/10 focus:bg-white"
+                    style={{ minHeight: 44 }}
+                  >
+                    <option value="dev">Dev</option>
+                    <option value="qa">QA</option>
+                    <option value="beta">Beta</option>
+                    <option value="production">Production</option>
+                  </select>
+                </div>
+              )}
+
               <div className="mt-3 rounded-[20px] border border-black/5 bg-white p-3 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1098,7 +1140,7 @@ export function RoleWorkspaceView({
                 </div>
 
                 {showContextRail && (
-                  <section className="hidden xl:flex min-h-0 flex-col border-l border-black/5 bg-[rgba(248,247,243,0.88)] p-4">
+                  <section className="hidden xl:flex min-h-0 flex-col border-l border-black/5 bg-[rgba(248,247,243,0.88)] p-4 overflow-y-auto overscroll-contain">
                     {isCustomerFacing ? (
                       <>
                         <div className="rounded-[26px] border border-black/5 bg-white p-4 shadow-sm">
@@ -1292,7 +1334,7 @@ export function RoleWorkspaceView({
           </main>
 
           {showContextRail && (
-            <aside className="hidden lg:flex min-h-0 flex-col gap-4">
+            <aside className="hidden lg:flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 pb-1">
               <div className="rounded-[28px] border border-black/5 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>

@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
+import { FloatingMenu } from './FloatingMenu';
 
 interface Workspace {
   id: string;
@@ -20,14 +21,6 @@ export function WorkspaceSwitcher({
 }: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   if (!activeWorkspace || workspaces.length <= 1) return null;
 
@@ -66,32 +59,47 @@ export function WorkspaceSwitcher({
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1">
-          <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-            Workspaces
-          </div>
-          {workspaces.map((ws) => (
-            <button
-              key={ws.id}
-              onClick={() => {
-                if (ws.id !== activeWorkspace.id) {
-                  onSwitch(ws.id);
-                }
-                setOpen(false);
-              }}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors
-                ${ws.id === activeWorkspace.id ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${ws.id === activeWorkspace.id ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-              />
-              <span className="flex-1 text-left truncate">{ws.name}</span>
-              {roleBadge(ws.role)}
-            </button>
-          ))}
+      <FloatingMenu
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={ref}
+        width={224}
+        maxHeight={320}
+        alignment="start"
+        placement="bottom"
+        style={{
+          background: 'var(--c-bg-2)',
+          border: '1px solid var(--c-border-1)',
+          borderRadius: 16,
+          boxShadow: '0 18px 40px rgba(0,0,0,0.18)',
+          padding: '6px 0',
+        }}
+      >
+        <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--c-text-4)]">
+          Workspaces
         </div>
-      )}
+        {workspaces.map((ws) => (
+          <button
+            key={ws.id}
+            onClick={() => {
+              if (ws.id !== activeWorkspace.id) {
+                onSwitch(ws.id);
+              }
+              setOpen(false);
+            }}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--c-bg-hover)] ${
+              ws.id === activeWorkspace.id ? 'bg-[var(--c-bg-active)]' : ''
+            }`}
+            style={{ color: 'var(--c-text-1)' }}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${ws.id === activeWorkspace.id ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+            />
+            <span className="flex-1 text-left truncate">{ws.name}</span>
+            {roleBadge(ws.role)}
+          </button>
+        ))}
+      </FloatingMenu>
     </div>
   );
 }

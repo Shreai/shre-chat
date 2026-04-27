@@ -720,6 +720,7 @@ export function ChatPanels(props: any) {
               onDownloadMd={handleDownloadMd}
               onDownloadJson={handleDownloadJson}
               onToggleApps={() => setShowApps(!showApps)}
+              headerMoreRef={headerMoreRef}
               view={view}
               onSetView={(v) => actions.setView(v as View)}
               sessions={sessions}

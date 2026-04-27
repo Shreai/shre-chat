@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import type { View } from './store';
+import { FloatingMenu } from './components/FloatingMenu';
 
 // ── View labels for the nav header ──
 export const VIEW_LABELS: Record<string, string> = {
@@ -60,14 +61,6 @@ export function ViewNavHeader(props: ViewNavHeaderProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    if (open) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
   if ('title' in props && !props.view) {
     return (
       <header
@@ -126,7 +119,7 @@ export function ViewNavHeader(props: ViewNavHeaderProps) {
 
       <div style={{ width: 1, height: 16, background: 'var(--c-border-2)' }} />
 
-      <div className="relative" ref={ref}>
+      <div ref={ref}>
         <button
           onClick={() => setOpen(!open)}
           className="flex items-center gap-1.5 px-2 py-1.5 md:py-1 rounded-lg text-[13px] font-medium transition-colors hover:bg-white/5"
@@ -149,50 +142,52 @@ export function ViewNavHeader(props: ViewNavHeaderProps) {
           </svg>
         </button>
 
-        {open && (
-          <div
-            className="absolute left-0 top-full mt-1 z-[60] w-52 rounded-xl shadow-xl py-1"
-            style={{
-              background: 'var(--c-bg-2)',
-              border: '1px solid var(--c-border-2)',
-              maxHeight:
-                'min(420px, calc(var(--vv-height, 100dvh) - 80px - env(safe-area-inset-bottom, 0px)))',
-              overflowY: 'auto',
-            }}
-          >
-            {NAV_VIEWS.filter((item) => item.key !== 'investor' || __SHRE_INTERNAL__).map(
-              (item) => {
-                const showSection = item.section !== lastSection;
-                lastSection = item.section;
-                return (
-                  <div key={item.key}>
-                    {showSection && (
-                      <div
-                        className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
-                        style={{ color: 'var(--c-text-4)' }}
-                      >
-                        {item.section}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => onSwitch(item.key)}
-                      className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-                      style={{ color: view === item.key ? 'var(--c-accent)' : 'var(--c-text-1)' }}
-                    >
-                      {view === item.key && (
-                        <span
-                          className="inline-block h-1.5 w-1.5 rounded-full"
-                          style={{ background: 'var(--c-accent)' }}
-                        />
-                      )}
-                      {item.label}
-                    </button>
+        <FloatingMenu
+          open={open}
+          onClose={() => setOpen(false)}
+          anchorRef={ref}
+          width={208}
+          maxHeight={420}
+          alignment="start"
+          placement="bottom"
+          style={{
+            background: 'var(--c-bg-2)',
+            border: '1px solid var(--c-border-2)',
+            borderRadius: 16,
+            boxShadow: '0 20px 44px rgba(0,0,0,0.18)',
+            padding: '6px 0',
+          }}
+        >
+          {NAV_VIEWS.filter((item) => item.key !== 'investor' || __SHRE_INTERNAL__).map((item) => {
+            const showSection = item.section !== lastSection;
+            lastSection = item.section;
+            return (
+              <div key={item.key}>
+                {showSection && (
+                  <div
+                    className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
+                    style={{ color: 'var(--c-text-4)' }}
+                  >
+                    {item.section}
                   </div>
-                );
-              },
-            )}
-          </div>
-        )}
+                )}
+                <button
+                  onClick={() => onSwitch(item.key)}
+                  className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-[var(--c-bg-hover)]"
+                  style={{ color: view === item.key ? 'var(--c-accent)' : 'var(--c-text-1)' }}
+                >
+                  {view === item.key && (
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full"
+                      style={{ background: 'var(--c-accent)' }}
+                    />
+                  )}
+                  {item.label}
+                </button>
+              </div>
+            );
+          })}
+        </FloatingMenu>
       </div>
 
       <div className="flex-1" />

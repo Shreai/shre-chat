@@ -565,15 +565,13 @@ function MainApp({
   const [gatewayUp, setGatewayUp] = useState<boolean | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [syncing, setSyncing] = useState(false);
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(THEME_KEY) as Theme) || 'light',
-  );
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'light';
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const useLegacyShell = new URLSearchParams(window.location.search).get('legacy') === 'true';
-
-  useEffect(() => {
-    if (localStorage.getItem(THEME_KEY)) return;
-    setTheme('light');
-  }, []);
 
   // ── RapidRMS live anomaly stream ──
   const rapidrmsWorkspace = activeWorkspace?.id || getStoredWorkspaceId();
