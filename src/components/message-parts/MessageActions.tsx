@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { copyToClipboard, REACTION_EMOJIS, TAG_STYLES } from '../../chat-utils';
 import { usePreferences } from '../../preferences-store';
+import { pickBrowserVoice, prepareSpeechText } from '../../voice/voice-utils';
 
 const MessageExportMenu = lazy(() =>
   import('../MessageExportMenu').then((m) => ({ default: m.MessageExportMenu })),
@@ -99,17 +100,7 @@ export function MessageActions({
     const abort = new AbortController();
     speakAbortRef.current = abort;
     try {
-      const plainText = content
-        .replace(/```[\s\S]*?```/g, ' code block omitted ')
-        .replace(/`[^`]+`/g, (m) => m.slice(1, -1))
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-        .replace(/#{1,6}\s+/g, '')
-        .replace(/[*_~]{1,3}/g, '')
-        .replace(/\n{2,}/g, '. ')
-        .replace(/\n/g, ' ')
-        .trim()
-        .slice(0, 4096);
+      const plainText = prepareSpeechText(content);
       if (!plainText) {
         setSpeaking(false);
         return;
@@ -157,8 +148,12 @@ export function MessageActions({
     } catch (err: unknown) {
       if ((err as { name?: string } | null)?.name !== 'AbortError') {
         if (window.speechSynthesis) {
-          const utter = new SpeechSynthesisUtterance(content.slice(0, 1000));
-          utter.rate = 1.0;
+          const utter = new SpeechSynthesisUtterance(prepareSpeechText(content).slice(0, 1000));
+          utter.rate = 0.95;
+          utter.pitch = 1.0;
+          utter.lang = 'en-US';
+          const browserVoice = pickBrowserVoice();
+          if (browserVoice) utter.voice = browserVoice;
           utter.onend = () => setSpeaking(false);
           window.speechSynthesis.speak(utter);
           return;

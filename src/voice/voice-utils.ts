@@ -21,6 +21,73 @@ export interface VoiceShortcut {
   lastUsed: number;
 }
 
+function formatAmountForSpeech(raw: string): string {
+  const clean = raw.replace(/,/g, '');
+  const negative = clean.startsWith('-');
+  const normalized = negative ? clean.slice(1) : clean;
+  const [dollarsRaw, centsRaw = ''] = normalized.split('.');
+  const dollars = Number.parseInt(dollarsRaw || '0', 10);
+  const cents = Number.parseInt((centsRaw + '00').slice(0, 2), 10);
+  if (!Number.isFinite(dollars) || Number.isNaN(cents)) return raw;
+
+  const dollarWord = dollars === 1 && cents === 0 ? 'dollar' : 'dollars';
+  const centWord = cents === 1 ? 'cent' : 'cents';
+  const dollarPart = dollars.toLocaleString('en-US');
+
+  let spoken: string;
+  if (dollars === 0 && cents > 0) {
+    spoken = `${cents} ${centWord}`;
+  } else if (cents > 0) {
+    spoken = `${dollarPart} ${dollarWord} and ${cents} ${centWord}`;
+  } else {
+    spoken = `${dollarPart} ${dollarWord}`;
+  }
+
+  return negative ? `minus ${spoken}` : spoken;
+}
+
+/**
+ * Prepare assistant text for speech engines.
+ * Keeps the current markdown stripping, then rewrites obvious money amounts
+ * into natural spoken currency phrases so the result does not sound robotic.
+ */
+export function prepareSpeechText(t: string): string {
+  const source = stripMd(t);
+  if (!source) return '';
+
+  const amountContext =
+    /(?:\b(?:sales?|revenue|income|profit|loss|amount|total|balance|tax|discount|ticket|avg|average|gross|net|cash|change)\b|\$)/i;
+  const shouldNormalizePlainDecimals = amountContext.test(source);
+
+  let s = source.replace(/\$(-?\d[\d,]*)(?:\.(\d{1,2}))?(?!\d)/g, (_m, dollars, cents = '') =>
+    formatAmountForSpeech(`${dollars}.${(cents + '00').slice(0, 2)}`),
+  );
+
+  if (shouldNormalizePlainDecimals) {
+    s = s.replace(
+      /(?<![\w/.-])(-?\d[\d,]*)(?:\.(\d{1,2}))(?!\d)(?!\s*%)/g,
+      (_m, dollars, cents = '') =>
+        formatAmountForSpeech(`${dollars}.${(cents + '00').slice(0, 2)}`),
+    );
+  }
+
+  return s.replace(/\s+/g, ' ').trim().slice(0, 4096);
+}
+
+export function pickBrowserVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+
+  const preferred = voices.find((v) => {
+    const key = `${v.name} ${v.voiceURI}`.toLowerCase();
+    return /natural|neural|premium|enhanced|microsoft|google/.test(key) && /^en/i.test(v.lang);
+  });
+  if (preferred) return preferred;
+
+  return voices.find((v) => /^en/i.test(v.lang)) || voices[0] || null;
+}
+
 /** Strip markdown for TTS — converts tables to spoken form, removes formatting */
 export function stripMd(t: string): string {
   let s = t

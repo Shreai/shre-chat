@@ -4006,7 +4006,7 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── TTS endpoint — fallback chain: local piper → shre-voice → shre-router (OpenAI) ──
+  // ── TTS endpoint — provider-aware fallback chain favoring cloud/human voices ──
   if (url.pathname === "/api/tts" && req.method === "POST") {
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
@@ -4015,20 +4015,25 @@ async function requestHandler(req, res) {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
         if (!body.input) return json(res, { error: "Missing input text" }, 400);
 
+        const provider = String(body.provider || "auto").toLowerCase();
+        const routerSpeech = `${serviceUrl("shre-router")}/v1/audio/speech`;
+        const localSpeech = "http://127.0.0.1:5464/v1/audio/speech"; // local piper-tts
+        const voiceSpeech = "http://127.0.0.1:5456/v1/audio/speech"; // shre-voice / NVIDIA-backed local TTS
+
+        const ttsEndpoints =
+          provider === "personaplex"
+            ? [voiceSpeech, routerSpeech, localSpeech]
+            : provider === "elevenlabs"
+              ? [routerSpeech, voiceSpeech, localSpeech]
+              : [routerSpeech, voiceSpeech, localSpeech];
+
         const ttsPayload = JSON.stringify({
           input: body.input,
           voice: body.voice || "nova",
           model: body.model || "tts-1-hd",
           speed: body.speed || 1.05,
-          provider: body.provider || "auto",
+          provider,
         });
-
-        // Fallback chain: local → shre-voice → shre-router
-        const ttsEndpoints = [
-          "http://127.0.0.1:5464/v1/audio/speech",           // local piper-tts
-          "http://127.0.0.1:5456/v1/audio/speech",           // shre-voice
-          `${serviceUrl("shre-router")}/v1/audio/speech`,    // shre-router (OpenAI)
-        ];
 
         for (let i = 0; i < ttsEndpoints.length; i++) {
           try {
@@ -4052,11 +4057,11 @@ async function requestHandler(req, res) {
             }
 
             const audioBuffer = await ttsRes.arrayBuffer();
-            const provider = ttsRes.headers.get("X-TTS-Provider") || (i === 0 ? "piper-local" : "cloud");
+            const ttsProviderName = ttsRes.headers.get("X-TTS-Provider") || (i === 0 ? "piper-local" : "cloud");
             res.writeHead(200, {
               "Content-Type": ttsRes.headers.get("Content-Type") || "audio/mpeg",
               "Content-Length": audioBuffer.byteLength,
-              "X-TTS-Provider": provider,
+              "X-TTS-Provider": ttsProviderName,
             });
             return res.end(Buffer.from(audioBuffer));
           } catch (err) {
@@ -4086,6 +4091,8 @@ async function requestHandler(req, res) {
       const parsed = JSON.parse(body);
       if (!parsed.input) return json(res, { error: "Missing input text" }, 400);
 
+      const provider = String(parsed.provider || "auto").toLowerCase();
+
       const routerRes = await fetch(`${serviceUrl("shre-router")}/v1/audio/speech/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4094,7 +4101,7 @@ async function requestHandler(req, res) {
           voice: parsed.voice || "nova",
           model: parsed.model || "tts-1-hd",
           speed: parsed.speed || 1.05,
-          provider: parsed.provider || "auto",
+          provider,
         }),
         signal: AbortSignal.timeout(30000),
       });

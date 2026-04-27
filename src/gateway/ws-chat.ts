@@ -215,7 +215,11 @@ export async function sendChatWS(
       } else if (payload.state === 'compacting' || payload.state === 'summarizing') {
         callbacks.onStatus?.(payload.state);
         updateStreamStatus('compacting');
-      } else if (payload.state === 'final') {
+      } else if (
+        payload.state === 'final' ||
+        payload.state === 'done' ||
+        payload.state === 'completed'
+      ) {
         const content = payload.message?.content;
         let finalText = '';
         if (Array.isArray(content)) {

@@ -924,6 +924,21 @@ async function streamViaFallback(
   let buffer = '';
   let routedModel = '';
   const fallbackStart = Date.now();
+  let finalized = false;
+  const finalize = async (
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    status?: 'done' | 'error',
+  ): Promise<void> => {
+    if (finalized) return;
+    finalized = true;
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+    if (status === 'done') callbacks.onStatus?.('done');
+    callbacks.onDone(fullText);
+  };
 
   // Stream silence timeout — backend handles model-level timeouts and fallbacks
   // Frontend only kills on genuinely dead connections (5min)
@@ -1016,11 +1031,11 @@ async function streamViaFallback(
             if (usage && routedModel) {
               reportUsage(routedModel, usage, Date.now() - fallbackStart, requestAgentId);
             }
-            callbacks.onStatus?.('done');
+            await finalize(reader, 'done');
+            return;
           } else if (evt.type === 'agent_route') {
             callbacks.onAgentRoute?.(evt as AgentRouteInsight);
           } else if (evt.type === 'done') {
-            callbacks.onStatus?.('done');
             // Report usage — estimate tokens from text if no usage in event
             if (evt.usage) {
               reportUsage(
@@ -1039,6 +1054,8 @@ async function streamViaFallback(
                 requestAgentId,
               );
             }
+            await finalize(reader, 'done');
+            return;
           } else if (evt.type === 'tool_status') {
             const toolName = evt.tool || (evt.tools || []).join(', ');
             if (evt.status === 'executing' || evt.status === 'running') {
@@ -1194,6 +1211,18 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
   let buffer = '';
   let currentEvent = '';
   const streamStart = Date.now();
+  let finalized = false;
+  const finalize = async (status?: 'done' | 'error'): Promise<void> => {
+    if (finalized) return;
+    finalized = true;
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+    if (status === 'done') callbacks.onStatus?.('done');
+    callbacks.onDone(fullText);
+  };
 
   try {
     while (true) {
@@ -1252,7 +1281,8 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
               evtType === 'response.completed' ||
               evtType === 'response.output_text.done'
             ) {
-              callbacks.onStatus('done');
+              await finalize('done');
+              return;
             }
           }
 
@@ -1283,7 +1313,7 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
     reader.releaseLock();
   }
 
-  callbacks.onDone(fullText);
+  await finalize('done');
 }
 
 /**

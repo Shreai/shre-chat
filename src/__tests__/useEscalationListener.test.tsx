@@ -2,7 +2,10 @@
 import React, { useEffect } from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useEscalationListener } from '../hooks/useEscalationListener';
+import {
+  useEscalationListener,
+  type UseEscalationListenerOptions,
+} from '../hooks/useEscalationListener';
 
 type MessageHandler = (event: { data: string }) => void;
 
@@ -29,7 +32,7 @@ function Harness({
   addMessage,
 }: {
   activeSessionId: string | null;
-  addMessage: ReturnType<typeof vi.fn>;
+  addMessage: UseEscalationListenerOptions['addMessage'];
 }) {
   useEscalationListener({ activeSessionId, addMessage });
   useEffect(() => undefined, []);

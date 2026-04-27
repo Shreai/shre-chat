@@ -45,7 +45,7 @@ const ESCALATION_TYPES = new Set([
   'conversation.reopened',
 ]);
 
-interface UseEscalationListenerOptions {
+export interface UseEscalationListenerOptions {
   activeSessionId: string | null;
   addMessage: (
     sessionId: string,
