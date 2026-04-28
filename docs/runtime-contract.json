@@ -1,0 +1,141 @@
+{
+  "name": "shre-chat-evidence-first-runtime",
+  "version": "0.1.0",
+  "description": "Runtime contract for evidence-first chat: classify, gate, retrieve, reason, optionally act, then verify.",
+  "principles": {
+    "evidence_first": true,
+    "tools_are_actions": true,
+    "models_are_reasoners": true,
+    "policy_is_gatekeeper": true,
+    "verification_required": true
+  },
+  "pipeline": [
+    "classifier_and_policy_gate",
+    "scoped_evidence_retrieval",
+    "evidence_normalization",
+    "reasoning_over_evidence_packet",
+    "optional_tool_execution",
+    "verifier",
+    "final_answer_or_action_log"
+  ],
+  "context_packet": {
+    "request_id": "req_001",
+    "tenant_id": "org_123",
+    "query": "Why did customer ABC pay in POS but still show unpaid in accounting?",
+    "domains": ["crm", "pos", "accounting"],
+    "objects": ["Customer", "Payment", "Invoice", "Order"],
+    "allowed_tools": [
+      "crm_customer_lookup",
+      "pos_transaction_search",
+      "accounting_invoice_search",
+      "accounting_payment_match"
+    ],
+    "blocked_domains": ["payroll", "hr", "inventory_write", "scheduling"],
+    "risk_level": "medium",
+    "requires_approval": false,
+    "evidence": [
+      {
+        "source": "pos",
+        "object_type": "Payment",
+        "record_id": "pay_123",
+        "fields": {
+          "customer_id": "cus_77",
+          "amount": 182.4,
+          "status": "captured",
+          "date": "2026-04-27"
+        },
+        "citation": "pos://payments/pay_123"
+      },
+      {
+        "source": "accounting",
+        "object_type": "Invoice",
+        "record_id": "inv_456",
+        "fields": {
+          "customer_id": "cus_77",
+          "amount": 182.4,
+          "status": "unpaid"
+        },
+        "citation": "accounting://invoices/inv_456"
+      }
+    ]
+  },
+  "tool_classes": {
+    "read_tools": [
+      "crm_customer_lookup",
+      "pos_transaction_search",
+      "accounting_invoice_search",
+      "erp_inventory_lookup",
+      "schedule_shift_lookup"
+    ],
+    "write_tools": [
+      "issue_refund",
+      "match_payment_to_invoice",
+      "adjust_inventory",
+      "create_shift",
+      "send_customer_email",
+      "create_journal_entry"
+    ],
+    "workflow_tools": [
+      "create_reconciliation_task",
+      "route_to_specialist",
+      "request_preview"
+    ]
+  },
+  "object_index": {
+    "Customer": {
+      "sources": ["crm", "pos", "accounting"],
+      "tools": ["crm_customer_lookup", "pos_customer_lookup"]
+    },
+    "Payment": {
+      "sources": ["pos", "accounting"],
+      "tools": ["pos_transaction_search", "accounting_payment_search", "accounting_payment_match"]
+    },
+    "Invoice": {
+      "sources": ["accounting"],
+      "tools": ["accounting_invoice_search"]
+    },
+    "Order": {
+      "sources": ["pos", "erp"],
+      "tools": ["pos_order_search", "erp_order_lookup"]
+    },
+    "Shift": {
+      "sources": ["scheduling"],
+      "tools": ["schedule_shift_lookup"]
+    },
+    "LedgerEntry": {
+      "sources": ["accounting"],
+      "tools": ["accounting_ledger_lookup", "create_journal_entry"]
+    }
+  },
+  "verification": {
+    "required": true,
+    "checks": [
+      "claim_to_record_mapping",
+      "tool_allowlist_validation",
+      "permission_validation",
+      "field_fidelity_validation",
+      "read_vs_write_classification",
+      "approval_state_validation_for_high_risk_actions"
+    ]
+  },
+  "high_risk_actions": {
+    "categories": ["money", "payroll", "tax", "refunds", "inventory", "schedule_changes"],
+    "approval_flow": ["draft", "preview", "user_approval", "execute"]
+  },
+  "example_answer_shape": {
+    "answer": "The POS payment and accounting invoice match on amount and customer, but the invoice is still unpaid, which suggests the payment has not been reconciled.",
+    "sources": [
+      {
+        "citation": "pos://payments/pay_123",
+        "claim": "POS shows a captured payment of 182.4 on 2026-04-27."
+      },
+      {
+        "citation": "accounting://invoices/inv_456",
+        "claim": "Accounting shows invoice inv_456 as unpaid for the same amount."
+      }
+    ],
+    "action_log": [
+      "No write action taken."
+    ]
+  }
+}

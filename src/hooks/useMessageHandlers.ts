@@ -1,8 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePreferences } from '../preferences-store';
-import { sendMessage, type ChatMessage, type PreviewGatePayload } from '../router-client';
-import { isWSConnected } from '../gateway-ws';
+import {
+  sendMessage,
+  type ChatMessage,
+  type PreviewGatePayload,
+  type ChatErrorEnvelope,
+} from '../router-client';
 import { getAgent, type UploadedFile, type Session, type AppActions } from '../store';
+import { getStoredWorkspaceId } from '../workspace-context';
 import { playNotifSound } from '../chat-utils';
 import { streamViaCLI } from './cli-streaming';
 import { fetchSuggestions, verifyIdentityCode, sendFeedbackToServer } from './message-utils';
@@ -10,12 +15,17 @@ import type { ProcessStep } from '../components/process-bar/types';
 
 // ── Extracted modules ──
 import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handlers/handler-utils';
-import { anchorContextIfNeeded, fetchContextSources } from './message-handlers/context-builder';
+import { anchorContextIfNeeded, buildScopedRuntimePacket, fetchContextSources } from './message-handlers/context-builder';
 import { useTaskIntents } from './message-handlers/task-intents';
 import { useMemoryIntents } from './message-handlers/memory-intents';
 import { useCommsIntents } from './message-handlers/comms-intents';
-import { handleWSMessage } from './message-handlers/ws-handler';
 import type { ProcessStepKind } from '../components/process-bar/types';
+import {
+  buildRuntimeScope,
+  buildRuntimeSystemPrompt,
+  summarizeRuntimeScope,
+  verifyRuntimeAnswer,
+} from '../runtime-contract';
 
 // Re-export for backward compatibility
 export { SYSTEM_PROMPT_VERSION };
@@ -221,6 +231,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   const [editingQueueText, setEditingQueueText] = useState('');
   const [cliContinue, setCliContinue] = useState(false);
   const pendingSuggestionSendRef = useRef(false);
+  const pendingTraceIdRef = useRef<string | null>(null);
+  const pendingTraceRecordRef = useRef<Record<string, unknown> | null>(null);
 
   const currentAgent = getAgent(activeAgentId);
   const { detectAndHandleTaskQuery } = useTaskIntents({ actions });
@@ -253,6 +265,53 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       completeRun(runId);
     },
     [actions, completeRun],
+  );
+
+  const attachTraceRecord = useCallback(
+    (sessionId: string, traceId: string, traceRecord: Record<string, unknown>) => {
+      const session = sessions.find((s: Session) => s.id === sessionId);
+      if (!session) return;
+      const traceJson = JSON.stringify(traceRecord);
+      const messages = session.messages.map((msg: ChatMessage) => {
+        if (msg.role !== 'assistant') return msg;
+        if (msg.meta?.traceId !== traceId) return msg;
+        return {
+          ...msg,
+          meta: {
+            ...msg.meta,
+            traceRecord: traceJson,
+          },
+        };
+      });
+      actions.replaceSessionMessages(sessionId, messages);
+    },
+    [actions, sessions],
+  );
+
+  const emitStructuredError = useCallback(
+    (sessionId: string, err: ChatErrorEnvelope) => {
+      const traceId = err.traceId || pendingTraceIdRef.current || '';
+      const traceRecord = pendingTraceRecordRef.current;
+      actions.addMessage(sessionId, {
+        role: 'assistant',
+        content: `[system] ${err.message}`,
+        timestamp: Date.now(),
+        meta: {
+          system: 'true',
+          type: 'system',
+          event: 'chat_error',
+          errorCode: err.code,
+          errorStage: err.stage,
+          errorRetryable: String(err.retryable),
+          errorWhereToLook: err.whereToLook,
+          errorEnvelope: JSON.stringify(err),
+          ...(traceId ? { traceId } : {}),
+          ...(traceRecord ? { traceRecord: JSON.stringify(traceRecord) } : {}),
+        },
+      });
+      actions.addActivity(sessionId, 'error', `${err.code}: ${err.whereToLook}`);
+    },
+    [actions],
   );
   const verifyIdentity = useCallback(
     (code: string) => verifyIdentityCode(code, setVerifying, setIdentityVerified),
@@ -298,6 +357,20 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     ],
   );
 
+  const buildScopedRuntimeContext = useCallback(
+    async (sessionId: string, messageText: string) => {
+      const runtimeScope = buildRuntimeScope(messageText, getStoredWorkspaceId() || 'default');
+      const runtimeSources = await fetchContextSources(sessionId);
+      const runtimePacket = buildScopedRuntimePacket(runtimeScope, runtimeSources);
+      const systemPrompt = buildRuntimeSystemPrompt(
+        buildDefaultSystemPrompt(currentAgent.name, currentAgent.id),
+        runtimePacket,
+      );
+      return { runtimeScope, runtimePacket, systemPrompt };
+    },
+    [currentAgent.name, currentAgent.id],
+  );
+
   const handleSend = useCallback(async () => {
     setSelectedMsgIndex(null);
     const text = input.trim();
@@ -313,7 +386,6 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       ? extractMention(text).agentId || activeAgentId
       : activeAgentId;
     const sendText = extractMention ? extractMention(text).cleanText : text;
-
     if (compareMode && compareModels.length > 0) {
       const cmpSid = ensureSession();
       actions.addMessage(cmpSid, { role: 'user', content: text, timestamp: Date.now() });
@@ -322,13 +394,16 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       actions.setStatusLine('Comparing models...');
       setCompareStreams(() => ({}));
       setCompareWinner(null);
+      const { runtimeScope, runtimePacket, systemPrompt: compareSystemPrompt } =
+        await buildScopedRuntimeContext(cmpSid, sendText);
+      actions.setStatusLine(`Scoped → ${summarizeRuntimeScope(runtimeScope)}`);
       const promises = compareModels.map(async (modelId: string) => {
         try {
           let fullResp = '';
           await sendMessage(
             sendText,
             [],
-            '',
+            compareSystemPrompt,
             {
               onToken: (t) => {
                 fullResp += t;
@@ -362,6 +437,17 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             modelId,
             undefined,
             routerMode,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            runtimePacket,
           );
         } catch (err: unknown) {
           setCompareStreams(
@@ -433,6 +519,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     setFirstTokenReceived(false);
     actions.addActivity(sessionId, 'connecting', 'Sending message');
     actions.addFeed(sessionId, 'sent', text.length > 80 ? text.slice(0, 80) + '\u2026' : text);
+    pendingTraceIdRef.current = null;
+    pendingTraceRecordRef.current = null;
 
     const [, , commsHandled] = await Promise.all([
       detectAndHandleTaskQuery(text, sessionId),
@@ -476,6 +564,12 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       });
     }
 
+    const { runtimeScope, runtimePacket, systemPrompt } = await buildScopedRuntimeContext(
+      sessionId,
+      messageText,
+    );
+    actions.setStatusLine(`Scoped → ${summarizeRuntimeScope(runtimeScope)}`);
+
     if (cliMode) {
       try {
         await sendViaCLI(messageText, sessionId);
@@ -486,44 +580,10 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       }
     }
 
-    const useRouterWS = isWSConnected();
-    if (useRouterWS) {
-      actions.addFeed(sessionId, 'gateway', 'Router Gateway', { transport: 'ws' });
-      const wsResult = await handleWSMessage({
-        effectiveAgentId,
-        sessionId,
-        messageText,
-        selectedModel,
-        currentAgent,
-        runId,
-        sessions,
-        actions,
-        setCompacting,
-        setStreamPhase,
-        setActiveToolName,
-        updateStep,
-        addStep,
-        completeRun,
-        processStepRef,
-        firstTokenTimeRef,
-        sendTimeRef,
-        setFirstTokenReceived,
-        bufferToken,
-        streamBufferRef,
-        streamFlushRaf,
-        generateSuggestions,
-        recentWSSendRef,
-        routerMode,
-      });
-      if (wsResult.ok) return;
-    }
-
     let fullResponse = '';
     const abortController = new AbortController();
     abortRef.current = abortController;
     const history = messages.slice(-20);
-    await fetchContextSources(sessionId);
-    const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
 
     try {
       await sendMessage(
@@ -553,12 +613,25 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           },
           onDone: (full) => {
             const final = full || fullResponse;
+            const verdict = verifyRuntimeAnswer(final, runtimePacket);
             actions.addMessage(sessionId, {
               role: 'assistant',
               content: final,
               timestamp: Date.now(),
-              meta: { route: 'http', model: selectedModel || currentAgent.name },
+              meta: {
+                route: 'http',
+                model: selectedModel || currentAgent.name,
+                verifierOk: String(verdict.ok),
+                ...(verdict.issues.length ? { verifierIssues: verdict.issues.join(',') } : {}),
+                ...(pendingTraceIdRef.current ? { traceId: pendingTraceIdRef.current } : {}),
+                ...(pendingTraceRecordRef.current
+                  ? { traceRecord: JSON.stringify(pendingTraceRecordRef.current) }
+                  : {}),
+              },
             });
+            if (!verdict.ok) {
+              actions.addActivity(sessionId, 'warning', `Verifier: ${verdict.issues.join(', ')}`);
+            }
             actions.setStreaming(false);
             actions.setStreamText('');
             actions.setStatusLine(null);
@@ -571,8 +644,22 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             actions.setStatusLine(`Error: ${err}`);
             completeRun(runId);
           },
+          onStructuredError: (err) => {
+            emitStructuredError(sessionId, err);
+          },
           onPreviewRequired: (payload, originalMessage) =>
             emitPreviewRequired(sessionId, runId, payload, originalMessage),
+          onTrace: (traceId: string) => {
+            pendingTraceIdRef.current = traceId;
+          },
+          onTraceComplete: (traceRecord: Record<string, unknown>) => {
+            pendingTraceRecordRef.current = traceRecord;
+            const traceId =
+              (traceRecord.traceId as string | undefined) || pendingTraceIdRef.current || '';
+            if (traceId) {
+              attachTraceRecord(sessionId, traceId, traceRecord);
+            }
+          },
           onStatus: (status: string) => {
             if (status === 'thinking') setStreamPhase('thinking');
             else if (status === 'writing') setStreamPhase('writing');
@@ -583,6 +670,17 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
         selectedModel || undefined,
         undefined,
         routerMode,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        runtimePacket,
       );
     } catch (err) {
       actions.setStreaming(false);
@@ -625,6 +723,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     updateStep,
     completeRun,
     sendViaCLI,
+    buildScopedRuntimeContext,
     detectAndHandleTaskQuery,
     detectAndHandleMemoryIntent,
     detectAndHandleCommsIntent,
@@ -667,6 +766,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       actions.setStreamText('');
       actions.setStatusLine('Confirming preview...');
       setStreamPhase('connecting');
+      pendingTraceIdRef.current = null;
+      pendingTraceRecordRef.current = null;
       const runId = `run-${Date.now()}-confirm`;
       processRunIdRef.current = runId;
       startRun(runId, sessionId);
@@ -675,7 +776,10 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
 
       let fullResponse = '';
       const history = messages.slice(-20);
-      const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
+      const { runtimePacket, systemPrompt } = await buildScopedRuntimeContext(
+        sessionId,
+        originalMessage,
+      );
       try {
         await sendMessage(
           originalMessage,
@@ -689,6 +793,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             },
             onDone: (full) => {
               const final = full || fullResponse;
+              const verdict = verifyRuntimeAnswer(final, runtimePacket);
               actions.addMessage(sessionId, {
                 role: 'assistant',
                 content: final,
@@ -697,8 +802,17 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                   route: 'http',
                   model: selectedModel || currentAgent.name,
                   previewConfirmed: previewId,
+                  verifierOk: String(verdict.ok),
+                  ...(verdict.issues.length ? { verifierIssues: verdict.issues.join(',') } : {}),
+                  ...(pendingTraceIdRef.current ? { traceId: pendingTraceIdRef.current } : {}),
+                  ...(pendingTraceRecordRef.current
+                    ? { traceRecord: JSON.stringify(pendingTraceRecordRef.current) }
+                    : {}),
                 },
               });
+              if (!verdict.ok) {
+                actions.addActivity(sessionId, 'warning', `Verifier: ${verdict.issues.join(', ')}`);
+              }
               actions.setStreaming(false);
               actions.setStreamText('');
               actions.setStatusLine(null);
@@ -711,9 +825,23 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
               actions.setStatusLine(`Error: ${err}`);
               completeRun(runId);
             },
+            onStructuredError: (err) => {
+              emitStructuredError(sessionId, err);
+            },
             // Re-trigger card if gate fires again (e.g. token expired, fresh writes).
             onPreviewRequired: (payload, msg) =>
               emitPreviewRequired(sessionId, runId, payload, msg),
+            onTrace: (traceId: string) => {
+              pendingTraceIdRef.current = traceId;
+            },
+            onTraceComplete: (traceRecord: Record<string, unknown>) => {
+              pendingTraceRecordRef.current = traceRecord;
+              const traceId =
+                (traceRecord.traceId as string | undefined) || pendingTraceIdRef.current || '';
+              if (traceId) {
+                attachTraceRecord(sessionId, traceId, traceRecord);
+              }
+            },
             onStatus: (status: string) => {
               if (status === 'thinking') setStreamPhase('thinking');
               else if (status === 'writing') setStreamPhase('writing');
@@ -733,6 +861,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           undefined,
           undefined,
           previewId,
+          undefined,
+          runtimePacket,
         );
       } catch {
         actions.setStreaming(false);
@@ -750,6 +880,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       ensureSession,
       generateSuggestions,
       messages,
+      buildScopedRuntimeContext,
       processStepRef,
       processRunIdRef,
       routerMode,

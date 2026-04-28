@@ -165,7 +165,147 @@ Every conversation writes to the training WAL (Write-Ahead Log) via `shre-sdk/tr
    - done: full response → store.finalizeMessage()
    - tool_use: tool execution → ProcessBar animation
 6. serve.js post-stream:
-   a. Extracts user/assistant messages for local SQLite history
-   b. Client posts `/api/conversation-log` for audit/training side effects
-   c. Session state syncs separately via `/api/chat-sessions/*`
+    a. Extracts user/assistant messages for local SQLite history
+    b. Client posts `/api/conversation-log` for audit/training side effects
+    c. Session state syncs separately via `/api/chat-sessions/*`
 ```
+
+## Evidence-First Runtime
+
+The preferred runtime model for enterprise chat is:
+
+```
+User request
+  ↓
+Classifier + policy gate
+  ↓
+Scoped evidence retrieval
+  ↓
+Reasoning over evidence packet
+  ↓
+Tool execution only if needed
+  ↓
+Verifier
+  ↓
+Final answer or action with sources + audit log
+```
+
+### Core Split
+
+- `Files / records / docs` = evidence
+- `Tools` = actions
+- `Models` = reasoning engines
+- `Policy` = gatekeeper
+
+### Runtime Plan
+
+The model should not begin by exploring tools. It should first receive a citable context packet assembled from the allowed tenant, domain, and object scope.
+
+```
+Workspace / Tenant
+ ├─ Source Registry
+ │   ├─ ERP
+ │   ├─ CRM
+ │   ├─ POS
+ │   ├─ Accounting
+ │   └─ Scheduling
+ │
+ ├─ Business Object Index
+ │   ├─ Customer
+ │   ├─ Invoice
+ │   ├─ Payment
+ │   ├─ Product
+ │   ├─ Shift
+ │   └─ LedgerEntry
+ │
+ ├─ Retrieval Layer
+ │   ├─ vector search
+ │   ├─ keyword search
+ │   ├─ SQL lookups
+ │   └─ record resolver
+ │
+ ├─ Tool Registry
+ │   ├─ read tools
+ │   ├─ write tools
+ │   └─ workflow tools
+ │
+ ├─ Policy Engine
+ │   ├─ permissions
+ │   ├─ allowed domains
+ │   ├─ allowed tools
+ │   └─ allowed models
+ │
+ └─ Agent Runtime
+     ├─ router
+     ├─ specialist agents
+     ├─ verifier
+     └─ audit log
+```
+
+### Tool Scoping Rule
+
+For a POS reconciliation issue, the router should expose only the relevant tools:
+
+```json
+{
+  "allowed_tools": [
+    "crm_customer_lookup",
+    "pos_transaction_search",
+    "accounting_invoice_search",
+    "accounting_payment_match"
+  ]
+}
+```
+
+Payroll, HR, inventory-write, and scheduling tools should stay blocked unless the classifier and policy engine explicitly widen scope.
+
+### Verifier Requirements
+
+The verifier should run before any final answer or action. It should check:
+
+- Did the answer cite retrieved records?
+- Was every tool allowed?
+- Were permissions checked?
+- Did the model invent any field?
+- Is this read-only, or does it change state?
+
+### High-Risk Action Flow
+
+For money, payroll, tax, refunds, inventory, or schedule changes:
+
+```
+draft → preview → user approval → execute
+```
+
+### Combined Pattern
+
+- Perplexity-style layer: find the right evidence
+- Agent/tool layer: take the right action
+- Policy layer: only within allowed scope
+- Verifier: prove it before saying it
+
+The concrete runtime contract lives in [runtime-contract.json](runtime-contract.json).
+
+## Perplexity Analogy
+
+Public Perplexity documentation supports the idea that Spaces and Internal Knowledge Search behave like a source layer rather than a simple folder tree:
+
+- Spaces can use web sources, attached files, and enterprise sources.
+- Uploaded files are parsed and become searchable sources in a Space or org file repository.
+- Long files are reduced to the most relevant sections for a query.
+- Responses include file citations.
+- Users can choose source scope such as `Web`, `Org Files`, `Web + Org Files`, or `None`.
+
+That supports the high-level design claim:
+
+> The model likely does not browse a folder tree directly. It reasons over retrieved evidence from a controlled source layer.
+
+What is still speculative is the exact internal implementation:
+
+- whether Perplexity uses a literal graph, a tree, or both
+- whether the primary retrieval stack is vector search, keyword search, or hybrid ranking
+- how source normalization is implemented internally
+
+So the safe conclusion is:
+
+> Public evidence supports a source-registry + retrieval-index abstraction. The exact storage topology remains an inference.

@@ -8,6 +8,8 @@
  */
 
 import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
+import type { RuntimeContextPacket } from './runtime-contract';
+import { getStoredWorkspaceId } from './workspace-context';
 
 const RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
@@ -25,16 +27,7 @@ let currentAgentModel = 'claude-sonnet-4-6';
 /** Get the active tenant/workspace ID from the stored auth workspace (set at login/workspace switch).
  *  Falls back to "default" when no workspace is selected. */
 export function getTenantId(): string {
-  try {
-    const ws = localStorage.getItem('shre-auth-workspace');
-    if (ws) {
-      const parsed = JSON.parse(ws);
-      if (parsed?.id) return parsed.id;
-    }
-  } catch {
-    /* fallback */
-  }
-  return 'default';
+  return getStoredWorkspaceId() || 'default';
 }
 
 /** Get user's preferred language from localStorage (set via profile or chat settings) */
@@ -97,6 +90,7 @@ function reportUsage(
   model: string,
   usage: { input_tokens?: number; output_tokens?: number; total_tokens?: number },
   latencyMs?: number,
+  agentId: string = currentAgentId,
 ): void {
   if (!usage.input_tokens && !usage.output_tokens) return;
   fetch(`${SHRE_ROUTER_URL}/v1/record-usage`, {
@@ -109,7 +103,7 @@ function reportUsage(
         output_tokens: usage.output_tokens ?? 0,
         total_tokens: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
       },
-      agentId: currentAgentId,
+      agentId,
       sessionId: activeSessionKey,
       source: 'shre-chat',
       latencyMs,
@@ -141,6 +135,36 @@ export interface ChatMessage {
   replyTo?: number;
   meta?: Record<string, string>;
   attachments?: MessageAttachment[];
+}
+
+export interface AgentRouteCandidate {
+  agentId: string;
+  compositeScore: number;
+  capabilityScore?: number;
+  outcomeMultiplier?: number;
+  costTier?: string;
+  reason?: string;
+}
+
+export interface AgentRouteInsight {
+  selectedAgent: string;
+  selectedModel?: string;
+  requestedAgent?: string;
+  domain?: string;
+  taskType?: string;
+  reason?: string;
+  floor?: number;
+  floorMet?: boolean;
+  authoritative?: boolean;
+  vetoReason?: string;
+  alternativeAgent?: string;
+  learnedPrior?: {
+    agentId: string;
+    sampleSize: number;
+    successRate: number;
+    reason: string;
+  } | null;
+  candidates?: AgentRouteCandidate[];
 }
 
 // ── Session Sync (reads JSONL sessions via serve.js API) ────
@@ -573,6 +597,39 @@ export interface ToolErrorEvent {
   iteration: number;
 }
 
+export type ChatErrorStage =
+  | 'ingest'
+  | 'preflight'
+  | 'routing'
+  | 'context'
+  | 'provider'
+  | 'tool'
+  | 'stream'
+  | 'audit'
+  | 'transport'
+  | 'timeout'
+  | 'billing'
+  | 'auth'
+  | 'unknown';
+
+export interface ChatErrorEnvelope {
+  code: string;
+  message: string;
+  stage: ChatErrorStage;
+  retryable: boolean;
+  whereToLook: string;
+  remediation: string[];
+  summary: string;
+  traceId?: string;
+  sessionId?: string;
+  agentId?: string;
+  model?: string;
+  provider?: string;
+  tool?: string;
+  cause?: string;
+  details?: Record<string, unknown>;
+}
+
 /** Payload returned by shre-router when /v1/chat is blocked by the preview gate (HTTP 409).
  *  Mirrors `PreviewResponseBody` in `shre-router/src/routing-v2/preview-gate.ts`, plus the
  *  optional `proposal_id` that shadow workspaces attach when they file an owner-review task. */
@@ -645,10 +702,61 @@ export interface StreamCallbacks {
     reason: string;
     confidence: number;
   }) => void;
+  /** Fired when shre-router emits the agent-routing competition payload. */
+  onAgentRoute?: (insight: AgentRouteInsight) => void;
   /** Fired when trace ID is received from shre-router */
   onTrace?: (traceId: string) => void;
   /** Fired when full trace record is received (when trace mode is on) */
   onTraceComplete?: (traceRecord: Record<string, unknown>) => void;
+  /** Fired when shre-router returns structured error diagnostics */
+  onStructuredError?: (error: ChatErrorEnvelope) => void;
+}
+
+function normalizeChatErrorEnvelope(input: unknown): ChatErrorEnvelope | null {
+  if (!input) return null;
+  if (typeof input === 'string') {
+    return {
+      code: 'CHAT_ERROR',
+      message: input,
+      stage: 'unknown',
+      retryable: true,
+      whereToLook: 'router',
+      remediation: ['Check the router trace', 'Retry after verifying upstream health'],
+      summary: input,
+    };
+  }
+  if (typeof input !== 'object') return null;
+  const value = input as Record<string, unknown>;
+  const remediation = Array.isArray(value.remediation)
+    ? value.remediation.filter((item): item is string => typeof item === 'string')
+    : ['Check the router trace', 'Inspect the failing hop'];
+  const stage =
+    typeof value.stage === 'string' &&
+    ['ingest', 'preflight', 'routing', 'context', 'provider', 'tool', 'stream', 'audit', 'transport', 'timeout', 'billing', 'auth', 'unknown'].includes(
+      value.stage,
+    )
+      ? (value.stage as ChatErrorStage)
+      : 'unknown';
+  return {
+    code: typeof value.code === 'string' ? value.code : 'CHAT_ERROR',
+    message: typeof value.message === 'string' ? value.message : 'Chat request failed',
+    stage,
+    retryable: typeof value.retryable === 'boolean' ? value.retryable : true,
+    whereToLook: typeof value.whereToLook === 'string' ? value.whereToLook : 'router',
+    remediation,
+    summary: typeof value.summary === 'string' ? value.summary : 'Chat request failed',
+    traceId: typeof value.traceId === 'string' ? value.traceId : undefined,
+    sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
+    agentId: typeof value.agentId === 'string' ? value.agentId : undefined,
+    model: typeof value.model === 'string' ? value.model : undefined,
+    provider: typeof value.provider === 'string' ? value.provider : undefined,
+    tool: typeof value.tool === 'string' ? value.tool : undefined,
+    cause: typeof value.cause === 'string' ? value.cause : undefined,
+    details:
+      typeof value.details === 'object' && value.details !== null
+        ? (value.details as Record<string, unknown>)
+        : undefined,
+  };
 }
 
 /**
@@ -679,6 +787,8 @@ export async function sendMessage(
   conversationMode?: string,
   activeAppId?: string | null,
   previewConfirmed?: string,
+  agentIdOverride?: string,
+  runtimeContext?: RuntimeContextPacket,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -718,6 +828,8 @@ export async function sendMessage(
       activeAppId,
       undefined,
       previewConfirmed,
+      agentIdOverride,
+      runtimeContext,
     );
   } catch (err) {
     if (done) return;
@@ -741,6 +853,10 @@ export async function sendMessage(
       msg.includes('auth_expired') ||
       msg.includes('Session expired') ||
       msg.includes('sign in again');
+    const structured = normalizeChatErrorEnvelope(msg);
+    if (structured) {
+      callbacks.onStructuredError?.(structured);
+    }
     if (isToolLoopError) {
       // Tool loop exhaustion — NOT a gateway error, NOT transient. Prefix with 'tool_loop_exhausted:'
       // so useMessageHandlers knows not to auto-retry.
@@ -781,6 +897,8 @@ async function streamViaFallback(
   activeAppId?: string | null,
   _emptyRetry?: boolean,
   previewConfirmed?: string,
+  agentIdOverride?: string,
+  runtimeContext?: RuntimeContextPacket,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
 
@@ -803,6 +921,7 @@ async function streamViaFallback(
 
   // Direct mode bypasses shre-router — sends to local Ollama via serve.js proxy
   const chatUrl = directMode ? '/api/direct/v1/chat' : `${SHRE_ROUTER_URL}/v1/chat`;
+  const requestAgentId = agentIdOverride || currentAgentId;
   const res = await fetchWithRetry(chatUrl, {
     method: 'POST',
     headers: {
@@ -816,7 +935,7 @@ async function streamViaFallback(
       systemPrompt,
       model: modelOverride || 'auto',
       stream: true,
-      agentId: currentAgentId,
+      agentId: requestAgentId,
       sessionId: activeSessionKey,
       tenantId: getTenantId(),
       companyId: getTenantId(),
@@ -832,6 +951,7 @@ async function streamViaFallback(
       ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
       ...(activeAppId ? { appId: activeAppId } : {}),
       ...(previewConfirmed ? { previewConfirmed } : {}),
+      ...(runtimeContext ? { runtimeContext } : {}),
     }),
     signal,
   });
@@ -895,6 +1015,21 @@ async function streamViaFallback(
   let buffer = '';
   let routedModel = '';
   const fallbackStart = Date.now();
+  let finalized = false;
+  const finalize = async (
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    status?: 'done' | 'error',
+  ): Promise<void> => {
+    if (finalized) return;
+    finalized = true;
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+    if (status === 'done') callbacks.onStatus?.('done');
+    callbacks.onDone(fullText);
+  };
 
   // Stream silence timeout — backend handles model-level timeouts and fallbacks
   // Frontend only kills on genuinely dead connections (5min)
@@ -985,17 +1120,20 @@ async function streamViaFallback(
           } else if (evt.type === 'response.completed') {
             const usage = evt.response?.usage;
             if (usage && routedModel) {
-              reportUsage(routedModel, usage, Date.now() - fallbackStart);
+              reportUsage(routedModel, usage, Date.now() - fallbackStart, requestAgentId);
             }
-            callbacks.onStatus?.('done');
+            await finalize(reader, 'done');
+            return;
+          } else if (evt.type === 'agent_route') {
+            callbacks.onAgentRoute?.(evt as AgentRouteInsight);
           } else if (evt.type === 'done') {
-            callbacks.onStatus?.('done');
             // Report usage — estimate tokens from text if no usage in event
             if (evt.usage) {
               reportUsage(
                 routedModel || modelOverride || 'auto',
                 evt.usage,
                 Date.now() - fallbackStart,
+                requestAgentId,
               );
             } else if (fullText && routedModel) {
               const estInput = Math.ceil(message.length / 4);
@@ -1004,8 +1142,11 @@ async function streamViaFallback(
                 routedModel,
                 { input_tokens: estInput, output_tokens: estOutput },
                 Date.now() - fallbackStart,
+                requestAgentId,
               );
             }
+            await finalize(reader, 'done');
+            return;
           } else if (evt.type === 'tool_status') {
             const toolName = evt.tool || (evt.tools || []).join(', ');
             if (evt.status === 'executing' || evt.status === 'running') {
@@ -1078,8 +1219,14 @@ async function streamViaFallback(
             callbacks.onTrace?.(evt.traceId);
           } else if (evt.type === 'trace_complete') {
             callbacks.onTraceComplete?.(evt.trace);
+          } else if (evt.type === 'agent_route') {
+            callbacks.onAgentRoute?.(evt as AgentRouteInsight);
           } else if (evt.type === 'error') {
-            const errMsg = evt.error || 'Gateway error';
+            const structuredError = normalizeChatErrorEnvelope(evt.error);
+            if (structuredError) {
+              callbacks.onStructuredError?.(structuredError);
+            }
+            const errMsg = structuredError?.message || evt.error || 'Gateway error';
             // Tool loop exhaustion is not a gateway failure — surface it accurately
             // and skip the outer catch (which would prepend "Gateway unavailable")
             if (
@@ -1134,6 +1281,9 @@ async function streamViaFallback(
         conversationMode,
         activeAppId,
         true,
+        previewConfirmed,
+        agentIdOverride,
+        runtimeContext,
       );
     }
 
@@ -1157,6 +1307,18 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
   let buffer = '';
   let currentEvent = '';
   const streamStart = Date.now();
+  let finalized = false;
+  const finalize = async (status?: 'done' | 'error'): Promise<void> => {
+    if (finalized) return;
+    finalized = true;
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+    if (status === 'done') callbacks.onStatus?.('done');
+    callbacks.onDone(fullText);
+  };
 
   try {
     while (true) {
@@ -1215,7 +1377,8 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
               evtType === 'response.completed' ||
               evtType === 'response.output_text.done'
             ) {
-              callbacks.onStatus('done');
+              await finalize('done');
+              return;
             }
           }
 
@@ -1246,7 +1409,7 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
     reader.releaseLock();
   }
 
-  callbacks.onDone(fullText);
+  await finalize('done');
 }
 
 /**

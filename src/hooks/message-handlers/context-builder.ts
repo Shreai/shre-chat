@@ -4,6 +4,12 @@
  */
 import type { ChatMessage } from '../../router-client';
 import { mib007Link } from '../../chat-utils';
+import {
+  buildRuntimeContextPacket,
+  type RuntimeEvidenceItem,
+  type RuntimeScope,
+  type RuntimeContextPacket,
+} from '../../runtime-contract';
 
 interface TaskContextItem {
   id?: string;
@@ -229,4 +235,29 @@ export async function fetchContextSources(sessionId: string): Promise<{
   }
 
   return { taskContext, sessionContext, contextHealth };
+}
+
+export function buildScopedRuntimePacket(
+  scope: RuntimeScope,
+  sources: {
+    taskContext: string;
+    sessionContext: string;
+    contextHealth: Record<string, 'ok' | 'missing' | 'error'>;
+  },
+): RuntimeContextPacket {
+  const evidence: RuntimeEvidenceItem[] = [];
+  if (sources.taskContext.trim()) {
+    evidence.push({
+      source: 'task_context',
+      text: sources.taskContext.trim(),
+    });
+  }
+  if (sources.sessionContext.trim()) {
+    evidence.push({
+      source: 'session_context',
+      text: sources.sessionContext.trim(),
+    });
+  }
+
+  return buildRuntimeContextPacket(scope, evidence);
 }
