@@ -17,9 +17,11 @@ export interface UseStreamStateReturn {
   setStreamElapsed: React.Dispatch<React.SetStateAction<number>>;
   streamPhase:
     | 'connecting'
+    | 'research'
     | 'thinking'
     | 'planning'
     | 'tool_use'
+    | 'implementation'
     | 'writing'
     | 'compacting'
     | 'done'
@@ -28,9 +30,11 @@ export interface UseStreamStateReturn {
   setStreamPhase: React.Dispatch<
     React.SetStateAction<
       | 'connecting'
+      | 'research'
       | 'thinking'
       | 'planning'
       | 'tool_use'
+      | 'implementation'
       | 'writing'
       | 'compacting'
       | 'done'
@@ -59,9 +63,11 @@ export function useStreamState(streaming: boolean): UseStreamStateReturn {
   const [streamElapsed, setStreamElapsed] = useState(0);
   const [streamPhase, setStreamPhase] = useState<
     | 'connecting'
+    | 'research'
     | 'thinking'
     | 'planning'
     | 'tool_use'
+    | 'implementation'
     | 'writing'
     | 'compacting'
     | 'done'

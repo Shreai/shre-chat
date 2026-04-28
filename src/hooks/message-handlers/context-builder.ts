@@ -259,5 +259,7 @@ export function buildScopedRuntimePacket(
     });
   }
 
-  return buildRuntimeContextPacket(scope, evidence);
+  const packet = buildRuntimeContextPacket(scope, evidence);
+  packet.context_health = sources.contextHealth;
+  return packet;
 }

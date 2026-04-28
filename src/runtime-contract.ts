@@ -2,6 +2,32 @@ import runtimeContract from '../docs/runtime-contract.json';
 
 export type RiskLevel = 'low' | 'medium' | 'high';
 export type ActionMode = 'read' | 'write' | 'mixed';
+export type RuntimePhase = 'research' | 'planning' | 'implementation';
+export type RuntimeHealth = 'ok' | 'missing' | 'error';
+
+export interface RuntimePhaseTiming {
+  phase: RuntimePhase;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+}
+
+export interface RuntimeFlowDiagnostics {
+  researchMs?: number;
+  planningMs?: number;
+  implementationMs?: number;
+  firstTokenMs?: number;
+  compareModelCount?: number;
+  attachedFiles?: number;
+  contextHealth?: Record<string, RuntimeHealth>;
+}
+
+export interface RuntimeBottleneck {
+  stage: RuntimePhase | 'approval' | 'router';
+  severity: RiskLevel;
+  reason: string;
+  signals: string[];
+}
 
 export interface RuntimeScope {
   requestId: string;
@@ -34,6 +60,7 @@ export interface RuntimeContextPacket {
   requires_approval: boolean;
   action_mode: ActionMode;
   evidence: RuntimeEvidenceItem[];
+  context_health?: Record<string, RuntimeHealth>;
 }
 
 interface RuntimeContractDoc {
@@ -217,10 +244,14 @@ export function buildRuntimeSystemPrompt(basePrompt: string, packet: RuntimeCont
     `- Requires approval: ${String(packet.requires_approval)}`,
     `- Action mode: ${packet.action_mode}`,
     'Rules:',
+    '- Research: inspect evidence only; do not act yet.',
+    '- Planning: decide scope, identify gaps, and choose only allowed tools.',
+    '- Implementation: execute only approved work or provide the final answer.',
     '- Use evidence only for factual claims.',
     '- Do not invent fields or records.',
     '- If you need a tool outside the allowlist, stop and request escalation.',
     '- For write actions, follow draft -> preview -> user approval -> execute.',
+    '- Surface likely bottlenecks when research, planning, or implementation is slow.',
     'Evidence packet:',
     JSON.stringify(packet),
   ].join('\n');
@@ -233,6 +264,130 @@ export function summarizeRuntimeScope(scope: RuntimeScope): string {
   const objects = scope.objects.length ? scope.objects.join(', ') : 'unspecified';
   const risk = scope.riskLevel.toUpperCase();
   return `${domains} / ${objects} / ${risk}`;
+}
+
+function addBottleneck(
+  items: RuntimeBottleneck[],
+  stage: RuntimeBottleneck['stage'],
+  severity: RiskLevel,
+  reason: string,
+  signals: string[],
+): void {
+  items.push({ stage, severity, reason, signals: dedupe(signals) });
+}
+
+export function predictRuntimeBottlenecks(
+  scope: RuntimeScope,
+  packet: RuntimeContextPacket,
+  diagnostics: RuntimeFlowDiagnostics = {},
+): RuntimeBottleneck[] {
+  const bottlenecks: RuntimeBottleneck[] = [];
+  const contextHealth = diagnostics.contextHealth ?? {};
+  const researchErrors = Object.entries(contextHealth).filter(([, health]) => health !== 'ok');
+  const broadScope = scope.domains.length >= 4 || scope.objects.length >= 4 || scope.actionMode === 'mixed';
+  const highRiskFlow = scope.riskLevel === 'high' || scope.requiresApproval;
+  const hasEvidence = packet.evidence.length > 0;
+
+  if (researchErrors.length > 0) {
+    addBottleneck(
+      bottlenecks,
+      'research',
+      'high',
+      'One or more source layers are unavailable or stale',
+      researchErrors.map(([name, health]) => `${name}:${health}`),
+    );
+  }
+
+  if (!hasEvidence) {
+    addBottleneck(bottlenecks, 'research', 'medium', 'No citable evidence was loaded', [
+      'empty_evidence_packet',
+    ]);
+  }
+
+  if (diagnostics.researchMs != null && diagnostics.researchMs > 2500) {
+    addBottleneck(bottlenecks, 'research', diagnostics.researchMs > 6000 ? 'high' : 'medium', 'Evidence retrieval is slow', [
+      `research_ms=${diagnostics.researchMs}`,
+    ]);
+  }
+
+  if (broadScope) {
+    addBottleneck(bottlenecks, 'planning', 'medium', 'Wide scope can slow routing and disambiguation', [
+      `domains=${scope.domains.length}`,
+      `objects=${scope.objects.length}`,
+      `mode=${scope.actionMode}`,
+    ]);
+  }
+
+  if (scope.allowedTools.length > 8) {
+    addBottleneck(bottlenecks, 'planning', 'medium', 'Tool menu is still broad for a single request', [
+      `allowed_tools=${scope.allowedTools.length}`,
+    ]);
+  }
+
+  if (diagnostics.planningMs != null && diagnostics.planningMs > 1200) {
+    addBottleneck(
+      bottlenecks,
+      'planning',
+      diagnostics.planningMs > 4000 ? 'high' : 'medium',
+      'Plan assembly is slow',
+      [`planning_ms=${diagnostics.planningMs}`],
+    );
+  }
+
+  if (highRiskFlow) {
+    addBottleneck(bottlenecks, 'approval', 'medium', 'Draft / preview / approval gates may stall execution', [
+      `risk=${scope.riskLevel}`,
+      `requires_approval=${String(scope.requiresApproval)}`,
+    ]);
+  }
+
+  if (diagnostics.compareModelCount && diagnostics.compareModelCount > 2) {
+    addBottleneck(bottlenecks, 'router', 'medium', 'Compare mode fans out to multiple models', [
+      `compare_models=${diagnostics.compareModelCount}`,
+    ]);
+  }
+
+  if (diagnostics.firstTokenMs != null && diagnostics.firstTokenMs > 4000) {
+    addBottleneck(
+      bottlenecks,
+      'router',
+      diagnostics.firstTokenMs > 12000 ? 'high' : 'medium',
+      'Model turn-up or upstream streaming is slow',
+      [`first_token_ms=${diagnostics.firstTokenMs}`],
+    );
+  }
+
+  if (diagnostics.implementationMs != null && diagnostics.implementationMs > 15000) {
+    addBottleneck(
+      bottlenecks,
+      'implementation',
+      diagnostics.implementationMs > 30000 ? 'high' : 'medium',
+      'Tool execution or finalization is slow',
+      [`implementation_ms=${diagnostics.implementationMs}`],
+    );
+  }
+
+  if (diagnostics.attachedFiles && diagnostics.attachedFiles > 0 && diagnostics.researchMs == null) {
+    addBottleneck(
+      bottlenecks,
+      'research',
+      'medium',
+      'Attached files often increase retrieval and parsing latency',
+      [`attached_files=${diagnostics.attachedFiles}`],
+    );
+  }
+
+  if (scope.allowedTools.length === 0) {
+    addBottleneck(
+      bottlenecks,
+      'planning',
+      'high',
+      'No tools are allowed for this request scope',
+      ['empty_tool_allowlist'],
+    );
+  }
+
+  return bottlenecks;
 }
 
 export function verifyRuntimeAnswer(answer: string, packet: RuntimeContextPacket): {

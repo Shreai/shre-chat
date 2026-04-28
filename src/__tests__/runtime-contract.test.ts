@@ -3,6 +3,7 @@ import {
   buildRuntimeContextPacket,
   buildRuntimeScope,
   buildRuntimeSystemPrompt,
+  predictRuntimeBottlenecks,
   summarizeRuntimeScope,
   verifyRuntimeAnswer,
 } from '../runtime-contract';
@@ -40,6 +41,30 @@ describe('runtime contract planner', () => {
     expect(packet.evidence).toHaveLength(1);
     expect(prompt).toContain('Allowed tools');
     expect(prompt).toContain('invoice inv_456 is unpaid');
+  });
+
+  it('predicts bottlenecks for slow or broad execution paths', () => {
+    const scope = buildRuntimeScope(
+      'Compare the customer payment in POS with accounting and create a reconciliation task',
+      'org_123',
+    );
+    const packet = buildRuntimeContextPacket(scope, []);
+    packet.context_health = { tasks: 'error', crossSession: 'missing' };
+
+    const bottlenecks = predictRuntimeBottlenecks(scope, packet, {
+      researchMs: 3200,
+      planningMs: 1800,
+      firstTokenMs: 6200,
+      compareModelCount: 3,
+      attachedFiles: 2,
+    });
+
+    expect(bottlenecks.map((item) => item.stage)).toEqual(
+      expect.arrayContaining(['research', 'planning', 'router']),
+    );
+    expect(bottlenecks.some((item) => item.reason.includes('Evidence retrieval is slow'))).toBe(
+      true,
+    );
   });
 
   it('flags a simple read query as non-approval work', () => {

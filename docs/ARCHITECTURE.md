@@ -277,12 +277,34 @@ For money, payroll, tax, refunds, inventory, or schedule changes:
 draft → preview → user approval → execute
 ```
 
+### Hard Runtime Phases
+
+The chat runtime now treats every request as a three-stage flow:
+
+```
+research → planning → implementation
+```
+
+- Research: fetch and normalize evidence only
+- Planning: choose scope, allowed tools, and action path
+- Implementation: answer, call approved tools, or execute the approved write path
+
+The client records phase timing and predicts slowdowns when:
+
+- source layers are missing or stale
+- evidence retrieval is slow
+- scope is broad or tool menus are too large
+- first-token latency is high
+- compare mode fans out to many models
+- approval-gated writes are likely to stall
+
 ### Combined Pattern
 
 - Perplexity-style layer: find the right evidence
 - Agent/tool layer: take the right action
 - Policy layer: only within allowed scope
 - Verifier: prove it before saying it
+- Bottleneck predictor: surface slow or failing stages early
 
 The concrete runtime contract lives in [runtime-contract.json](runtime-contract.json).
 

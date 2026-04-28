@@ -26,9 +26,11 @@ export interface WSHandlerProps {
   setStreamPhase: (
     v:
       | 'connecting'
+      | 'research'
       | 'thinking'
       | 'planning'
       | 'tool_use'
+      | 'implementation'
       | 'writing'
       | 'compacting'
       | 'done'
@@ -115,7 +117,7 @@ export async function handleWSMessage(
           }
           fullResponse += token;
           bufferToken(fullResponse);
-          actions.setStatusLine(`${currentAgent.name} is writing...`);
+          actions.setStatusLine(`${currentAgent.name} is implementing...`);
           setCompacting(false);
           if (processStepRef.current !== 'generating') {
             if (processStepRef.current)
@@ -232,7 +234,7 @@ export async function handleWSMessage(
             return;
           }
           setCompacting(false);
-          if (status === 'thinking') setStreamPhase('thinking');
+          if (status === 'thinking') setStreamPhase('research');
           else if (status === 'planning') {
             setStreamPhase('planning');
             if (processStepRef.current)
@@ -243,7 +245,7 @@ export async function handleWSMessage(
             const pId = addStep(runId, { kind: 'planning', label: 'Planning strategy...' });
             processStepRef.current = pId;
           } else if (status === 'writing') {
-            setStreamPhase('writing');
+            setStreamPhase('implementation');
             setActiveToolName(null);
           } else if (status === 'connecting') setStreamPhase('connecting');
         },

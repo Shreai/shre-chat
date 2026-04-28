@@ -676,9 +676,15 @@ export function MessageList(props: MessageListProps) {
                           color: 'var(--c-slate)',
                           bg: 'rgba(148,163,184,0.12)',
                         },
+                        research: {
+                          icon: '\uD83D\uDD0D',
+                          label: 'Research',
+                          color: 'var(--c-text-2)',
+                          bg: 'var(--c-bg-hover)',
+                        },
                         thinking: {
-                          icon: '\uD83E\uDDE0',
-                          label: 'Thinking',
+                          icon: '\uD83D\uDD0D',
+                          label: 'Research',
                           color: 'var(--c-text-2)',
                           bg: 'var(--c-bg-hover)',
                         },
@@ -688,6 +694,13 @@ export function MessageList(props: MessageListProps) {
                           color: 'var(--c-purple)',
                           bg: 'rgba(167,139,250,0.12)',
                         },
+                        implementation: {
+                          icon: '\u2699\uFE0F',
+                          label: 'Implementation',
+                          color: 'var(--c-info-soft)',
+                          bg: 'rgba(96,165,250,0.12)',
+                          spin: true,
+                        },
                         tool_use: {
                           icon: '\u26A1',
                           label: activeToolName || 'Tool',
@@ -696,10 +709,11 @@ export function MessageList(props: MessageListProps) {
                           spin: true,
                         },
                         writing: {
-                          icon: '\u270D\uFE0F',
-                          label: 'Writing',
-                          color: 'var(--c-success-soft)',
-                          bg: 'rgba(74,222,128,0.12)',
+                          icon: '\u2699\uFE0F',
+                          label: 'Implementation',
+                          color: 'var(--c-info-soft)',
+                          bg: 'rgba(96,165,250,0.12)',
+                          spin: true,
                         },
                         compacting: {
                           icon: '\uD83D\uDCE6',

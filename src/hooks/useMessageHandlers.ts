@@ -21,8 +21,10 @@ import { useMemoryIntents } from './message-handlers/memory-intents';
 import { useCommsIntents } from './message-handlers/comms-intents';
 import type { ProcessStepKind } from '../components/process-bar/types';
 import {
+  buildRuntimeContextPacket,
   buildRuntimeScope,
   buildRuntimeSystemPrompt,
+  predictRuntimeBottlenecks,
   summarizeRuntimeScope,
   verifyRuntimeAnswer,
 } from '../runtime-contract';
@@ -87,9 +89,11 @@ export interface UseMessageHandlersParams {
   setStreamPhase: (
     v:
       | 'connecting'
+      | 'research'
       | 'thinking'
       | 'planning'
       | 'tool_use'
+      | 'implementation'
       | 'writing'
       | 'compacting'
       | 'done'
@@ -244,6 +248,34 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     [setSuggestions],
   );
 
+  const emitRuntimeBottlenecks = useCallback(
+    (
+      sessionId: string,
+      label: string,
+      scope: ReturnType<typeof buildRuntimeScope>,
+      packet: ReturnType<typeof buildRuntimeContextPacket>,
+      diagnostics: {
+        researchMs?: number;
+        planningMs?: number;
+        implementationMs?: number;
+        firstTokenMs?: number;
+        compareModelCount?: number;
+      } = {},
+    ) => {
+      const bottlenecks = predictRuntimeBottlenecks(scope, packet, {
+        ...diagnostics,
+        contextHealth: packet.context_health,
+      });
+      if (!bottlenecks.length) return [];
+      const summary = bottlenecks
+        .map((item) => `${item.stage}:${item.reason}`)
+        .join(' | ');
+      actions.addActivity(sessionId, 'warning', `${label}: ${summary}`);
+      return bottlenecks;
+    },
+    [actions],
+  );
+
   // Shared 409 preview-gate handler: appends a system message so MessageList
   // can render PreviewConfirmCard + ProposalFiledCard instead of an error bubble.
   const emitPreviewRequired = useCallback(
@@ -360,13 +392,23 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   const buildScopedRuntimeContext = useCallback(
     async (sessionId: string, messageText: string) => {
       const runtimeScope = buildRuntimeScope(messageText, getStoredWorkspaceId() || 'default');
+      const researchStartedAt = Date.now();
       const runtimeSources = await fetchContextSources(sessionId);
+      const researchMs = Date.now() - researchStartedAt;
+      const planningStartedAt = Date.now();
       const runtimePacket = buildScopedRuntimePacket(runtimeScope, runtimeSources);
       const systemPrompt = buildRuntimeSystemPrompt(
         buildDefaultSystemPrompt(currentAgent.name, currentAgent.id),
         runtimePacket,
       );
-      return { runtimeScope, runtimePacket, systemPrompt };
+      const planningMs = Date.now() - planningStartedAt;
+      return {
+        runtimeScope,
+        runtimePacket,
+        systemPrompt,
+        runtimeSources,
+        timings: { researchMs, planningMs },
+      };
     },
     [currentAgent.name, currentAgent.id],
   );
@@ -391,15 +433,32 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       actions.addMessage(cmpSid, { role: 'user', content: text, timestamp: Date.now() });
       setInput('');
       actions.setStreaming(true);
-      actions.setStatusLine('Comparing models...');
+      actions.setStatusLine('Researching...');
+      setStreamPhase('research');
+      streamStartRef.current = Date.now();
+      sendTimeRef.current = Date.now();
+      firstTokenTimeRef.current = 0;
+      setFirstTokenReceived(false);
       setCompareStreams(() => ({}));
       setCompareWinner(null);
-      const { runtimeScope, runtimePacket, systemPrompt: compareSystemPrompt } =
+      const {
+        runtimeScope,
+        runtimePacket,
+        systemPrompt: compareSystemPrompt,
+        timings,
+      } =
         await buildScopedRuntimeContext(cmpSid, sendText);
-      actions.setStatusLine(`Scoped → ${summarizeRuntimeScope(runtimeScope)}`);
+      emitRuntimeBottlenecks(cmpSid, 'Compare setup', runtimeScope, runtimePacket, {
+        researchMs: timings.researchMs,
+        planningMs: timings.planningMs,
+        compareModelCount: compareModels.length,
+      });
+      actions.setStatusLine(`Planning → ${summarizeRuntimeScope(runtimeScope)}`);
+      setStreamPhase('planning');
       const promises = compareModels.map(async (modelId: string) => {
         try {
           let fullResp = '';
+          setStreamPhase('implementation');
           await sendMessage(
             sendText,
             [],
@@ -430,7 +489,10 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                   }),
                 );
               },
-              onStatus: () => {},
+              onStatus: (status) => {
+                if (status === 'thinking') setStreamPhase('planning');
+                else if (status === 'writing') setStreamPhase('implementation');
+              },
             },
             undefined,
             undefined,
@@ -463,8 +525,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
         }
       });
       Promise.all(promises).then(() => {
-        actions.setStreaming(false);
         actions.setStatusLine(null);
+        actions.setStreaming(false);
         playNotifSound();
       });
       return;
@@ -564,14 +626,22 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       });
     }
 
-    const { runtimeScope, runtimePacket, systemPrompt } = await buildScopedRuntimeContext(
+    actions.setStatusLine('Researching...');
+    setStreamPhase('research');
+    const { runtimeScope, runtimePacket, systemPrompt, timings } = await buildScopedRuntimeContext(
       sessionId,
       messageText,
     );
-    actions.setStatusLine(`Scoped → ${summarizeRuntimeScope(runtimeScope)}`);
+    emitRuntimeBottlenecks(sessionId, 'Scoped setup', runtimeScope, runtimePacket, {
+      researchMs: timings.researchMs,
+      planningMs: timings.planningMs,
+    });
+    actions.setStatusLine(`Planning → ${summarizeRuntimeScope(runtimeScope)}`);
+    setStreamPhase('planning');
 
     if (cliMode) {
       try {
+        setStreamPhase('implementation');
         await sendViaCLI(messageText, sessionId);
         return;
       } catch (err) {
@@ -584,6 +654,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     const abortController = new AbortController();
     abortRef.current = abortController;
     const history = messages.slice(-20);
+    const implementationStartedAt = Date.now();
+    setStreamPhase('implementation');
 
     try {
       await sendMessage(
@@ -598,7 +670,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             }
             fullResponse += token;
             bufferToken(fullResponse);
-            actions.setStatusLine(`${currentAgent.name} is writing...`);
+            actions.setStatusLine(`${currentAgent.name} is implementing...`);
+            setStreamPhase('implementation');
             if (processStepRef.current !== 'writing') {
               if (processStepRef.current)
                 updateStep(runId, processStepRef.current, {
@@ -613,6 +686,15 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           },
           onDone: (full) => {
             const final = full || fullResponse;
+            const firstTokenMs =
+              firstTokenTimeRef.current > 0 ? firstTokenTimeRef.current - sendTimeRef.current : undefined;
+            const implementationMs = Date.now() - implementationStartedAt;
+            const bottlenecks = emitRuntimeBottlenecks(sessionId, 'Delivery', runtimeScope, runtimePacket, {
+              researchMs: timings.researchMs,
+              planningMs: timings.planningMs,
+              implementationMs,
+              firstTokenMs,
+            });
             const verdict = verifyRuntimeAnswer(final, runtimePacket);
             actions.addMessage(sessionId, {
               role: 'assistant',
@@ -621,8 +703,13 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
               meta: {
                 route: 'http',
                 model: selectedModel || currentAgent.name,
+                runtimePhase: 'implementation',
                 verifierOk: String(verdict.ok),
+                ...(bottlenecks.length ? { runtimeBottlenecks: JSON.stringify(bottlenecks) } : {}),
                 ...(verdict.issues.length ? { verifierIssues: verdict.issues.join(',') } : {}),
+                ...(runtimePacket.context_health
+                  ? { runtimeHealth: JSON.stringify(runtimePacket.context_health) }
+                  : {}),
                 ...(pendingTraceIdRef.current ? { traceId: pendingTraceIdRef.current } : {}),
                 ...(pendingTraceRecordRef.current
                   ? { traceRecord: JSON.stringify(pendingTraceRecordRef.current) }
@@ -661,8 +748,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             }
           },
           onStatus: (status: string) => {
-            if (status === 'thinking') setStreamPhase('thinking');
-            else if (status === 'writing') setStreamPhase('writing');
+            if (status === 'thinking') setStreamPhase('planning');
+            else if (status === 'writing') setStreamPhase('implementation');
           },
         },
         abortController.signal,
@@ -766,6 +853,10 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       actions.setStreamText('');
       actions.setStatusLine('Confirming preview...');
       setStreamPhase('connecting');
+      streamStartRef.current = Date.now();
+      sendTimeRef.current = Date.now();
+      firstTokenTimeRef.current = 0;
+      setFirstTokenReceived(false);
       pendingTraceIdRef.current = null;
       pendingTraceRecordRef.current = null;
       const runId = `run-${Date.now()}-confirm`;
@@ -776,11 +867,20 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
 
       let fullResponse = '';
       const history = messages.slice(-20);
-      const { runtimePacket, systemPrompt } = await buildScopedRuntimeContext(
+      actions.setStatusLine('Researching...');
+      setStreamPhase('research');
+      const { runtimePacket, systemPrompt, runtimeScope, timings } = await buildScopedRuntimeContext(
         sessionId,
         originalMessage,
       );
+      emitRuntimeBottlenecks(sessionId, 'Preview setup', runtimeScope, runtimePacket, {
+        researchMs: timings.researchMs,
+        planningMs: timings.planningMs,
+      });
+      actions.setStatusLine('Planning...');
+      setStreamPhase('planning');
       try {
+        setStreamPhase('implementation');
         await sendMessage(
           originalMessage,
           history,
@@ -789,11 +889,20 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             onToken: (token) => {
               fullResponse += token;
               bufferToken(fullResponse);
-              actions.setStatusLine(`${currentAgent.name} is writing...`);
+              actions.setStatusLine(`${currentAgent.name} is implementing...`);
+              setStreamPhase('implementation');
             },
             onDone: (full) => {
               const final = full || fullResponse;
+              const firstTokenMs =
+                firstTokenTimeRef.current > 0 ? firstTokenTimeRef.current - sendTimeRef.current : undefined;
               const verdict = verifyRuntimeAnswer(final, runtimePacket);
+              const bottlenecks = emitRuntimeBottlenecks(sessionId, 'Delivery', runtimeScope, runtimePacket, {
+                researchMs: timings.researchMs,
+                planningMs: timings.planningMs,
+                implementationMs: Date.now() - sendTimeRef.current,
+                firstTokenMs,
+              });
               actions.addMessage(sessionId, {
                 role: 'assistant',
                 content: final,
@@ -801,8 +910,13 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                 meta: {
                   route: 'http',
                   model: selectedModel || currentAgent.name,
+                  runtimePhase: 'implementation',
                   previewConfirmed: previewId,
                   verifierOk: String(verdict.ok),
+                  ...(bottlenecks.length ? { runtimeBottlenecks: JSON.stringify(bottlenecks) } : {}),
+                  ...(runtimePacket.context_health
+                    ? { runtimeHealth: JSON.stringify(runtimePacket.context_health) }
+                    : {}),
                   ...(verdict.issues.length ? { verifierIssues: verdict.issues.join(',') } : {}),
                   ...(pendingTraceIdRef.current ? { traceId: pendingTraceIdRef.current } : {}),
                   ...(pendingTraceRecordRef.current
@@ -843,8 +957,8 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
               }
             },
             onStatus: (status: string) => {
-              if (status === 'thinking') setStreamPhase('thinking');
-              else if (status === 'writing') setStreamPhase('writing');
+              if (status === 'thinking') setStreamPhase('planning');
+              else if (status === 'writing') setStreamPhase('implementation');
             },
           },
           abortController.signal,
