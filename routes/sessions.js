@@ -58,7 +58,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
 
     // GET /api/chat-sessions — list all (metadata only, no messages)
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions') {
-      const claims = checkAuth(req);
+      const claims = await checkAuth(req);
       const userId = claims?.sub || 'system';
       const tenantId = claims?.activeWorkspaceId || 'default';
       const rows = stmtGetAll.all(userId, tenantId);
@@ -77,7 +77,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // GET /api/chat-sessions/recent-context — cross-session context for AI memory
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/recent-context') {
       try {
-        const claims = checkAuth(req);
+        const claims = await checkAuth(req);
         const userId = claims?.sub || 'system';
         const tenantId = claims?.activeWorkspaceId || 'default';
         const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -139,7 +139,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // GET /api/chat-sessions/search — search past conversations (text + voice + audit)
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/search') {
       try {
-        const claims = checkAuth(req);
+        const claims = await checkAuth(req);
         const userId = claims?.sub || 'system';
         const query = url.searchParams.get("q") || "";
         const since = url.searchParams.get("since") || "0";
@@ -228,7 +228,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
 
     // GET /api/chat-sessions/trash — list recently deleted sessions (must be before :id match)
     if (req.method === 'GET' && url.pathname === '/api/chat-sessions/trash') {
-      const claims = checkAuth(req);
+      const claims = await checkAuth(req);
       const userId = claims?.sub || 'system';
       const tenantId = claims?.activeWorkspaceId || 'default';
       const rows = stmtListDeleted.all(userId, tenantId);
@@ -240,7 +240,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     if (req.method === 'POST' && url.pathname.match(/^\/api\/chat-sessions\/[^/]+\/restore$/)) {
       const parts = url.pathname.split('/');
       const id = parts[parts.length - 2];
-      const claims = checkAuth(req);
+      const claims = await checkAuth(req);
       const userId = claims?.sub || 'system';
       const tenantId = claims?.activeWorkspaceId || 'default';
       const restored = stmtRestoreDeleted.run(id, userId, tenantId);
@@ -255,7 +255,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // GET /api/chat-sessions/:id — get single session with messages
     if (req.method === 'GET' && url.pathname.match(/^\/api\/chat-sessions\/[^/]+$/)) {
       const id = url.pathname.split('/').pop();
-      const claims = checkAuth(req);
+      const claims = await checkAuth(req);
       const userId = claims?.sub || 'system';
       const tenantId = claims?.activeWorkspaceId || 'default';
       const row = stmtGetOne.get(id, userId, tenantId);
@@ -269,7 +269,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       let body;
       try { body = await collectBody(req, 2 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
       try {
-        const claims = checkAuth(req);
+        const claims = await checkAuth(req);
         const userId = claims?.sub || 'system';
         const tenantId = claims?.activeWorkspaceId || 'default';
         const session = JSON.parse(body);
@@ -285,7 +285,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
     // DELETE /api/chat-sessions/:id — soft delete
     if (req.method === 'DELETE' && url.pathname.match(/^\/api\/chat-sessions\/[^/]+$/)) {
       const id = url.pathname.split('/').pop();
-      const claims = checkAuth(req);
+      const claims = await checkAuth(req);
       const userId = claims?.sub || 'unknown';
       const tenantId = claims?.activeWorkspaceId || 'default';
       stmtSoftDelete.run(userId, id, userId, tenantId);
@@ -300,7 +300,7 @@ export function registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stm
       let body;
       try { body = await collectBody(req, 5 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
       try {
-        const claims = checkAuth(req);
+        const claims = await checkAuth(req);
         const userId = claims?.sub || 'system';
         const tenantId = claims?.activeWorkspaceId || 'default';
         const { sessions: clientSessions = [] } = JSON.parse(body);

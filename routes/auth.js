@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { randomUUID, createHash, createHmac, timingSafeEqual, scryptSync, randomBytes, createDecipheriv, createCipheriv } from "node:crypto";
+import { randomUUID, createHmac, timingSafeEqual, scryptSync, randomBytes, createDecipheriv, createCipheriv } from "node:crypto";
 import { spawn } from "node:child_process";
 
 /** @typedef {import('node:http').IncomingMessage} IncomingMessage */
@@ -147,24 +147,6 @@ function hashPassword(password, salt) {
   if (!salt) salt = randomBytes(16).toString("hex");
   const derived = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 });
   return `scrypt:${salt}:${derived.toString("hex")}`;
-}
-
-/**
- * @param {string} password
- * @param {string} stored - stored hash (scrypt or legacy sha256)
- * @returns {boolean}
- */
-function verifyPassword(password, stored) {
-  if (stored.startsWith("scrypt:")) {
-    const [, salt, hash] = stored.split(":");
-    const derived = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex");
-    return timingSafeEqual(Buffer.from(derived, "hex"), Buffer.from(hash, "hex"));
-  }
-  const legacy = createHash("sha256").update(password).digest("hex");
-  if (stored.length === 64) {
-    return timingSafeEqual(Buffer.from(legacy, "hex"), Buffer.from(stored, "hex"));
-  }
-  return false;
 }
 
 /**
@@ -317,28 +299,6 @@ try {
   authSigningKey = Buffer.from(readFileSync(AUTH_SIGNING_KEY_PATH, "utf8").trim(), "hex");
 } catch { /* auth disabled if no key */ }
 
-/**
- * @param {string} username
- * @param {string} [role]
- * @returns {string|null} JWT token or null if signing key unavailable
- */
-function issueAuthToken(username, role = "admin") {
-  if (!authSigningKey) return null;
-  // Use cached platformId (UUID from shre-auth) so local fallback tokens
-  // produce the same user_id as platform tokens — critical for session sync.
-  const users = loadUsers();
-  const userRecord = users[username] || {};
-  const sub = userRecord.platformId || username;
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const now = Math.floor(Date.now() / 1000);
-  const claims = { sub, role, username, iat: now, exp: now + AUTH_TOKEN_TTL, jti: randomUUID() };
-  // Include cached workspace so tenant_id stays consistent
-  if (userRecord.activeWorkspaceId) claims.activeWorkspaceId = userRecord.activeWorkspaceId;
-  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
-  const sig = createHmac("sha256", authSigningKey).update(`${header}.${payload}`).digest("base64url");
-  return `${header}.${payload}.${sig}`;
-}
-
 /** Extract sub (user UUID) from a platform JWT without verifying signature */
 function extractSubFromToken(token) {
   try {
@@ -394,20 +354,39 @@ export function verifyAuthToken(token) {
   } catch { return null; }
 }
 
+async function resolvePlatformClaims(token) {
+  if (!token) return null;
+  try {
+    const { serviceUrl } = await import("shre-sdk/discovery");
+    const authUrl = serviceUrl("shre-auth");
+    const valRes = await fetch(`${authUrl}/v1/auth/validate-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const valData = await valRes.json().catch(() => null);
+    if (valData?.valid && valData.claims) return valData.claims;
+  } catch {
+    // Fail closed when shre-auth is unavailable.
+  }
+  return null;
+}
+
 /**
  * Check if request has valid auth. Returns claims or null.
  * @param {IncomingMessage} req
- * @returns {JWTClaims|null}
+ * @returns {Promise<JWTClaims|null>}
  */
-export function checkAuth(req) {
+export async function checkAuth(req) {
   const authHeader = req.headers["authorization"];
   if (authHeader?.startsWith("Bearer ")) {
-    return verifyAuthToken(authHeader.slice(7));
+    return resolvePlatformClaims(authHeader.slice(7));
   }
   const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
   const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
   if (tokenCookie) {
-    return verifyAuthToken(tokenCookie.split("=")[1]);
+    return resolvePlatformClaims(tokenCookie.split("=")[1]);
   }
   return null;
 }
@@ -521,40 +500,8 @@ export function registerAuthRoutes({ log }) {
             if (data.user && !data.user.username) data.user.username = username;
             return json(res, data);
           } catch (authErr) {
-            // shre-auth unavailable — fall back to local auth
-            log.warn("[auth] shre-auth unavailable, falling back to local auth", { error: authErr?.message });
-            const users = loadUsers();
-            const user = users[username];
-            if (!user || !verifyPassword(password, user.hash)) {
-              auditLog("login_failed", { ip: clientIp, username });
-              return json(res, { error: "Invalid credentials" }, 401);
-            }
-            upgradePasswordIfNeeded(username, password, users);
-            if (user.twoFactor && user.email) {
-              const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
-              const trustCookie = cookies.find(c => c.startsWith("shre_trust="));
-              const trustToken = trustCookie?.split("=")[1];
-              if (trustToken && isDeviceTrusted(username, trustToken)) {
-                const token = issueAuthToken(username, user.role || "admin");
-                if (!token) return json(res, { error: "Auth system unavailable" }, 500);
-                res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
-                auditLog("login_success_trusted", { ip: clientIp, username });
-                logLogin(username, req, "login_trusted_device");
-                return json(res, { token, user: { username, name: user.name || username, role: user.role || "admin" } });
-              }
-              const code = generateOTP();
-              otpStore.set(username, { code, expires: Date.now() + OTP_TTL, attempts: 0 });
-              sendOTPEmail(user.email, code, username);
-              const masked = user.email.replace(/^(.{1,2})(.*)(@.*)$/, (_, a, b, c) => a + "*".repeat(Math.min(b.length, 6)) + c);
-              auditLog("2fa_sent", { ip: clientIp, username });
-              return json(res, { requires2FA: true, maskedEmail: masked });
-            }
-            const token = issueAuthToken(username, user.role || "admin");
-            if (!token) return json(res, { error: "Auth system unavailable" }, 500);
-            res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
-            auditLog("login_success", { ip: clientIp, username });
-            logLogin(username, req, "login");
-            return json(res, { token, user: { username, name: user.name || username, role: user.role || "admin" } });
+            log.warn("[auth] shre-auth unavailable", { error: authErr?.message });
+            return json(res, { error: "Authentication service unavailable" }, 503);
           }
         } catch { return json(res, { error: "Invalid request" }, 400); }
       });
@@ -651,27 +598,13 @@ export function registerAuthRoutes({ log }) {
             logLogin(username, req, "login_2fa");
             return json(res, platformData);
           }
-          // Fallback: local auth (shre-auth was unavailable during login)
-          const users = loadUsers();
-          const user = users[username];
-          const token = issueAuthToken(username, user?.role || "admin");
-          if (!token) return json(res, { error: "Auth system unavailable" }, 500);
-          const cookieHeaders = [authCookie("shre_token", token, AUTH_TOKEN_TTL, req)];
-          if (shouldTrust) {
-            const deviceToken = trustDevice(username);
-            cookieHeaders.push(authCookie("shre_trust", deviceToken, TRUST_TTL, req));
-            auditLog("device_trusted", { ip: clientIp, username });
-          }
-          res.setHeader("Set-Cookie", cookieHeaders);
-          auditLog("login_success_2fa", { ip: clientIp, username });
-          logLogin(username, req, "login_2fa");
-          return json(res, { token, user: { username, name: user?.name || username, role: user?.role || "admin" } });
+          return json(res, { error: "Auth session unavailable" }, 503);
         } catch { return json(res, { error: "Invalid request" }, 400); }
       });
       return true;
     }
 
-    // ── Auth check (try shre-auth first, fallback to local) ──
+    // ── Auth check (shre-auth only) ──
     if (url.pathname === "/api/auth/check" && req.method === "GET") {
       const authHeader = req.headers["authorization"];
       const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -713,19 +646,8 @@ export function registerAuthRoutes({ log }) {
           });
         }
       } catch {
-        // shre-auth unavailable — fall back to local check
+        return json(res, { authenticated: false }, 401);
       }
-
-      // Local JWT fallback
-      const claims = checkAuth(req);
-      if (!claims) return json(res, { authenticated: false }, 401);
-      if (claims.jti && isJtiRevoked && (await isJtiRevoked(claims.jti))) {
-        return json(res, { authenticated: false, reason: "session_revoked" }, 401);
-      }
-      const users = loadUsers();
-      const user = users[claims.sub];
-      json(res, { authenticated: true, user: { username: claims.sub, name: user?.name || claims.sub, role: claims.role } });
-      return true;
     }
 
     // ── SSO from shre-auth-gate ──
@@ -960,7 +882,7 @@ export function registerAuthRoutes({ log }) {
     // ── Login history ──
     if (url.pathname === "/api/auth/sessions" && req.method === "GET") {
       try {
-        const claims = checkAuth(req);
+        const claims = await checkAuth(req);
         if (!claims) return json(res, { error: "Unauthorized" }, 401);
         const lines = existsSync(LOGIN_LOG_PATH)
           ? readFileSync(LOGIN_LOG_PATH, "utf8").trim().split("\n").filter(Boolean)
