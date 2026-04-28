@@ -1,6 +1,6 @@
 {
   "services": {
-    "shre-auth": { "port": 5490, "protocol": "https" },
+    "shre-auth": { "port": 5455, "protocol": "https" },
     "shre-chat": { "port": 5000, "protocol": "https" },
     "shre-chronicle": { "port": 5491, "protocol": "https" },
     "shre-contacts": { "port": 5492, "protocol": "https" },
