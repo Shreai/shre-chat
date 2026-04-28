@@ -1678,7 +1678,15 @@ async function requestHandler(req, res) {
     requestHost === "chat.nirtek.net" &&
     !["/api/health", "/api/readyz", "/health", "/readyz", "/api/version"].includes(url.pathname)
   ) {
-    res.writeHead(302, { Location: "https://mib.nirtek.net/ellie" });
+    res.writeHead(302, { Location: "https://mib.nirtek.net/" });
+    res.end();
+    return;
+  }
+
+  // Legacy login paths used by old bookmarks and redirect targets.
+  // Keep the standalone Shre app reachable even if users still hit the old gate URL.
+  if (requestHost === "shre.nirtek.net" && url.pathname.startsWith("/__gate/")) {
+    res.writeHead(302, { Location: "https://shre.nirtek.net/" });
     res.end();
     return;
   }
