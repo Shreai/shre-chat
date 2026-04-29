@@ -66,6 +66,8 @@ import {
   useFoldDetection,
   useUpdateSessions,
 } from './AppEffects';
+import { isLocalDevHost as isLocalDevHostFlag, isDevSafeMode } from './env';
+import { getAppModeForHost, scopedStorageKey } from './workspace-context';
 
 // Lazy-load non-default views for code splitting
 const ActivityView = lazy(() =>
@@ -169,8 +171,14 @@ function RouterGatewayEmbed() {
   );
 }
 
-const AGENT_KEY = 'shre-active-agent';
-const THEME_KEY = 'shre-theme';
+const FALLBACK_CHAT_AGENT_ID = 'ellie';
+const FALLBACK_DOCUMENTS_AGENT_ID = 'aros-agent';
+
+function resolveStartupAgentId(agentId: string | null, appMode: 'chat' | 'documents'): string {
+  const fallback = appMode === 'documents' ? FALLBACK_DOCUMENTS_AGENT_ID : FALLBACK_CHAT_AGENT_ID;
+  if (!agentId || agentId === 'nova') return fallback;
+  return agentId;
+}
 
 export function App() {
   // ── Demo mode — internal only, gated by compile flag ──
@@ -181,9 +189,10 @@ export function App() {
       new URLSearchParams(window.location.search).get('demo') === 'true'
     );
 
-  const DEV_BYPASS_AUTH = false;
-  const isDocumentsHost =
-    typeof window !== 'undefined' && window.location.hostname === 'shre.nirtek.net';
+  const DEV_BYPASS_AUTH = isLocalDevHostFlag();
+  const appMode = getAppModeForHost(
+    typeof window !== 'undefined' ? window.location.hostname : null,
+  );
 
   const {
     authState,
@@ -218,6 +227,15 @@ export function App() {
     );
   }
 
+  if (pendingWorkspaceSelection) {
+    return (
+      <WorkspaceSelectionScreen
+        pending={pendingWorkspaceSelection}
+        onSelect={handleWorkspaceSelected}
+      />
+    );
+  }
+
   if (authChecking) {
     return (
       <div
@@ -235,15 +253,6 @@ export function App() {
     );
   }
 
-  if (pendingWorkspaceSelection) {
-    return (
-      <WorkspaceSelectionScreen
-        pending={pendingWorkspaceSelection}
-        onSelect={handleWorkspaceSelected}
-      />
-    );
-  }
-
   if (!authState) {
     return <LoginView onLogin={handleLogin} />;
   }
@@ -255,7 +264,7 @@ export function App() {
       activeWorkspace={authState.workspace}
       workspaces={authState.workspaces}
       onWorkspaceSwitch={handleWorkspaceSwitch}
-      mode={isDocumentsHost ? 'documents' : 'chat'}
+      mode={appMode}
     />
   );
 }
@@ -275,17 +284,60 @@ function AuthenticatedApp({
   onWorkspaceSwitch: (workspaceId: string) => void;
   mode?: 'chat' | 'documents';
 }) {
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
+  const authProfileKeys = Array.from(
+    new Set(
+      [authUser.username, authUser.email, authUser.id]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    ),
+  );
+  const loadAuthProfile = useCallback(() => {
+    for (const key of authProfileKeys) {
+      const profile = loadUserProfile(key);
+      if (profile) return profile;
+    }
+    return loadUserProfile(authUser.username);
+  }, [authProfileKeys, authUser.username]);
+  const saveAuthProfile = useCallback(
+    (profile: UserProfile) => {
+      for (const key of authProfileKeys) {
+        saveUserProfile(profile, key);
+      }
+    },
+    [authProfileKeys],
+  );
+
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadAuthProfile());
   const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done' | 'welcome'>(
-    'loading',
+    () => {
+      if (isLocalDevHostFlag()) return 'done';
+      return loadAuthProfile()?.onboardedAt ? 'done' : 'loading';
+    },
   );
   const [landingTarget, setLandingTarget] = useState<'chat' | 'home'>('chat');
   const checkedRef = useRef(false);
 
   useEffect(() => {
+    if (isDevSafeMode()) return;
     if (checkedRef.current) return;
     checkedRef.current = true;
     const ac = new AbortController();
+    let settled = false;
+    const finalize = (phase: 'done' | 'needed') => {
+      if (settled || ac.signal.aborted) return;
+      settled = true;
+      setOnboardingPhase(phase);
+    };
+    const timeoutId = window.setTimeout(() => {
+      if (settled || ac.signal.aborted) return;
+      console.warn('Onboarding status check timed out');
+      if (userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
+        finalize('done');
+      } else {
+        finalize('needed');
+      }
+      ac.abort();
+    }, 5000);
 
     fetch('/api/onboarding/status', { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : null))
@@ -308,13 +360,15 @@ function AuthenticatedApp({
                 size: data.identityData.businessSize || '',
               };
             }
-            saveUserProfile(completed);
+            saveAuthProfile(completed);
             setUserProfile(completed);
           }
-          setOnboardingPhase('done');
+          window.clearTimeout(timeoutId);
+          finalize('done');
         } else {
           // Server says not complete — check for local migration
-          const migrated = localStorage.getItem('shre-onboarding-migrated');
+          const migratedKey = scopedStorageKey(`shre-onboarding-migrated:${authUser.username}`);
+          const migrated = localStorage.getItem(migratedKey);
           if (!migrated && userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
             // Existing local user — push to server as complete, don't re-onboard
             fetch('/api/onboarding/state', {
@@ -349,26 +403,32 @@ function AuthenticatedApp({
                   : undefined,
               }),
             })
-              .then(() => localStorage.setItem('shre-onboarding-migrated', '1'))
+              .then(() => localStorage.setItem(migratedKey, '1'))
               .catch(() => {
                 /* non-fatal */
               });
-            setOnboardingPhase('done');
+            window.clearTimeout(timeoutId);
+            finalize('done');
           } else {
-            setOnboardingPhase('needed');
+            window.clearTimeout(timeoutId);
+            finalize('needed');
           }
         }
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
+        window.clearTimeout(timeoutId);
         // MIB007 unreachable — fall back to localStorage
         if (userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
-          setOnboardingPhase('done');
+          finalize('done');
         } else {
-          setOnboardingPhase('needed');
+          finalize('needed');
         }
       });
-    return () => ac.abort();
+    return () => {
+      window.clearTimeout(timeoutId);
+      ac.abort();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (onboardingPhase === 'loading') {
@@ -391,6 +451,7 @@ function AuthenticatedApp({
     return (
       <OnboardingView
         profile={userProfile || createDefaultProfile(authUser)}
+        mode={mode === 'documents' ? 'documents' : 'app'}
         onComplete={(completed, selectedAgents, selectedBundle) => {
           // Persist to server with selected agents from wizard
           fetch('/api/onboarding/unified/activate', {
@@ -410,7 +471,7 @@ function AuthenticatedApp({
           }).catch(() => {
             /* non-fatal */
           });
-          saveUserProfile(completed);
+          saveAuthProfile(completed);
           setUserProfile(completed);
           // Check smart landing target
           fetch('/api/onboarding/landing-target')
@@ -434,7 +495,7 @@ function AuthenticatedApp({
           }).catch(() => {
             /* non-fatal */
           });
-          saveUserProfile(skipped);
+          saveAuthProfile(skipped);
           setUserProfile(skipped);
           setOnboardingPhase('done');
         }}
@@ -487,7 +548,16 @@ function AuthenticatedApp({
   }
 
   return mode === 'documents' ? (
-    <DocumentsView authUser={authUser} userProfile={userProfile!} onLogout={onLogout} />
+    <MainApp
+      authUser={authUser}
+      onLogout={onLogout}
+      userProfile={userProfile!}
+      setUserProfile={setUserProfile}
+      activeWorkspace={activeWorkspace}
+      workspaces={workspaces}
+      onWorkspaceSwitch={onWorkspaceSwitch}
+      mode={mode}
+    />
   ) : (
     <MainApp
       authUser={authUser}
@@ -497,6 +567,7 @@ function AuthenticatedApp({
       activeWorkspace={activeWorkspace}
       workspaces={workspaces}
       onWorkspaceSwitch={onWorkspaceSwitch}
+      mode={mode}
     />
   );
 }
@@ -509,6 +580,7 @@ function MainApp({
   activeWorkspace,
   workspaces,
   onWorkspaceSwitch,
+  mode = 'chat',
 }: {
   authUser: AuthUser;
   onLogout: () => void;
@@ -517,12 +589,20 @@ function MainApp({
   onWorkspaceSwitch: (workspaceId: string) => void;
   userProfile: UserProfile;
   setUserProfile: (p: UserProfile) => void;
+  mode?: 'chat' | 'documents';
 }) {
+  const appMode = getAppModeForHost(
+    typeof window !== 'undefined' ? window.location.hostname : null,
+  );
   const [sessions, setSessions] = useState<Session[]>(() => {
     const loaded = loadSessions();
     if (loaded.length === 0) {
       try {
-        const old = JSON.parse(localStorage.getItem('shre-chat-history') || '[]');
+        const old = JSON.parse(
+          localStorage.getItem(scopedStorageKey('shre-chat-history')) ||
+            localStorage.getItem('shre-chat-history') ||
+            '[]',
+        );
         if (old.length > 0) {
           const migrated = createSession('Migrated chat', 'main');
           migrated.messages = old;
@@ -534,6 +614,7 @@ function MainApp({
     }
     return loaded;
   });
+  const devSafeMode = isDevSafeMode();
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(() => {
     const saved = loadActiveSession();
@@ -543,6 +624,7 @@ function MainApp({
 
   // Sync sessions with server on mount — merges server data with local
   useEffect(() => {
+    if (devSafeMode) return;
     syncWithServer(sessions).then((merged) => {
       if (merged !== sessions && merged.length > 0) {
         setSessions(merged);
@@ -557,8 +639,12 @@ function MainApp({
     return activeSessionId ? [activeSessionId] : [];
   });
 
-  const [activeAgentId, setActiveAgentId] = useState(
-    () => localStorage.getItem(AGENT_KEY) || 'shre',
+  const [activeAgentId, setActiveAgentId] = useState(() =>
+    resolveStartupAgentId(
+      localStorage.getItem(scopedStorageKey('shre-active-agent')) ||
+        localStorage.getItem('shre-active-agent'),
+      appMode,
+    ),
   );
   const [view, setView] = useState<View>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -574,12 +660,16 @@ function MainApp({
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [syncing, setSyncing] = useState(false);
   const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(THEME_KEY) as Theme) || 'dark',
+    () =>
+      ((localStorage.getItem(scopedStorageKey('shre-theme')) ||
+        localStorage.getItem('shre-theme')) as Theme) || 'dark',
   );
 
   // ── RapidRMS live anomaly stream ──
-  const [rapidrmsWorkspace] = useState<string | null>(() =>
-    localStorage.getItem('rapidrms-workspace'),
+  const [rapidrmsWorkspace] = useState<string | null>(
+    () =>
+      localStorage.getItem(scopedStorageKey('rapidrms-workspace')) ||
+      localStorage.getItem('rapidrms-workspace'),
   );
   const {
     anomalies: rmsAnomalies,
@@ -588,12 +678,21 @@ function MainApp({
   } = useAnomalyStream({
     workspaceId: rapidrmsWorkspace,
   });
-  const [compact, setCompact] = useState(() => localStorage.getItem('shre-compact') === 'true');
+  const [compact, setCompact] = useState(
+    () =>
+      (localStorage.getItem(scopedStorageKey('shre-compact')) ||
+        localStorage.getItem('shre-compact')) === 'true',
+  );
   const [writeEnabled, setWriteEnabled] = useState(
-    () => localStorage.getItem('shre-write-enabled') !== 'false',
+    () =>
+      devSafeMode ||
+      (localStorage.getItem(scopedStorageKey('shre-write-enabled')) ||
+        localStorage.getItem('shre-write-enabled')) !== 'false',
   );
   const [claudeCliMode, setClaudeCliMode] = useState(
-    () => localStorage.getItem('shre-claude-cli-mode') === 'true',
+    () =>
+      (localStorage.getItem(scopedStorageKey('shre-claude-cli-mode')) ||
+        localStorage.getItem('shre-claude-cli-mode')) === 'true',
   );
   const [replyToIndex, setReplyToIndex] = useState<number | null>(null);
   const [themeCustom, setThemeCustomState] = useState<ThemeCustom>(() => loadThemeCustom());
@@ -609,6 +708,15 @@ function MainApp({
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (activeAgentId === 'nova') {
+      const fallback =
+        appMode === 'documents' ? FALLBACK_DOCUMENTS_AGENT_ID : FALLBACK_CHAT_AGENT_ID;
+      setActiveAgentId(fallback);
+      localStorage.setItem(scopedStorageKey('shre-active-agent'), fallback);
+    }
+  }, [activeAgentId, appMode]);
 
   // ── Refs ──
   const sessionsRef = useRef(sessions);
@@ -790,298 +898,302 @@ function MainApp({
     (window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true);
 
-  return (
-    <ErrorBoundary>
-      <AppContext.Provider value={contextValue}>
-        <div
-          className={`h-full flex flex-col${isPWA ? ' pwa-mode' : ''}`}
-          style={{ background: 'var(--c-bg-1)' }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          {/* PWA safe-area spacer — accounts for notch/status bar without a redundant header */}
-          {isPWA && (
-            <div
-              className="shrink-0"
+  const mainContent =
+    mode === 'documents' ? (
+      <DocumentsView authUser={authUser} userProfile={userProfile} onLogout={onLogout} />
+    ) : (
+      <div
+        className={`h-full flex flex-col${isPWA ? ' pwa-mode' : ''}`}
+        style={{ background: 'var(--c-bg-1)' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* PWA safe-area spacer — accounts for notch/status bar without a redundant header */}
+        {isPWA && (
+          <div
+            className="shrink-0"
+            style={{
+              height: 'env(safe-area-inset-top, 0px)',
+              background: 'var(--c-bg-2)',
+            }}
+          />
+        )}
+        <StatusBar />
+        <InstallBanner />
+        {workspaces && workspaces.length > 1 && (
+          <WorkspaceSwitcher
+            activeWorkspace={
+              (activeWorkspace ?? null) as {
+                id: string;
+                name: string;
+                role: string;
+                isDefault?: boolean;
+              } | null
+            }
+            workspaces={workspaces}
+            onSwitch={onWorkspaceSwitch}
+          />
+        )}
+        {rmsAnomalies.length > 0 && (
+          <div
+            style={{
+              background:
+                rmsCriticalCount > 0 ? 'var(--c-error, #dc2626)' : 'var(--c-warning, #d97706)',
+              color: '#fff',
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              fontSize: 13,
+              lineHeight: 1.4,
+              flexShrink: 0,
+            }}
+            role="alert"
+            aria-live="polite"
+          >
+            <span style={{ fontSize: 16, flexShrink: 0, paddingTop: 1 }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {rmsAnomalies.slice(0, 3).map((a: any, i: number) => (
+                <div
+                  key={i}
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  <strong style={{ textTransform: 'capitalize' }}>{a.severity}</strong>: {a.message}
+                </div>
+              ))}
+              {rmsAnomalies.length > 3 && (
+                <div style={{ opacity: 0.85 }}>
+                  +{rmsAnomalies.length - 3} more alert{rmsAnomalies.length - 3 !== 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={dismissRmsAlerts}
               style={{
-                height: 'env(safe-area-inset-top, 0px)',
-                background: 'var(--c-bg-2)',
-              }}
-            />
-          )}
-          <StatusBar />
-          <InstallBanner />
-          {workspaces && workspaces.length > 1 && (
-            <WorkspaceSwitcher
-              activeWorkspace={
-                (activeWorkspace ?? null) as {
-                  id: string;
-                  name: string;
-                  role: string;
-                  isDefault?: boolean;
-                } | null
-              }
-              workspaces={workspaces}
-              onSwitch={onWorkspaceSwitch}
-            />
-          )}
-          {rmsAnomalies.length > 0 && (
-            <div
-              style={{
-                background:
-                  rmsCriticalCount > 0 ? 'var(--c-error, #dc2626)' : 'var(--c-warning, #d97706)',
+                background: 'none',
+                border: 'none',
                 color: '#fff',
-                padding: '6px 12px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 8,
-                fontSize: 13,
-                lineHeight: 1.4,
+                cursor: 'pointer',
+                fontSize: 16,
+                padding: '0 4px',
+                opacity: 0.85,
                 flexShrink: 0,
               }}
-              role="alert"
-              aria-live="polite"
+              title="Dismiss alerts"
+              aria-label="Dismiss RapidRMS alerts"
             >
-              <span style={{ fontSize: 16, flexShrink: 0, paddingTop: 1 }}>⚠️</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {rmsAnomalies.slice(0, 3).map((a: any, i: number) => (
-                  <div
-                    key={i}
-                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                  >
-                    <strong style={{ textTransform: 'capitalize' }}>{a.severity}</strong>:{' '}
-                    {a.message}
-                  </div>
-                ))}
-                {rmsAnomalies.length > 3 && (
-                  <div style={{ opacity: 0.85 }}>
-                    +{rmsAnomalies.length - 3} more alert{rmsAnomalies.length - 3 !== 1 ? 's' : ''}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={dismissRmsAlerts}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  fontSize: 16,
-                  padding: '0 4px',
-                  opacity: 0.85,
-                  flexShrink: 0,
-                }}
-                title="Dismiss alerts"
-                aria-label="Dismiss RapidRMS alerts"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-          <div className="flex flex-1 min-h-0">
-            <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
-            <Sidebar />
-            <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
+              ✕
+            </button>
+          </div>
+        )}
+        <div className="flex flex-1 min-h-0">
+          <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
+          <Sidebar />
+          <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
+            <Suspense fallback={<LazyFallback />}>
+              <ChatView />
+            </Suspense>
+          </div>
+          {view !== 'chat' && (
+            <div className="flex-1 flex flex-col min-h-0 min-w-0">
+              <ViewNavHeader view={view} onSwitch={actions.setView} />
               <Suspense fallback={<LazyFallback />}>
-                <ChatView />
+                {view === 'activity' && (
+                  <ViewErrorBoundary viewName="Activity">
+                    <ActivityView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'files' && (
+                  <ViewErrorBoundary viewName="Files">
+                    <FilesView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'cron' && (
+                  <ViewErrorBoundary viewName="Cron">
+                    <CronView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'feed' && (
+                  <ViewErrorBoundary viewName="Feed">
+                    <FeedView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'agent-feed' && (
+                  <ViewErrorBoundary viewName="Agent Feed">
+                    <AgentFeedView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'agent-social' && (
+                  <ViewErrorBoundary viewName="Agent Social">
+                    <AgentSocialView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'preview' && (
+                  <ViewErrorBoundary viewName="Preview">
+                    <PreviewView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'spend' && (
+                  <ViewErrorBoundary viewName="Spend">
+                    <SpendView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'briefing' && (
+                  <ViewErrorBoundary viewName="Briefing">
+                    <BriefingView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'reminders' && (
+                  <ViewErrorBoundary viewName="Reminders">
+                    <RemindersView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'cost-dashboard' && (
+                  <ViewErrorBoundary viewName="Cost Dashboard">
+                    <CostDashboardView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'marketplace' && (
+                  <ViewErrorBoundary viewName="Marketplace">
+                    <MarketplaceView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'admin' && (
+                  <ViewErrorBoundary viewName="Admin">
+                    <AdminView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'feed-analytics' && (
+                  <ViewErrorBoundary viewName="Feed Analytics">
+                    <FeedAnalyticsView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'task-timeline' && (
+                  <ViewErrorBoundary viewName="Task Timeline">
+                    <TaskTimelineView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'finetune' && (
+                  <ViewErrorBoundary viewName="Fine-Tuning">
+                    <FinetuneView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'reports' && (
+                  <ViewErrorBoundary viewName="Reports">
+                    <ReportsView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'employee-activity' && (
+                  <ViewErrorBoundary viewName="Employee Activity">
+                    <EmployeeActivityView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'tasks' && (
+                  <ViewErrorBoundary viewName="Tasks">
+                    <TasksView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'projects' && (
+                  <ViewErrorBoundary viewName="Projects">
+                    <ProjectsView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'email' && (
+                  <ViewErrorBoundary viewName="Email">
+                    <EmailView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'billing' && (
+                  <ViewErrorBoundary viewName="Billing">
+                    <BillingView />
+                  </ViewErrorBoundary>
+                )}
+                {__SHRE_INTERNAL__ && view === 'investor' && (
+                  <ViewErrorBoundary viewName="Investor Dashboard">
+                    <InvestorView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'agent-trace' && (
+                  <ViewErrorBoundary viewName="Agent Trace">
+                    <AgentTraceView />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'router-gateway' && (
+                  <ViewErrorBoundary viewName="Gateway Status">
+                    <RouterGatewayEmbed />
+                  </ViewErrorBoundary>
+                )}
+                {view === 'shre-dashboard' && (
+                  <ViewErrorBoundary viewName="Shre Dashboard">
+                    <div
+                      className="flex-1 w-full h-full flex flex-col"
+                      style={{ background: 'var(--c-bg-1)' }}
+                    >
+                      <iframe
+                        src="/shre-dashboard/"
+                        className="flex-1 w-full border-0"
+                        title="Shre AI Dashboard"
+                        style={{ background: '#1a1a2e', minHeight: 0 }}
+                      />
+                    </div>
+                  </ViewErrorBoundary>
+                )}
+                {view === 'cortexdb' && (
+                  <ViewErrorBoundary viewName="CortexDB">
+                    <div
+                      className="flex-1 w-full h-full flex flex-col"
+                      style={{ background: 'var(--c-bg-1)' }}
+                    >
+                      <iframe
+                        src="/cortexdb-ui/"
+                        className="flex-1 w-full border-0"
+                        title="CortexDB Dashboard"
+                        style={{ background: '#1a1a2e', minHeight: 0 }}
+                      />
+                    </div>
+                  </ViewErrorBoundary>
+                )}
+                {view === 'storepulse' && (
+                  <ViewErrorBoundary viewName="StorePulse">
+                    <div
+                      className="flex-1 w-full h-full flex flex-col"
+                      style={{ background: 'var(--c-bg-1)' }}
+                    >
+                      <iframe
+                        src="/storepulse/"
+                        className="flex-1 w-full border-0"
+                        title="StorePulse"
+                        style={{ background: '#1a1a2e', minHeight: 0 }}
+                      />
+                    </div>
+                  </ViewErrorBoundary>
+                )}
+                {view === 'app-marketplace' && (
+                  <ViewErrorBoundary viewName="Marketplace">
+                    <div
+                      className="flex-1 w-full h-full flex flex-col"
+                      style={{ background: 'var(--c-bg-1)' }}
+                    >
+                      <iframe
+                        src="/app-marketplace/"
+                        className="flex-1 w-full border-0"
+                        title="Marketplace"
+                        style={{ background: '#1a1a2e', minHeight: 0 }}
+                      />
+                    </div>
+                  </ViewErrorBoundary>
+                )}
               </Suspense>
             </div>
-            {view !== 'chat' && (
-              <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                <ViewNavHeader view={view} onSwitch={actions.setView} />
-                <Suspense fallback={<LazyFallback />}>
-                  {view === 'activity' && (
-                    <ViewErrorBoundary viewName="Activity">
-                      <ActivityView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'files' && (
-                    <ViewErrorBoundary viewName="Files">
-                      <FilesView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'cron' && (
-                    <ViewErrorBoundary viewName="Cron">
-                      <CronView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'feed' && (
-                    <ViewErrorBoundary viewName="Feed">
-                      <FeedView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'agent-feed' && (
-                    <ViewErrorBoundary viewName="Agent Feed">
-                      <AgentFeedView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'agent-social' && (
-                    <ViewErrorBoundary viewName="Agent Social">
-                      <AgentSocialView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'preview' && (
-                    <ViewErrorBoundary viewName="Preview">
-                      <PreviewView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'spend' && (
-                    <ViewErrorBoundary viewName="Spend">
-                      <SpendView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'briefing' && (
-                    <ViewErrorBoundary viewName="Briefing">
-                      <BriefingView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'reminders' && (
-                    <ViewErrorBoundary viewName="Reminders">
-                      <RemindersView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'cost-dashboard' && (
-                    <ViewErrorBoundary viewName="Cost Dashboard">
-                      <CostDashboardView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'marketplace' && (
-                    <ViewErrorBoundary viewName="Marketplace">
-                      <MarketplaceView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'admin' && (
-                    <ViewErrorBoundary viewName="Admin">
-                      <AdminView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'feed-analytics' && (
-                    <ViewErrorBoundary viewName="Feed Analytics">
-                      <FeedAnalyticsView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'task-timeline' && (
-                    <ViewErrorBoundary viewName="Task Timeline">
-                      <TaskTimelineView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'finetune' && (
-                    <ViewErrorBoundary viewName="Fine-Tuning">
-                      <FinetuneView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'reports' && (
-                    <ViewErrorBoundary viewName="Reports">
-                      <ReportsView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'employee-activity' && (
-                    <ViewErrorBoundary viewName="Employee Activity">
-                      <EmployeeActivityView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'tasks' && (
-                    <ViewErrorBoundary viewName="Tasks">
-                      <TasksView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'projects' && (
-                    <ViewErrorBoundary viewName="Projects">
-                      <ProjectsView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'email' && (
-                    <ViewErrorBoundary viewName="Email">
-                      <EmailView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'billing' && (
-                    <ViewErrorBoundary viewName="Billing">
-                      <BillingView />
-                    </ViewErrorBoundary>
-                  )}
-                  {__SHRE_INTERNAL__ && view === 'investor' && (
-                    <ViewErrorBoundary viewName="Investor Dashboard">
-                      <InvestorView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'agent-trace' && (
-                    <ViewErrorBoundary viewName="Agent Trace">
-                      <AgentTraceView />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'router-gateway' && (
-                    <ViewErrorBoundary viewName="Router Gateway">
-                      <RouterGatewayEmbed />
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'shre-dashboard' && (
-                    <ViewErrorBoundary viewName="Shre Dashboard">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/shre-dashboard/"
-                          className="flex-1 w-full border-0"
-                          title="Shre AI Dashboard"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'cortexdb' && (
-                    <ViewErrorBoundary viewName="CortexDB">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/cortexdb-ui/"
-                          className="flex-1 w-full border-0"
-                          title="CortexDB Dashboard"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'storepulse' && (
-                    <ViewErrorBoundary viewName="StorePulse">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/storepulse/"
-                          className="flex-1 w-full border-0"
-                          title="StorePulse"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                  {view === 'app-marketplace' && (
-                    <ViewErrorBoundary viewName="Marketplace">
-                      <div
-                        className="flex-1 w-full h-full flex flex-col"
-                        style={{ background: 'var(--c-bg-1)' }}
-                      >
-                        <iframe
-                          src="/app-marketplace/"
-                          className="flex-1 w-full border-0"
-                          title="Marketplace"
-                          style={{ background: '#1a1a2e', minHeight: 0 }}
-                        />
-                      </div>
-                    </ViewErrorBoundary>
-                  )}
-                </Suspense>
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      </AppContext.Provider>
+      </div>
+    );
+
+  return (
+    <ErrorBoundary>
+      <AppContext.Provider value={contextValue}>{mainContent}</AppContext.Provider>
     </ErrorBoundary>
   );
 }

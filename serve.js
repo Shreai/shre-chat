@@ -15,6 +15,10 @@ import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline, createServiceClient } from "shre-sdk";
 import { isProductionLike as isProductionLikeEnv } from "shre-sdk/environment";
+import { getAgentModels, loadModelConfig } from "shre-model-config";
+import { MINIMUM_FLEET } from "../shre-router/dist/minimum-fleet.js";
+import { SYSTEM_TOOLS } from "../shre-router/dist/system-tools.js";
+import { APP_TOOLS } from "../shre-router/dist/app-tools.js";
 
 /** Universal service client — retry + circuit breaker for inter-service calls */
 const svc = createServiceClient("shre-chat");
@@ -71,6 +75,126 @@ const LOCAL_VOICE_URL = process.env.LOCAL_VOICE_URL || "http://127.0.0.1:5525";
 const PIPER_VOICE_URL = process.env.PIPER_VOICE_URL || "http://127.0.0.1:5464";
 const SHRE_VOICE_URL = process.env.SHRE_VOICE_URL || serviceUrl("shre-voice");
 const SHRE_ROUTER_URL = process.env.SHRE_ROUTER_URL || serviceUrl("shre-router");
+const ALL_ROUTER_TOOLS = [...SYSTEM_TOOLS, ...APP_TOOLS];
+
+const TOOL_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    content: {
+      oneOf: [
+        { type: "string" },
+        {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { type: { type: "string" } },
+            required: ["type"],
+            additionalProperties: true,
+          },
+        },
+      ],
+    },
+    is_error: { type: "boolean" },
+    metadata: { type: "object", additionalProperties: true },
+  },
+  required: ["content"],
+  additionalProperties: true,
+};
+
+let _cachedRouterConfigAgents = null;
+let _cachedRouterToolsAvailable = null;
+let _cachedAgentCapabilities = null;
+let _cachedMinimumFleet = null;
+
+function fallbackRouterConfigAgents() {
+  if (_cachedRouterConfigAgents) return _cachedRouterConfigAgents;
+  try {
+    _cachedRouterConfigAgents = getAgentModels();
+  } catch {
+    _cachedRouterConfigAgents = {
+      _default: "ollama/qwen3:8b",
+      _councilDefault: "ollama/qwen3:8b",
+      shre: "ollama/aros:14b",
+      main: "ollama/aros:14b",
+      ellie: "ollama/aros:14b",
+      storepulse: "ollama-remote/shre-ft:latest",
+      support: "ollama/qwen3:8b",
+    };
+  }
+  return _cachedRouterConfigAgents;
+}
+
+function fallbackRouterToolsAvailable() {
+  if (_cachedRouterToolsAvailable) return _cachedRouterToolsAvailable;
+  _cachedRouterToolsAvailable = {
+    tools: ALL_ROUTER_TOOLS.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema,
+      output_schema: TOOL_OUTPUT_SCHEMA,
+    })),
+    systemTools: SYSTEM_TOOLS.length,
+    appTools: APP_TOOLS.length,
+    total: ALL_ROUTER_TOOLS.length,
+    enabled: true,
+  };
+  return _cachedRouterToolsAvailable;
+}
+
+function fallbackAgentCapabilities() {
+  if (_cachedAgentCapabilities) return _cachedAgentCapabilities;
+  _cachedAgentCapabilities = {
+    agents: Object.entries(fallbackRouterConfigAgents())
+      .filter(([id]) => !id.startsWith("_"))
+      .map(([id, model]) => ({
+        id,
+        tier: "unknown",
+        domains: [],
+        specializations: [],
+        model,
+      })),
+  };
+  return _cachedAgentCapabilities;
+}
+
+function fallbackMinimumFleet() {
+  if (_cachedMinimumFleet) return _cachedMinimumFleet;
+  _cachedMinimumFleet = { fleet: MINIMUM_FLEET };
+  return _cachedMinimumFleet;
+}
+
+function isDiscoveryRouterPath(routerPath) {
+  return (
+    routerPath === "/v1/config/agents" ||
+    routerPath === "/v1/tools/available" ||
+    routerPath === "/v1/config/models"
+  );
+}
+
+function sendDiscoveryFallback(res, routerPath) {
+  if (routerPath === "/v1/config/agents") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(fallbackRouterConfigAgents()));
+    return true;
+  }
+  if (routerPath === "/v1/tools/available") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(fallbackRouterToolsAvailable()));
+    return true;
+  }
+  if (routerPath === "/v1/config/models") {
+    try {
+      const config = loadModelConfig();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ catalog: config.catalog, roles: config.roles, gates: config.gates, agents: config.agents }));
+    } catch {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ catalog: {}, roles: {}, gates: {}, agents: {} }));
+    }
+    return true;
+  }
+  return false;
+}
 
 // ── Production safety: block empty passwords (also enforced for beta — paying customers) ──
 if ((isProductionLikeEnv() || process.env.NODE_ENV === "production") && !process.env.CORTEX_PG_PASSWORD) {
@@ -1683,7 +1807,12 @@ async function requestHandler(req, res) {
   // Legacy login paths used by old bookmarks and redirect targets.
   // Keep the standalone Shre app reachable even if users still hit the old gate URL.
   if (requestHost === "shre.nirtek.net" && url.pathname.startsWith("/__gate/")) {
-    res.writeHead(302, { Location: "https://shre.nirtek.net/" });
+    const forwardedProto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+    const protocol = forwardedProto === "http" ? "http" : "https";
+    const currentHost = (req.headers["x-forwarded-host"] || req.headers["host"] || "shre.nirtek.net")
+      .split(":")[0]
+      .trim();
+    res.writeHead(302, { Location: `${protocol}://${currentHost}/` });
     res.end();
     return;
   }
@@ -2402,11 +2531,12 @@ async function requestHandler(req, res) {
       const routerUrl = serviceUrl("shre-router");
       const upstream = await fetch(`${routerUrl}/v1/agents/capabilities`, { signal: AbortSignal.timeout(8000) });
       const data = await upstream.text();
+      if (upstream.ok) _cachedAgentCapabilities = JSON.parse(data);
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Agent capabilities proxy failed:", err.message);
-      json(res, { error: "shre-router unreachable" }, 502);
+      json(res, fallbackAgentCapabilities(), 200);
     }
     return;
   }
@@ -2418,11 +2548,16 @@ async function requestHandler(req, res) {
         signal: AbortSignal.timeout(8000),
       });
       const data = await upstream.text();
+      if (upstream.ok) {
+        try {
+          _cachedMinimumFleet = JSON.parse(data);
+        } catch { /* keep existing cache */ }
+      }
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Minimum fleet proxy failed:", err.message);
-      json(res, { error: "shre-router unreachable" }, 502);
+      json(res, fallbackMinimumFleet(), 200);
     }
     return;
   }
@@ -5059,6 +5194,7 @@ async function requestHandler(req, res) {
           Connection: "keep-alive",
           "X-Accel-Buffering": "no",
         });
+        res.write(`data: ${JSON.stringify({ type: "ack", route: "cli", accepted: true, sessionId: ledgerSessionId })}\n\n`);
 
         // Build claude CLI args
         const args = ["-p", contextPrompt, "--output-format", "stream-json", "--verbose"];
@@ -6084,6 +6220,7 @@ async function requestHandler(req, res) {
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
       });
+      res.write(`data: ${JSON.stringify({ type: "ack", route: "direct", accepted: true, model: resolvedModel })}\n\n`);
       res.write(`data: ${JSON.stringify({ type: "route", route: "direct", model: resolvedModel })}\n\n`);
 
       const ollamaRes = await fetch("http://127.0.0.1:11434/api/chat", {
@@ -6277,6 +6414,32 @@ async function requestHandler(req, res) {
           routerUrl,
           { method: req.method, headers: routerHeaders, rejectUnauthorized: false, timeout: proxyTimeoutMs },
           (routerRes) => {
+            if (
+              routerRes.statusCode &&
+              routerRes.statusCode >= 500 &&
+              req.method === "GET" &&
+              isDiscoveryRouterPath(routerPath)
+            ) {
+              let errorBody = "";
+              routerRes.on("data", (chunk) => {
+                errorBody += chunk;
+              });
+              routerRes.on("end", () => {
+                log.warn("[router-proxy] discovery upstream failed, using fallback", {
+                  routerPath,
+                  statusCode: routerRes.statusCode,
+                  body: errorBody.slice(0, 200),
+                });
+                if (sendDiscoveryFallback(res, routerPath)) return;
+                if (!res.headersSent) {
+                  res.writeHead(routerRes.statusCode ?? 502, { "Content-Type": "application/json" });
+                }
+                try {
+                  res.end(errorBody || JSON.stringify({ error: "shre-router error" }));
+                } catch {}
+              });
+              return;
+            }
             // ── Budget/billing blocks: convert to SSE so frontend doesn't hang ──
             if (routerRes.statusCode === 402 || routerRes.statusCode === 429) {
               let errorBody = "";
@@ -6400,6 +6563,9 @@ async function requestHandler(req, res) {
 
         routerReq.on("error", (err) => {
           log.error("[router-proxy] shre-router error:", err.message);
+          if (req.method === "GET" && isDiscoveryRouterPath(routerPath) && sendDiscoveryFallback(res, routerPath)) {
+            return;
+          }
           if (!res.headersSent) {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(

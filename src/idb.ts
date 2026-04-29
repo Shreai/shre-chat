@@ -7,6 +7,7 @@
  */
 
 import type { Session, ActivityEvent, FeedEntry, UploadedFile, QueuedMessage } from './store';
+import { scopedStorageKey } from './workspace-context';
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -92,67 +93,69 @@ function idbPut<T>(storeName: string, key: string, value: T): Promise<void> {
 // ── Public async load/save ───────────────────────────────────────────
 
 export async function idbLoadSessions(): Promise<Session[]> {
-  return (await idbGet<Session[]>(STORE_SESSIONS, 'data')) ?? [];
+  return (await idbGet<Session[]>(STORE_SESSIONS, scopedStorageKey('data'))) ?? [];
 }
 
 export async function idbSaveSessions(sessions: Session[]): Promise<void> {
-  await idbPut(STORE_SESSIONS, 'data', sessions);
+  await idbPut(STORE_SESSIONS, scopedStorageKey('data'), sessions);
 }
 
 export async function idbLoadActivity(): Promise<ActivityEvent[]> {
-  return (await idbGet<ActivityEvent[]>(STORE_ACTIVITY, 'data')) ?? [];
+  return (await idbGet<ActivityEvent[]>(STORE_ACTIVITY, scopedStorageKey('data'))) ?? [];
 }
 
 export async function idbSaveActivity(events: ActivityEvent[]): Promise<void> {
-  await idbPut(STORE_ACTIVITY, 'data', events);
+  await idbPut(STORE_ACTIVITY, scopedStorageKey('data'), events);
 }
 
 export async function idbLoadFeed(): Promise<FeedEntry[]> {
-  return (await idbGet<FeedEntry[]>(STORE_FEED, 'data')) ?? [];
+  return (await idbGet<FeedEntry[]>(STORE_FEED, scopedStorageKey('data'))) ?? [];
 }
 
 export async function idbSaveFeed(entries: FeedEntry[]): Promise<void> {
-  await idbPut(STORE_FEED, 'data', entries);
+  await idbPut(STORE_FEED, scopedStorageKey('data'), entries);
 }
 
 export async function idbLoadFiles(): Promise<UploadedFile[]> {
-  return (await idbGet<UploadedFile[]>(STORE_FILES, 'data')) ?? [];
+  return (await idbGet<UploadedFile[]>(STORE_FILES, scopedStorageKey('data'))) ?? [];
 }
 
 export async function idbSaveFiles(files: UploadedFile[]): Promise<void> {
-  await idbPut(STORE_FILES, 'data', files);
+  await idbPut(STORE_FILES, scopedStorageKey('data'), files);
 }
 
 export async function idbLoadQueue(): Promise<QueuedMessage[]> {
-  return (await idbGet<QueuedMessage[]>(STORE_QUEUE, 'data')) ?? [];
+  return (await idbGet<QueuedMessage[]>(STORE_QUEUE, scopedStorageKey('data'))) ?? [];
 }
 
 export async function idbSaveQueue(queue: QueuedMessage[]): Promise<void> {
-  await idbPut(STORE_QUEUE, 'data', queue);
+  await idbPut(STORE_QUEUE, scopedStorageKey('data'), queue);
 }
 
 export async function idbLoadTabs(): Promise<string[]> {
-  return (await idbGet<string[]>(STORE_META, 'tabs')) ?? [];
+  return (await idbGet<string[]>(STORE_META, scopedStorageKey('tabs'))) ?? [];
 }
 
 export async function idbSaveTabs(tabs: string[]): Promise<void> {
-  await idbPut(STORE_META, 'tabs', tabs);
+  await idbPut(STORE_META, scopedStorageKey('tabs'), tabs);
 }
 
 export async function idbLoadActiveSession(): Promise<string | null> {
-  return (await idbGet<string | null>(STORE_META, 'activeSession')) ?? null;
+  return (await idbGet<string | null>(STORE_META, scopedStorageKey('activeSession'))) ?? null;
 }
 
 export async function idbSaveActiveSession(id: string | null): Promise<void> {
-  await idbPut(STORE_META, 'activeSession', id);
+  await idbPut(STORE_META, scopedStorageKey('activeSession'), id);
 }
 
 export async function idbLoadScrollPositions(): Promise<Record<string, number>> {
-  return (await idbGet<Record<string, number>>(STORE_META, 'scrollPositions')) ?? {};
+  return (
+    (await idbGet<Record<string, number>>(STORE_META, scopedStorageKey('scrollPositions'))) ?? {}
+  );
 }
 
 export async function idbSaveScrollPositions(positions: Record<string, number>): Promise<void> {
-  await idbPut(STORE_META, 'scrollPositions', positions);
+  await idbPut(STORE_META, scopedStorageKey('scrollPositions'), positions);
 }
 
 // ── Migration ────────────────────────────────────────────────────────

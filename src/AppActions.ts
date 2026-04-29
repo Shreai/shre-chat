@@ -33,11 +33,19 @@ import {
   loadSessions,
   saveSessions,
 } from './store';
+import { scopedStorageKey } from './workspace-context';
 import type { ActivityStatus, ChatMessage } from './router-client';
 
-const AGENT_KEY = 'shre-active-agent';
-const COMPACT_KEY = 'shre-compact';
-const WRITE_ENABLED_KEY = 'shre-write-enabled';
+const FALLBACK_AGENT_ID = 'ellie';
+
+function scopedKey(base: string): string {
+  return scopedStorageKey(base);
+}
+
+function normalizeAgentId(agentId: string | null | undefined): string {
+  if (!agentId || agentId === 'nova') return FALLBACK_AGENT_ID;
+  return agentId;
+}
 
 export interface ActionDeps {
   sessionsRef: MutableRefObject<Session[]>;
@@ -140,9 +148,10 @@ export function buildActions(deps: ActionDeps): AppActions {
       saveActiveSession(id);
       const session = sessionsRef.current.find((s) => s.id === id);
       if (session?.agentId) {
-        setActiveAgentId(session.agentId);
-        localStorage.setItem(AGENT_KEY, session.agentId);
-        const PINNED_KEY = 'shre-pinned-sessions';
+        const agentId = normalizeAgentId(session.agentId);
+        setActiveAgentId(agentId);
+        localStorage.setItem(scopedKey('shre-active-agent'), agentId);
+        const PINNED_KEY = scopedKey('shre-pinned-sessions');
         let pinned: Record<string, string> = {};
         try {
           pinned = JSON.parse(localStorage.getItem(PINNED_KEY) || '{}');
@@ -275,11 +284,12 @@ export function buildActions(deps: ActionDeps): AppActions {
     setSidebarOpen,
 
     setActiveAgent: (agentId: string) => {
-      setActiveAgentId(agentId);
-      localStorage.setItem(AGENT_KEY, agentId);
+      const nextAgentId = normalizeAgentId(agentId);
+      setActiveAgentId(nextAgentId);
+      localStorage.setItem(AGENT_KEY, nextAgentId);
 
       // Always start a fresh session when switching agents
-      const s = createSession(undefined, agentId);
+      const s = createSession(undefined, nextAgentId);
       updateSessions((prev) => [...prev, s]);
       setActiveSessionId(s.id);
       saveActiveSession(s.id);
@@ -393,20 +403,20 @@ export function buildActions(deps: ActionDeps): AppActions {
     toggleCompact: () => {
       setCompact((prev) => {
         const next = !prev;
-        localStorage.setItem(COMPACT_KEY, String(next));
+        localStorage.setItem(scopedKey('shre-compact'), String(next));
         return next;
       });
     },
     toggleWriteEnabled: () => {
       setWriteEnabled((prev) => {
         const next = !prev;
-        localStorage.setItem(WRITE_ENABLED_KEY, String(next));
+        localStorage.setItem(scopedKey('shre-write-enabled'), String(next));
         return next;
       });
     },
     setClaudeCliMode: (on: boolean) => {
       setClaudeCliMode(on);
-      localStorage.setItem('shre-claude-cli-mode', String(on));
+      localStorage.setItem(scopedKey('shre-claude-cli-mode'), String(on));
     },
 
     setSystemPrompt: (sessionId: string, prompt: string) => {

@@ -16,6 +16,33 @@ function canUseStorage(): boolean {
   return typeof window !== 'undefined' && !!window.localStorage && !!window.sessionStorage;
 }
 
+function normalizeScopePart(value: string | null | undefined, fallback: string): string {
+  const trimmed = String(value || '').trim();
+  return trimmed || fallback;
+}
+
+export function getStoredAuthUserId(): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id?: unknown; username?: unknown; email?: unknown };
+    const userId = normalizeScopePart(
+      typeof parsed?.id === 'string'
+        ? parsed.id
+        : typeof parsed?.username === 'string'
+          ? parsed.username
+          : typeof parsed?.email === 'string'
+            ? parsed.email
+            : null,
+      '',
+    );
+    return userId || null;
+  } catch {
+    return null;
+  }
+}
+
 function parseWorkspace(value: string | null): WorkspaceContext | null {
   if (!value) return null;
   try {
@@ -76,4 +103,39 @@ export function clearWorkspaceContext(): void {
   localStorage.removeItem(WORKSPACE_ID_KEY);
   localStorage.removeItem(RAPIDRMS_WORKSPACE_KEY);
   sessionStorage.removeItem(WORKSPACE_ID_KEY);
+}
+
+export function buildStorageScope(parts?: {
+  host?: string | null;
+  userId?: string | null;
+  workspaceId?: string | null;
+}): string {
+  const host = normalizeScopePart(
+    parts?.host ?? (typeof window !== 'undefined' ? window.location.host : null),
+    'unknown-host',
+  );
+  const userId = normalizeScopePart(parts?.userId ?? getStoredAuthUserId(), 'anonymous');
+  const workspaceId = normalizeScopePart(parts?.workspaceId ?? getStoredWorkspaceId(), 'default');
+  return [host, userId, workspaceId].join(':');
+}
+
+export function scopedStorageKey(
+  base: string,
+  parts?: {
+    host?: string | null;
+    userId?: string | null;
+    workspaceId?: string | null;
+  },
+): string {
+  return `${base}:${buildStorageScope(parts)}`;
+}
+
+export function getAppModeForHost(hostname?: string | null): 'chat' | 'documents' {
+  const host = normalizeScopePart(
+    hostname ?? (typeof window !== 'undefined' ? window.location.hostname : null),
+    '',
+  ).toLowerCase();
+
+  if (host === 'shre.nirtek.net') return 'documents';
+  return 'chat';
 }

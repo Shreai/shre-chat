@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { SButton, SInput, SBadge, PoweredByNirlab } from '@shre/ui-kit';
+import { getAppModeForHost } from './workspace-context';
 
 interface LoginProps {
   onLogin: (
@@ -14,6 +15,10 @@ const REMEMBER_KEY = 'shre_remember_user';
 type AuthMode = 'login' | 'signup';
 
 export function LoginView({ onLogin }: LoginProps) {
+  const appMode = getAppModeForHost(
+    typeof window !== 'undefined' ? window.location.hostname : null,
+  );
+  const isDocumentsHost = appMode === 'documents';
   const [mode, setMode] = useState<AuthMode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -223,17 +228,21 @@ export function LoginView({ onLogin }: LoginProps) {
               boxShadow: '0 8px 32px rgba(99,141,255,0.25)',
             }}
           >
-            S
+            {isDocumentsHost ? 'D' : 'S'}
           </div>
           <h1 className="text-[22px] font-semibold m-0 mb-1" style={{ color: 'var(--c-text-1)' }}>
-            Shre Chat
+            {isDocumentsHost ? 'Shre Documents' : 'Shre Chat'}
           </h1>
           <p className="text-[13px] m-0" style={{ color: 'var(--c-text-4)' }}>
             {needs2FA
               ? 'Enter verification code'
               : mode === 'signup'
-                ? 'Create your account'
-                : 'Sign in to continue'}
+                ? isDocumentsHost
+                  ? 'Create your profile once'
+                  : 'Create your account'
+                : isDocumentsHost
+                  ? 'Sign in to upload and organize documents'
+                  : 'Sign in to continue'}
           </p>
         </div>
 

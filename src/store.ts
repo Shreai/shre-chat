@@ -29,6 +29,8 @@ import {
   idbSaveScrollPositions,
   idbLoadScrollPositions,
 } from './idb';
+import { isDevSafeMode } from './env';
+import { getStoredAuthUserId, getStoredWorkspaceId, scopedStorageKey } from './workspace-context';
 
 // ── Agent Registry ───────────────────────────────────────────────────
 
@@ -323,30 +325,43 @@ export interface UserProfile {
 const USER_PROFILE_KEY = 'shre-user-profile';
 const USER_PROFILE_KEY_PREFIX = 'shre-user-profile:';
 
+function userProfileKeys(userId?: string): string[] {
+  const resolvedUserId = userId || getStoredAuthUserId() || 'anonymous';
+  return [
+    scopedStorageKey(`${USER_PROFILE_KEY_PREFIX}${resolvedUserId}`, {
+      userId: resolvedUserId,
+      workspaceId: 'profile',
+    }),
+    userId ? `${USER_PROFILE_KEY_PREFIX}${resolvedUserId}` : null,
+    USER_PROFILE_KEY,
+  ].filter((value): value is string => Boolean(value));
+}
+
 export function loadUserProfile(userId?: string): UserProfile | null {
   try {
-    if (userId) {
-      const scoped = localStorage.getItem(`${USER_PROFILE_KEY_PREFIX}${userId}`);
-      if (scoped) return JSON.parse(scoped);
+    for (const key of userProfileKeys(userId)) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as UserProfile;
+      if (userId && parsed?.id && parsed.id !== userId) continue;
+      return parsed;
     }
-
-    const raw = localStorage.getItem(USER_PROFILE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as UserProfile;
-    if (userId && parsed?.id && parsed.id !== userId) return null;
-    return parsed;
   } catch {
     return null;
   }
+  return null;
 }
 
 export function saveUserProfile(profile: UserProfile, userId?: string): void {
   try {
-    if (userId) {
-      localStorage.setItem(`${USER_PROFILE_KEY_PREFIX}${userId}`, JSON.stringify(profile));
-    }
-    localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+    const resolvedUserId = userId || profile.id || getStoredAuthUserId() || 'anonymous';
+    localStorage.setItem(
+      scopedStorageKey(`${USER_PROFILE_KEY_PREFIX}${resolvedUserId}`, {
+        userId: resolvedUserId,
+        workspaceId: 'profile',
+      }),
+      JSON.stringify(profile),
+    );
   } catch {
     /* quota */
   }
@@ -575,9 +590,20 @@ export interface ThemeCustom {
 
 const THEME_CUSTOM_KEY = 'shre-theme-custom';
 
+function scopedKey(base: string, workspaceAware = true): string {
+  return scopedStorageKey(base, {
+    userId: getStoredAuthUserId(),
+    workspaceId: workspaceAware ? getStoredWorkspaceId() : 'profile',
+  });
+}
+
 export function loadThemeCustom(): ThemeCustom {
   try {
-    return JSON.parse(localStorage.getItem(THEME_CUSTOM_KEY) || '{}');
+    return JSON.parse(
+      localStorage.getItem(scopedKey(THEME_CUSTOM_KEY)) ||
+        localStorage.getItem(THEME_CUSTOM_KEY) ||
+        '{}',
+    );
   } catch {
     return {};
   }
@@ -585,7 +611,7 @@ export function loadThemeCustom(): ThemeCustom {
 
 export function saveThemeCustom(custom: ThemeCustom) {
   try {
-    localStorage.setItem(THEME_CUSTOM_KEY, JSON.stringify(custom));
+    localStorage.setItem(scopedKey(THEME_CUSTOM_KEY), JSON.stringify(custom));
   } catch {
     /* quota */
   }
@@ -630,6 +656,30 @@ const ACTIVE_KEY = 'shre-active-session';
 const QUEUE_KEY = 'shre-queue';
 const DRAFTS_KEY = 'shre-drafts';
 
+function scopedDataKey(base: string): string {
+  return scopedKey(base);
+}
+
+function loadFromScopedArray<T>(base: string, legacyKey: string): T[] {
+  const scoped = loadArray<T>(scopedDataKey(base));
+  if (scoped.length > 0) return scoped;
+  return loadArray<T>(legacyKey);
+}
+
+function loadFromScopedRecord<T extends Record<string, unknown>>(
+  base: string,
+  legacyKey: string,
+  fallback: T,
+): T {
+  const scoped = loadRecord<T>(scopedDataKey(base), fallback);
+  if (Object.keys(scoped).length > 0) return scoped;
+  return loadRecord<T>(legacyKey, fallback);
+}
+
+function loadFromScopedValue(base: string, legacyKey: string): string | null {
+  return localStorage.getItem(scopedDataKey(base)) || localStorage.getItem(legacyKey);
+}
+
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -653,7 +703,7 @@ function loadRecord<T extends Record<string, unknown>>(key: string, fallback: T)
 }
 
 export function loadSessions(): Session[] {
-  return loadArray<Session>(SESSIONS_KEY).map(normalizeSessionAgentId);
+  return loadFromScopedArray<Session>(SESSIONS_KEY, SESSIONS_KEY).map(normalizeSessionAgentId);
 }
 
 const MAX_SESSIONS = 100;
@@ -670,7 +720,7 @@ export function saveSessions(sessions: Session[]) {
     toSave = [...pinned, ...unpinned.slice(0, unpinnedSlots)];
   }
   try {
-    localStorage.setItem(SESSIONS_KEY, JSON.stringify(toSave));
+    localStorage.setItem(scopedDataKey(SESSIONS_KEY), JSON.stringify(toSave));
   } catch {
     /* quota */
   }
@@ -681,6 +731,7 @@ export function saveSessions(sessions: Session[]) {
 
 /** Push a single session to the server. Returns true on success. */
 export async function syncSessionToServer(session: Session): Promise<boolean> {
+  if (isDevSafeMode()) return true;
   try {
     const res = await fetch('/api/chat-sessions/' + encodeURIComponent(session.id), {
       method: 'PUT',
@@ -701,6 +752,7 @@ export function syncDeleteToServer(id: string): void {
 /** Full sync: push local sessions, receive merged result from server.
  *  Server wins on conflicts (higher updatedAt). Returns merged list. */
 export async function syncWithServer(localSessions: Session[]): Promise<Session[]> {
+  if (isDevSafeMode()) return localSessions;
   try {
     const res = await fetch('/api/chat-sessions/sync', {
       method: 'POST',
@@ -750,6 +802,7 @@ let _serverSyncTimer: ReturnType<typeof setTimeout> | null = null;
 /** Mark a session as dirty — synced to server within 500ms (was 2s).
  *  Retries once on failure after 3s. */
 export function markSessionDirty(sessionId: string): void {
+  if (isDevSafeMode()) return;
   _dirtySessionIds.add(sessionId);
   if (_serverSyncTimer !== null) return; // already scheduled
   _serverSyncTimer = setTimeout(async () => {
@@ -779,6 +832,7 @@ export function markSessionDirty(sessionId: string): void {
 
 /** Flush dirty sessions to server immediately (call on beforeunload) */
 export function flushServerSync(): void {
+  if (isDevSafeMode()) return;
   if (_serverSyncTimer !== null) {
     clearTimeout(_serverSyncTimer);
     _serverSyncTimer = null;
@@ -806,13 +860,26 @@ export function flushServerSync(): void {
  *  Call after every user/assistant message to guarantee crash-proof persistence.
  *  Server sync is the primary durable store; localStorage is a fast cache. */
 export function saveSessionImmediate(session: Session): void {
+  if (isDevSafeMode()) {
+    const sessions = loadSessions();
+    const idx = sessions.findIndex((s) => s.id === session.id);
+    if (idx >= 0) sessions[idx] = session;
+    else sessions.push(session);
+    try {
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+    } catch {
+      _trimLocalStorage(sessions, session.id);
+    }
+    if (isIdbReady()) idbSaveSessions(sessions).catch(() => {});
+    return;
+  }
   // 1. localStorage (sync, instant) — may fail on quota (~5MB)
   const sessions = loadSessions();
   const idx = sessions.findIndex((s) => s.id === session.id);
   if (idx >= 0) sessions[idx] = session;
   else sessions.push(session);
   try {
-    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+    localStorage.setItem(scopedDataKey(SESSIONS_KEY), JSON.stringify(sessions));
   } catch {
     // Quota exceeded — trim older sessions from localStorage to free space
     _trimLocalStorage(sessions, session.id);
@@ -892,13 +959,13 @@ export function flushPendingSave() {
 }
 
 export function loadActivity(): ActivityEvent[] {
-  return loadArray<ActivityEvent>(ACTIVITY_KEY);
+  return loadFromScopedArray<ActivityEvent>(ACTIVITY_KEY, ACTIVITY_KEY);
 }
 
 export function saveActivity(events: ActivityEvent[]) {
   const capped = events.slice(-200);
   try {
-    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(capped));
+    localStorage.setItem(scopedDataKey(ACTIVITY_KEY), JSON.stringify(capped));
   } catch {
     /* quota */
   }
@@ -906,13 +973,13 @@ export function saveActivity(events: ActivityEvent[]) {
 }
 
 export function loadFeed(): FeedEntry[] {
-  return loadArray<FeedEntry>(FEED_KEY);
+  return loadFromScopedArray<FeedEntry>(FEED_KEY, FEED_KEY);
 }
 
 export function saveFeed(entries: FeedEntry[]) {
   const capped = entries.slice(-MAX_FEED_ENTRIES);
   try {
-    localStorage.setItem(FEED_KEY, JSON.stringify(capped));
+    localStorage.setItem(scopedDataKey(FEED_KEY), JSON.stringify(capped));
   } catch {
     /* quota */
   }
@@ -920,13 +987,13 @@ export function saveFeed(entries: FeedEntry[]) {
 }
 
 export function loadFiles(): UploadedFile[] {
-  return loadArray<UploadedFile>(FILES_KEY);
+  return loadFromScopedArray<UploadedFile>(FILES_KEY, FILES_KEY);
 }
 
 export function saveFiles(files: UploadedFile[]) {
   const capped = files.length > MAX_FILES ? files.slice(-MAX_FILES) : files;
   try {
-    localStorage.setItem(FILES_KEY, JSON.stringify(capped));
+    localStorage.setItem(scopedDataKey(FILES_KEY), JSON.stringify(capped));
   } catch {
     /* quota */
   }
@@ -934,12 +1001,12 @@ export function saveFiles(files: UploadedFile[]) {
 }
 
 export function loadTabs(): string[] {
-  return loadArray<string>(TABS_KEY);
+  return loadFromScopedArray<string>(TABS_KEY, TABS_KEY);
 }
 
 export function saveTabs(tabs: string[]) {
   try {
-    localStorage.setItem(TABS_KEY, JSON.stringify(tabs));
+    localStorage.setItem(scopedDataKey(TABS_KEY), JSON.stringify(tabs));
   } catch {
     /* quota */
   }
@@ -947,22 +1014,23 @@ export function saveTabs(tabs: string[]) {
 }
 
 export function loadActiveSession(): string | null {
-  return localStorage.getItem(ACTIVE_KEY);
+  return loadFromScopedValue(ACTIVE_KEY, ACTIVE_KEY);
 }
 
 export function saveActiveSession(id: string | null) {
-  if (id) localStorage.setItem(ACTIVE_KEY, id);
-  else localStorage.removeItem(ACTIVE_KEY);
+  const key = scopedDataKey(ACTIVE_KEY);
+  if (id) localStorage.setItem(key, id);
+  else localStorage.removeItem(key);
   if (isIdbReady()) idbSaveActiveSession(id).catch(() => {});
 }
 
 export function loadQueue(): QueuedMessage[] {
-  return loadArray<QueuedMessage>(QUEUE_KEY);
+  return loadFromScopedArray<QueuedMessage>(QUEUE_KEY, QUEUE_KEY);
 }
 
 export function saveQueue(queue: QueuedMessage[]) {
   try {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    localStorage.setItem(scopedDataKey(QUEUE_KEY), JSON.stringify(queue));
   } catch {
     /* quota */
   }
@@ -970,12 +1038,12 @@ export function saveQueue(queue: QueuedMessage[]) {
 }
 
 export function loadDrafts(): Record<string, string> {
-  return loadRecord<Record<string, string>>(DRAFTS_KEY, {});
+  return loadFromScopedRecord<Record<string, string>>(DRAFTS_KEY, DRAFTS_KEY, {});
 }
 
 export function saveDrafts(drafts: Record<string, string>) {
   try {
-    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+    localStorage.setItem(scopedDataKey(DRAFTS_KEY), JSON.stringify(drafts));
   } catch {
     /* quota */
   }
@@ -984,7 +1052,7 @@ export function saveDrafts(drafts: Record<string, string>) {
 const SCROLL_POS_KEY = 'shre-scroll-positions';
 
 export function loadScrollPositions(): Record<string, number> {
-  return loadRecord<Record<string, number>>(SCROLL_POS_KEY, {});
+  return loadFromScopedRecord<Record<string, number>>(SCROLL_POS_KEY, SCROLL_POS_KEY, {});
 }
 
 export function saveScrollPositions(positions: Record<string, number>) {
@@ -992,7 +1060,7 @@ export function saveScrollPositions(positions: Record<string, number>) {
   const entries = Object.entries(positions);
   const capped = entries.length > 50 ? Object.fromEntries(entries.slice(-50)) : positions;
   try {
-    localStorage.setItem(SCROLL_POS_KEY, JSON.stringify(capped));
+    localStorage.setItem(scopedDataKey(SCROLL_POS_KEY), JSON.stringify(capped));
   } catch {
     /* quota */
   }

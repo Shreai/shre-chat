@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 
 import { ProcessBar, ProcessDetail, useProcessRun } from './components/process-bar';
 import type { ChatMessage } from './router-client';
 import { useApp, generateTitle, getAgent, AGENTS, type Session, type View } from './store';
+import { scopedStorageKey } from './workspace-context';
 import type { TerminalHandle } from './TerminalView';
 const TerminalView = lazy(() =>
   import('./TerminalView').then((m) => ({ default: m.TerminalView })),
@@ -162,8 +163,24 @@ export function ChatView() {
   } = useVoiceRecording();
 
   useWakeWord(voiceAssistantOpen, isRecording, setVoiceAssistantOpen, voiceMode);
+  const voiceLaunchHandledRef = useRef(false);
   const [realtimeVoiceOpen, setRealtimeVoiceOpen] = useState(false);
   const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (voiceLaunchHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const voiceLaunch = params.get('voice');
+    if (voiceLaunch !== '1' && voiceLaunch !== 'true') return;
+
+    voiceLaunchHandledRef.current = true;
+    setVoiceMode(true);
+    setVoiceAssistantOpen(true);
+    params.delete('voice');
+    const next = params.toString();
+    const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [setVoiceAssistantOpen, setVoiceMode]);
 
   useEffect(() => {
     if (voiceAssistantOpen && !voiceSessionId) {
@@ -206,22 +223,22 @@ export function ChatView() {
   const { toolOptions, systemCount: toolSystemCount, appCount: toolAppCount } = useToolList();
 
   const [cliMode, setCliMode] = useState(
-    () => localStorage.getItem('shre-cli-mode-default') === 'true',
+    () => localStorage.getItem(scopedStorageKey('shre-cli-mode-default')) === 'true',
   );
   const [claudeCliMode, setClaudeCliMode] = useState(
-    () => localStorage.getItem('shre-claude-cli-mode') === 'true',
+    () => localStorage.getItem(scopedStorageKey('shre-claude-cli-mode')) === 'true',
   );
   const [identityVerified, setIdentityVerified] = useState(true);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [showTerminal, setShowTerminalRaw] = useState(
-    () => localStorage.getItem('shre-terminal-open') === 'true',
+    () => localStorage.getItem(scopedStorageKey('shre-terminal-open')) === 'true',
   );
 
   const setShowTerminal = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
     setShowTerminalRaw((prev) => {
       const next = typeof v === 'function' ? v(prev) : v;
-      localStorage.setItem('shre-terminal-open', String(next));
+      localStorage.setItem(scopedStorageKey('shre-terminal-open'), String(next));
       return next;
     });
   }, []);
@@ -965,13 +982,13 @@ export function ChatView() {
                 claudeCliMode={claudeCliMode}
                 setClaudeCliMode={(on: boolean) => {
                   setClaudeCliMode(on);
-                  localStorage.setItem('shre-claude-cli-mode', String(on));
+                  localStorage.setItem(scopedStorageKey('shre-claude-cli-mode'), String(on));
                   if (on) {
                     setShowTerminal(true);
                     if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
                   } else if (cliMode) {
                     setCliMode(false);
-                    localStorage.setItem('shre-cli-mode-default', 'false');
+                    localStorage.setItem(scopedStorageKey('shre-cli-mode-default'), 'false');
                   }
                 }}
                 onOpenClaudeCli={() => {

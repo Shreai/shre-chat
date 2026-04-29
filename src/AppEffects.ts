@@ -22,6 +22,7 @@ import {
   loadSessions,
   syncWithServer,
   saveActiveSession,
+  loadActiveSession,
   flushPendingSave,
   saveSessionImmediate,
   fetchAgentModels,
@@ -32,6 +33,8 @@ import {
   markSessionDirty,
 } from './store';
 import { compactSession, listSessions } from './router-client';
+import { isDevSafeMode } from './env';
+import { scopedStorageKey } from './workspace-context';
 
 const THEME_KEY = 'shre-theme';
 
@@ -39,7 +42,7 @@ const THEME_KEY = 'shre-theme';
 export function useThemeEffect(theme: Theme) {
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light');
-    localStorage.setItem(THEME_KEY, theme);
+    localStorage.setItem(scopedStorageKey(THEME_KEY), theme);
   }, [theme]);
 }
 
@@ -107,6 +110,11 @@ export function useInitEffects(
   setSyncing: Dispatch<SetStateAction<boolean>>,
 ) {
   useEffect(() => {
+    if (isDevSafeMode()) {
+      initStorage();
+      setSyncing(false);
+      return;
+    }
     fetchAgentModels();
     fetchAgentRegistry().then(() => fetchAgentCapabilities());
   }, []);
@@ -115,11 +123,15 @@ export function useInitEffects(
   }, []);
 
   useEffect(() => {
+    if (isDevSafeMode()) {
+      setSyncing(false);
+      return;
+    }
     syncWithServer(loadSessions())
       .then((merged) => {
         if (merged.length > 0) {
           setSessions(merged);
-          const active = localStorage.getItem('shre-active-session');
+          const active = loadActiveSession();
           if (!active && merged.length > 0) {
             setActiveSessionId(merged[0].id);
             saveActiveSession(merged[0].id);
@@ -136,6 +148,7 @@ export function useInitEffects(
 // ── Desktop notification + Web Push ──
 export function usePushNotifications() {
   useEffect(() => {
+    if (isDevSafeMode()) return;
     if (typeof Notification === 'undefined') return;
     const setupPush = async () => {
       if (Notification.permission === 'default') {
@@ -215,10 +228,11 @@ export function useStreamPersistence(
           session.updatedAt = Date.now();
           sessions[idx] = session;
           try {
-            localStorage.setItem('shre-sessions', JSON.stringify(sessions));
+            localStorage.setItem(scopedStorageKey('shre-sessions'), JSON.stringify(sessions));
           } catch (err) {
             console.debug('stream persist quota', err);
           }
+          markSessionDirty(activeSessionId);
         }
       }
     };
@@ -235,9 +249,15 @@ export function useStreamPersistence(
     };
     window.addEventListener('beforeunload', handleUnload);
     document.addEventListener('visibilitychange', handleVisChange);
+
+    const streamPersistTimer = setInterval(() => {
+      persistStreamIfActive();
+    }, 2500);
+
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
       document.removeEventListener('visibilitychange', handleVisChange);
+      clearInterval(streamPersistTimer);
     };
   }, [activeSessionId, streamingRef, streamTextRef]);
 }
@@ -248,6 +268,7 @@ export function usePeriodicSync(
   sessionsRef: MutableRefObject<Session[]>,
 ) {
   useEffect(() => {
+    if (isDevSafeMode()) return;
     const interval = setInterval(() => {
       const sid = activeSessionId;
       if (!sid) return;
@@ -261,7 +282,7 @@ export function usePeriodicSync(
 // ── Daily session compaction ──
 export function useDailyCompaction(sessions: Session[]) {
   useEffect(() => {
-    const COMPACT_DATE_KEY = 'shre-last-compact';
+    const COMPACT_DATE_KEY = scopedStorageKey('shre-last-compact');
     const today = new Date().toISOString().slice(0, 10);
     if (localStorage.getItem(COMPACT_DATE_KEY) === today) return;
 
@@ -302,21 +323,26 @@ export function useCrossTabSync(
     const handler = (e: StorageEvent) => {
       if (!e.key) return;
       crossTabRef.current = true;
+      const currentSessionsKey = scopedStorageKey('shre-sessions');
+      const currentActivityKey = scopedStorageKey('shre-activity');
+      const currentFeedKey = scopedStorageKey('shre-feed');
+      const currentFilesKey = scopedStorageKey('shre-files');
+      const currentTabsKey = scopedStorageKey('shre-open-tabs');
       try {
         switch (e.key) {
-          case 'shre-sessions':
+          case currentSessionsKey:
             setSessions(e.newValue ? JSON.parse(e.newValue) : []);
             break;
-          case 'shre-activity':
+          case currentActivityKey:
             setActivity(e.newValue ? JSON.parse(e.newValue) : []);
             break;
-          case 'shre-feed':
+          case currentFeedKey:
             setFeed(e.newValue ? JSON.parse(e.newValue) : []);
             break;
-          case 'shre-files':
+          case currentFilesKey:
             setFiles(e.newValue ? JSON.parse(e.newValue) : []);
             break;
-          case 'shre-open-tabs':
+          case currentTabsKey:
             setOpenTabs(e.newValue ? JSON.parse(e.newValue) : []);
             break;
         }
