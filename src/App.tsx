@@ -51,6 +51,7 @@ import {
 } from './AppAuth';
 import { ViewNavHeader } from './ViewNavHeader';
 import { buildActions, type ActionDeps } from './AppActions';
+import { DocumentsView } from './DocumentsView';
 import {
   useThemeEffect,
   useThemeCustomEffect,
@@ -127,7 +128,7 @@ const LazyFallback = () => (
   </div>
 );
 
-/** Router Gateway Control UI embed — auto-injects gateway token + WS URL */
+/** Gateway health embed — shows router status when that path is in use. */
 function RouterGatewayEmbed() {
   const [status, setStatus] = useState<{
     ok?: boolean;
@@ -140,7 +141,7 @@ function RouterGatewayEmbed() {
     fetch('/api/router/health')
       .then((r) => r.json())
       .then((d) => setStatus(d))
-      .catch(() => setStatus({ error: 'Cannot reach shre-router' }));
+      .catch(() => setStatus({ error: 'Cannot reach the gateway service' }));
   }, []);
   return (
     <div
@@ -148,13 +149,13 @@ function RouterGatewayEmbed() {
       style={{ background: 'var(--c-bg-1)' }}
     >
       <div style={{ fontSize: 14, color: 'var(--c-text-2)', maxWidth: 480, textAlign: 'center' }}>
-        <h2 style={{ fontSize: 18, color: 'var(--c-text-1)', marginBottom: 12 }}>Router Gateway</h2>
+        <h2 style={{ fontSize: 18, color: 'var(--c-text-1)', marginBottom: 12 }}>Gateway Status</h2>
         {!status && <p>Loading...</p>}
         {status?.error && <p style={{ color: '#ef4444' }}>{status.error}</p>}
         {status?.ok && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
             <p>
-              <span style={{ color: '#22c55e' }}>&#9679;</span> shre-router is online (uptime:{' '}
+              <span style={{ color: '#22c55e' }}>&#9679;</span> gateway service is online (uptime:{' '}
               {Math.round((status.uptime || 0) / 60)}m)
             </p>
             {status.agents != null && <p>Active agents: {status.agents}</p>}
@@ -181,6 +182,8 @@ export function App() {
     );
 
   const DEV_BYPASS_AUTH = false;
+  const isDocumentsHost =
+    typeof window !== 'undefined' && window.location.hostname === 'shre.nirtek.net';
 
   const {
     authState,
@@ -252,6 +255,7 @@ export function App() {
       activeWorkspace={authState.workspace}
       workspaces={authState.workspaces}
       onWorkspaceSwitch={handleWorkspaceSwitch}
+      mode={isDocumentsHost ? 'documents' : 'chat'}
     />
   );
 }
@@ -262,12 +266,14 @@ function AuthenticatedApp({
   activeWorkspace,
   workspaces,
   onWorkspaceSwitch,
+  mode = 'chat',
 }: {
   authUser: AuthUser;
   onLogout: () => void;
   activeWorkspace?: AuthWorkspace | null;
   workspaces?: AuthWorkspace[];
   onWorkspaceSwitch: (workspaceId: string) => void;
+  mode?: 'chat' | 'documents';
 }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => loadUserProfile());
   const [onboardingPhase, setOnboardingPhase] = useState<'loading' | 'needed' | 'done' | 'welcome'>(
@@ -437,7 +443,8 @@ function AuthenticatedApp({
   }
 
   if (onboardingPhase === 'welcome') {
-    const mib007Url = 'https://mib007.nirtek.net';
+    const mib007Url =
+      typeof window !== 'undefined' ? window.location.origin : 'https://shre.nirtek.net';
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
@@ -448,7 +455,7 @@ function AuthenticatedApp({
             You're all set!
           </h2>
           <p className="text-sm" style={{ color: 'var(--c-text-4)' }}>
-            Your AI workspace is ready. Where would you like to start?
+            Your profile is saved. Where would you like to start?
           </p>
           <div className="space-y-3">
             <button
@@ -456,9 +463,9 @@ function AuthenticatedApp({
               className="w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors"
               style={{ background: 'var(--c-accent)', color: '#fff' }}
             >
-              Start Chatting
+              {mode === 'documents' ? 'Open Document Workspace' : 'Start Chatting'}
             </button>
-            {landingTarget === 'home' && (
+            {mode !== 'documents' && landingTarget === 'home' && (
               <a
                 href={mib007Url}
                 target="_blank"
@@ -479,7 +486,9 @@ function AuthenticatedApp({
     );
   }
 
-  return (
+  return mode === 'documents' ? (
+    <DocumentsView authUser={authUser} userProfile={userProfile!} onLogout={onLogout} />
+  ) : (
     <MainApp
       authUser={authUser}
       onLogout={onLogout}

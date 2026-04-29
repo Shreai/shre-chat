@@ -25,10 +25,17 @@ function extractTwin(raw: string | undefined): string | null {
 function buildTaskHref(proposalId: string): string {
   const envUrl =
     typeof import.meta !== 'undefined' ? (import.meta as ImportMeta).env?.VITE_MIB007_URL : null;
-  if (envUrl && typeof envUrl === 'string')
+  const isLegacyHost =
+    typeof envUrl === 'string' &&
+    /(?:mib007\.nirtek\.net|mib\.nirtek\.net|app\.nirtek\.net|chat\.nirtek\.net|app\.shre\.ai|chat\.shre\.ai)/.test(
+      envUrl,
+    );
+  if (envUrl && typeof envUrl === 'string' && !isLegacyHost)
     return `${envUrl.replace(/\/$/, '')}/tasks/${proposalId}`;
-  // Same-origin fallback (works when mib007 is proxied behind the same host)
-  return `/tasks/${proposalId}`;
+  // Same-origin fallback (works when shre-chat is served behind the public host)
+  return typeof window !== 'undefined'
+    ? `${window.location.origin}/tasks/${proposalId}`
+    : `/tasks/${proposalId}`;
 }
 
 export function ProposalFiledCard({ proposalId, rawMessage }: Props) {

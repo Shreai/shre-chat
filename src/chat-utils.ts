@@ -105,6 +105,8 @@ export function formatTokenCount(tokens: number): string {
   return `~${tokens} tokens`;
 }
 
+import { getProviderDisplayLabel } from './model-families';
+
 // ── Provider icon mapping ────────────────────────────────────────────
 export const PROVIDER_ICONS: Record<string, string> = {
   anthropic: '🟣',
@@ -112,23 +114,18 @@ export const PROVIDER_ICONS: Record<string, string> = {
   google: '🔵',
   ollama: '⚪',
   'ollama-remote': '⚪',
+  'ollama-gpu': '⚪',
+  moonshot: '🌙',
+  nvidia: '🟩',
   ensemble: '🟡',
   'claude-cli': '🟣',
+  xai: '⚫',
 };
 export function providerIcon(provider: string): string {
   return PROVIDER_ICONS[provider] || '⚫';
 }
 export function providerLabel(provider: string): string {
-  const labels: Record<string, string> = {
-    anthropic: 'Anthropic',
-    openai: 'OpenAI',
-    google: 'Google',
-    ollama: 'Ollama (Local)',
-    'ollama-remote': 'Ollama (Remote)',
-    ensemble: 'Ensemble',
-    'claude-cli': 'Claude CLI',
-  };
-  return labels[provider] || provider;
+  return getProviderDisplayLabel(provider);
 }
 
 // Fallback models (used until live fetch completes)
@@ -144,46 +141,60 @@ export const FALLBACK_MODELS: Array<{
   {
     id: 'anthropic/claude-sonnet-4-6',
     name: 'Claude Sonnet 4.6',
-    provider: 'Anthropic',
+    provider: 'Claude',
     icon: '🟣',
     connected: true,
   },
   {
     id: 'anthropic/claude-opus-4-6',
     name: 'Claude Opus 4.6',
-    provider: 'Anthropic',
+    provider: 'Claude',
     icon: '🟣',
     connected: true,
   },
   {
     id: 'anthropic/claude-haiku',
     name: 'Claude Haiku',
-    provider: 'Anthropic',
+    provider: 'Claude',
     icon: '🟣',
     connected: true,
   },
-  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'OpenAI', icon: '🟢', connected: true },
+  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'ChatGPT', icon: '🟢', connected: true },
   {
     id: 'openai/gpt-4o-mini',
     name: 'GPT-4o Mini',
-    provider: 'OpenAI',
+    provider: 'ChatGPT',
     icon: '🟢',
     connected: true,
   },
-  { id: 'openai/o1', name: 'o1', provider: 'OpenAI', icon: '🟢', connected: true },
-  { id: 'openai/o3-mini', name: 'o3-mini', provider: 'OpenAI', icon: '🟢', connected: true },
+  { id: 'openai/o1', name: 'o1', provider: 'ChatGPT', icon: '🟢', connected: true },
+  { id: 'openai/o3-mini', name: 'o3-mini', provider: 'ChatGPT', icon: '🟢', connected: true },
   {
     id: 'google/gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
-    provider: 'Google',
+    provider: 'Gemini',
     icon: '🔵',
     connected: true,
   },
   {
     id: 'google/gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
-    provider: 'Google',
+    provider: 'Gemini',
     icon: '🔵',
+    connected: true,
+  },
+  {
+    id: 'moonshot/kimi-k2.6',
+    name: 'Kimi K2.6',
+    provider: 'Kimi',
+    icon: '🌙',
+    connected: true,
+  },
+  {
+    id: 'meta/llama-3.3-70b-instruct',
+    name: 'Llama 3.3 70B',
+    provider: 'Nvidia',
+    icon: '🟩',
     connected: true,
   },
   {
@@ -191,13 +202,6 @@ export const FALLBACK_MODELS: Array<{
     name: 'DeepSeek R1',
     provider: 'DeepSeek',
     icon: '🟠',
-    connected: true,
-  },
-  {
-    id: 'meta/llama-3.3-70b',
-    name: 'Llama 3.3 70B',
-    provider: 'Meta',
-    icon: '🦙',
     connected: true,
   },
 ];
@@ -311,10 +315,10 @@ export function setModelOverride(agentId: string, modelId: string | null) {
   usePreferences.getState().setModelOverride(agentId, modelId);
 }
 
-/** MIB007 base URL — use tunnel URL when available, fallback to localhost */
+/** MIB007 base URL — use the current public origin when available, fallback to localhost */
 export const MIB007_BASE =
   typeof window !== 'undefined' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
-    ? 'https://mib007.nirtek.net'
+    ? window.location.origin
     : `https://localhost:${ports.services?.['mib007']?.port ?? 5520}`;
 
 /** Default company prefix for MIB007 deep links */

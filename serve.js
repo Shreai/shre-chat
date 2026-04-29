@@ -45,7 +45,8 @@ if (existsSync(_mkcertCA) && !process.env.NODE_EXTRA_CA_CERTS) {
 }
 
 const PORT = Number(process.env.PORT) || 5510;
-const ALLOW_DIRECT_MODE = process.env.SHRE_CHAT_ALLOW_DIRECT_MODE === "true";
+// Keep the direct path always available so chat survives router outages.
+const ALLOW_DIRECT_MODE = true;
 const _serverStartedAt = new Date().toISOString();
 let _investorCache = null;
 let _investorCacheAt = 0;
@@ -972,6 +973,8 @@ function isOriginAllowed(req) {
     `http://localhost:${PORT}`, `https://localhost:${PORT}`,
     `http://127.0.0.1:${PORT}`, `https://127.0.0.1:${PORT}`,
     "https://chat.nirtek.net", "http://chat.nirtek.net",
+    "https://mib.nirtek.net", "http://mib.nirtek.net",
+    "https://mib007.nirtek.net", "http://mib007.nirtek.net",
     "https://app.nirtek.net", "http://app.nirtek.net",
     "https://shre.nirtek.net", "http://shre.nirtek.net",
   ];
@@ -1671,17 +1674,6 @@ async function requestHandler(req, res) {
   const correlationId = extractCorrelationId(req.headers);
   res.setHeader("x-correlation-id", correlationId);
   const requestHost = (req.headers["x-forwarded-host"] || req.headers["host"] || "").split(":")[0].toLowerCase();
-
-  // chat.nirtek.net has been superseded by the Ellie framework in MIB.
-  // Keep only health/version probes here and redirect all user-facing traffic.
-  if (
-    requestHost === "chat.nirtek.net" &&
-    !["/api/health", "/api/readyz", "/health", "/readyz", "/api/version"].includes(url.pathname)
-  ) {
-    res.writeHead(302, { Location: "https://mib.nirtek.net/" });
-    res.end();
-    return;
-  }
 
   // Legacy login paths used by old bookmarks and redirect targets.
   // Keep the standalone Shre app reachable even if users still hit the old gate URL.
@@ -4880,7 +4872,25 @@ async function requestHandler(req, res) {
 
       routerReq.on("error", (err) => {
         if (!res.headersSent) {
-          json(res, { error: "shre-router unreachable: " + err.message }, 502);
+          json(
+            res,
+            {
+              error: {
+                code: "SHRE_ROUTER_UNREACHABLE",
+                message: "shre-router unreachable: " + err.message,
+                stage: "transport",
+                retryable: true,
+                whereToLook: "shre-router",
+                remediation: [
+                  "Check shre-router process health",
+                  "Verify the router port and service discovery",
+                  "Inspect the router trace for the failing hop",
+                ],
+                summary: "The chat proxy could not reach shre-router.",
+              },
+            },
+            502,
+          );
         }
       });
 
@@ -4907,7 +4917,25 @@ async function requestHandler(req, res) {
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
-      json(res, { error: "shre-router unreachable" }, 502);
+      json(
+        res,
+        {
+          error: {
+            code: "SHRE_ROUTER_UNREACHABLE",
+            message: "shre-router unreachable",
+            stage: "transport",
+            retryable: true,
+            whereToLook: "shre-router",
+            remediation: [
+              "Check shre-router process health",
+              "Verify the router port and service discovery",
+              "Inspect the router trace for the failing hop",
+            ],
+            summary: "The chat proxy could not reach shre-router.",
+          },
+        },
+        502,
+      );
     }
     return;
   }
@@ -5735,7 +5763,7 @@ async function requestHandler(req, res) {
             }
           } catch {}
         }
-      } catch (auditErr) { log.warn("Chat audit log failed", {}, auditErr); }
+      } catch (auditErr) { log.warn("Chat audit log failed", { error: auditErr.message }); }
 
       // Fire-and-forget: log to CortexDB + extract skills
       const wsTenantId = authClaims?.activeWorkspaceId || "default";
@@ -5762,8 +5790,145 @@ async function requestHandler(req, res) {
   }
 
   // ── Direct mode — /api/direct/v1/chat ──────────────────────────────
-  // Routes through shre-router with forced local model — preserves trust gate, budget, and audit.
-  // Previously bypassed router entirely (security finding: trust boundary violation).
+  // Executes locally through Ollama, then mirrors conversation state back to
+  // shre-router asynchronously through the learning/session bridge.
+  async function persistDirectConversation({
+    authClaims: directClaims,
+    sessionId,
+    agentId,
+    userMessage,
+    assistantResponse,
+    model,
+    channel = "direct",
+  }) {
+    if (!sessionId || !userMessage || !assistantResponse) return;
+
+    const auditUserId = directClaims?.sub || "system";
+    const tenantId = directClaims?.activeWorkspaceId || "default";
+    const now = Date.now();
+    const traceId = randomUUID();
+
+    try {
+      chatDb.prepare(
+        `INSERT INTO chat_audit_log (id, session_id, trace_id, event_type, agent_id, model, user_id, user_message, assistant_response, created_at)
+         VALUES (?, ?, ?, 'chat_exchange', ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        randomUUID(),
+        sessionId,
+        traceId,
+        agentId || "shre",
+        model || "local-direct",
+        auditUserId,
+        userMessage.slice(0, 5000),
+        assistantResponse.slice(0, 10000),
+        now,
+      );
+    } catch (auditErr) {
+      log.warn("[direct] Chat audit log failed", { error: auditErr.message });
+    }
+
+    try {
+      const session = stmtGetSessionById.get(sessionId);
+      if (session) {
+        insertProjectedMessage({
+          sessionId,
+          role: "user",
+          content: userMessage,
+          model: model || null,
+          agentId: agentId || "shre",
+          userId: session.user_id || auditUserId,
+        });
+        insertProjectedMessage({
+          sessionId,
+          role: "assistant",
+          content: assistantResponse,
+          model: model || null,
+          agentId: agentId || "shre",
+          userId: auditUserId,
+        });
+
+        appendMessageToCanonicalSession(
+          sessionId,
+          {
+            id: `msg-${now}-${Math.random().toString(36).slice(2, 8)}-user`,
+            role: "user",
+            content: userMessage,
+            timestamp: now,
+            meta: {
+              source: channel,
+              model: model || "local-direct",
+              agentId: agentId || "shre",
+            },
+          },
+          session.user_id || auditUserId,
+          session.tenant_id || tenantId,
+        );
+        appendMessageToCanonicalSession(
+          sessionId,
+          {
+            id: `msg-${now}-${Math.random().toString(36).slice(2, 8)}`,
+            role: "assistant",
+            content: assistantResponse,
+            timestamp: now,
+            meta: {
+              source: channel,
+              model: model || "local-direct",
+              agentId: agentId || "shre",
+            },
+          },
+          session.user_id || auditUserId,
+          session.tenant_id || tenantId,
+        );
+
+        chatDb.prepare("UPDATE chat_sessions SET updated_at = ? WHERE id = ?").run(now, sessionId);
+      }
+    } catch (pErr) {
+      log.debug("[direct] Local persistence failed", { error: pErr.message });
+    }
+
+    const wsTenantId = tenantId;
+    logConversationToCortex(agentId || "shre", userMessage, assistantResponse, channel, model || "local-direct", wsTenantId).catch(() => {});
+    const conversationForSkills = `User: ${userMessage}\n\nAssistant: ${assistantResponse}`;
+    extractAndLogSkills(agentId || "shre", conversationForSkills).catch(() => {});
+    emitConversationComplete(agentId || "shre", userMessage, assistantResponse, channel, model || "local-direct").catch(() => {});
+    conversationLearner.learn(userMessage, assistantResponse, wsTenantId, agentId || "shre").catch(() => {});
+    feedbackPipeline.reportKnowledgeLearned("conversation", assistantResponse.slice(0, 200), `${channel}:${agentId || "shre"}`).catch(() => {});
+    conversationEvaluator.evaluate(sessionId, userMessage, assistantResponse, agentId || "shre", model || "local-direct").catch(() => {});
+  }
+
+  async function syncDirectConversationToRouter({
+    sessionId,
+    agentId,
+    userMessage,
+    assistantResponse,
+    model,
+  }) {
+    if (!sessionId || !userMessage || !assistantResponse) return;
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      await fetch(`${routerUrl}/v1/learn/session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-channel": "shre-chat",
+        },
+        body: JSON.stringify({
+          agentId: agentId || "shre",
+          prompt: userMessage,
+          response: assistantResponse,
+          quality: 3,
+          taskType: "conversation",
+          domain: "direct-chat",
+          modelUsed: model || "local-direct",
+          sessionId,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (err) {
+      log.debug("[direct-sync] Router learning sync skipped", { error: err.message });
+    }
+  }
+
   if (url.pathname === "/api/direct/v1/chat" && req.method === "POST") {
     if (!ALLOW_DIRECT_MODE) {
       return json(res, {
@@ -5771,16 +5936,224 @@ async function requestHandler(req, res) {
         code: "DIRECT_MODE_DISABLED",
       }, 403);
     }
-    // Rewrite to router proxy with forced local model — enforces trust gate + audit
-    // The "direct" label is preserved for the UI but traffic goes through shre-router.
-    log.info("[direct] Rewriting /api/direct to /api/router with provider:ollama lock");
-    // Rewrite URL to go through the standard router proxy
-    url.pathname = "/api/router/v1/chat";
-    // Fall through to the /api/router/* handler below — the request body is
-    // intercepted there. We inject model="provider:ollama" so the router
-    // constrains to local models only (same latency, full trust enforcement).
-    req._directModeRewrite = true;
-    // Don't return — fall through to the router proxy handler
+
+    let body;
+    try {
+      body = await collectBody(req, 5 * 1024 * 1024);
+    } catch {
+      return json(res, { error: "Body too large" }, 413);
+    }
+
+    try {
+      const parsed = JSON.parse(body);
+      const rawMessages = Array.isArray(parsed.messages) ? parsed.messages : [];
+      const messages = [...rawMessages];
+      if (parsed.systemPrompt && !messages.some((m) => m.role === "system")) {
+        messages.unshift({ role: "system", content: parsed.systemPrompt });
+      }
+
+      const resolvedModel = (() => {
+        const model = parsed.model || process.env.DIRECT_CHAT_MODEL || "qwen3:8b";
+        if (typeof model !== "string") return "qwen3:8b";
+        if (model === "auto") return "qwen3:8b";
+        if (model.startsWith("ollama/")) return model.slice("ollama/".length);
+        if (model === "provider:ollama") return "qwen3:8b";
+        return model;
+      })();
+
+      const sessionId = parsed.sessionId || parsed.session_id || req.headers["x-session-id"] || null;
+      const agentId = parsed.agentId || "shre";
+      const userMessage =
+        (typeof parsed.message === "string" && parsed.message.trim()) ||
+        [...messages]
+          .reverse()
+          .find((m) => m.role === "user" && typeof m.content === "string")
+          ?.content?.trim() ||
+        "";
+
+      if (!userMessage) {
+        return json(res, { error: "message required" }, 400);
+      }
+
+      const ollamaPayload = {
+        model: resolvedModel,
+        messages,
+        stream: parsed.stream === true,
+      };
+
+      if (parsed.stream !== true) {
+        const ollamaRes = await fetch("http://127.0.0.1:11434/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ollamaPayload),
+          signal: AbortSignal.timeout(300_000),
+        });
+
+        if (!ollamaRes.ok) {
+          const text = await ollamaRes.text().catch(() => "");
+          throw new Error(`local model unavailable (${ollamaRes.status}): ${text.slice(0, 200)}`);
+        }
+
+        const data = await ollamaRes.json();
+        const assistantResponse =
+          (typeof data.message?.content === "string" && data.message.content) ||
+          (typeof data.response === "string" && data.response) ||
+          (typeof data.content === "string" && data.content) ||
+          "";
+
+        if (assistantResponse) {
+          persistDirectConversation({
+            authClaims,
+            sessionId,
+            agentId,
+            userMessage,
+            assistantResponse,
+            model: resolvedModel,
+            channel: "direct",
+          }).catch(() => {});
+          syncDirectConversationToRouter({
+            sessionId,
+            agentId,
+            userMessage,
+            assistantResponse,
+            model: resolvedModel,
+          }).catch(() => {});
+        }
+
+        return json(res, {
+          role: "assistant",
+          content: assistantResponse,
+          model: resolvedModel,
+          route: "direct",
+        });
+      }
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      res.write(`data: ${JSON.stringify({ type: "route", route: "direct", model: resolvedModel })}\n\n`);
+
+      const ollamaRes = await fetch("http://127.0.0.1:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ollamaPayload),
+        signal: AbortSignal.timeout(300_000),
+      });
+
+      if (!ollamaRes.ok || !ollamaRes.body) {
+        const text = await ollamaRes.text().catch(() => "");
+        throw new Error(`local model unavailable (${ollamaRes.status}): ${text.slice(0, 200)}`);
+      }
+
+      const reader = ollamaRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let assistantResponse = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const evt = JSON.parse(trimmed);
+            const chunk =
+              (typeof evt.message?.content === "string" && evt.message.content) ||
+              (typeof evt.response === "string" && evt.response) ||
+              (typeof evt.content === "string" && evt.content) ||
+              "";
+            if (chunk) {
+              assistantResponse += chunk;
+              res.write(`data: ${JSON.stringify({ type: "delta", text: chunk })}\n\n`);
+            }
+          } catch {
+            // Ignore malformed chunks from the local model stream.
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const evt = JSON.parse(buffer.trim());
+          const chunk =
+            (typeof evt.message?.content === "string" && evt.message.content) ||
+            (typeof evt.response === "string" && evt.response) ||
+            (typeof evt.content === "string" && evt.content) ||
+            "";
+          if (chunk) assistantResponse += chunk;
+        } catch {
+          // Ignore trailing parse failures.
+        }
+      }
+
+      res.write(
+        `data: ${JSON.stringify({ type: "done", text: assistantResponse, model: resolvedModel, route: "direct" })}\n\n`,
+      );
+      res.end();
+
+      if (assistantResponse) {
+        persistDirectConversation({
+          authClaims,
+          sessionId,
+          agentId,
+          userMessage,
+          assistantResponse,
+          model: resolvedModel,
+          channel: "direct",
+        }).catch(() => {});
+        syncDirectConversationToRouter({
+          sessionId,
+          agentId,
+          userMessage,
+          assistantResponse,
+          model: resolvedModel,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      log.error("[direct] Local chat failed", { error: err.message });
+      if (res.headersSent) {
+        try {
+          res.write(
+            `data: ${JSON.stringify({
+              type: "error",
+              error: `Local chat service unavailable: ${err.message}`,
+            })}\n\n`,
+          );
+          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        } catch {
+          // Ignore secondary stream failures.
+        }
+        try { res.end(); } catch { /* already closed */ }
+      } else {
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: {
+              code: "DIRECT_CHAT_UNAVAILABLE",
+              message: "Local chat service unavailable",
+              stage: "transport",
+              retryable: true,
+              whereToLook: "shre-chat",
+              remediation: [
+                "Check the local Ollama process health",
+                "Verify shre-chat is running on port 5510",
+                "Inspect the local chat trace for the failing hop",
+              ],
+              summary: "The direct chat path could not reach the local model.",
+            },
+          }),
+        );
+      }
+    }
+    return;
   }
 
   // ── Proxy /api/daemon/* to claude-daemon (port 5471) ──────
@@ -5820,25 +6193,12 @@ async function requestHandler(req, res) {
 
     // Capture request body for post-stream persistence
     let reqBody = "";
-    const reqChunks = [];
     req.on("data", (chunk) => {
-      reqChunks.push(chunk);
       reqBody += chunk;
     });
 
     req.on("end", async () => {
       try {
-        // Direct mode rewrite: force local-only model via provider lock
-        if (req._directModeRewrite && reqBody) {
-          try {
-            const parsed = JSON.parse(reqBody);
-            parsed.model = "provider:ollama";
-            reqBody = JSON.stringify(parsed);
-            reqChunks.length = 0;
-            reqChunks.push(Buffer.from(reqBody));
-          } catch { /* leave body as-is if unparseable */ }
-        }
-
         const routerHeaders = { ...req.headers, host: new URL(serviceUrl("shre-router")).host };
         delete routerHeaders["accept-encoding"]; // avoid gzip for streaming
         delete routerHeaders["content-length"]; // body may be modified — let Node use chunked encoding
@@ -5991,8 +6351,24 @@ async function requestHandler(req, res) {
         routerReq.on("error", (err) => {
           log.error("[router-proxy] shre-router error:", err.message);
           if (!res.headersSent) {
-            res.writeHead(502);
-            res.end(JSON.stringify({ error: "shre-router unreachable" }));
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: {
+                  code: "SHRE_ROUTER_UNREACHABLE",
+                  message: "shre-router unreachable",
+                  stage: "transport",
+                  retryable: true,
+                  whereToLook: "shre-router",
+                  remediation: [
+                    "Check shre-router process health",
+                    "Verify the router port and service discovery",
+                    "Inspect the router trace for the failing hop",
+                  ],
+                  summary: "The chat proxy could not reach shre-router.",
+                },
+              }),
+            );
           }
         });
 
@@ -6310,7 +6686,26 @@ async function requestHandler(req, res) {
       );
       routerReq.on("error", (err) => {
         log.error("[v1-proxy] shre-router error:", err.message);
-        if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: "shre-router unreachable" })); }
+        if (!res.headersSent) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: {
+                code: "SHRE_ROUTER_UNREACHABLE",
+                message: "shre-router unreachable",
+                stage: "transport",
+                retryable: true,
+                whereToLook: "shre-router",
+                remediation: [
+                  "Check shre-router process health",
+                  "Verify the router port and service discovery",
+                  "Inspect the router trace for the failing hop",
+                ],
+                summary: "The chat proxy could not reach shre-router.",
+              },
+            }),
+          );
+        }
       });
       req.on("data", (chunk) => routerReq.write(chunk));
       req.on("end", () => routerReq.end());
@@ -7155,7 +7550,7 @@ Examples:
   }
 }
 
-// ── (Legacy WebSocket proxy removed — all traffic routes through shre-router) ──
+// ── (Legacy WebSocket proxy removed — chat now uses direct or router-backed HTTP/SSE) ──
 
 // ── Notification WebSocket — push due reminders + status updates ──
 
@@ -7568,7 +7963,7 @@ if (tlsOpts && httpsServer) {
   netServer.listen(PORT, '0.0.0.0', () => {
     log.info("Server started (dual-protocol)", { port: PORT });
     log.info(`[shre-chat] serving on https+http://localhost:${PORT}`);
-    log.info(`[shre-chat] All chat routes through shre-router (trust gate, budgets, cost tracking)`);
+    log.info(`[shre-chat] Chat can run direct-local or through shre-router (trust gate, budgets, cost tracking)`);
     log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications`);
     lifecycle.started();
     feedbackPipeline.start();
@@ -7582,7 +7977,7 @@ if (tlsOpts && httpsServer) {
   server.listen(PORT, '0.0.0.0', () => {
     log.info("Server started (HTTP only)", { port: PORT });
     log.info(`[shre-chat] serving on http://localhost:${PORT}`);
-    log.info(`[shre-chat] All chat routes through shre-router (trust gate, budgets, cost tracking)`);
+    log.info(`[shre-chat] Chat can run direct-local or through shre-router (trust gate, budgets, cost tracking)`);
     log.info(`[shre-chat] WebSocket: /ws/terminal, /ws/notifications`);
     lifecycle.started();
     feedbackPipeline.start();
