@@ -812,7 +812,7 @@ export function ChatView() {
             />
           }
           content={
-            <div className="flex flex-col h-full relative">
+            <div className="flex flex-col flex-1 min-w-0 w-full h-full relative">
               <MessageList
                 filteredMessages={filteredMessages}
                 messages={messages}

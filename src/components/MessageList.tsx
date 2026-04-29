@@ -313,13 +313,13 @@ export function MessageList(props: MessageListProps) {
         onTouchStart={onPullStart}
         onTouchMove={onPullMove}
         onTouchEnd={onPullEnd}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text relative scroll-anchor-container"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-6 select-text relative scroll-anchor-container"
         role="log"
         aria-label="Message history"
         aria-relevant="additions"
         style={{
-          paddingLeft: '24px',
-          paddingRight: '24px',
+          paddingLeft: '0px',
+          paddingRight: '0px',
           paddingBottom: window.innerWidth <= 768 ? '120px' : '24px',
         }}
       >
@@ -363,7 +363,7 @@ export function MessageList(props: MessageListProps) {
         {messages.length === 0 &&
           !streaming &&
           (syncing ? (
-            <div className="max-w-3xl mx-auto space-y-4 animate-pulse">
+            <div className="w-full space-y-4 animate-pulse">
               {[...Array(4)].map((_, i) => (
                 <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
                   <div
@@ -530,7 +530,7 @@ export function MessageList(props: MessageListProps) {
 
         {/* Streaming indicator — TTFT timer + timeout warnings */}
         {streaming && (
-          <div className="max-w-3xl mx-auto w-full stream-indicator-zone">
+          <div className="w-full stream-indicator-zone">
             {/* Pre-first-token: show elapsed TTFT timer immediately */}
             {!firstTokenReceived && !streamStall && (
               <div
@@ -654,7 +654,7 @@ export function MessageList(props: MessageListProps) {
               />
             ) : (
               <div className="flex justify-start">
-                <div className="max-w-[85%]">
+                <div className="w-full">
                   <div className="flex items-center gap-1.5 mb-0.5 px-1">
                     <span className="text-[11px]">{currentAgent.emoji}</span>
                     <span className="text-[11px] font-medium" style={{ color: 'var(--c-text-3)' }}>

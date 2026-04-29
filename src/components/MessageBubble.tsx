@@ -20,6 +20,7 @@ import type { ProcessRun } from './process-bar/types';
 import { ChatMessageTools, type ToolCall } from './ChatMessageTools';
 import type { ClaudeToolEvent } from './ClaudeToolView';
 import {
+  copyToClipboard,
   formatTime,
   estimateTokens,
   formatTokenCount,
@@ -45,6 +46,120 @@ import { usePreferences } from '../preferences-store';
 export { Lightbox, StableMarkdownBlock, SystemEventChip } from './message-parts/SystemEventChip';
 export { ToolExecutionChip, ToolExecutionGroup } from './message-parts/ToolExecutionChip';
 export type { ToolExecStep } from './message-parts/ToolExecutionChip';
+
+function MessageFooterMenu({
+  content,
+  onReply,
+  onAnnotate,
+  onToggleBookmark,
+  isBookmarked,
+}: {
+  content: string;
+  onReply?: () => void;
+  onAnnotate?: () => void;
+  onToggleBookmark?: () => void;
+  isBookmarked?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative ml-auto">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center justify-center rounded-full p-0.5 transition-all opacity-0 group-hover/msg:opacity-75 focus-visible:opacity-100 hover:bg-white/0"
+        style={{ color: open ? 'var(--c-accent)' : 'var(--c-text-5)' }}
+        title="More actions"
+        aria-label="More actions"
+        aria-expanded={open}
+      >
+        <svg
+          className="h-3 w-3"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.25"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="5" r="1.5" />
+          <circle cx="12" cy="12" r="1.5" />
+          <circle cx="12" cy="19" r="1.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute bottom-full right-0 mb-1.5 rounded-xl shadow-xl py-1.5 z-50"
+          style={{
+            background: 'var(--c-bg-2)',
+            border: '1px solid var(--c-border-1)',
+            minWidth: 170,
+            boxShadow: '0 16px 36px rgba(0,0,0,0.22)',
+          }}
+        >
+          <FooterMenuItem
+            label="Copy message"
+            onClick={async () => {
+              await copyToClipboard(content);
+              setOpen(false);
+            }}
+          />
+          {onReply && (
+            <FooterMenuItem
+              label="Reply"
+              onClick={() => {
+                onReply();
+                setOpen(false);
+              }}
+            />
+          )}
+          {onAnnotate && (
+            <FooterMenuItem
+              label="Add annotation"
+              onClick={() => {
+                onAnnotate();
+                setOpen(false);
+              }}
+            />
+          )}
+          {onToggleBookmark && (
+            <FooterMenuItem
+              label={isBookmarked ? 'Remove bookmark' : 'Bookmark message'}
+              onClick={() => {
+                onToggleBookmark();
+                setOpen(false);
+              }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FooterMenuItem({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full px-3 py-2 text-xs text-left transition-colors hover:bg-white/5"
+      style={{ color: 'var(--c-text-2)' }}
+    >
+      {label}
+    </button>
+  );
+}
 
 // ── MessageBubble ───────────────────────────────────────────────────
 const MessageBubble = memo(function MessageBubble({
@@ -222,11 +337,9 @@ const MessageBubble = memo(function MessageBubble({
   }, [swipeX, onReply]);
 
   return (
-    <div
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${compact ? 'max-w-2xl' : 'max-w-3xl'} mx-auto`}
-    >
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} w-full`}>
       <div
-        className={`${compact ? 'max-w-[95%]' : 'max-w-[85%]'} group/msg`}
+        className={`${compact ? 'max-w-full' : 'max-w-full'} group/msg w-full`}
         onTouchStart={onReply ? handleSwipeTouchStart : undefined}
         onTouchMove={onReply ? handleSwipeTouchMove : undefined}
         onTouchEnd={onReply ? handleSwipeTouchEnd : undefined}
@@ -901,48 +1014,20 @@ const MessageBubble = memo(function MessageBubble({
                   )}
                 </div>
               )}
-              {onReply && (
-                <button
-                  onClick={onReply}
-                  className="p-1 rounded transition-colors opacity-0 group-hover/msg:opacity-100"
-                  style={{ color: 'var(--c-text-5)' }}
-                  title="Reply to this message"
-                >
-                  <svg
-                    className="h-3 w-3"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="9 17 4 12 9 7" />
-                    <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-                  </svg>
-                </button>
-              )}
-              <CopyButton content={message.content} inline />
-              {onToggleBookmark && (
-                <button
-                  onClick={onToggleBookmark}
-                  className={`p-1 rounded transition-colors ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'}`}
-                  style={{ color: isBookmarked ? 'var(--c-accent)' : 'var(--c-text-5)' }}
-                  title={isBookmarked ? 'Remove bookmark' : 'Bookmark this message'}
-                >
-                  <svg
-                    className="h-3 w-3"
-                    viewBox="0 0 24 24"
-                    fill={isBookmarked ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                  </svg>
-                </button>
-              )}
+              <MessageFooterMenu
+                content={message.content}
+                onReply={onReply}
+                onAnnotate={
+                  onAnnotate
+                    ? () => {
+                        setAnnotationEditing(true);
+                        setAnnotationDraft(message.annotation || '');
+                      }
+                    : undefined
+                }
+                onToggleBookmark={onToggleBookmark}
+                isBookmarked={isBookmarked}
+              />
             </div>
           ) : onFeedback ? (
             <div>
