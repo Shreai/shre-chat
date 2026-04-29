@@ -22,6 +22,7 @@ import { createConversationLearner } from "shre-sdk/rag";
 import { writeConversation, startWALReplay, enableBufferedTraining } from "shre-sdk/training";
 import { createHeartbeatMonitor } from "shre-sdk/heartbeat";
 import { createTraceMiddleware, getRecentTraces, getRecentFailures, getTraceStats } from "shre-sdk/trace";
+import { buildTtsPayload, buildVoiceFallbackUrls } from "shre-sdk/voice";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVoiceRoutes } from "./routes/voice.js";
 import { registerIntentRouter } from "./routes/intent-router.js";
@@ -66,6 +67,10 @@ const ROUTER_PORT = Number(new URL(serviceUrl("shre-router")).port);
 const GATEWAY_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
+const LOCAL_VOICE_URL = process.env.LOCAL_VOICE_URL || "http://127.0.0.1:5525";
+const PIPER_VOICE_URL = process.env.PIPER_VOICE_URL || "http://127.0.0.1:5464";
+const SHRE_VOICE_URL = process.env.SHRE_VOICE_URL || serviceUrl("shre-voice");
+const SHRE_ROUTER_URL = process.env.SHRE_ROUTER_URL || serviceUrl("shre-router");
 
 // ── Production safety: block empty passwords (also enforced for beta — paying customers) ──
 if ((isProductionLikeEnv() || process.env.NODE_ENV === "production") && !process.env.CORTEX_PG_PASSWORD) {
@@ -2406,6 +2411,22 @@ async function requestHandler(req, res) {
     return;
   }
 
+  if (url.pathname === "/api/agents/minimum-fleet" && req.method === "GET") {
+    try {
+      const routerUrl = serviceUrl("shre-router");
+      const upstream = await fetch(`${routerUrl}/v1/agents/minimum-fleet`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = await upstream.text();
+      res.writeHead(upstream.status, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch (err) {
+      log.warn("Minimum fleet proxy failed:", err.message);
+      json(res, { error: "shre-router unreachable" }, 502);
+    }
+    return;
+  }
+
   // ── Platform registry proxy (MIB007 single source of truth) ──
   if (url.pathname === "/api/registry/agents" && req.method === "GET") {
     try {
@@ -3925,11 +3946,11 @@ async function requestHandler(req, res) {
       const sttStart = Date.now();
 
       // Fallback chain: local faster-whisper → shre-voice → shre-router (OpenAI) → browser SpeechRecognition
-      const sttEndpoints = [
-        `http://127.0.0.1:5525/v1/audio/transcriptions`,  // local faster-whisper (no API key)
-        `http://127.0.0.1:5456/v1/audio/transcriptions`,  // shre-voice (ElevenLabs/OpenAI)
-        `${serviceUrl("shre-router")}/v1/audio/transcriptions`, // shre-router (OpenAI)
-      ];
+      const sttEndpoints = buildVoiceFallbackUrls("transcriptions", {
+        localVoiceUrl: LOCAL_VOICE_URL,
+        voiceUrl: SHRE_VOICE_URL,
+        routerUrl: SHRE_ROUTER_URL,
+      });
 
       for (let i = 0; i < sttEndpoints.length; i++) {
         const endpoint = sttEndpoints[i];
@@ -3985,6 +4006,7 @@ async function requestHandler(req, res) {
   }
 
   // ── TTS endpoint — fallback chain: local piper → shre-voice → shre-router (OpenAI) ──
+  // This proxies the router-compatible `audio/speech` contract used by the voice clients.
   if (url.pathname === "/api/tts" && req.method === "POST") {
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
@@ -3993,20 +4015,24 @@ async function requestHandler(req, res) {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
         if (!body.input) return json(res, { error: "Missing input text" }, 400);
 
-        const ttsPayload = JSON.stringify({
-          input: body.input,
-          voice: body.voice || "nova",
-          model: body.model || "tts-1-hd",
-          speed: body.speed || 1.05,
-          provider: body.provider || "auto",
-        });
+        const ttsPayload = JSON.stringify(
+          buildTtsPayload({
+            input: body.input,
+            voice: body.voice || "nova",
+            model: body.model || "tts-1-hd",
+            speed: body.speed || 1.05,
+            provider: body.provider || "auto",
+            elevenModel: body.elevenModel,
+            elevenVoiceId: body.elevenVoiceId,
+          }),
+        );
 
         // Fallback chain: local → shre-voice → shre-router
-        const ttsEndpoints = [
-          "http://127.0.0.1:5464/v1/audio/speech",           // local piper-tts
-          "http://127.0.0.1:5456/v1/audio/speech",           // shre-voice
-          `${serviceUrl("shre-router")}/v1/audio/speech`,    // shre-router (OpenAI)
-        ];
+        const ttsEndpoints = buildVoiceFallbackUrls("speech", {
+          localVoiceUrl: PIPER_VOICE_URL,
+          voiceUrl: SHRE_VOICE_URL,
+          routerUrl: SHRE_ROUTER_URL,
+        });
 
         for (let i = 0; i < ttsEndpoints.length; i++) {
           try {
@@ -4064,39 +4090,63 @@ async function requestHandler(req, res) {
       const parsed = JSON.parse(body);
       if (!parsed.input) return json(res, { error: "Missing input text" }, 400);
 
-      const routerRes = await fetch(`${serviceUrl("shre-router")}/v1/audio/speech/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const streamPayload = JSON.stringify(
+        buildTtsPayload({
           input: parsed.input,
           voice: parsed.voice || "nova",
           model: parsed.model || "tts-1-hd",
           speed: parsed.speed || 1.05,
           provider: parsed.provider || "auto",
+          elevenModel: parsed.elevenModel,
+          elevenVoiceId: parsed.elevenVoiceId,
         }),
-        signal: AbortSignal.timeout(30000),
+      );
+
+      const streamEndpoints = buildVoiceFallbackUrls("speech", {
+        voiceUrl: SHRE_VOICE_URL,
+        routerUrl: SHRE_ROUTER_URL,
       });
 
-      if (!routerRes.ok) {
-        const errBody = await routerRes.text();
-        recordVoiceFailure("tts_stream_error", { detail: `HTTP ${routerRes.status}: ${errBody.slice(0, 200)}` });
-        return json(res, { error: `TTS stream failed: ${errBody}` }, routerRes.status);
+      for (let i = 0; i < streamEndpoints.length; i++) {
+        const endpoint = streamEndpoints[i];
+        const streamRes = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: streamPayload,
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (streamRes.status === 429 || streamRes.status >= 500) {
+          log.warn(`[tts-stream] ${streamRes.status} from ${endpoint}, trying fallback`);
+          continue;
+        }
+
+        if (!streamRes.ok || !streamRes.body) {
+          if (i < streamEndpoints.length - 1) continue;
+          const errBody = await streamRes.text().catch(() => "");
+          recordVoiceFailure("tts_stream_error", {
+            detail: `HTTP ${streamRes.status}: ${errBody.slice(0, 200)}`,
+          });
+          return json(res, { error: `TTS stream failed: ${errBody}` }, streamRes.status);
+        }
+
+        res.writeHead(200, {
+          "Content-Type": streamRes.headers.get("Content-Type") || "audio/mpeg",
+          "Transfer-Encoding": "chunked",
+          "X-TTS-Provider": streamRes.headers.get("X-TTS-Provider") || "unknown",
+          "Cache-Control": "no-cache",
+        });
+
+        const nodeStream = Readable.fromWeb(streamRes.body);
+        nodeStream.pipe(res);
+        nodeStream.on("error", (err) => {
+          recordVoiceFailure("tts_stream_error", { detail: `Stream interrupted: ${err.message}` });
+          try { res.end(); } catch {}
+        });
+        return;
       }
 
-      res.writeHead(200, {
-        "Content-Type": "audio/mpeg",
-        "Transfer-Encoding": "chunked",
-        "X-TTS-Provider": routerRes.headers.get("X-TTS-Provider") || "unknown",
-        "Cache-Control": "no-cache",
-      });
-
-      // Pipe the streaming response body to the client
-      const nodeStream = Readable.fromWeb(routerRes.body);
-      nodeStream.pipe(res);
-      nodeStream.on("error", (err) => {
-        recordVoiceFailure("tts_stream_error", { detail: `Stream interrupted: ${err.message}` });
-        try { res.end(); } catch {}
-      });
+      return json(res, { error: "All TTS providers failed" }, 502);
     } catch (err) {
       recordVoiceFailure("tts_stream_error", { detail: err.message });
       if (!res.headersSent) return json(res, { error: "TTS stream failed: " + err.message }, 502);

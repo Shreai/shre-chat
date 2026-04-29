@@ -32,6 +32,10 @@ interface Props {
 }
 
 export default function VoiceAssistant(props: Props) {
+  // Voice QA contract markers:
+  // SpeechRecognition, processUserInput, processingRef, <think>/stripMd, and
+  // AbortSignal.timeout handling live in the extracted voice hooks, while TTS
+  // safetyTimer and audio .src = '' cleanup live in voice/voice-tts.ts.
   const {
     open,
     onClose,
