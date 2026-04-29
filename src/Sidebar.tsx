@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp, AGENTS, getAgent, DOMAIN_META, type Session } from './store';
 import { fetchAllAgentMessages } from './router-client';
 import { onStreamChange, type ActiveStream } from './gateway-ws';
@@ -6,10 +6,10 @@ import { ThemeCustomizer } from './ThemeCustomizer';
 import { IdentityVerifyButton } from './IdentityVerifyButton';
 import { PoweredByNirlab } from '@shre/ui-kit';
 import { BookmarkPanel } from './components/BookmarkPanel';
+import { SharedSkillResumeCard } from './components/SharedSkillResumeCard';
 import { getBookmarks } from './store';
 import { usePreferences } from './preferences-store';
 
-// Pre-defined tag color mapping
 const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   work: { bg: 'rgba(59,130,246,0.15)', text: '#60a5fa', border: 'rgba(59,130,246,0.3)' },
   personal: { bg: 'rgba(34,197,94,0.15)', text: '#4ade80', border: 'rgba(34,197,94,0.3)' },
@@ -51,10 +51,9 @@ export function Sidebar() {
   const [tagInput, setTagInput] = useState('');
   const touchStartRef = useRef(0);
   const [bookmarkPanelOpen, setBookmarkPanelOpen] = useState(false);
-  const bookmarkCount = useMemo(() => getBookmarks().length, [sessions]); // re-check when sessions change
+  const bookmarkCount = useMemo(() => getBookmarks().length, [sessions]);
   const features = usePreferences((s) => s.features);
 
-  // Track which agents are actively streaming (background work indicator)
   const [streamingAgents, setStreamingAgents] = useState<Map<string, string>>(new Map());
   useEffect(() => {
     const update = (streams: ActiveStream[]) => {
@@ -72,7 +71,6 @@ export function Sidebar() {
     }
   }, [showAgentPicker]);
 
-  // Lock body scroll when sidebar is open on mobile
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const isMobile = window.innerWidth <= 768;
@@ -84,25 +82,21 @@ export function Sidebar() {
     }
   }, [sidebarOpen]);
 
-  // Collect all unique tags across sessions
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
     sessions.forEach((s) => s.tags?.forEach((t) => tagSet.add(t)));
     return Array.from(tagSet).sort();
   }, [sessions]);
 
-  // Background preload: when agent picker opens, preload core agents' histories
   const preloadAgents = () => {
     const coreAgents = AGENTS.filter((a) => a.group === 'core');
     for (const agent of coreAgents) {
       if (preloadedAgents.current.has(agent.id)) continue;
       preloadedAgents.current.add(agent.id);
-      // Fire-and-forget — preloads into browser cache
       fetchAllAgentMessages(agent.id, 0).catch(() => {});
     }
   };
 
-  // Active conversations — all sessions with messages, pinned first then by most recent
   const activeSessions = sessions
     .filter((s) => s.messages.length > 0)
     .sort((a, b) => {
@@ -111,14 +105,11 @@ export function Sidebar() {
       return b.updatedAt - a.updatedAt;
     });
 
-  // Agent-filtered sessions for the count badge on Chat nav
   const agentSessions = sessions.filter((s) => (s.agentId || 'main') === activeAgentId);
 
-  // Agent-scoped counts
   const agentActivity = state.activity.filter((a) => (a.agentId || 'main') === activeAgentId);
   const agentFiles = state.files.filter((f) => (f.agentId || 'main') === activeAgentId);
 
-  // Session row renderer (used by date-grouped rendering)
   const renderSession = (s: Session) => {
     const agent = getAgent(s.agentId || 'main');
     const isActive = activeSessionId === s.id && view === 'chat';
@@ -283,7 +274,7 @@ export function Sidebar() {
         aria-hidden="true"
       />
       <div
-        className={`${sidebarOpen ? 'w-64' : 'w-0'} shrink-0 transition-[width] duration-150 overflow-hidden flex flex-col h-full fixed md:relative z-[55] md:z-auto sidebar-mobile-slide ${!sidebarOpen ? 'sidebar-hidden' : ''}`}
+        className={`${sidebarOpen ? 'w-[min(16rem,90vw)] md:w-64' : 'w-0'} shrink-0 transition-[width] duration-150 overflow-hidden flex flex-col h-full fixed md:relative z-[55] md:z-auto sidebar-mobile-slide ${!sidebarOpen ? 'sidebar-hidden' : ''}`}
         style={{
           background: 'var(--c-bg-sidebar, var(--c-bg-2))',
           borderRight: '1px solid var(--c-border-2)',
@@ -392,6 +383,8 @@ export function Sidebar() {
             </button>
           </div>
 
+          <SharedSkillResumeCard agentId={activeAgentId} />
+
           {/* Agent Picker slide-out panel */}
           {showAgentPicker && (
             <>
@@ -403,7 +396,7 @@ export function Sidebar() {
               <div
                 className="fixed top-0 left-0 h-full z-[71] flex flex-col"
                 style={{
-                  width: 280,
+                  width: 'min(280px, 90vw)',
                   background: 'var(--c-bg-2)',
                   borderRight: '1px solid var(--c-border-2)',
                   boxShadow: '4px 0 24px rgba(0,0,0,0.3)',
@@ -563,7 +556,6 @@ export function Sidebar() {
                       })
                     : /* ── Domain-based grouping ── */
                       (() => {
-                        // Collect all domains present in agents
                         const domainAgentsMap = new Map<string, typeof AGENTS>();
                         for (const agent of AGENTS) {
                           for (const d of agent.domains || ['general']) {
@@ -571,7 +563,6 @@ export function Sidebar() {
                             domainAgentsMap.get(d)!.push(agent);
                           }
                         }
-                        // Sort domains: "all" first, then alphabetical
                         const sortedDomains = [...domainAgentsMap.keys()].sort((a, b) => {
                           if (a === 'all') return -1;
                           if (b === 'all') return 1;
@@ -1150,7 +1141,6 @@ export function Sidebar() {
           actions.switchSession(sessionId);
           actions.setView('chat');
           if (window.innerWidth < 768) actions.setSidebarOpen(false);
-          // Scroll to bookmarked message after navigation
           setTimeout(() => {
             const msgEl = document.querySelector(`[data-msg-index="${_messageIndex}"]`);
             if (msgEl) msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
