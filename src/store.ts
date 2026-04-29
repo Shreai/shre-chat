@@ -50,7 +50,7 @@ interface MinimumFleetRole {
   agentId: string;
 }
 
-const MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID: Record<string, string> = {
+const FALLBACK_MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID: Record<string, string> = {
   shre: 'Orchestrator',
   architect: 'Planner',
   'shre-context': 'Memory',
@@ -65,8 +65,17 @@ const MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID: Record<string, string> = {
   'shre-chronicle': 'Scribe',
 };
 
+let minimumFleetRoleLabelByAgentId: Record<string, string> = {
+  ...FALLBACK_MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID,
+};
+
 export function getMinimumFleetRoleLabel(agentId: string): string | null {
-  return MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID[normalizeVisibleAgentId(agentId)] ?? null;
+  const visibleId = normalizeVisibleAgentId(agentId);
+  return (
+    minimumFleetRoleLabelByAgentId[visibleId] ??
+    AGENTS.find((agent) => agent.id === visibleId)?.fleetRoleLabel ??
+    null
+  );
 }
 
 function applyMinimumFleetRole(agent: Agent, agentId: string): Agent {
@@ -177,6 +186,11 @@ export async function fetchAgentCapabilities(): Promise<void> {
     const fleetByAgentId = new Map<string, MinimumFleetRole>(
       (fleetData?.fleet ?? []).map((role) => [role.agentId, role]),
     );
+    if (fleetData?.fleet?.length) {
+      minimumFleetRoleLabelByAgentId = Object.fromEntries(
+        fleetData.fleet.map((role) => [role.agentId, role.name.replace(/\s+Agent$/, '')]),
+      );
+    }
     for (const remote of data.agents) {
       const local = AGENTS.find((a) => a.id === remote.id);
       if (local && remote.domains.length > 0) {
