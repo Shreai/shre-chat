@@ -67,6 +67,7 @@ import {
   loadThemeCustom,
   saveThemeCustom,
   getAgent,
+  getMinimumFleetRoleLabel,
   AGENTS,
   type Session,
 } from '../store';
@@ -114,7 +115,7 @@ describe('createSession', () => {
   it('accepts a custom title and agentId', () => {
     const s = createSession('My Chat', 'nova');
     expect(s.title).toBe('My Chat');
-    expect(s.agentId).toBe('nova');
+    expect(s.agentId).toBe('ellie');
   });
 });
 
@@ -157,6 +158,16 @@ describe('loadSessions / saveSessions', () => {
   it('returns empty array on corrupted JSON', () => {
     localStorageMap.set('shre-sessions', '{broken json');
     expect(loadSessions()).toEqual([]);
+  });
+
+  it('normalizes legacy nova sessions to ellie on load', () => {
+    localStorageMap.set(
+      'shre-sessions',
+      JSON.stringify([{ id: 's1', title: 'Legacy', agentId: 'nova', messages: [] }]),
+    );
+    const loaded = loadSessions();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].agentId).toBe('ellie');
   });
 
   it('caps sessions at 100 — keeps pinned, drops oldest unpinned', () => {
@@ -351,6 +362,12 @@ describe('getAgent', () => {
     const agent = getAgent('unknown-agent');
     expect(agent.id).toBe('unknown-agent');
     expect(agent.name).toBe('unknown-agent');
+  });
+
+  it('attaches minimum fleet role labels when known', () => {
+    const agent = getAgent('guardian');
+    expect(agent.fleetRoleLabel).toBe('Guardian');
+    expect(getMinimumFleetRoleLabel('guardian')).toBe('Guardian');
   });
 });
 

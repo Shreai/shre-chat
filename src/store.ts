@@ -40,6 +40,43 @@ export interface Agent {
   group: 'core' | 'department' | 'council';
   domains?: string[];
   description?: string;
+  fleetRoleId?: string;
+  fleetRoleLabel?: string;
+}
+
+interface MinimumFleetRole {
+  id: string;
+  name: string;
+  agentId: string;
+}
+
+const MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID: Record<string, string> = {
+  shre: 'Orchestrator',
+  architect: 'Planner',
+  'shre-context': 'Memory',
+  'chief-scientist': 'Researcher',
+  compass: 'Analyst',
+  'founding-engineer': 'Builder',
+  herald: 'Communicator',
+  weaver: 'Integrator',
+  guardian: 'Guardian',
+  pulse: 'Observer',
+  'shre-scorer': 'Trainer',
+  'shre-chronicle': 'Scribe',
+};
+
+export function getMinimumFleetRoleLabel(agentId: string): string | null {
+  return MINIMUM_FLEET_ROLE_LABEL_BY_AGENT_ID[normalizeVisibleAgentId(agentId)] ?? null;
+}
+
+function applyMinimumFleetRole(agent: Agent, agentId: string): Agent {
+  const fleetRoleLabel = getMinimumFleetRoleLabel(agentId);
+  if (!fleetRoleLabel) return agent;
+  return {
+    ...agent,
+    fleetRoleId: fleetRoleLabel.toLowerCase(),
+    fleetRoleLabel,
+  };
 }
 
 // Agent UI metadata — generated from mib007/packages/shared/src/platform-registry.ts.
@@ -107,7 +144,8 @@ export async function fetchAgentRegistry(): Promise<void> {
         group: mapGroup(a.group),
         domains: a.domains,
         description: a.description,
-      }));
+      }))
+      .map((agent) => applyMinimumFleetRole(agent, agent.id));
 
     // Preserve any agents in AGENTS not in registry (runtime-added)
     const registryIds = new Set(registryAgents.map((a) => a.id));
@@ -125,11 +163,20 @@ export async function fetchAgentRegistry(): Promise<void> {
 /** Fetch agent capabilities from shre-router and merge domains into AGENTS */
 export async function fetchAgentCapabilities(): Promise<void> {
   try {
-    const res = await fetch('/api/agents/capabilities');
-    if (!res.ok) return;
-    const data = (await res.json()) as {
+    const [capabilitiesRes, fleetRes] = await Promise.all([
+      fetch('/api/agents/capabilities'),
+      fetch('/api/agents/minimum-fleet'),
+    ]);
+    if (!capabilitiesRes.ok) return;
+    const data = (await capabilitiesRes.json()) as {
       agents: Array<{ id: string; tier: string; domains: string[]; specializations: string[] }>;
     };
+    const fleetData = fleetRes.ok
+      ? ((await fleetRes.json()) as { fleet?: MinimumFleetRole[] })
+      : null;
+    const fleetByAgentId = new Map<string, MinimumFleetRole>(
+      (fleetData?.fleet ?? []).map((role) => [role.agentId, role]),
+    );
     for (const remote of data.agents) {
       const local = AGENTS.find((a) => a.id === remote.id);
       if (local && remote.domains.length > 0) {
@@ -137,9 +184,16 @@ export async function fetchAgentCapabilities(): Promise<void> {
         const merged = new Set([...(local.domains || []), ...remote.domains]);
         (local as any).domains = [...merged];
       }
+      if (local) {
+        const role = fleetByAgentId.get(remote.id);
+        if (role) {
+          local.fleetRoleId = role.id;
+          local.fleetRoleLabel = role.name.replace(/\s+Agent$/, '');
+        }
+      }
       // If an agent exists in router but not in local AGENT_META, add it dynamically
       if (!local && remote.id !== 'shre-fleet' && remote.id !== 'shre-voice') {
-        AGENTS.push({
+        const agent: Agent = {
           id: remote.id,
           name: remote.id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
           emoji:
@@ -156,7 +210,8 @@ export async function fetchAgentCapabilities(): Promise<void> {
                 ? 'department'
                 : 'core',
           domains: remote.domains,
-        });
+        };
+        AGENTS.push(applyMinimumFleetRole(agent, remote.id));
       }
     }
   } catch {
@@ -191,6 +246,15 @@ function getAgentModelFromConfig(agentId: string): string {
   return agentModelMap[agentId] ?? agentModelMap._default ?? DEFAULT_MODEL;
 }
 
+function normalizeVisibleAgentId(agentId: string): string {
+  return agentId === 'nova' ? 'ellie' : agentId;
+}
+
+function normalizeSessionAgentId(session: Session): Session {
+  const agentId = normalizeVisibleAgentId(session.agentId || 'main');
+  return agentId === session.agentId ? session : { ...session, agentId };
+}
+
 // Merged AGENTS array — models come from config, fallback to default
 export const AGENTS: Agent[] = AGENT_META.map((a) => ({
   ...a,
@@ -198,15 +262,15 @@ export const AGENTS: Agent[] = AGENT_META.map((a) => ({
 }));
 
 export function getAgent(id: string): Agent {
-  return (
-    AGENTS.find((a) => a.id === id) || {
-      id,
-      name: id,
-      emoji: '●',
-      model: getAgentModelFromConfig(id),
-      group: 'core' as const,
-    }
-  );
+  const visibleId = normalizeVisibleAgentId(id);
+  const agent = AGENTS.find((a) => a.id === visibleId) || {
+    id: visibleId,
+    name: visibleId,
+    emoji: '●',
+    model: getAgentModelFromConfig(visibleId),
+    group: 'core' as const,
+  };
+  return applyMinimumFleetRole(agent, visibleId);
 }
 
 // ── User Profile & Identity ──────────────────────────────────────────
@@ -243,18 +307,31 @@ export interface UserProfile {
 }
 
 const USER_PROFILE_KEY = 'shre-user-profile';
+const USER_PROFILE_KEY_PREFIX = 'shre-user-profile:';
 
-export function loadUserProfile(): UserProfile | null {
+export function loadUserProfile(userId?: string): UserProfile | null {
   try {
+    if (userId) {
+      const scoped = localStorage.getItem(`${USER_PROFILE_KEY_PREFIX}${userId}`);
+      if (scoped) return JSON.parse(scoped);
+    }
+
     const raw = localStorage.getItem(USER_PROFILE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as UserProfile;
+    if (userId && parsed?.id && parsed.id !== userId) return null;
+    return parsed;
   } catch {
     return null;
   }
 }
 
-export function saveUserProfile(profile: UserProfile): void {
+export function saveUserProfile(profile: UserProfile, userId?: string): void {
   try {
+    if (userId) {
+      localStorage.setItem(`${USER_PROFILE_KEY_PREFIX}${userId}`, JSON.stringify(profile));
+    }
     localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
   } catch {
     /* quota */
@@ -543,12 +620,26 @@ export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-export function loadSessions(): Session[] {
+function parseJson<T>(raw: string | null, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]');
+    return JSON.parse(raw || '') as T;
   } catch {
-    return [];
+    return fallback;
   }
+}
+
+function loadArray<T>(key: string): T[] {
+  const parsed = parseJson<unknown>(localStorage.getItem(key), []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function loadRecord<T extends Record<string, unknown>>(key: string, fallback: T): T {
+  const parsed = parseJson<unknown>(localStorage.getItem(key), fallback);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as T) : fallback;
+}
+
+export function loadSessions(): Session[] {
+  return loadArray<Session>(SESSIONS_KEY).map(normalizeSessionAgentId);
 }
 
 const MAX_SESSIONS = 100;
@@ -611,17 +702,18 @@ export async function syncWithServer(localSessions: Session[]): Promise<Session[
     const localMap = new Map(localSessions.map((s) => [s.id, s]));
     const merged = serverMerged.map((serverSession: Session) => {
       const local = localMap.get(serverSession.id);
-      if (!local) return serverSession; // new from server
+      const normalizedServer = normalizeSessionAgentId(serverSession);
+      if (!local) return normalizedServer; // new from server
       const localCount = local.messages?.length ?? 0;
-      const serverCount = serverSession.messages?.length ?? 0;
+      const serverCount = normalizedServer.messages?.length ?? 0;
       // Prefer the version with more messages (data wins over timestamps)
       if (localCount > serverCount) return local;
-      return serverSession;
+      return normalizedServer;
     });
     // Also include local-only sessions not on server yet
     for (const local of localSessions) {
       if (!serverMerged.some((s: Session) => s.id === local.id)) {
-        merged.push(local);
+        merged.push(normalizeSessionAgentId(local));
       }
     }
 
@@ -786,11 +878,7 @@ export function flushPendingSave() {
 }
 
 export function loadActivity(): ActivityEvent[] {
-  try {
-    return JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return loadArray<ActivityEvent>(ACTIVITY_KEY);
 }
 
 export function saveActivity(events: ActivityEvent[]) {
@@ -804,11 +892,7 @@ export function saveActivity(events: ActivityEvent[]) {
 }
 
 export function loadFeed(): FeedEntry[] {
-  try {
-    return JSON.parse(localStorage.getItem(FEED_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return loadArray<FeedEntry>(FEED_KEY);
 }
 
 export function saveFeed(entries: FeedEntry[]) {
@@ -822,11 +906,7 @@ export function saveFeed(entries: FeedEntry[]) {
 }
 
 export function loadFiles(): UploadedFile[] {
-  try {
-    return JSON.parse(localStorage.getItem(FILES_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return loadArray<UploadedFile>(FILES_KEY);
 }
 
 export function saveFiles(files: UploadedFile[]) {
@@ -840,11 +920,7 @@ export function saveFiles(files: UploadedFile[]) {
 }
 
 export function loadTabs(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(TABS_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return loadArray<string>(TABS_KEY);
 }
 
 export function saveTabs(tabs: string[]) {
@@ -867,11 +943,7 @@ export function saveActiveSession(id: string | null) {
 }
 
 export function loadQueue(): QueuedMessage[] {
-  try {
-    return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return loadArray<QueuedMessage>(QUEUE_KEY);
 }
 
 export function saveQueue(queue: QueuedMessage[]) {
@@ -884,11 +956,7 @@ export function saveQueue(queue: QueuedMessage[]) {
 }
 
 export function loadDrafts(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
-  } catch {
-    return {};
-  }
+  return loadRecord<Record<string, string>>(DRAFTS_KEY, {});
 }
 
 export function saveDrafts(drafts: Record<string, string>) {
@@ -902,11 +970,7 @@ export function saveDrafts(drafts: Record<string, string>) {
 const SCROLL_POS_KEY = 'shre-scroll-positions';
 
 export function loadScrollPositions(): Record<string, number> {
-  try {
-    return JSON.parse(localStorage.getItem(SCROLL_POS_KEY) || '{}');
-  } catch {
-    return {};
-  }
+  return loadRecord<Record<string, number>>(SCROLL_POS_KEY, {});
 }
 
 export function saveScrollPositions(positions: Record<string, number>) {
@@ -922,10 +986,11 @@ export function saveScrollPositions(positions: Record<string, number>) {
 }
 
 export function createSession(title?: string, agentId?: string): Session {
+  const normalizedAgentId = agentId === 'nova' ? 'ellie' : agentId;
   return {
     id: uid(),
     title: title || 'New chat',
-    agentId: agentId || 'main',
+    agentId: normalizedAgentId || 'main',
     messages: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -933,10 +998,11 @@ export function createSession(title?: string, agentId?: string): Session {
 }
 
 export function createVoiceSession(agentId?: string): Session {
+  const normalizedAgentId = agentId === 'nova' ? 'ellie' : agentId;
   return {
     id: uid(),
     title: 'Voice session',
-    agentId: agentId || 'main',
+    agentId: normalizedAgentId || 'main',
     messages: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -978,8 +1044,10 @@ export function importSessions(
       const imported: Session[] = JSON.parse(reader.result as string);
       if (!Array.isArray(imported)) throw new Error('Invalid format');
       const existingIds = new Set(existingSessions.map((s) => s.id));
-      const newSessions = imported.filter((s) => s.id && !existingIds.has(s.id));
-      const merged = [...existingSessions, ...newSessions];
+      const newSessions = imported
+        .filter((s) => s.id && !existingIds.has(s.id))
+        .map(normalizeSessionAgentId);
+      const merged = [...existingSessions.map(normalizeSessionAgentId), ...newSessions];
       saveSessions(merged);
       onDone(merged);
     } catch {

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ChatWidgetProps } from '../types';
+import { isDevSafeMode } from '../../env';
+import { getMinimumFleetRoleLabel } from '../../store';
 
 interface AgentStatus {
   id: string;
@@ -14,10 +16,16 @@ interface StatusBarAgent {
 }
 
 export default function ActiveAgentsPanel({ size }: ChatWidgetProps) {
+  const devSafeMode = isDevSafeMode();
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (devSafeMode) {
+      setAgents([]);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -42,7 +50,7 @@ export default function ActiveAgentsPanel({ size }: ChatWidgetProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [devSafeMode]);
 
   const activeCount = agents.filter((a) => a.status === 'active').length;
   const dotColor: Record<string, string> = {
@@ -67,6 +75,17 @@ export default function ActiveAgentsPanel({ size }: ChatWidgetProps) {
               <span className="text-[13px] font-normal text-[var(--c-text-2)] truncate">
                 {a.name}
               </span>
+              {getMinimumFleetRoleLabel(a.id) && (
+                <span
+                  className="text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0"
+                  style={{
+                    background: 'var(--c-bg-3)',
+                    color: 'var(--c-text-4)',
+                  }}
+                >
+                  {getMinimumFleetRoleLabel(a.id)}
+                </span>
+              )}
               <span className="text-[11px] font-medium text-[var(--c-text-3)] ml-auto">
                 {a.status}
               </span>

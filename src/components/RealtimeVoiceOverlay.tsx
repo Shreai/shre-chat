@@ -5,12 +5,13 @@
  * - Pulsing orb animation (listening/speaking state)
  * - Live transcripts (user + AI)
  * - Provider badge (PersonaPlex 70ms / OpenAI 300ms)
- * - Persona selector (Shre, Ellie, Nova, Support)
+ * - Persona selector (Shre, Ellie, Support)
  * - End call button
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { useRealtimeVoice, type RealtimeVoiceState } from '../hooks/useRealtimeVoice';
+import { getAgent, getMinimumFleetRoleLabel } from '../store';
 
 interface RealtimeVoiceOverlayProps {
   open?: boolean;
@@ -22,11 +23,14 @@ interface RealtimeVoiceOverlayProps {
 }
 
 const PERSONAS = [
-  { id: 'shre', name: 'Shre', role: 'CEO', color: '#3b82f6' },
-  { id: 'ellie', name: 'Ellie', role: 'President', color: '#8b5cf6' },
-  { id: 'nova', name: 'Nova', role: 'Innovation', color: '#ec4899' },
-  { id: 'support', name: 'Support', role: 'Help Desk', color: '#10b981' },
-];
+  { id: 'shre', color: '#3b82f6' },
+  { id: 'ellie', color: '#8b5cf6' },
+  { id: 'support', color: '#10b981' },
+].map((persona) => ({
+  ...persona,
+  name: getAgent(persona.id).name,
+  role: getMinimumFleetRoleLabel(persona.id) ?? getAgent(persona.id).name,
+}));
 
 const stateLabels: Record<RealtimeVoiceState, string> = {
   idle: 'Tap to start',
@@ -100,7 +104,7 @@ export function RealtimeVoiceOverlay({
       }}
     >
       {/* Header */}
-      <div className="w-full flex items-center justify-between px-6 pt-6">
+      <div className="w-full flex items-center justify-between px-4 sm:px-6 pt-[calc(env(safe-area-inset-top)+1rem)] sm:pt-6">
         <div className="flex items-center gap-3">
           <div
             className="w-3 h-3 rounded-full"
@@ -127,7 +131,7 @@ export function RealtimeVoiceOverlay({
       </div>
 
       {/* Center — Orb + Transcripts */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
+      <div className="flex-1 flex flex-col items-center justify-center gap-6 sm:gap-8 px-4 sm:px-6">
         {/* Persona name */}
         <div className="text-center">
           <h2 className="text-white text-2xl font-light">{persona.name}</h2>
@@ -137,7 +141,7 @@ export function RealtimeVoiceOverlay({
         {/* Pulsing orb */}
         <button
           onClick={handleToggle}
-          className="relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500"
+          className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-full flex items-center justify-center transition-all duration-500"
           style={{
             background: `radial-gradient(circle, ${persona.color}88 0%, ${persona.color}22 70%, transparent 100%)`,
             boxShadow: isActive
@@ -147,7 +151,7 @@ export function RealtimeVoiceOverlay({
         >
           {/* Inner orb */}
           <div
-            className={`w-20 h-20 rounded-full transition-all duration-300 ${
+            className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full transition-all duration-300 ${
               state === 'listening' ? 'animate-pulse' : ''
             } ${state === 'speaking' ? 'scale-110' : 'scale-100'}`}
             style={{
@@ -198,15 +202,15 @@ export function RealtimeVoiceOverlay({
       </div>
 
       {/* Bottom — Persona selector + End button */}
-      <div className="w-full px-6 pb-8 space-y-4">
+      <div className="w-full px-4 sm:px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] sm:pb-8 space-y-4">
         {/* Persona pills */}
         {!isActive && (
-          <div className="flex justify-center gap-2">
+          <div className="flex flex-wrap justify-center gap-2">
             {PERSONAS.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setSelectedPersona(p.id)}
-                className={`px-4 py-2 rounded-full text-sm transition-all ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm transition-all ${
                   selectedPersona === p.id
                     ? 'text-white border-2'
                     : 'text-white/50 border border-white/20 hover:border-white/40'

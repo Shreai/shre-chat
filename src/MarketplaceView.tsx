@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { mib007Link } from './chat-utils';
+import { getAgent, getMinimumFleetRoleLabel } from './store';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -39,6 +40,17 @@ interface BundleListing {
   billing: string;
   savings?: string;
   popular?: boolean;
+}
+
+interface ReleaseBundle {
+  id: 'qa' | 'beta' | 'production';
+  name: string;
+  description: string;
+  leadAgent: string;
+  releaseGate: string[];
+  supportAgents: string[];
+  customerFacingAgents: string[];
+  purchaseMode: 'bundle' | 'a-la-carte';
 }
 
 interface CatalogData {
@@ -106,6 +118,10 @@ function priceLabel(item: AgentListing | CatalogItem | BundleListing): string {
   return pt === 'free' ? 'Free' : pt ? pt.charAt(0).toUpperCase() + pt.slice(1) : 'Free';
 }
 
+function roleHint(agentId: string): string {
+  return getMinimumFleetRoleLabel(agentId) ?? getAgent(agentId).name ?? agentId.replace(/-/g, ' ');
+}
+
 async function fetchJson<T>(path: string): Promise<T | null> {
   try {
     const r = await fetch(path);
@@ -161,6 +177,9 @@ function iconEmoji(icon?: string): string {
 
 export function MarketplaceView() {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
+  const [releaseBundles, setReleaseBundles] = useState<ReleaseBundle[]>([]);
+  const [builderBundleId, setBuilderBundleId] = useState<ReleaseBundle['id'] | null>(null);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('available');
@@ -213,6 +232,29 @@ export function MarketplaceView() {
         return;
       }
       setCatalog(data);
+      const bundles = await fetchJson<{ bundles?: ReleaseBundle[] }>(
+        '/api/router/v1/agents/release-bundles',
+      );
+      if (!cancelled && bundles?.bundles) {
+        setReleaseBundles(bundles.bundles);
+        if (!builderBundleId) {
+          const defaultBundle =
+            bundles.bundles.find((bundle) => bundle.id === 'beta') ?? bundles.bundles[0];
+          if (defaultBundle) {
+            setBuilderBundleId(defaultBundle.id);
+            setSelectedTeamIds(
+              Array.from(
+                new Set([
+                  defaultBundle.leadAgent,
+                  ...defaultBundle.releaseGate,
+                  ...defaultBundle.supportAgents,
+                  ...defaultBundle.customerFacingAgents,
+                ]),
+              ),
+            );
+          }
+        }
+      }
       setLoading(false);
     }
     load();
@@ -282,6 +324,56 @@ export function MarketplaceView() {
     catalog.agents.forEach((a) => cats.add(a.category));
     return Array.from(cats).sort();
   }, [catalog]);
+
+  const agentLookup = useMemo(() => {
+    const map = new Map<string, AgentListing>();
+    catalog?.agents.forEach((agent) => map.set(agent.id, agent));
+    return map;
+  }, [catalog]);
+
+  const activeBuilderBundle = useMemo(
+    () => releaseBundles.find((bundle) => bundle.id === builderBundleId) ?? null,
+    [releaseBundles, builderBundleId],
+  );
+
+  const selectedTeam = useMemo(() => {
+    return selectedTeamIds.map(
+      (id) =>
+        agentLookup.get(id) ?? {
+          id,
+          name: roleHint(id),
+          title: roleHint(id),
+          description: `${roleHint(id)} role for release operations`,
+          category: 'business',
+          skills: [],
+          price: 0,
+          currency: 'USD',
+          billing: 'per-month',
+          status: 'available' as const,
+        },
+    );
+  }, [selectedTeamIds, agentLookup]);
+
+  function seedTeam(bundle: ReleaseBundle) {
+    setBuilderBundleId(bundle.id);
+    setSelectedTeamIds(
+      Array.from(
+        new Set([
+          bundle.leadAgent,
+          ...bundle.releaseGate,
+          ...bundle.supportAgents,
+          ...bundle.customerFacingAgents,
+        ]),
+      ),
+    );
+    setSection('agents');
+  }
+
+  function toggleTeamAgent(agentId: string) {
+    setSelectedTeamIds((current) =>
+      current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId],
+    );
+  }
 
   return (
     <div
@@ -411,6 +503,122 @@ export function MarketplaceView() {
         </div>
       </div>
 
+      {!loading && releaseBundles.length > 0 && (
+        <div
+          className="px-4 py-4 border-b"
+          style={{
+            borderColor: 'var(--c-border-2)',
+            background: 'linear-gradient(180deg, rgba(99,102,241,0.08), transparent)',
+          }}
+        >
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div>
+              <div
+                className="text-[11px] uppercase tracking-[0.16em]"
+                style={{ color: 'var(--c-text-4)' }}
+              >
+                Release Teams
+              </div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--c-text-1)' }}>
+                Buy a team or assemble your own
+              </div>
+            </div>
+            <div className="text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+              Browse release bundles and team configurations powered by the minimum fleet
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {releaseBundles.map((bundle) => (
+              <div
+                key={bundle.id}
+                className="rounded-xl p-3 border"
+                style={{
+                  background: 'var(--c-bg-1)',
+                  borderColor: 'var(--c-border-2)',
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: 'var(--c-text-1)' }}>
+                      {bundle.name}
+                    </div>
+                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--c-text-4)' }}>
+                      {bundle.description}
+                    </div>
+                  </div>
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded-full"
+                    style={{
+                      color: bundle.id === 'production' ? '#4ade80' : '#60a5fa',
+                      background:
+                        bundle.id === 'production'
+                          ? 'rgba(74,222,128,0.12)'
+                          : 'rgba(96,165,250,0.12)',
+                    }}
+                  >
+                    {bundle.id}
+                  </span>
+                </div>
+
+                <div className="mt-3 space-y-2 text-[11px]">
+                  <div style={{ color: 'var(--c-text-3)' }}>
+                    <span className="font-medium" style={{ color: 'var(--c-text-2)' }}>
+                      Lead:
+                    </span>{' '}
+                    {roleHint(bundle.leadAgent)}
+                  </div>
+                  <div style={{ color: 'var(--c-text-3)' }}>
+                    <span className="font-medium" style={{ color: 'var(--c-text-2)' }}>
+                      Gate:
+                    </span>{' '}
+                    {bundle.releaseGate.map((a) => roleHint(a)).join(' · ')}
+                  </div>
+                  <div style={{ color: 'var(--c-text-3)' }}>
+                    <span className="font-medium" style={{ color: 'var(--c-text-2)' }}>
+                      Support:
+                    </span>{' '}
+                    {bundle.supportAgents.map((a) => roleHint(a)).join(' · ') || 'None'}
+                  </div>
+                  <div style={{ color: 'var(--c-text-3)' }}>
+                    <span className="font-medium" style={{ color: 'var(--c-text-2)' }}>
+                      Customer-facing:
+                    </span>{' '}
+                    {bundle.customerFacingAgents.map((a) => roleHint(a)).join(' · ') || 'None'}
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => seedTeam(bundle)}
+                    className="px-2.5 py-1.5 rounded text-[11px] font-medium"
+                    style={{
+                      background:
+                        bundle.id === 'production' ? 'var(--c-accent, #6366f1)' : 'var(--c-bg-2)',
+                      color: bundle.id === 'production' ? '#fff' : 'var(--c-text-3)',
+                      border: `1px solid ${bundle.id === 'production' ? 'transparent' : 'var(--c-border-2)'}`,
+                    }}
+                  >
+                    Build team
+                  </button>
+                  <button
+                    onClick={() => setSection('agents')}
+                    className="px-2.5 py-1.5 rounded text-[11px] font-medium"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--c-text-4)',
+                      border: '1px solid var(--c-border-2)',
+                    }}
+                  >
+                    Hand select
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Category pills ─────────────────────────────────────── */}
       {(section === 'all' || section === 'apps' || section === 'agents') &&
         allCategories.length > 0 && (
@@ -471,6 +679,84 @@ export function MarketplaceView() {
 
         {catalog && (
           <>
+            {section === 'agents' && activeBuilderBundle && (
+              <div
+                className="mb-6 rounded-2xl p-4 border"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(14,165,233,0.10), rgba(99,102,241,0.08))',
+                  borderColor: 'rgba(99,102,241,0.25)',
+                }}
+              >
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                  <div>
+                    <div
+                      className="text-[11px] uppercase tracking-[0.16em]"
+                      style={{ color: 'var(--c-text-4)' }}
+                    >
+                      Team Builder
+                    </div>
+                    <div className="text-base font-semibold" style={{ color: 'var(--c-text-1)' }}>
+                      {activeBuilderBundle?.name || 'Custom Team'}
+                    </div>
+                    <div className="text-[11px] mt-1" style={{ color: 'var(--c-text-4)' }}>
+                      {activeBuilderBundle?.description || 'Pick the agents you want to activate.'}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => activeBuilderBundle && seedTeam(activeBuilderBundle)}
+                      className="px-3 py-1.5 rounded text-[11px] font-medium"
+                      style={{
+                        background: 'var(--c-bg-2)',
+                        color: 'var(--c-text-3)',
+                        border: '1px solid var(--c-border-2)',
+                      }}
+                    >
+                      Reset template
+                    </button>
+                    <button
+                      onClick={() => setSelectedTeamIds([])}
+                      className="px-3 py-1.5 rounded text-[11px] font-medium"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--c-text-4)',
+                        border: '1px solid var(--c-border-2)',
+                      }}
+                    >
+                      Clear team
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedTeam.map((agent) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => toggleTeamAgent(agent.id)}
+                      className="px-2.5 py-1.5 rounded-full text-[11px] font-medium"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        color: 'var(--c-text-2)',
+                        border: '1px solid var(--c-border-2)',
+                      }}
+                    >
+                      {agent.title || agent.name}
+                      <span className="ml-2 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                        remove
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                  Lead: {roleHint(activeBuilderBundle?.leadAgent || 'ellie')} · Gate:{' '}
+                  {(activeBuilderBundle?.releaseGate || []).map((a) => roleHint(a)).join(' · ') ||
+                    'None'}
+                </div>
+              </div>
+            )}
+
             {/* Apps Section */}
             {(section === 'all' || section === 'apps') && filteredApps.length > 0 && (
               <div className="mb-6">
@@ -577,6 +863,9 @@ export function MarketplaceView() {
                             {agent.name}
                           </div>
                           <div className="text-[10px]" style={{ color: 'var(--c-text-5)' }}>
+                            {getMinimumFleetRoleLabel(agent.id)
+                              ? `${getMinimumFleetRoleLabel(agent.id)} · `
+                              : ''}
                             {agent.title || agent.category}
                           </div>
                         </div>
@@ -636,6 +925,30 @@ export function MarketplaceView() {
                         >
                           {agent.status === 'available' ? 'Available' : 'Coming Soon'}
                         </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-[10px]" style={{ color: 'var(--c-text-5)' }}>
+                          {selectedTeamIds.includes(agent.id) ? 'Selected for team' : 'Optional'}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamAgent(agent.id);
+                            setSection('agents');
+                          }}
+                          className="px-2 py-1 rounded text-[10px] font-medium"
+                          style={{
+                            background: selectedTeamIds.includes(agent.id)
+                              ? 'rgba(74,222,128,0.12)'
+                              : 'var(--c-bg-3)',
+                            color: selectedTeamIds.includes(agent.id)
+                              ? '#4ade80'
+                              : 'var(--c-text-3)',
+                            border: '1px solid var(--c-border-2)',
+                          }}
+                        >
+                          {selectedTeamIds.includes(agent.id) ? 'Remove' : 'Add to team'}
+                        </button>
                       </div>
                     </button>
                   ))}

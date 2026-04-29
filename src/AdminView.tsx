@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { SBadge } from '@shre/ui-kit';
 import { mib007Link } from './chat-utils';
+import { getMinimumFleetRoleLabel } from './store';
 
 interface AgentSummary {
   id: string;
@@ -633,6 +634,19 @@ export function AdminView() {
                               >
                                 {a.id}
                               </div>
+                              {getMinimumFleetRoleLabel(a.id) && (
+                                <div className="mt-0.5">
+                                  <span
+                                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium"
+                                    style={{
+                                      background: 'var(--c-bg-3)',
+                                      color: 'var(--c-text-4)',
+                                    }}
+                                  >
+                                    {getMinimumFleetRoleLabel(a.id)}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="text-right px-3 py-2" style={{ color: 'var(--c-text-3)' }}>
