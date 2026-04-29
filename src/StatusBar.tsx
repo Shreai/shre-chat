@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp, getAgent } from './store';
 import { usePreferences } from './preferences-store';
+import { getStoredWorkspaceId } from './workspace-context';
 import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
 import { MemoryPanel } from './components/MemoryPanel';
 import { RoutingModeIndicator, StatusBarGatewayPill } from './status-bar/GatewayIndicators';
@@ -964,7 +965,12 @@ export function StatusBar() {
           <path d="M9 21h6" />
         </svg>
       </button>
-      <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
+      <MemoryPanel
+        open={memoryOpen}
+        onClose={() => setMemoryOpen(false)}
+        tenantId={getStoredWorkspaceId()}
+        agentId={state.activeAgentId}
+      />
 
       {/* Trace toggle — conversation traceroute */}
       <button

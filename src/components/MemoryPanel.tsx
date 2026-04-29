@@ -35,6 +35,16 @@ interface MuscleMemoryStats {
 interface Props {
   open: boolean;
   onClose: () => void;
+  tenantId?: string | null;
+  agentId?: string | null;
+}
+
+interface SharedFact {
+  fact: string;
+  category: string;
+  confidence: number;
+  sourceAgent: string;
+  sharedAt: string;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -47,12 +57,15 @@ const CATEGORY_COLORS: Record<string, string> = {
   default: '#6b7280',
 };
 
-export function MemoryPanel({ open, onClose }: Props) {
-  const [tab, setTab] = useState<'facts' | 'patterns' | 'dashboard'>('facts');
+export function MemoryPanel({ open, onClose, tenantId, agentId }: Props) {
+  const [tab, setTab] = useState<'facts' | 'patterns' | 'shared' | 'dashboard'>('facts');
   const [facts, setFacts] = useState<MemoryFact[]>([]);
   const [dashboard, setDashboard] = useState<MemoryDashboard | null>(null);
   const [muscleMemory, setMuscleMemory] = useState<MuscleMemoryStats | null>(null);
+  const [sharedFacts, setSharedFacts] = useState<SharedFact[]>([]);
   const [loading, setLoading] = useState(false);
+  const [sharedSyncState, setSharedSyncState] = useState<'idle' | 'refreshing' | 'live'>('idle');
+  const [lastSharedRefreshAt, setLastSharedRefreshAt] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -80,9 +93,112 @@ export function MemoryPanel({ open, onClose }: Props) {
     }
   }, []);
 
+  const fetchSharedFacts = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      setSharedSyncState('refreshing');
+      const res = await fetch(`/api/router/v1/memory/shared/${encodeURIComponent(tenantId)}`);
+      const data = res.ok ? await res.json() : null;
+      if (Array.isArray(data?.facts) && data.facts.length > 0) {
+        setSharedFacts(data.facts);
+      } else {
+        const token =
+          sessionStorage.getItem('shre-auth-token') || localStorage.getItem('shre-auth-token');
+        const fallback = await fetch(
+          `/api/workspaces/${encodeURIComponent(tenantId)}/memory/shared?limit=20`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        );
+        if (fallback.ok) {
+          const shared = await fallback.json();
+          if (Array.isArray(shared.facts) && shared.facts.length > 0) {
+            setSharedFacts(
+              shared.facts
+                .map((entry) => ({
+                  fact: entry.fact || '',
+                  category: entry.category || 'decision',
+                  confidence: typeof entry.confidence === 'number' ? entry.confidence : 0.5,
+                  sourceAgent: entry.sourceAgent || 'unknown',
+                  sharedAt: entry.sharedAt || new Date().toISOString(),
+                }))
+                .filter((entry) => entry.fact),
+            );
+          }
+        }
+      }
+      setLastSharedRefreshAt(Date.now());
+      setSharedSyncState('live');
+    } catch (err) {
+      console.error('[MemoryPanel] Shared memory fetch failed:', err);
+      setSharedSyncState('idle');
+    }
+  }, [tenantId, agentId]);
+
   useEffect(() => {
-    if (open) fetchData();
-  }, [open, fetchData]);
+    if (!open || !tenantId) return;
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const token =
+      sessionStorage.getItem('shre-auth-token') || localStorage.getItem('shre-auth-token');
+    const wsUrl = token
+      ? `${proto}//${location.host}/api/workspaces/${encodeURIComponent(tenantId)}/events/ws?token=${encodeURIComponent(token)}`
+      : `${proto}//${location.host}/api/workspaces/${encodeURIComponent(tenantId)}/events/ws`;
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string) as {
+          type?: string;
+          workspaceId?: string;
+          payload?: {
+            fact?: string;
+            category?: string;
+            confidence?: number;
+            sourceAgent?: string;
+            sharedAt?: string;
+          };
+        };
+        if (data?.type !== 'memory.shared.updated') return;
+        if (data.workspaceId && data.workspaceId !== tenantId) return;
+        setSharedSyncState('refreshing');
+        if (data.payload?.fact) {
+          setSharedFacts((prev) => {
+            const next: SharedFact = {
+              fact: data.payload?.fact ?? '',
+              category: data.payload?.category ?? 'context',
+              confidence: data.payload?.confidence ?? 0.5,
+              sourceAgent: data.payload?.sourceAgent ?? 'unknown',
+              sharedAt: data.payload?.sharedAt ?? new Date().toISOString(),
+            };
+            if (prev.some((item) => item.fact === next.fact && item.sharedAt === next.sharedAt)) {
+              return prev;
+            }
+            return [next, ...prev].slice(0, 50);
+          });
+        }
+        void fetchSharedFacts();
+      } catch {
+        // ignore malformed messages
+      }
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [open, tenantId, fetchSharedFacts]);
+
+  useEffect(() => {
+    if (open) {
+      fetchData();
+      fetchSharedFacts();
+    }
+  }, [open, fetchData, fetchSharedFacts]);
 
   const handleForget = async (factId: string) => {
     try {
@@ -161,23 +277,83 @@ export function MemoryPanel({ open, onClose }: Props) {
               Memory
             </span>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--c-text-3)',
-              cursor: 'pointer',
-              fontSize: 18,
-            }}
-          >
-            x
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {tenantId && (
+              <div
+                data-testid="shared-memory-sync-badge"
+                aria-label={`Shared sync ${sharedSyncState}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 10px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  background:
+                    sharedSyncState === 'live'
+                      ? 'rgba(16, 185, 129, 0.14)'
+                      : sharedSyncState === 'refreshing'
+                        ? 'rgba(245, 158, 11, 0.14)'
+                        : 'rgba(107, 114, 128, 0.14)',
+                  color:
+                    sharedSyncState === 'live'
+                      ? '#34d399'
+                      : sharedSyncState === 'refreshing'
+                        ? '#f59e0b'
+                        : '#9ca3af',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 999,
+                    background:
+                      sharedSyncState === 'live'
+                        ? '#34d399'
+                        : sharedSyncState === 'refreshing'
+                          ? '#f59e0b'
+                          : '#9ca3af',
+                    boxShadow:
+                      sharedSyncState === 'refreshing'
+                        ? '0 0 8px rgba(245, 158, 11, 0.55)'
+                        : 'none',
+                  }}
+                />
+                {sharedSyncState === 'live'
+                  ? lastSharedRefreshAt
+                    ? `Live ${new Date(lastSharedRefreshAt).toLocaleTimeString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}`
+                    : 'Live sync'
+                  : sharedSyncState === 'refreshing'
+                    ? 'Refreshing'
+                    : 'Idle'}
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--c-text-3)',
+                cursor: 'pointer',
+                fontSize: 18,
+              }}
+            >
+              x
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--c-border, #1f2937)' }}>
-          {(['facts', 'patterns', 'dashboard'] as const).map((t) => (
+          {(['facts', 'patterns', 'shared', 'dashboard'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -296,6 +472,52 @@ export function MemoryPanel({ open, onClose }: Props) {
                 >
                   <span style={{ fontSize: 13, color: 'var(--c-text-1)' }}>{a.agentId}</span>
                   <span style={{ fontSize: 12, color: '#22c55e' }}>{a.learnedCount} learned</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!loading && tab === 'shared' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {tenantId ? null : (
+                <div style={{ color: 'var(--c-text-3)', textAlign: 'center', padding: 20 }}>
+                  No workspace selected, so shared memory is not available.
+                </div>
+              )}
+              {tenantId && sharedFacts.length === 0 && (
+                <div style={{ color: 'var(--c-text-3)', textAlign: 'center', padding: 20 }}>
+                  No shared memories yet for this workspace.
+                </div>
+              )}
+              {sharedFacts.map((fact, index) => (
+                <div
+                  key={`${fact.sharedAt}-${index}`}
+                  style={{ background: 'var(--c-bg-3, #1f2937)', borderRadius: 10, padding: 12 }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        background: '#10b98133',
+                        color: '#10b981',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {fact.category}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--c-text-3)' }}>
+                      {fact.sourceAgent}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--c-text-3)', marginLeft: 'auto' }}>
+                      {(fact.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--c-text-1, #f9fafb)', fontSize: 13, lineHeight: 1.5 }}>
+                    {fact.fact}
+                  </div>
                 </div>
               ))}
             </div>
