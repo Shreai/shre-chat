@@ -1098,17 +1098,30 @@ function isOriginAllowed(req) {
   const referer = req.headers["referer"] || "";
   // Allow same-origin (localhost on our port)
   if (!origin && !referer) return true; // non-browser clients (curl, etc.)
-  const allowed = [
-    `http://localhost:${PORT}`, `https://localhost:${PORT}`,
-    `http://127.0.0.1:${PORT}`, `https://127.0.0.1:${PORT}`,
-    "https://chat.nirtek.net", "http://chat.nirtek.net",
-    "https://mib.nirtek.net", "http://mib.nirtek.net",
-    "https://mib007.nirtek.net", "http://mib007.nirtek.net",
-    "https://app.nirtek.net", "http://app.nirtek.net",
-    "https://shre.nirtek.net", "http://shre.nirtek.net",
-  ];
-  if (origin && allowed.some((a) => origin.startsWith(a))) return true;
-  if (referer && allowed.some((a) => referer.startsWith(a))) return true;
+  const isNirtekOrigin = (value) => {
+    try {
+      const parsed = new URL(value);
+      const host = parsed.hostname.toLowerCase();
+      return host === "nirtek.net" || host.endsWith(".nirtek.net");
+    } catch {
+      return false;
+    }
+  };
+  const isLocalOrigin = (value) => {
+    try {
+      const parsed = new URL(value);
+      return (
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1" ||
+        parsed.hostname === "::1" ||
+        parsed.hostname === "[::1]"
+      );
+    } catch {
+      return false;
+    }
+  };
+  if (origin && (isLocalOrigin(origin) || isNirtekOrigin(origin))) return true;
+  if (referer && (isLocalOrigin(referer) || isNirtekOrigin(referer))) return true;
   // .replit.dev CORS removed — not used in production
   // Cloudflare tunnel: trust requests where X-Forwarded-Host matches *.nirtek.net
   const fwdHost = req.headers["x-forwarded-host"] || "";
