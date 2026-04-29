@@ -15,6 +15,8 @@ import {
   stripMd,
   detectCmd,
   detectAgentSwitch,
+  humanizeVoiceText,
+  splitVoiceResponse,
   type AgentOption,
   type Turn,
   type VoiceShortcut,
@@ -323,6 +325,11 @@ export function useVoiceAssistantLogic(params: UseVoiceAssistantLogicParams) {
             undefined,
             undefined,
             routerMode,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            true,
           ).catch((err) => {
             clearTimeout(timeoutId);
             if (err?.name === 'AbortError') {
@@ -546,9 +553,12 @@ export function useVoiceAssistantLogic(params: UseVoiceAssistantLogicParams) {
           return;
         }
 
+        const responseParts = splitVoiceResponse(response);
+        const spokenText = humanizeVoiceText(responseParts.spokenText || response);
         const assistTurn: Turn = {
           role: 'assistant',
           text: response,
+          spokenText,
           mib007Link: responseMib007Link,
         };
         setTurns((prev) => [...prev, assistTurn]);
@@ -556,7 +566,7 @@ export function useVoiceAssistantLogic(params: UseVoiceAssistantLogicParams) {
         onVoiceTurn?.({ role: 'assistant', content: response });
 
         dispatch({ type: 'AI_RESPONSE' });
-        await speak(stripMd(response));
+        await speak(spokenText || stripMd(response));
 
         if (activeRef.current) {
           if ((phaseRef.current as VoicePhase) === 'speaking') {
