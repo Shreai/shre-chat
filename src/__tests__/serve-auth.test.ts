@@ -27,7 +27,6 @@ import {
   createAuthCookieHelper,
   getJsonResponse,
 } from './route-test-helpers';
-import { registerAuthRoutes } from '../../routes/auth.js';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -35,17 +34,21 @@ const log = createMockLogger();
 const json = createJsonHelper();
 const authCookie = createAuthCookieHelper();
 
-let handleAuth: ReturnType<typeof registerAuthRoutes>;
+type RegisterAuthRoutes = typeof import('../../routes/auth.js').registerAuthRoutes;
+let registerAuthRoutes: RegisterAuthRoutes;
+let handleAuth: ReturnType<RegisterAuthRoutes>;
 const TEST_SIGNING_KEY = randomBytes(32);
 const TEST_SIGNING_KEY_PATH = join(homedir(), '.shre', 'auth', 'signing-key.hex');
 let createdSigningKey = false;
 
-beforeAll(() => {
+beforeAll(async () => {
   if (!existsSync(TEST_SIGNING_KEY_PATH)) {
     mkdirSync(join(homedir(), '.shre', 'auth'), { recursive: true });
     writeFileSync(TEST_SIGNING_KEY_PATH, TEST_SIGNING_KEY.toString('hex'));
     createdSigningKey = true;
   }
+  const authModule = await import('../../routes/auth.js');
+  registerAuthRoutes = authModule.registerAuthRoutes;
   handleAuth = registerAuthRoutes({ log: log as any });
 });
 
