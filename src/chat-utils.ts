@@ -330,6 +330,46 @@ export function mib007Link(view: string, params?: string): string {
   return params ? `${base}?${params}` : base;
 }
 
+const SHRE_CITY_BASE =
+  typeof window !== 'undefined' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
+    ? window.location.origin
+    : `http://127.0.0.1:${ports.services?.['shre-city']?.port ?? 5479}`;
+
+function encodeBase64Url(text: string): string {
+  if (typeof window === 'undefined') return text;
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+export function cityLink(
+  params?: Record<string, string | number | boolean | null | undefined>,
+): string {
+  const url = new URL(SHRE_CITY_BASE);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value == null) continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+
+export function cityWorkflowLink(
+  packet: unknown,
+  extra?: Record<string, string | number | boolean | null | undefined>,
+): string {
+  const params: Record<string, string | number | boolean | null | undefined> = {
+    mode: 'game',
+    panel: 'pipes',
+    autoConnect: true,
+    workflow: encodeBase64Url(JSON.stringify(packet)),
+    ...extra,
+  };
+  return cityLink(params);
+}
+
 const isRemote =
   typeof window !== 'undefined' &&
   window.location.hostname !== 'localhost' &&
@@ -355,7 +395,7 @@ export const ECOSYSTEM_APPS = [
   },
   {
     id: 'router-gateway',
-    name: 'Router Gateway',
+    name: 'Gateway Status',
     icon: 'R',
     url: '/router/',
     color: 'from-amber-500 to-orange-500',

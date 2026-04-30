@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { isDevSafeMode } from '../env';
 
 export interface TrackedTask {
   id: string;
@@ -26,7 +27,10 @@ export interface TrackedTask {
   completion_ratio?: number;
   description?: string;
   source?: string;
+  intake_meta?: string;
   depends_on?: string[];
+  task_memory?: string;
+  tools_needed?: string[];
   message_index?: number;
   created_at: number;
   updated_at?: number;
@@ -71,7 +75,10 @@ interface RawTaskRecord {
   completion_ratio?: number;
   description?: string;
   source?: string;
+  intake_meta?: string;
   depends_on?: string[];
+  task_memory?: string;
+  tools_needed?: string[];
   metadata?: { message_index?: number; trace_id?: string };
   created_at?: number;
   updated_at?: number;
@@ -141,6 +148,7 @@ interface UseTaskTrackerOptions {
 }
 
 export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOptions) {
+  const devSafeMode = isDevSafeMode();
   const [tasks, setTasks] = useState<TrackedTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -149,6 +157,7 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
 
   // ── Fetch tasks from shre-tasks API ──
   const fetchTasks = useCallback(async () => {
+    if (devSafeMode) return;
     if (!sessionId) return;
     try {
       const res = await fetch(`/api/tasks?session_id=${encodeURIComponent(sessionId)}&limit=50`, {
@@ -171,7 +180,10 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
         completion_ratio: t.completion_ratio,
         description: t.description,
         source: t.source,
+        intake_meta: t.intake_meta,
         depends_on: t.depends_on,
+        task_memory: t.task_memory,
+        tools_needed: t.tools_needed,
         message_index: t.metadata?.message_index,
         created_at: t.created_at,
         updated_at: t.updated_at,
@@ -181,7 +193,7 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
     } catch {
       // Network error — keep existing state
     }
-  }, [sessionId]);
+  }, [devSafeMode, sessionId]);
 
   // ── Polling ──
   const hasActive = useMemo(
@@ -191,15 +203,17 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
   const effectiveInterval = pollInterval ?? (hasActive ? 10_000 : 30_000);
 
   useEffect(() => {
+    if (devSafeMode) return;
     fetchTasks();
     intervalRef.current = setInterval(fetchTasks, effectiveInterval);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchTasks, effectiveInterval]);
+  }, [devSafeMode, fetchTasks, effectiveInterval]);
 
   // ── WebSocket real-time updates ──
   useEffect(() => {
+    if (devSafeMode) return;
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${proto}//${location.host}/ws/notifications`);
@@ -249,11 +263,12 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [sessionId, fetchTasks]);
+  }, [devSafeMode, sessionId, fetchTasks]);
 
   // ── Update task (check off, approve, cancel, retry) ──
   const updateTask = useCallback(
     async (taskId: string, patch: Record<string, unknown>) => {
+      if (devSafeMode) return { ok: true };
       try {
         const token =
           sessionStorage.getItem('shre-auth-token') ||
@@ -284,71 +299,80 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
         return { error: String(err) };
       }
     },
-    [fetchTasks],
+    [devSafeMode, fetchTasks],
   );
 
   // ── Fetch subtasks for a parent ──
-  const fetchSubtasks = useCallback(async (parentId: string): Promise<TrackedTask[]> => {
-    try {
-      const res = await fetch(`/api/tasks?parent_id=${encodeURIComponent(parentId)}&limit=50`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) return [];
-      const data: unknown = await res.json();
-      const rawTasks = toTaskArray(data);
-      return rawTasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        agent: t.agent || t.agent_id,
-        priority: t.priority,
-        quality_score: t.quality_score,
-        completion_ratio: t.completion_ratio,
-        created_at: t.created_at,
-        updated_at: t.updated_at,
-      }));
-    } catch {
-      return [];
-    }
-  }, []);
+  const fetchSubtasks = useCallback(
+    async (parentId: string): Promise<TrackedTask[]> => {
+      if (devSafeMode) return [];
+      try {
+        const res = await fetch(`/api/tasks?parent_id=${encodeURIComponent(parentId)}&limit=50`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return [];
+        const data: unknown = await res.json();
+        const rawTasks = toTaskArray(data);
+        return rawTasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          agent: t.agent || t.agent_id,
+          priority: t.priority,
+          quality_score: t.quality_score,
+          completion_ratio: t.completion_ratio,
+          created_at: t.created_at,
+          updated_at: t.updated_at,
+          task_memory: t.task_memory,
+        }));
+      } catch {
+        return [];
+      }
+    },
+    [devSafeMode],
+  );
 
   // ── Fetch trace steps for a task ──
-  const fetchTrace = useCallback(async (traceId: string): Promise<TaskTraceDetails> => {
-    try {
-      const res = await fetch(`/api/router/v1/traces/${encodeURIComponent(traceId)}`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) return { steps: [], executionPlan: [] };
-      const data: unknown = await res.json();
-      const trace = (data && typeof data === 'object' ? data : {}) as {
-        spans?: RawTraceSpan[];
-        steps?: RawTraceSpan[];
-        executionPlan?: RawTraceExecutionStep[];
-      };
-      return {
-        steps: (trace.spans || trace.steps || []).map((s) => ({
-          name: String(s.name || s.step || 'step'),
-          status: s.error ? 'fail' : s.endTime ? 'ok' : s.startTime ? 'running' : 'pending',
-          duration_ms:
-            s.duration_ms ?? (s.endTime && s.startTime ? s.endTime - s.startTime : undefined),
-          error: s.error,
-          timestamp: s.startTime || s.timestamp,
-        })),
-        executionPlan: (trace.executionPlan || []).map((step) => ({
-          stepId: String(step.stepId || step.id || `${step.order ?? 0}-${step.title || 'step'}`),
-          order: Number(step.order ?? 0),
-          type: String(step.type || step.kind || 'step'),
-          title: String(step.title || step.name || 'Untitled step'),
-          status: String(step.status || 'pending'),
-          taskId: step.taskId ? String(step.taskId) : undefined,
-          error: step.error ? String(step.error) : undefined,
-          queryText: step.queryText ? String(step.queryText) : undefined,
-        })),
-      };
-    } catch {
-      return { steps: [], executionPlan: [] };
-    }
-  }, []);
+  const fetchTrace = useCallback(
+    async (traceId: string): Promise<TaskTraceDetails> => {
+      if (devSafeMode) return { steps: [], executionPlan: [] };
+      try {
+        const res = await fetch(`/api/router/v1/traces/${encodeURIComponent(traceId)}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return { steps: [], executionPlan: [] };
+        const data: unknown = await res.json();
+        const trace = (data && typeof data === 'object' ? data : {}) as {
+          spans?: RawTraceSpan[];
+          steps?: RawTraceSpan[];
+          executionPlan?: RawTraceExecutionStep[];
+        };
+        return {
+          steps: (trace.spans || trace.steps || []).map((s) => ({
+            name: String(s.name || s.step || 'step'),
+            status: s.error ? 'fail' : s.endTime ? 'ok' : s.startTime ? 'running' : 'pending',
+            duration_ms:
+              s.duration_ms ?? (s.endTime && s.startTime ? s.endTime - s.startTime : undefined),
+            error: s.error,
+            timestamp: s.startTime || s.timestamp,
+          })),
+          executionPlan: (trace.executionPlan || []).map((step) => ({
+            stepId: String(step.stepId || step.id || `${step.order ?? 0}-${step.title || 'step'}`),
+            order: Number(step.order ?? 0),
+            type: String(step.type || step.kind || 'step'),
+            title: String(step.title || step.name || 'Untitled step'),
+            status: String(step.status || 'pending'),
+            taskId: step.taskId ? String(step.taskId) : undefined,
+            error: step.error ? String(step.error) : undefined,
+            queryText: step.queryText ? String(step.queryText) : undefined,
+          })),
+        };
+      } catch {
+        return { steps: [], executionPlan: [] };
+      }
+    },
+    [devSafeMode],
+  );
 
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) ?? null,

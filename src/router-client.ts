@@ -2,9 +2,9 @@
  * Shre Chat — Streaming Client
  *
  * Primary chat client for Shre chat UI.
- * Flow: Shre → shre-router → optimal model (budget, RAG, cost tracking, learning)
- *
- * All chat routes through shre-router /v1/chat. No direct provider calls.
+ * Flow: direct-local or router-backed chat depending on gateway mode.
+ * Direct mode uses the local chat service and mirrors durable state back to
+ * router asynchronously.
  */
 
 import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
@@ -22,7 +22,7 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.0.0';
 
 // Active agent ID — defaults to shre, switchable
 let currentAgentId = 'shre';
-let currentAgentModel = 'claude-sonnet-4-6';
+let currentAgentModel = 'google/gemini-2.5-flash';
 
 /** Get the active tenant/workspace ID from the stored auth workspace (set at login/workspace switch).
  *  Falls back to "default" when no workspace is selected. */
@@ -50,7 +50,7 @@ export function setUserLanguage(lang: string): void {
 }
 
 /** Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6").
- *  Also handles "provider:X" format (e.g. "provider:anthropic" → "anthropic").
+ *  Also handles "provider:X" format (e.g. "provider:claude" → "claude").
  *  Some providers expect bare model IDs without provider prefix. */
 export function stripProviderPrefix(modelId: string): string {
   if (modelId.startsWith('provider:')) return modelId.slice('provider:'.length);
@@ -71,7 +71,7 @@ async function refreshAgentModelCache(): Promise<void> {
 }
 
 function resolveAgentModel(agentId: string): string {
-  return agentModelCache[agentId] ?? agentModelCache._default ?? 'claude-sonnet-4-6';
+  return agentModelCache[agentId] ?? agentModelCache._default ?? 'google/gemini-2.5-flash';
 }
 
 export function setAgent(agentId: string) {
@@ -221,6 +221,7 @@ interface AppApi {
   category?: string;
   activated?: boolean;
   skillCount?: number;
+  assignedAgents?: string[];
 }
 
 interface AppsApiResponse {
@@ -498,7 +499,7 @@ export interface RouterTool {
   category: 'system' | 'app';
 }
 
-/** Fetch available tools via shre-router proxy. */
+/** Fetch available tools via the router-backed proxy path. */
 export async function fetchAvailableTools(): Promise<RouterTool[]> {
   try {
     const res = await fetch(`${SHRE_ROUTER_URL}/v1/tools/available`, {
@@ -528,6 +529,7 @@ export interface RouterApp {
   category?: string;
   activated: boolean;
   skillCount: number;
+  assignedAgents?: string[];
 }
 
 /** Fetch available apps via serve.js proxy to shre-skills /v1/apps. */
@@ -546,6 +548,7 @@ export async function fetchAvailableApps(): Promise<RouterApp[]> {
       category: a.category,
       activated: a.activated ?? true,
       skillCount: a.skillCount || 0,
+      assignedAgents: a.assignedAgents,
     }));
   } catch {
     return [];
@@ -595,6 +598,23 @@ export interface ToolErrorEvent {
   tool: string;
   error: string;
   iteration: number;
+}
+
+export interface MemoryLoadEvent {
+  layers: Array<{ layer: string; chars: number; hit: boolean }>;
+  hitCount: number;
+  totalChars: number;
+  hitLayers?: string[];
+}
+
+export interface LearningStatusEvent {
+  state: 'started' | 'completed' | 'failed';
+  sessionId?: string;
+  summary?: string;
+  elapsedMs?: number;
+  operations?: number;
+  failedCount?: number;
+  failures?: Array<{ step: string; error: string }>;
 }
 
 export type ChatErrorStage =
@@ -708,6 +728,10 @@ export interface StreamCallbacks {
   onTrace?: (traceId: string) => void;
   /** Fired when full trace record is received (when trace mode is on) */
   onTraceComplete?: (traceRecord: Record<string, unknown>) => void;
+  /** Fired when the router finishes loading streaming context/memory layers */
+  onMemoryLoaded?: (event: MemoryLoadEvent) => void;
+  /** Fired when the router runs post-response learning work */
+  onLearningStatus?: (event: LearningStatusEvent) => void;
   /** Fired when shre-router returns structured error diagnostics */
   onStructuredError?: (error: ChatErrorEnvelope) => void;
 }
@@ -732,9 +756,21 @@ function normalizeChatErrorEnvelope(input: unknown): ChatErrorEnvelope | null {
     : ['Check the router trace', 'Inspect the failing hop'];
   const stage =
     typeof value.stage === 'string' &&
-    ['ingest', 'preflight', 'routing', 'context', 'provider', 'tool', 'stream', 'audit', 'transport', 'timeout', 'billing', 'auth', 'unknown'].includes(
-      value.stage,
-    )
+    [
+      'ingest',
+      'preflight',
+      'routing',
+      'context',
+      'provider',
+      'tool',
+      'stream',
+      'audit',
+      'transport',
+      'timeout',
+      'billing',
+      'auth',
+      'unknown',
+    ].includes(value.stage)
       ? (value.stage as ChatErrorStage)
       : 'unknown';
   return {
@@ -760,12 +796,19 @@ function normalizeChatErrorEnvelope(input: unknown): ChatErrorEnvelope | null {
 }
 
 /**
- * Send a chat message through shre-router (streaming).
+ * Send a chat message through the active gateway path (streaming).
  */
 export interface ThreadContext {
   parentSessionId?: string;
   branchPoint?: number;
   replyToMessageIndex?: number;
+}
+
+export interface MentionContext {
+  agentId: string | null;
+  appId?: string | null;
+  explicit?: boolean;
+  scopeTags?: string[];
 }
 
 export async function sendMessage(
@@ -789,6 +832,7 @@ export async function sendMessage(
   previewConfirmed?: string,
   agentIdOverride?: string,
   runtimeContext?: RuntimeContextPacket,
+  mentionContext?: MentionContext,
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -806,10 +850,10 @@ export async function sendMessage(
     },
   };
 
-  // All chat routes through shre-router /v1/chat (trust gate + training):
-  // Router (default): shre-router → provider-proxy → LLM (budget, RAG, cost tracking, learning)
-  try {
-    await streamViaFallback(
+  // Default chat uses the router-backed path unless direct mode is selected.
+  // Direct mode uses the local chat service and syncs learning state back to router.
+  const runStream = async (useDirectMode: boolean) =>
+    streamViaFallback(
       message,
       history,
       systemPrompt,
@@ -821,7 +865,7 @@ export async function sendMessage(
       threadContext,
       contextHealth,
       claudeCliMode,
-      directMode,
+      useDirectMode,
       voiceMode,
       traceEnabled,
       conversationMode,
@@ -830,7 +874,11 @@ export async function sendMessage(
       previewConfirmed,
       agentIdOverride,
       runtimeContext,
+      mentionContext,
     );
+
+  try {
+    await runStream(!!directMode);
   } catch (err) {
     if (done) return;
     if (signal?.aborted) {
@@ -838,39 +886,54 @@ export async function sendMessage(
       return;
     }
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[shre] shre-router failed:', msg);
-    // Classify error for better UX — order matters: check specific patterns before generic fallback
     const isToolLoopError =
       msg.includes('iterations') ||
       msg.includes('tool loop') ||
       msg.includes('maximum iteration') ||
       msg.includes('tool_loop');
-    const isNetworkError =
-      msg.includes('Failed to fetch') ||
-      msg.includes('NetworkError') ||
-      (msg.includes('TypeError') && msg.includes('fetch'));
     const isAuthError =
       msg.includes('auth_expired') ||
       msg.includes('Session expired') ||
       msg.includes('sign in again');
-    const structured = normalizeChatErrorEnvelope(msg);
+    const isRouterOutage =
+      !directMode &&
+      (msg.includes('Failed to fetch') ||
+        msg.includes('NetworkError') ||
+        (msg.includes('TypeError') && msg.includes('fetch')) ||
+        /Smart gateway 5\d\d/i.test(msg) ||
+        /gateway unavailable/i.test(msg));
+
+    if (isRouterOutage) {
+      console.warn('[shre] shre-router unavailable, falling back to local chat', msg);
+      try {
+        callbacks.onStatus?.('warning', 'Gateway unavailable — switching to local chat');
+        await runStream(true);
+        return;
+      } catch (fallbackErr) {
+        err = fallbackErr;
+      }
+    }
+
+    const finalMsg = err instanceof Error ? err.message : String(err);
+    console.error('[shre] shre-router failed:', finalMsg);
+    const structured = normalizeChatErrorEnvelope(finalMsg);
     if (structured) {
       callbacks.onStructuredError?.(structured);
     }
     if (isToolLoopError) {
-      // Tool loop exhaustion — NOT a gateway error, NOT transient. Prefix with 'tool_loop_exhausted:'
-      // so useMessageHandlers knows not to auto-retry.
       safeCallbacks.onError(
         'tool_loop_exhausted: The agent ran out of tool iterations. Your message has been escalated for review. Try rephrasing or breaking the request into smaller steps.',
       );
     } else if (isAuthError) {
       safeCallbacks.onError('Session expired — please sign in again.');
-    } else if (isNetworkError) {
+    } else if (isRouterOutage) {
       safeCallbacks.onError(
-        'Cannot reach the gateway — check if shre-router is running. Please try again.',
+        'Gateway unavailable — local chat fallback also failed. Please try again.',
       );
+    } else if (directMode) {
+      safeCallbacks.onError(`Local chat service unavailable — ${finalMsg}. Please try again.`);
     } else {
-      safeCallbacks.onError(`Gateway unavailable — ${msg}. Please try again.`);
+      safeCallbacks.onError(`Gateway unavailable — ${finalMsg}. Please try again.`);
     }
   }
 }
@@ -899,6 +962,7 @@ async function streamViaFallback(
   previewConfirmed?: string,
   agentIdOverride?: string,
   runtimeContext?: RuntimeContextPacket,
+  mentionContext?: MentionContext,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
 
@@ -919,9 +983,33 @@ async function streamViaFallback(
     { role: 'user', content: message },
   ];
 
-  // Direct mode bypasses shre-router — sends to local Ollama via serve.js proxy
+  // Direct mode bypasses shre-router — sends to the local chat service via serve.js proxy
   const chatUrl = directMode ? '/api/direct/v1/chat' : `${SHRE_ROUTER_URL}/v1/chat`;
   const requestAgentId = agentIdOverride || currentAgentId;
+  const requestBody = {
+    messages,
+    systemPrompt,
+    model: modelOverride || 'auto',
+    stream: true,
+    agentId: requestAgentId,
+    sessionId: activeSessionKey,
+    tenantId: getTenantId(),
+    companyId: getTenantId(),
+    promptVersion: SYSTEM_PROMPT_VERSION,
+    ...(attachments?.length ? { attachments } : {}),
+    ...(routerMode ? { routerMode: true } : {}),
+    ...(claudeCliMode ? { claudeCliMode: true } : {}),
+    ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
+    ...(voiceMode ? { voiceMode: true } : {}),
+    ...(threadContext ? { threadContext } : {}),
+    ...(contextHealth ? { contextHealth } : {}),
+    ...(traceEnabled ? { trace: true } : {}),
+    ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
+    ...(activeAppId ? { appId: activeAppId } : {}),
+    ...(previewConfirmed ? { previewConfirmed } : {}),
+    ...(runtimeContext ? { runtimeContext } : {}),
+    ...(mentionContext ? { mentionContext } : {}),
+  };
   const res = await fetchWithRetry(chatUrl, {
     method: 'POST',
     headers: {
@@ -930,29 +1018,7 @@ async function streamViaFallback(
       'X-App-Version': APP_VERSION,
       'x-channel': 'shre-chat',
     },
-    body: JSON.stringify({
-      messages,
-      systemPrompt,
-      model: modelOverride || 'auto',
-      stream: true,
-      agentId: requestAgentId,
-      sessionId: activeSessionKey,
-      tenantId: getTenantId(),
-      companyId: getTenantId(),
-      promptVersion: SYSTEM_PROMPT_VERSION,
-      ...(attachments?.length ? { attachments } : {}),
-      ...(routerMode ? { routerMode: true } : {}),
-      ...(claudeCliMode ? { claudeCliMode: true } : {}),
-      ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
-      ...(voiceMode ? { voiceMode: true } : {}),
-      ...(threadContext ? { threadContext } : {}),
-      ...(contextHealth ? { contextHealth } : {}),
-      ...(traceEnabled ? { trace: true } : {}),
-      ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
-      ...(activeAppId ? { appId: activeAppId } : {}),
-      ...(previewConfirmed ? { previewConfirmed } : {}),
-      ...(runtimeContext ? { runtimeContext } : {}),
-    }),
+    body: JSON.stringify(requestBody),
     signal,
   });
 
@@ -1003,6 +1069,43 @@ async function streamViaFallback(
         if (e instanceof Error && e.message.includes('Payment required')) throw e;
       }
     }
+    if (!directMode && res.status >= 500 && res.status < 600) {
+      try {
+        callbacks.onStatus?.('warning', 'Gateway stream failed — retrying without streaming');
+        const fallbackRes = await fetchWithRetry(chatUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-App-Version': APP_VERSION,
+            'x-channel': 'shre-chat',
+          },
+          body: JSON.stringify({ ...requestBody, stream: false }),
+          signal,
+        });
+        if (fallbackRes.ok) {
+          const data = (await fallbackRes.json().catch(() => null)) as Record<
+            string,
+            unknown
+          > | null;
+          const fallbackText =
+            (typeof data?.content === 'string' && data.content) ||
+            ((data?.message as Record<string, unknown> | undefined)?.content as string) ||
+            ((data?.choices as Array<{ message?: { content?: string } }> | undefined)?.[0]?.message
+              ?.content as string) ||
+            ((
+              data?.candidates as
+                | Array<{ content?: { parts?: Array<{ text?: string }> } }>
+                | undefined
+            )?.[0]?.content?.parts?.[0]?.text as string) ||
+            '';
+          callbacks.onDone(fallbackText || '');
+          return;
+        }
+      } catch (_fallbackErr) {
+        // Fall through to the normal error path below.
+      }
+    }
     throw new Error(`Smart gateway ${res.status}: ${text.slice(0, 200)}`);
   }
 
@@ -1014,14 +1117,27 @@ async function streamViaFallback(
   let fullText = '';
   let buffer = '';
   let routedModel = '';
+  let firstTokenSeen = false;
   const fallbackStart = Date.now();
   let finalized = false;
+  let firstTokenTimer: ReturnType<typeof setTimeout> | null = null;
+  let completionTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearFirstTokenTimer = () => {
+    if (firstTokenTimer) clearTimeout(firstTokenTimer);
+    firstTokenTimer = null;
+  };
+  const clearCompletionTimer = () => {
+    if (completionTimer) clearTimeout(completionTimer);
+    completionTimer = null;
+  };
   const finalize = async (
     reader: ReadableStreamDefaultReader<Uint8Array>,
     status?: 'done' | 'error',
   ): Promise<void> => {
     if (finalized) return;
     finalized = true;
+    clearFirstTokenTimer();
+    clearCompletionTimer();
     try {
       await reader.cancel();
     } catch {
@@ -1035,6 +1151,24 @@ async function streamViaFallback(
   // Frontend only kills on genuinely dead connections (5min)
   const STREAM_SILENCE_TIMEOUT = 300_000;
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  const armFirstTokenTimer = () => {
+    clearFirstTokenTimer();
+    firstTokenTimer = setTimeout(() => {
+      if (finalized || firstTokenSeen) return;
+      callbacks.onStatus?.(
+        'warning',
+        `Model acknowledged: ${currentAgentModel} - waiting for first token`,
+      );
+    }, 15000);
+  };
+  const armCompletionTimer = () => {
+    clearCompletionTimer();
+    completionTimer = setTimeout(() => {
+      if (finalized || !firstTokenSeen || !fullText.trim()) return;
+      callbacks.onStatus?.('warning', 'Stream stalled — finalizing partial response');
+      void finalize(reader, 'done');
+    }, 3000);
+  };
   const resetSilenceTimer = () => {
     if (silenceTimer) clearTimeout(silenceTimer);
     silenceTimer = setTimeout(() => {
@@ -1076,7 +1210,8 @@ async function streamViaFallback(
             if (evt.modeSuggestion && callbacks.onModeSuggestion) {
               callbacks.onModeSuggestion(evt.modeSuggestion);
             }
-            callbacks.onStatus?.('thinking', `Routed → ${routedModel}`);
+            callbacks.onStatus?.('thinking', `Model acknowledged: ${routedModel || 'router'}`);
+            armFirstTokenTimer();
           } else if (evt.type === 'session_start') {
             callbacks.onClaudeSessionStart?.(evt.sessionId || '');
             callbacks.onStatus?.('executing', 'Claude CLI starting...');
@@ -1107,14 +1242,24 @@ async function streamViaFallback(
             );
           } else if (evt.type === 'delta' && (evt.text || evt.content)) {
             const chunk = evt.text || evt.content;
+            if (!firstTokenSeen) {
+              firstTokenSeen = true;
+              clearFirstTokenTimer();
+            }
             fullText += chunk;
             callbacks.onToken(chunk);
             callbacks.onStatus?.('writing');
+            armCompletionTimer();
           } else if (evt.type === 'response.output_text.delta' && evt.delta) {
             // Text deltas in OpenAI Responses API format
+            if (!firstTokenSeen) {
+              firstTokenSeen = true;
+              clearFirstTokenTimer();
+            }
             fullText += evt.delta;
             callbacks.onToken(evt.delta);
             callbacks.onStatus?.('writing');
+            armCompletionTimer();
           } else if (evt.type === 'response.in_progress' || evt.type === 'response.created') {
             callbacks.onStatus?.('thinking');
           } else if (evt.type === 'response.completed') {
@@ -1203,6 +1348,66 @@ async function streamViaFallback(
           } else if (evt.type === 'context_loaded') {
             const layers = (evt.layers || []).map((l: { layer: string }) => l.layer).join(', ');
             callbacks.onStatus?.('thinking', `Context: ${layers}`);
+          } else if (evt.type === 'memory_loaded') {
+            const layers: Array<{ layer?: string; chars?: number; hit?: boolean }> = Array.isArray(
+              evt.layers,
+            )
+              ? evt.layers
+              : [];
+            const hitLayers = Array.isArray(evt.hitLayers)
+              ? evt.hitLayers.filter((layer: unknown): layer is string => typeof layer === 'string')
+              : layers
+                  .filter((layer) => !!layer.hit)
+                  .map((layer: { layer?: string }) => String(layer.layer || ''));
+            callbacks.onMemoryLoaded?.({
+              layers: layers as Array<{ layer: string; chars: number; hit: boolean }>,
+              hitCount: typeof evt.hitCount === 'number' ? evt.hitCount : hitLayers.length,
+              totalChars: typeof evt.totalChars === 'number' ? evt.totalChars : 0,
+              hitLayers,
+            });
+            callbacks.onStatus?.(
+              'thinking',
+              hitLayers.length > 0
+                ? `Memory loaded: ${hitLayers.slice(0, 3).join(', ')}`
+                : 'Memory checked',
+            );
+          } else if (evt.type === 'learning_started') {
+            callbacks.onLearningStatus?.({
+              state: 'started',
+              sessionId: evt.sessionId,
+              summary: evt.summary,
+            });
+            callbacks.onStatus?.('thinking', evt.summary || 'Finalizing learning...');
+          } else if (evt.type === 'learning_completed') {
+            callbacks.onLearningStatus?.({
+              state: 'completed',
+              sessionId: evt.sessionId,
+              elapsedMs: evt.elapsedMs,
+              operations: evt.operations,
+            });
+            callbacks.onStatus?.('done', 'Learning complete');
+          } else if (evt.type === 'learning_failed') {
+            callbacks.onLearningStatus?.({
+              state: 'failed',
+              sessionId: evt.sessionId,
+              elapsedMs: evt.elapsedMs,
+              failedCount: evt.failedCount,
+              failures: Array.isArray(evt.failures)
+                ? evt.failures
+                    .filter(
+                      (failure: unknown): failure is { step: string; error: string } =>
+                        !!failure &&
+                        typeof failure === 'object' &&
+                        typeof (failure as { step?: unknown }).step === 'string' &&
+                        typeof (failure as { error?: unknown }).error === 'string',
+                    )
+                    .map((failure: { step: string; error: string }) => ({
+                      step: failure.step,
+                      error: failure.error,
+                    }))
+                : undefined,
+            });
+            callbacks.onStatus?.('warning', 'Learning finished with issues');
           } else if (evt.type === 'hallucination_detected') {
             callbacks.onStatus?.('warning', 'Verifying response accuracy...');
           } else if (evt.type === 'dtg') {
@@ -1246,6 +1451,7 @@ async function streamViaFallback(
     }
   } finally {
     if (silenceTimer) clearTimeout(silenceTimer);
+    clearFirstTokenTimer();
     reader.releaseLock();
   }
 
@@ -1253,6 +1459,7 @@ async function streamViaFallback(
   if (!fullText || fullText.trim().length < 3) {
     const elapsed = Date.now() - fallbackStart;
     if (elapsed >= STREAM_SILENCE_TIMEOUT - 1000) {
+      clearFirstTokenTimer();
       callbacks.onError(
         'Request timed out — no response received. The service may be restarting. Please try again.',
       );
@@ -1308,9 +1515,40 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
   let currentEvent = '';
   const streamStart = Date.now();
   let finalized = false;
+  let firstTokenSeen = false;
+  let firstTokenTimer: ReturnType<typeof setTimeout> | null = null;
+  let completionTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearFirstTokenTimer = () => {
+    if (firstTokenTimer) clearTimeout(firstTokenTimer);
+    firstTokenTimer = null;
+  };
+  const clearCompletionTimer = () => {
+    if (completionTimer) clearTimeout(completionTimer);
+    completionTimer = null;
+  };
+  const armFirstTokenTimer = () => {
+    clearFirstTokenTimer();
+    firstTokenTimer = setTimeout(() => {
+      if (finalized || firstTokenSeen) return;
+      callbacks.onStatus?.(
+        'warning',
+        `Model acknowledged: ${currentAgentModel} - waiting for first token`,
+      );
+    }, 15000);
+  };
+  const armCompletionTimer = () => {
+    clearCompletionTimer();
+    completionTimer = setTimeout(() => {
+      if (finalized || !firstTokenSeen || !fullText.trim()) return;
+      callbacks.onStatus?.('warning', 'Stream stalled — finalizing partial response');
+      void finalize('done');
+    }, 3000);
+  };
   const finalize = async (status?: 'done' | 'error'): Promise<void> => {
     if (finalized) return;
     finalized = true;
+    clearFirstTokenTimer();
+    clearCompletionTimer();
     try {
       await reader.cancel();
     } catch {
@@ -1390,13 +1628,23 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
 
           // Extract text content — Responses API format
           if (evtType === 'response.output_text.delta' && evt.delta) {
+            if (!firstTokenSeen) {
+              firstTokenSeen = true;
+              clearFirstTokenTimer();
+            }
             fullText += evt.delta;
             callbacks.onToken(evt.delta);
+            armCompletionTimer();
           }
           // Alternative format (Anthropic native)
           if (evtType === 'content_block_delta' && evt.delta?.text) {
+            if (!firstTokenSeen) {
+              firstTokenSeen = true;
+              clearFirstTokenTimer();
+            }
             fullText += evt.delta.text;
             callbacks.onToken(evt.delta.text);
+            armCompletionTimer();
           }
         } catch {
           /* skip malformed JSON */

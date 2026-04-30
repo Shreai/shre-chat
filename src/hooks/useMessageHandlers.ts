@@ -15,7 +15,11 @@ import type { ProcessStep } from '../components/process-bar/types';
 
 // ── Extracted modules ──
 import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handlers/handler-utils';
-import { anchorContextIfNeeded, buildScopedRuntimePacket, fetchContextSources } from './message-handlers/context-builder';
+import {
+  anchorContextIfNeeded,
+  buildScopedRuntimePacket,
+  fetchContextSources,
+} from './message-handlers/context-builder';
 import { useTaskIntents } from './message-handlers/task-intents';
 import { useMemoryIntents } from './message-handlers/memory-intents';
 import { useCommsIntents } from './message-handlers/comms-intents';
@@ -84,7 +88,13 @@ export interface UseMessageHandlersParams {
   setVerifying: (v: boolean) => void;
   ensureSession: () => string;
   executeSlashCommand: (cmd: string) => void;
-  extractMention?: (text: string) => { cleanText: string; agentId: string | null };
+  extractMention?: (text: string) => {
+    cleanText: string;
+    agentId: string | null;
+    appId: string | null;
+    explicit: boolean;
+    scopeTags: string[];
+  };
   clearMention?: () => void;
   setStreamPhase: (
     v:
@@ -243,6 +253,22 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   const { detectAndHandleMemoryIntent } = useMemoryIntents({ actions });
   const { detectAndHandleCommsIntent } = useCommsIntents({ actions });
 
+  const extractMentionContext = useCallback(
+    (text: string) => {
+      if (!extractMention) {
+        return {
+          cleanText: text,
+          agentId: null as string | null,
+          appId: null as string | null,
+          explicit: false,
+          scopeTags: [],
+        };
+      }
+      return extractMention(text);
+    },
+    [extractMention],
+  );
+
   const generateSuggestions = useCallback(
     (res: string) => fetchSuggestions(res, setSuggestions),
     [setSuggestions],
@@ -267,9 +293,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
         contextHealth: packet.context_health,
       });
       if (!bottlenecks.length) return [];
-      const summary = bottlenecks
-        .map((item) => `${item.stage}:${item.reason}`)
-        .join(' | ');
+      const summary = bottlenecks.map((item) => `${item.stage}:${item.reason}`).join(' | ');
       actions.addActivity(sessionId, 'warning', `${label}: ${summary}`);
       return bottlenecks;
     },
@@ -390,13 +414,13 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
   );
 
   const buildScopedRuntimeContext = useCallback(
-    async (sessionId: string, messageText: string) => {
+    async (sessionId: string, messageText: string, attachedFiles: UploadedFile[] = []) => {
       const runtimeScope = buildRuntimeScope(messageText, getStoredWorkspaceId() || 'default');
       const researchStartedAt = Date.now();
       const runtimeSources = await fetchContextSources(sessionId);
       const researchMs = Date.now() - researchStartedAt;
       const planningStartedAt = Date.now();
-      const runtimePacket = buildScopedRuntimePacket(runtimeScope, runtimeSources);
+      const runtimePacket = buildScopedRuntimePacket(runtimeScope, runtimeSources, attachedFiles);
       const systemPrompt = buildRuntimeSystemPrompt(
         buildDefaultSystemPrompt(currentAgent.name, currentAgent.id),
         runtimePacket,
@@ -424,14 +448,34 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       return;
     }
 
-    const effectiveAgentId = extractMention
-      ? extractMention(text).agentId || activeAgentId
-      : activeAgentId;
-    const sendText = extractMention ? extractMention(text).cleanText : text;
+    const mentionContext = extractMentionContext(text);
+    const effectiveAgentId = mentionContext.agentId || activeAgentId;
+    const sendText = mentionContext.cleanText;
+    const attachedFiles = [...pendingFiles];
+    const attachedFileAttachments = attachedFiles
+      .filter((f) => f.dataUrl)
+      .map((f) => ({ name: f.name, type: f.type, dataUrl: f.dataUrl, size: f.size }));
     if (compareMode && compareModels.length > 0) {
       const cmpSid = ensureSession();
-      actions.addMessage(cmpSid, { role: 'user', content: text, timestamp: Date.now() });
+      const cmpSession = sessions.find((s: Session) => s.id === cmpSid);
+      setPendingFiles([]);
+      for (const f of attachedFiles) {
+        actions.addFile({
+          ...f,
+          sessionId: cmpSid,
+          sessionTitle: cmpSession?.title || 'Chat',
+          agentId: effectiveAgentId,
+        });
+      }
+      actions.addMessage(cmpSid, {
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+        ...(replyToIndex !== null ? { replyTo: replyToIndex } : {}),
+        ...(attachedFileAttachments.length > 0 ? { attachments: attachedFileAttachments } : {}),
+      });
       setInput('');
+      clearMention?.();
       actions.setStreaming(true);
       actions.setStatusLine('Researching...');
       setStreamPhase('research');
@@ -446,8 +490,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
         runtimePacket,
         systemPrompt: compareSystemPrompt,
         timings,
-      } =
-        await buildScopedRuntimeContext(cmpSid, sendText);
+      } = await buildScopedRuntimeContext(cmpSid, sendText, attachedFiles);
       emitRuntimeBottlenecks(cmpSid, 'Compare setup', runtimeScope, runtimePacket, {
         researchMs: timings.researchMs,
         planningMs: timings.planningMs,
@@ -455,12 +498,26 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       });
       actions.setStatusLine(`Planning → ${summarizeRuntimeScope(runtimeScope)}`);
       setStreamPhase('planning');
+      const compareMessageText =
+        attachedFiles.length > 0
+          ? `[Attached files: ${attachedFiles.map((f) => f.name).join(', ')}]\n\n${sendText}`
+          : sendText;
+      if (attachedFiles.length > 0) {
+        actions.addFeed(
+          cmpSid,
+          'sent',
+          `Attached: ${attachedFiles.map((f) => f.name).join(', ')}`,
+          {
+            files: String(attachedFiles.length),
+          },
+        );
+      }
       const promises = compareModels.map(async (modelId: string) => {
         try {
           let fullResp = '';
           setStreamPhase('implementation');
           await sendMessage(
-            sendText,
+            compareMessageText,
             [],
             compareSystemPrompt,
             {
@@ -489,15 +546,57 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                   }),
                 );
               },
-              onStatus: (status) => {
-                if (status === 'thinking') setStreamPhase('planning');
-                else if (status === 'writing') setStreamPhase('implementation');
+              onMemoryLoaded: (event) => {
+                const hitLayers = event.hitLayers?.length
+                  ? event.hitLayers.slice(0, 3).join(', ')
+                  : event.layers
+                      .filter((layer) => layer.hit)
+                      .map((layer) => layer.layer)
+                      .slice(0, 3)
+                      .join(', ');
+                const detail =
+                  hitLayers.length > 0
+                    ? `Memory loaded: ${hitLayers}`
+                    : `Memory loaded: ${event.hitCount} layer${event.hitCount === 1 ? '' : 's'}`;
+                actions.addActivity(cmpSid, 'thinking', detail);
+                actions.setStatusLine(detail);
+              },
+              onLearningStatus: (event) => {
+                if (event.state === 'started') {
+                  const detail = event.summary || 'Finalizing learning...';
+                  actions.addActivity(cmpSid, 'thinking', detail);
+                  actions.setStatusLine(detail);
+                } else if (event.state === 'completed') {
+                  const detail =
+                    typeof event.elapsedMs === 'number'
+                      ? `Learning complete in ${event.elapsedMs}ms`
+                      : 'Learning complete';
+                  actions.addActivity(cmpSid, 'done', detail);
+                  actions.setStatusLine(null);
+                } else if (event.state === 'failed') {
+                  const detail =
+                    event.failedCount && event.failedCount > 0
+                      ? `Learning finished with ${event.failedCount} issue${event.failedCount === 1 ? '' : 's'}`
+                      : 'Learning finished with issues';
+                  actions.addActivity(cmpSid, 'warning', detail);
+                  actions.setStatusLine(detail);
+                }
+              },
+              onStatus: (status, detail) => {
+                if (status === 'thinking') {
+                  setStreamPhase('planning');
+                  if (detail) actions.setStatusLine(detail);
+                } else if (status === 'writing') {
+                  setStreamPhase('implementation');
+                } else if (status === 'warning' && detail) {
+                  actions.setStatusLine(detail);
+                }
               },
             },
             undefined,
             undefined,
             modelId,
-            undefined,
+            attachedFileAttachments,
             routerMode,
             undefined,
             undefined,
@@ -510,6 +609,14 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             undefined,
             undefined,
             runtimePacket,
+            mentionContext.explicit
+              ? {
+                  agentId: effectiveAgentId,
+                  appId: mentionContext.appId || activeAppId,
+                  explicit: true,
+                  scopeTags: mentionContext.scopeTags,
+                }
+              : undefined,
           );
         } catch (err: unknown) {
           setCompareStreams(
@@ -538,8 +645,6 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     queueMicrotask(() => {
       sendingRef.current = false;
     });
-
-    const attachedFiles = [...pendingFiles];
     setPendingFiles([]);
     for (const f of attachedFiles)
       actions.addFile({
@@ -565,6 +670,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     actions.addMessage(sessionId, userMsg);
     actions.setReplyTo(null);
     setInput('');
+    clearMention?.();
     voiceFinalTranscriptRef.current = '';
     setSuggestions([]);
     userNearBottomRef.current = true;
@@ -631,6 +737,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     const { runtimeScope, runtimePacket, systemPrompt, timings } = await buildScopedRuntimeContext(
       sessionId,
       messageText,
+      attachedFiles,
     );
     emitRuntimeBottlenecks(sessionId, 'Scoped setup', runtimeScope, runtimePacket, {
       researchMs: timings.researchMs,
@@ -687,14 +794,22 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           onDone: (full) => {
             const final = full || fullResponse;
             const firstTokenMs =
-              firstTokenTimeRef.current > 0 ? firstTokenTimeRef.current - sendTimeRef.current : undefined;
+              firstTokenTimeRef.current > 0
+                ? firstTokenTimeRef.current - sendTimeRef.current
+                : undefined;
             const implementationMs = Date.now() - implementationStartedAt;
-            const bottlenecks = emitRuntimeBottlenecks(sessionId, 'Delivery', runtimeScope, runtimePacket, {
-              researchMs: timings.researchMs,
-              planningMs: timings.planningMs,
-              implementationMs,
-              firstTokenMs,
-            });
+            const bottlenecks = emitRuntimeBottlenecks(
+              sessionId,
+              'Delivery',
+              runtimeScope,
+              runtimePacket,
+              {
+                researchMs: timings.researchMs,
+                planningMs: timings.planningMs,
+                implementationMs,
+                firstTokenMs,
+              },
+            );
             const verdict = verifyRuntimeAnswer(final, runtimePacket);
             actions.addMessage(sessionId, {
               role: 'assistant',
@@ -747,9 +862,30 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
               attachTraceRecord(sessionId, traceId, traceRecord);
             }
           },
-          onStatus: (status: string) => {
-            if (status === 'thinking') setStreamPhase('planning');
-            else if (status === 'writing') setStreamPhase('implementation');
+          onMemoryLoaded: (event) => {
+            const hitLayers = event.hitLayers?.length
+              ? event.hitLayers.slice(0, 3).join(', ')
+              : event.layers
+                  .filter((layer) => layer.hit)
+                  .map((layer) => layer.layer)
+                  .slice(0, 3)
+                  .join(', ');
+            const detail =
+              hitLayers.length > 0
+                ? `Memory loaded: ${hitLayers}`
+                : `Memory loaded: ${event.hitCount} layer${event.hitCount === 1 ? '' : 's'}`;
+            actions.addActivity(sessionId, 'thinking', detail);
+            actions.setStatusLine(detail);
+          },
+          onStatus: (status: string, detail?: string) => {
+            if (status === 'thinking') {
+              setStreamPhase('planning');
+              if (detail) actions.setStatusLine(detail);
+            } else if (status === 'writing') {
+              setStreamPhase('implementation');
+            } else if (status === 'warning' && detail) {
+              actions.setStatusLine(detail);
+            }
           },
         },
         abortController.signal,
@@ -768,6 +904,14 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
         undefined,
         undefined,
         runtimePacket,
+        mentionContext.explicit
+          ? {
+              agentId: effectiveAgentId,
+              appId: mentionContext.appId || activeAppId,
+              explicit: true,
+              scopeTags: mentionContext.scopeTags,
+            }
+          : undefined,
       );
     } catch (err) {
       actions.setStreaming(false);
@@ -798,6 +942,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
     ensureSession,
     executeSlashCommand,
     extractMention,
+    extractMentionContext,
     clearMention,
     setStreamPhase,
     setActiveToolName,
@@ -867,12 +1012,11 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
 
       let fullResponse = '';
       const history = messages.slice(-20);
+      const mentionContext = extractMentionContext(originalMessage);
       actions.setStatusLine('Researching...');
       setStreamPhase('research');
-      const { runtimePacket, systemPrompt, runtimeScope, timings } = await buildScopedRuntimeContext(
-        sessionId,
-        originalMessage,
-      );
+      const { runtimePacket, systemPrompt, runtimeScope, timings } =
+        await buildScopedRuntimeContext(sessionId, originalMessage);
       emitRuntimeBottlenecks(sessionId, 'Preview setup', runtimeScope, runtimePacket, {
         researchMs: timings.researchMs,
         planningMs: timings.planningMs,
@@ -880,6 +1024,7 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       actions.setStatusLine('Planning...');
       setStreamPhase('planning');
       try {
+        const implementationStartedAt = Date.now();
         setStreamPhase('implementation');
         await sendMessage(
           originalMessage,
@@ -895,14 +1040,22 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
             onDone: (full) => {
               const final = full || fullResponse;
               const firstTokenMs =
-                firstTokenTimeRef.current > 0 ? firstTokenTimeRef.current - sendTimeRef.current : undefined;
+                firstTokenTimeRef.current > 0
+                  ? firstTokenTimeRef.current - sendTimeRef.current
+                  : undefined;
               const verdict = verifyRuntimeAnswer(final, runtimePacket);
-              const bottlenecks = emitRuntimeBottlenecks(sessionId, 'Delivery', runtimeScope, runtimePacket, {
-                researchMs: timings.researchMs,
-                planningMs: timings.planningMs,
-                implementationMs: Date.now() - sendTimeRef.current,
-                firstTokenMs,
-              });
+              const bottlenecks = emitRuntimeBottlenecks(
+                sessionId,
+                'Delivery',
+                runtimeScope,
+                runtimePacket,
+                {
+                  researchMs: timings.researchMs,
+                  planningMs: timings.planningMs,
+                  implementationMs: Date.now() - implementationStartedAt,
+                  firstTokenMs,
+                },
+              );
               actions.addMessage(sessionId, {
                 role: 'assistant',
                 content: final,
@@ -913,7 +1066,9 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                   runtimePhase: 'implementation',
                   previewConfirmed: previewId,
                   verifierOk: String(verdict.ok),
-                  ...(bottlenecks.length ? { runtimeBottlenecks: JSON.stringify(bottlenecks) } : {}),
+                  ...(bottlenecks.length
+                    ? { runtimeBottlenecks: JSON.stringify(bottlenecks) }
+                    : {}),
                   ...(runtimePacket.context_health
                     ? { runtimeHealth: JSON.stringify(runtimePacket.context_health) }
                     : {}),
@@ -956,6 +1111,42 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
                 attachTraceRecord(sessionId, traceId, traceRecord);
               }
             },
+            onMemoryLoaded: (event) => {
+              const hitLayers = event.hitLayers?.length
+                ? event.hitLayers.slice(0, 3).join(', ')
+                : event.layers
+                    .filter((layer) => layer.hit)
+                    .map((layer) => layer.layer)
+                    .slice(0, 3)
+                    .join(', ');
+              const detail =
+                hitLayers.length > 0
+                  ? `Memory loaded: ${hitLayers}`
+                  : `Memory loaded: ${event.hitCount} layer${event.hitCount === 1 ? '' : 's'}`;
+              actions.addActivity(sessionId, 'thinking', detail);
+              actions.setStatusLine(detail);
+            },
+            onLearningStatus: (event) => {
+              if (event.state === 'started') {
+                const detail = event.summary || 'Finalizing learning...';
+                actions.addActivity(sessionId, 'thinking', detail);
+                actions.setStatusLine(detail);
+              } else if (event.state === 'completed') {
+                const detail =
+                  typeof event.elapsedMs === 'number'
+                    ? `Learning complete in ${event.elapsedMs}ms`
+                    : 'Learning complete';
+                actions.addActivity(sessionId, 'done', detail);
+                actions.setStatusLine(null);
+              } else if (event.state === 'failed') {
+                const detail =
+                  event.failedCount && event.failedCount > 0
+                    ? `Learning finished with ${event.failedCount} issue${event.failedCount === 1 ? '' : 's'}`
+                    : 'Learning finished with issues';
+                actions.addActivity(sessionId, 'warning', detail);
+                actions.setStatusLine(detail);
+              }
+            },
             onStatus: (status: string) => {
               if (status === 'thinking') setStreamPhase('planning');
               else if (status === 'writing') setStreamPhase('implementation');
@@ -977,6 +1168,14 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
           previewId,
           undefined,
           runtimePacket,
+          mentionContext.explicit
+            ? {
+                agentId: mentionContext.agentId || activeAgentId,
+                appId: mentionContext.appId || activeAppId,
+                explicit: true,
+                scopeTags: mentionContext.scopeTags,
+              }
+            : undefined,
         );
       } catch {
         actions.setStreaming(false);
@@ -990,10 +1189,13 @@ export function useMessageHandlers(params: any): UseMessageHandlersReturn {
       completeRun,
       currentAgent.id,
       currentAgent.name,
+      activeAgentId,
+      activeAppId,
       emitPreviewRequired,
       ensureSession,
       generateSuggestions,
       messages,
+      extractMentionContext,
       buildScopedRuntimeContext,
       processStepRef,
       processRunIdRef,

@@ -2,14 +2,14 @@
  * TaskPanel — Slide-out drawer showing task detail, trace route, subtasks
  * with interactive checkboxes for approving/completing/cancelling tasks.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type {
   TrackedTask,
   TraceExecutionStep,
   TaskTraceDetails,
   TraceStep,
 } from '../hooks/useTaskTracker';
-import { mib007Link } from '../chat-utils';
+import { cityWorkflowLink, mib007Link } from '../chat-utils';
 
 // ── Status & Priority styling ──
 
@@ -69,6 +69,7 @@ export function TaskPanel({
   const [loadingTrace, setLoadingTrace] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'detail' | 'trace' | 'subtasks'>('detail');
+  const workflowPacket = useMemo(() => parseWorkflowPacket(task.task_memory), [task.task_memory]);
 
   // Load subtasks
   useEffect(() => {
@@ -285,6 +286,17 @@ export function TaskPanel({
             onClick={() => handleUpdate(task.id, { status: 'todo' })}
           />
         )}
+        {workflowPacket && (
+          <a
+            href={cityWorkflowLink(workflowPacket, buildCityWorkflowParams(workflowPacket))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] px-2 py-1.5 rounded-lg transition-colors hover:bg-white/5"
+            style={{ color: 'var(--c-text-4)' }}
+          >
+            Open in Shre City
+          </a>
+        )}
         <a
           href={mib007Link('tasks', `id=${task.id}`)}
           target="_blank"
@@ -312,8 +324,10 @@ function DetailTab({
   onUpdate: (id: string, patch: Record<string, unknown>) => void;
   updating: string | null;
 }) {
+  const workflowPacket = parseWorkflowPacket(task.task_memory);
   return (
     <div className="space-y-3">
+      {workflowPacket && <WorkflowSummaryCard packet={workflowPacket} />}
       {task.description && (
         <p className="text-[12px] leading-relaxed" style={{ color: 'var(--c-text-2)' }}>
           {task.description}
@@ -335,6 +349,98 @@ function DetailTab({
         )}
         <InfoRow label="Created" value={new Date(task.created_at).toLocaleString()} />
         {task.updated_at && <InfoRow label="Updated" value={relativeTime(task.updated_at)} />}
+      </div>
+    </div>
+  );
+}
+
+type WorkflowPacket = {
+  workflowId?: string;
+  sourceAgentId?: string;
+  sourceAppId?: string | null;
+  sourceAppName?: string | null;
+  inferred?: {
+    sourceAppId?: string | null;
+    targetAppId?: string | null;
+    pipeMode?: boolean;
+  };
+  requestedScopes?: {
+    vault?: boolean;
+    memory?: boolean;
+    database?: boolean;
+  };
+  nodes?: Array<{ id?: string; appId?: string; role?: string }>;
+  pipes?: Array<{ id?: string; sourceAppId?: string; targetAppId?: string; label?: string }>;
+  securityMode?: string;
+};
+
+function parseWorkflowPacket(raw?: string): WorkflowPacket | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if ('packet' in parsed && parsed.packet && typeof parsed.packet === 'object') {
+      return parsed.packet as WorkflowPacket;
+    }
+    return parsed as WorkflowPacket;
+  } catch {
+    return null;
+  }
+}
+
+function buildCityWorkflowParams(packet: WorkflowPacket): Record<string, string> {
+  const params: Record<string, string> = {};
+  const focusAppId = packet.sourceAppId ?? packet.inferred?.sourceAppId ?? undefined;
+  if (focusAppId) params.appId = focusAppId;
+  if (focusAppId) params.serviceId = focusAppId;
+  if (packet.inferred?.targetAppId) params.targetAppId = packet.inferred.targetAppId;
+  if (packet.workflowId) params.workflowId = packet.workflowId;
+  if (packet.securityMode) params.securityMode = packet.securityMode;
+  return params;
+}
+
+function WorkflowSummaryCard({ packet }: { packet: WorkflowPacket }) {
+  const nodes = packet.nodes?.length ?? 0;
+  const pipes = packet.pipes?.length ?? 0;
+  const scopes = [
+    packet.requestedScopes?.vault ? 'vault' : null,
+    packet.requestedScopes?.memory ? 'memory' : null,
+    packet.requestedScopes?.database ? 'database' : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ borderColor: 'var(--c-border-2)' }}>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div
+            className="text-[10px] font-semibold uppercase tracking-wide"
+            style={{ color: 'var(--c-text-4)' }}
+          >
+            Workflow
+          </div>
+          <div className="text-[12px] font-medium" style={{ color: 'var(--c-text-1)' }}>
+            {packet.workflowId || 'Unnamed workflow'}
+          </div>
+        </div>
+        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+          {packet.securityMode ?? 'brokered'}
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+        <div className="rounded bg-white/[0.03] px-2 py-1">
+          <div style={{ color: 'var(--c-text-4)' }}>Nodes</div>
+          <div style={{ color: 'var(--c-text-1)' }}>{nodes}</div>
+        </div>
+        <div className="rounded bg-white/[0.03] px-2 py-1">
+          <div style={{ color: 'var(--c-text-4)' }}>Pipes</div>
+          <div style={{ color: 'var(--c-text-1)' }}>{pipes}</div>
+        </div>
+        <div className="rounded bg-white/[0.03] px-2 py-1">
+          <div style={{ color: 'var(--c-text-4)' }}>Scopes</div>
+          <div style={{ color: 'var(--c-text-1)' }}>
+            {scopes.length > 0 ? scopes.join(', ') : 'none'}
+          </div>
+        </div>
       </div>
     </div>
   );
