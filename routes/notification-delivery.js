@@ -68,6 +68,48 @@ function parseWebhookRoutes(value) {
   }
 }
 
+function ensureDir(path) {
+  if (!existsSync(path)) mkdirSync(path, { recursive: true });
+}
+
+function getVaultKey() {
+  try {
+    if (existsSync(VAULT_KEY_PATH)) {
+      const raw = readFileSync(VAULT_KEY_PATH, "utf8").trim();
+      if (raw) return raw.includes(":") ? raw.split(":").pop() : raw;
+    }
+    ensureDir(CONFIG_DIR);
+    const key = randomBytes(32).toString("hex");
+    writeFileSync(VAULT_KEY_PATH, key, { mode: 0o600 });
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+function encryptJson(value) {
+  const key = getVaultKey();
+  if (!key) throw new Error("missing-vault-key");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv);
+  const plaintext = Buffer.from(JSON.stringify(value), "utf8");
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `ENC:gcm:${iv.toString("hex")}:${tag.toString("hex")}:${ciphertext.toString("base64")}`;
+}
+
+function decryptJson(raw) {
+  const key = getVaultKey();
+  if (!key) throw new Error("missing-vault-key");
+  if (!raw.startsWith("ENC:")) return JSON.parse(raw);
+  const [, algo, ivHex, tagHex, data] = raw.split(":");
+  if (algo !== "gcm") throw new Error("unsupported-vault-format");
+  const decipher = createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), Buffer.from(ivHex, "hex"));
+  decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+  const plaintext = Buffer.concat([decipher.update(Buffer.from(data, "base64")), decipher.final()]);
+  return JSON.parse(plaintext.toString("utf8"));
+}
+
 function ensureConfigDir() {
   if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
 }
@@ -105,8 +147,151 @@ function loadConfig() {
  * @param {NotificationDeliveryConfig} config
  */
 function saveConfig(config) {
-  ensureConfigDir();
+  ensureDir(CONFIG_DIR);
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+}
+
+function loadSecrets() {
+  try {
+    if (!existsSync(VAULT_PATH)) {
+      return {
+        slackWebhookUrl: DEFAULT_CONFIG.slackWebhookUrl,
+        slackWebhookRoutes: DEFAULT_CONFIG.slackWebhookRoutes,
+        emailTo: DEFAULT_CONFIG.emailTo,
+      };
+    }
+    const raw = readFileSync(VAULT_PATH, "utf8").trim();
+    if (!raw) {
+      return {
+        slackWebhookUrl: DEFAULT_CONFIG.slackWebhookUrl,
+        slackWebhookRoutes: DEFAULT_CONFIG.slackWebhookRoutes,
+        emailTo: DEFAULT_CONFIG.emailTo,
+      };
+    }
+    const parsed = decryptJson(raw);
+    return {
+      slackWebhookUrl: typeof parsed?.slackWebhookUrl === "string" ? parsed.slackWebhookUrl : DEFAULT_CONFIG.slackWebhookUrl,
+      slackWebhookRoutes: parsed?.slackWebhookRoutes && typeof parsed.slackWebhookRoutes === "object" && !Array.isArray(parsed.slackWebhookRoutes)
+        ? Object.fromEntries(
+            Object.entries(parsed.slackWebhookRoutes)
+              .filter(([, url]) => typeof url === "string" && url.trim())
+              .map(([key, url]) => [String(key).trim(), url.trim()]),
+          )
+        : DEFAULT_CONFIG.slackWebhookRoutes,
+      emailTo: typeof parsed?.emailTo === "string" ? parsed.emailTo : DEFAULT_CONFIG.emailTo,
+    };
+  } catch {
+    return {
+      slackWebhookUrl: DEFAULT_CONFIG.slackWebhookUrl,
+      slackWebhookRoutes: DEFAULT_CONFIG.slackWebhookRoutes,
+      emailTo: DEFAULT_CONFIG.emailTo,
+    };
+  }
+}
+
+function saveSecrets(secrets) {
+  ensureDir(join(CONFIG_DIR, "vault"));
+  writeFileSync(VAULT_PATH, encryptJson(secrets), { mode: 0o600 });
+}
+
+function createSecureLink(baseUrl) {
+  const token = randomUUID().replace(/-/g, "");
+  secureLinks.set(token, { expiresAt: Date.now() + INGEST_TTL_MS, used: false });
+  return `${baseUrl.replace(/\/$/, "")}/api/notification-delivery/ingest/${token}`;
+}
+
+function getSecureLinkState(token) {
+  const entry = secureLinks.get(token);
+  if (!entry) return null;
+  if (entry.used || Date.now() > entry.expiresAt) {
+    secureLinks.delete(token);
+    return null;
+  }
+  return entry;
+}
+
+function consumeSecureLink(token) {
+  const entry = getSecureLinkState(token);
+  if (!entry) return false;
+  entry.used = true;
+  secureLinks.set(token, entry);
+  return true;
+}
+
+function renderSecureIngestPage(token) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shre Chat Secure Secret Ingest</title>
+  <style>
+    body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif; margin: 0; background: #0b1020; color: #e5e7eb; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 48px; }
+    .card { background: #111827; border: 1px solid #243043; border-radius: 16px; padding: 20px; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { color: #9ca3af; line-height: 1.5; }
+    textarea, input { width: 100%; box-sizing: border-box; border-radius: 12px; border: 1px solid #334155; background: #0f172a; color: #e5e7eb; padding: 12px 14px; font: inherit; }
+    textarea { min-height: 240px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .row { display: grid; gap: 12px; margin-top: 16px; }
+    button { background: #4f46e5; color: white; border: 0; border-radius: 12px; padding: 12px 16px; font-weight: 600; cursor: pointer; }
+    .hint { font-size: 12px; color: #94a3b8; }
+    .ok { background: rgba(34,197,94,.12); color: #86efac; border: 1px solid rgba(34,197,94,.25); padding: 12px 14px; border-radius: 12px; white-space: pre-wrap; }
+    .bad { background: rgba(239,68,68,.12); color: #fca5a5; border: 1px solid rgba(239,68,68,.25); padding: 12px 14px; border-radius: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Secure Secret Ingest</h1>
+      <p>Paste Slack webhook URLs, route maps, and notification recipient details here. The payload is stored encrypted in the local vault and this link expires after one use.</p>
+      <div class="hint">Token: ${token.slice(0, 8)}…</div>
+      <form id="form" class="row">
+        <label>
+          <div class="hint">JSON payload</div>
+          <textarea id="payload" placeholder='{"slackWebhookUrl":"https://hooks.slack.com/services/...","slackWebhookRoutes":{"fleet":"https://hooks.slack.com/services/..."},"emailTo":"alerts@example.com"}'></textarea>
+        </label>
+        <button type="submit">Save to Vault</button>
+      </form>
+      <div id="result" style="margin-top:16px;"></div>
+    </div>
+  </div>
+  <script>
+    const form = document.getElementById('form');
+    const payload = document.getElementById('payload');
+    const result = document.getElementById('result');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      result.innerHTML = '';
+      try {
+        const data = JSON.parse(payload.value);
+        const res = await fetch(location.pathname, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const text = await res.text();
+        result.innerHTML = '<div class="' + (res.ok ? 'ok' : 'bad') + '">' + text.replace(/</g, '&lt;') + '</div>';
+      } catch (err) {
+        result.innerHTML = '<div class="bad">' + String(err.message || err) + '</div>';
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function mergeEffectiveConfig() {
+  const config = loadConfig();
+  const secrets = loadSecrets();
+  return {
+    ...config,
+    slackWebhookUrl: secrets.slackWebhookUrl || config.slackWebhookUrl,
+    slackWebhookRoutes: Object.keys(secrets.slackWebhookRoutes || {}).length > 0
+      ? secrets.slackWebhookRoutes
+      : config.slackWebhookRoutes,
+    emailTo: secrets.emailTo || config.emailTo,
+  };
 }
 
 function maskValue(value) {
@@ -247,7 +432,7 @@ export function registerNotificationDeliveryRoutes({ log }) {
   let cachedConfig = loadConfig();
 
   async function deliverNotification(payload, opts = {}) {
-    const config = loadConfig();
+    const config = mergeEffectiveConfig();
     const type = payload?.type || "notification";
     const shouldDeliver = opts.force || isExternalAlert(type, payload) || !config.importantOnly;
     if (!shouldDeliver) {
@@ -270,7 +455,7 @@ export function registerNotificationDeliveryRoutes({ log }) {
   }
 
   function getStatus() {
-    const config = loadConfig();
+    const config = mergeEffectiveConfig();
     return {
       config: {
         slackEnabled: config.slackEnabled,
@@ -283,10 +468,12 @@ export function registerNotificationDeliveryRoutes({ log }) {
       },
       env: {
         slackWebhookConfigured: !!process.env.SHRE_SLACK_WEBHOOK_URL,
+        slackWebhookRoutesConfigured: !!process.env.SHRE_SLACK_WEBHOOK_ROUTES,
         emailToConfigured: !!process.env.SHRE_NOTIFICATION_EMAIL_TO,
       },
       shreChat: { enabled: true },
       path: CONFIG_PATH,
+      vaultPath: VAULT_PATH,
     };
   }
 
@@ -316,26 +503,94 @@ export function registerNotificationDeliveryRoutes({ log }) {
         const next = {
           ...loadConfig(),
           slackEnabled: !!body.slackEnabled,
-          slackWebhookUrl: typeof body.slackWebhookUrl === "string" ? body.slackWebhookUrl.trim() : loadConfig().slackWebhookUrl,
-          slackWebhookRoutes: body.slackWebhookRoutes && typeof body.slackWebhookRoutes === "object" && !Array.isArray(body.slackWebhookRoutes)
-            ? Object.fromEntries(
-                Object.entries(body.slackWebhookRoutes)
-                  .filter(([, url]) => typeof url === "string" && url.trim())
-                  .map(([key, url]) => [String(key).trim(), url.trim()]),
-              )
-            : loadConfig().slackWebhookRoutes,
           emailEnabled: !!body.emailEnabled,
-          emailTo: typeof body.emailTo === "string" ? body.emailTo.trim() : loadConfig().emailTo,
           emailAccount: typeof body.emailAccount === "string" ? body.emailAccount.trim() || DEFAULT_EMAIL_ACCOUNT : loadConfig().emailAccount,
           importantOnly: body.importantOnly !== undefined ? !!body.importantOnly : loadConfig().importantOnly,
         };
         saveConfig(next);
+        if (
+          body.slackWebhookUrl !== undefined ||
+          body.slackWebhookRoutes !== undefined ||
+          body.emailTo !== undefined
+        ) {
+          const secrets = {
+            ...loadSecrets(),
+            slackWebhookUrl: typeof body.slackWebhookUrl === "string" ? body.slackWebhookUrl.trim() : loadSecrets().slackWebhookUrl,
+            slackWebhookRoutes: body.slackWebhookRoutes && typeof body.slackWebhookRoutes === "object" && !Array.isArray(body.slackWebhookRoutes)
+              ? Object.fromEntries(
+                  Object.entries(body.slackWebhookRoutes)
+                    .filter(([, url]) => typeof url === "string" && url.trim())
+                    .map(([key, url]) => [String(key).trim(), url.trim()]),
+                )
+              : loadSecrets().slackWebhookRoutes,
+            emailTo: typeof body.emailTo === "string" ? body.emailTo.trim() : loadSecrets().emailTo,
+          };
+          saveSecrets(secrets);
+        }
         cachedConfig = next;
         return json(res, { ok: true, ...getStatus() });
       } catch (error) {
         log.error("Failed to save notification delivery config", {}, error);
         return json(res, { error: "Failed to save config" }, 500);
       }
+    }
+
+    if (url.pathname === "/api/notification-delivery/secure-link" && req.method === "POST") {
+      const origin = url.origin || `${req.headers["x-forwarded-proto"] || "http"}://${req.headers.host || "localhost:5510"}`;
+      const link = createSecureLink(origin);
+      return json(res, { ok: true, url: link, expiresInMs: INGEST_TTL_MS });
+    }
+
+    const ingestMatch = url.pathname.match(/^\/api\/notification-delivery\/ingest\/([A-Za-z0-9-]+)$/);
+    if (ingestMatch) {
+      const token = ingestMatch[1];
+      const entry = getSecureLinkState(token);
+      if (!entry) {
+        return json(res, { error: "Link expired or already used" }, 410);
+      }
+
+      if (req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(renderSecureIngestPage(token));
+        return true;
+      }
+
+      if (req.method === "POST") {
+        let body;
+        try {
+          body = await collectBody(req);
+        } catch {
+          return json(res, { error: "Body too large" }, 413);
+        }
+        try {
+          const secrets = {
+            slackWebhookUrl: typeof body.slackWebhookUrl === "string" ? body.slackWebhookUrl.trim() : "",
+            slackWebhookRoutes: body.slackWebhookRoutes && typeof body.slackWebhookRoutes === "object" && !Array.isArray(body.slackWebhookRoutes)
+              ? Object.fromEntries(
+                  Object.entries(body.slackWebhookRoutes)
+                    .filter(([, url]) => typeof url === "string" && url.trim())
+                    .map(([key, url]) => [String(key).trim(), url.trim()]),
+                )
+              : {},
+            emailTo: typeof body.emailTo === "string" ? body.emailTo.trim() : "",
+          };
+          if (!secrets.slackWebhookUrl && Object.keys(secrets.slackWebhookRoutes).length === 0 && !secrets.emailTo) {
+            return json(res, { error: "No secrets provided" }, 400);
+          }
+          saveSecrets(secrets);
+          consumeSecureLink(token);
+          return json(res, { ok: true, message: "Secrets saved to vault" });
+        } catch (error) {
+          log.error("Failed to save secrets to vault", {}, error);
+          return json(res, { error: "Failed to save secrets" }, 500);
+        }
+      }
+    }
+
+    if (url.pathname === "/api/notification-delivery/secure-link" && req.method === "GET") {
+      const origin = url.origin || `${req.headers["x-forwarded-proto"] || "http"}://${req.headers.host || "localhost:5510"}`;
+      const link = createSecureLink(origin);
+      return json(res, { ok: true, url: link, expiresInMs: INGEST_TTL_MS });
     }
 
     if (url.pathname === "/api/notification-delivery/test" && req.method === "POST") {

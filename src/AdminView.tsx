@@ -262,6 +262,8 @@ export function AdminView() {
   const [deliveryDraft, setDeliveryDraft] = useState<NotificationDeliveryConfig | null>(null);
   const [deliveryRoutesText, setDeliveryRoutesText] = useState('');
   const [deliverySaving, setDeliverySaving] = useState(false);
+  const [secureIngestLink, setSecureIngestLink] = useState<string | null>(null);
+  const [secureLinkLoading, setSecureLinkLoading] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [deliveryTestResult, setDeliveryTestResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -530,6 +532,24 @@ export function AdminView() {
       setDeliveryError(err instanceof Error ? err.message : 'Failed to send test notification');
     } finally {
       setDeliverySaving(false);
+    }
+  }
+
+  async function generateSecureLink() {
+    setSecureLinkLoading(true);
+    setDeliveryError(null);
+    try {
+      const res = await fetch('/api/notification-delivery/secure-link', { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error('Missing secure ingest link');
+      setSecureIngestLink(data.url);
+      await navigator.clipboard?.writeText(data.url).catch(() => {});
+      setDeliveryTestResult('Secure ingest link generated and copied to clipboard.');
+    } catch (err) {
+      setDeliveryError(err instanceof Error ? err.message : 'Failed to generate secure ingest link');
+    } finally {
+      setSecureLinkLoading(false);
     }
   }
 
