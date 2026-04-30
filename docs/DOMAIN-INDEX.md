@@ -36,6 +36,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Model and Tool Access](MODEL-TOOL-ACCESS.md) for least-privilege model access
 - [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md) for supply chain checks
 - [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md) for untrusted content handling
+- [Security Baseline](SECURITY-BASELINE.md) for database, network, and browser protections
 - [Policy Enforcement](POLICY-ENFORCEMENT.md) for code and docs alignment checks
 - [Role Capability Matrix](ROLE-CAPABILITY-MATRIX.md) for access boundaries
 - [Service Catalog](SERVICE-CATALOG.md) for the service map

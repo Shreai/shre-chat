@@ -149,6 +149,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Model and Tool Access](docs/MODEL-TOOL-ACCESS.md) | Least-privilege agent and model access |
 | [Dependency and License Review](docs/DEPENDENCY-LICENSE-REVIEW.md) | Supply-chain and redistribution review |
 | [Prompt Injection Safety](docs/PROMPT-INJECTION-SAFETY.md) | Untrusted content and tool output defense |
+| [Security Baseline](docs/SECURITY-BASELINE.md) | Database, network, and browser protections |
 | [Policy Enforcement](docs/POLICY-ENFORCEMENT.md) | Concrete checks for rules, manifests, and deploys |
 | [Role Capability Matrix](docs/ROLE-CAPABILITY-MATRIX.md) | What each role can read, write, approve, and deploy |
 | [Service Catalog](docs/SERVICE-CATALOG.md) | Canonical list of services and ownership |
