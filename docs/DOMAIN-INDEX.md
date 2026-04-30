@@ -30,6 +30,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [App Readmes](apps/README.md) for generated starter docs per app
 - [Pipe Manifest](PIPE-MANIFEST.md) for app-to-app contract flows
 - [Pipes Starter Docs](pipes/README.md) for pipe-specific templates
+- [Governance Review](GOVERNANCE-REVIEW.md) for policy review cadence and gaps
 
 ## Legal And Compliance
 

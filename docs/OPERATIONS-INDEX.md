@@ -34,6 +34,7 @@ This is the shared operating pack for every product.
 - [Connector Manifest](CONNECTOR-MANIFEST.md)
 - [Pipe Manifest](PIPE-MANIFEST.md)
 - [Pipes Starter Docs](pipes/README.md)
+- [Governance Review](GOVERNANCE-REVIEW.md)
 
 ## Rule
 
