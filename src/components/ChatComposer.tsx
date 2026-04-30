@@ -329,7 +329,12 @@ export function ChatComposer(props: ChatComposerProps) {
       {/* Input area */}
       <div
         className="px-0 py-0.5 shrink-0 mobile-safe-bottom mobile-input-sticky mobile-input-area relative"
-        style={{ background: 'var(--c-bg-2)', borderTop: '1px solid var(--c-border-2)' }}
+        style={{
+          background:
+            'linear-gradient(180deg, rgba(18,18,21,0.96) 0%, rgba(16,16,18,0.98) 100%)',
+          borderTop: '1px solid var(--c-border-2)',
+          backdropFilter: 'blur(18px)',
+        }}
       >
         {/* ARIA live region for voice status announcements */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
@@ -766,8 +771,8 @@ export function ChatComposer(props: ChatComposerProps) {
             autoCorrect="off"
             spellCheck={false}
             aria-label="Message input"
-            className="w-full px-4 pt-2 pb-0.5 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
-            style={{ color: 'var(--c-text-1)', minHeight: '44px' }}
+          className="w-full px-4 pt-2 pb-0.5 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
+            style={{ color: 'var(--c-text-1)', minHeight: '44px', letterSpacing: '-0.015em' }}
             onFocus={() => {
               // On mobile, scroll textarea into view when keyboard opens
               setTimeout(() => {

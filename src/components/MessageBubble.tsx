@@ -348,7 +348,7 @@ const MessageBubble = memo(function MessageBubble({
             ? { transform: `translateX(${swipeX}px)`, transition: 'none' }
             : { transition: 'transform 0.2s ease-out, border-color 0.15s, padding-left 0.15s' }),
           borderLeft: selected ? '2px solid var(--c-accent)' : '2px solid transparent',
-          paddingLeft: '8px',
+          paddingLeft: isUser ? '8px' : '10px',
           ...(selected ? { borderRadius: '2px' } : {}),
         }}
       >
@@ -371,10 +371,10 @@ const MessageBubble = memo(function MessageBubble({
         )}
         {/* Name + timestamp + agent badge header */}
         <div
-          className={`flex items-center gap-1.5 mb-0.5 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}
+          className={`flex items-center gap-1.5 mb-0.75 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}
         >
           {!isUser && <span className="text-[11px]">{agentEmoji}</span>}
-          <span className="text-[11px] font-medium" style={{ color: 'var(--c-text-2)' }}>
+          <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: 'var(--c-text-1)' }}>
             {name}
           </span>
           {!isUser && shortModel && (
@@ -404,7 +404,9 @@ const MessageBubble = memo(function MessageBubble({
         <div
           className={`rounded-2xl ${compact ? 'px-3 py-1.5 text-sm' : 'px-4 py-2.5 text-base'} leading-relaxed select-text`}
           style={{
-            background: isUser ? 'var(--c-msg-user)' : 'var(--c-msg-ai)',
+            background: isUser
+              ? 'linear-gradient(180deg, rgba(99,141,255,0.11) 0%, rgba(99,141,255,0.07) 100%)'
+              : 'rgba(255,255,255,0.03)',
             color: 'var(--c-text-1)',
             border: `1px solid ${isCurrentSearchHit ? 'var(--c-accent)' : isUser ? 'var(--c-accent-soft)' : 'var(--c-border-2)'}`,
             boxShadow: isCurrentSearchHit

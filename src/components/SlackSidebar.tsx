@@ -4,6 +4,7 @@ import { usePreferences, type ConversationModeId } from '../preferences-store';
 import { useAppList } from '../hooks/useAppList';
 import {
   WORKSPACE_CHANNELS,
+  getChannelParticipants,
   getWorkspaceChannelTag,
 } from '../workspace-channels';
 
@@ -29,6 +30,14 @@ function getSearchTokens(text: string) {
     .split(/\s+/)
     .map((token) => token.trim())
     .filter(Boolean);
+}
+
+function derivePresence(updatedAt?: number): 'active' | 'away' | 'offline' {
+  if (!updatedAt) return 'offline';
+  const delta = Date.now() - updatedAt;
+  if (delta < 5 * 60_000) return 'active';
+  if (delta < 30 * 60_000) return 'away';
+  return 'offline';
 }
 
 export function SlackSidebar() {
@@ -283,13 +292,14 @@ export function SlackSidebar() {
                 conversationMode === channel.mode &&
                 latestSessionForTag(state.sessions, getWorkspaceChannelTag(channel.id))?.id ===
                   state.activeSessionId;
+              const memberCount = getChannelParticipants(channel.id, state.activeAgentId).length;
               return (
                 <NavRow
                   key={channel.id}
                   active={active}
                   icon="#"
                   label={channel.label}
-                  description={channel.description}
+                  description={`${channel.description} · ${memberCount} members`}
                   accent={channel.accent}
                   onClick={() => openChannel(channel.id, channel.mode)}
                 />
@@ -333,6 +343,7 @@ export function SlackSidebar() {
               const latest = latestSessionForTag(state.sessions, scopeTag('dm', agent.id));
               const active =
                 state.activeSessionId === latest?.id && state.activeAgentId === agent.id;
+              const presence = derivePresence(latest?.updatedAt);
               return (
                 <button
                   key={agent.id}
@@ -342,8 +353,19 @@ export function SlackSidebar() {
                     active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
                   }`}
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[18px]">
+                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[18px]">
                     {agent.emoji}
+                    <span
+                      className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-[var(--c-bg-2)]"
+                      style={{
+                        background:
+                          presence === 'active'
+                            ? '#4ade80'
+                            : presence === 'away'
+                              ? '#f59e0b'
+                              : 'var(--c-text-5)',
+                      }}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
