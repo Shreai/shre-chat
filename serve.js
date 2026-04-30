@@ -5138,13 +5138,13 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── CLI Mode: spawn `claude` CLI and stream response via SSE ────
+  // ── CLI Mode: spawn `claude` or `codex` CLI and stream response via SSE ────
 
   if (url.pathname === "/api/cli/chat" && req.method === "POST") {
     let body;
     try { body = await collectBody(req, 5 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
-      const { message, continueConversation, agentId, autoMode, sessionType, sessionTitle, taskId, projectId, source } = JSON.parse(body);
+      const { message, continueConversation, agentId, autoMode, sessionType, sessionTitle, taskId, projectId, source, provider } = JSON.parse(body);
       if (!message) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "message required" }));
@@ -5208,6 +5208,153 @@ async function requestHandler(req, res) {
           "X-Accel-Buffering": "no",
         });
         res.write(`data: ${JSON.stringify({ type: "ack", route: "cli", accepted: true, sessionId: ledgerSessionId })}\n\n`);
+
+        const requestedProvider = String(provider || "claude").toLowerCase();
+        const useCodex = requestedProvider === "codex";
+
+        if (useCodex) {
+          const args = ["exec", contextPrompt, "--json"];
+          if (autoMode) {
+            args.push("--full-auto");
+            log.info("[cli] Code mode: codex --full-auto enabled");
+          }
+
+          const cliEnv = { ...process.env, NO_COLOR: "1" };
+          const proc = spawn("codex", args, {
+            env: cliEnv,
+            cwd: process.env.SHRE_DIR || join(process.env.HOME || "~", "Documents", "Projects", "shreai"),
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+
+          let codexBuffer = "";
+          let codexStderr = "";
+          let lastCodexEvent = null;
+          let fullResponseText = "";
+
+          proc.stdout.on("data", (data) => {
+            codexBuffer += data.toString();
+            const lines = codexBuffer.split("\n");
+            codexBuffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const evt = JSON.parse(line);
+                if (evt.type === "thread.started") {
+                  const initData = { type: "status", event: "init", model: "codex", ledgerSessionId };
+                  if (autoMode) initData.autoMode = true;
+                  res.write(`data: ${JSON.stringify(initData)}\n\n`);
+                } else if (evt.type === "item.completed" && evt.item?.type === "agent_message") {
+                  const text = evt.item.text || "";
+                  if (text) {
+                    fullResponseText += text;
+                    res.write(`data: ${JSON.stringify({ type: "delta", text })}\n\n`);
+                  }
+                } else if (evt.type === "item.completed" && evt.item?.type === "function_call") {
+                  const toolEvt = {
+                    type: "tool_start",
+                    tool: evt.item.name || "tool",
+                    toolId: evt.item.id,
+                    input: String(evt.item.arguments || "").slice(0, 500),
+                  };
+                  res.write(`data: ${JSON.stringify(toolEvt)}\n\n`);
+                  toolEvents.push({ name: toolEvt.tool, input: toolEvt.input });
+                } else if (evt.type === "item.completed" && evt.item?.type === "function_call_output") {
+                  const toolOutput = String(evt.item.output || "").slice(0, 2000);
+                  res.write(`data: ${JSON.stringify({
+                    type: "tool_result",
+                    toolId: evt.item.tool_call_id,
+                    output: toolOutput,
+                    isError: false,
+                  })}\n\n`);
+                  appendToolEvent(ledgerSessionId, "tool_result", evt.item.tool_call_id, toolOutput, { isError: false });
+                } else if (evt.type === "turn.completed") {
+                  lastCodexEvent = evt;
+                  const duration = evt.duration_ms || 0;
+                  res.write(`data: ${JSON.stringify({ type: "done", text: "", cost: 0, duration, model: "codex", ledgerSessionId })}\n\n`);
+                } else if (evt.type === "error") {
+                  res.write(`data: ${JSON.stringify({ type: "error", error: evt.error || "Codex execution failed" })}\n\n`);
+                } else {
+                  res.write(`data: ${JSON.stringify({ type: "status", event: evt.type, subtype: evt.subtype })}\n\n`);
+                }
+              } catch {
+                res.write(`data: ${JSON.stringify({ type: "delta", text: line })}\n\n`);
+                fullResponseText += line;
+              }
+            }
+          });
+
+          proc.stderr.on("data", (data) => {
+            const text = data.toString().trim();
+            if (text) {
+              codexStderr += text + "\n";
+              log.error("[cli]", text);
+              res.write(`data: ${JSON.stringify({ type: "status", event: "stderr", text })}\n\n`);
+            }
+          });
+
+          proc.on("error", (err) => {
+            spawnFailed = true;
+            releaseSlot();
+            log.error("[cli] Codex spawn error", { error: err.message });
+            if (!res.writableEnded) {
+              res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`);
+              res.end();
+            }
+          });
+
+          proc.on("close", (code) => {
+            if (spawnFailed) return;
+            (async () => {
+              if (!fullResponseText.trim() && codexBuffer.trim()) {
+                try {
+                  const evt = JSON.parse(codexBuffer);
+                  if (evt.type === "turn.completed" && evt.item?.type === "agent_message" && evt.item.text) {
+                    fullResponseText = evt.item.text;
+                  }
+                } catch { /* ignore */ }
+              }
+
+              if (fullResponseText) {
+                appendMessageToSession(agent, "assistant", fullResponseText, "codex-cli", userMsgId);
+                log.info(`[cli-session] Saved conversation to agent:${agent}:${CLI_SESSION_KEY} (${fullResponseText.length} chars)`);
+
+                try {
+                  const resultDuration = lastCodexEvent?.duration_ms || 0;
+                  appendCliResponse(ledgerSessionId, ledgerMsgId, fullResponseText, {
+                    model: "codex",
+                    cost: 0,
+                    duration: resultDuration,
+                    tools: toolEvents,
+                  });
+                  log.info(`[cli-ledger] Response recorded in session ${ledgerSessionId} (${fullResponseText.length} chars, ${toolEvents.length} tools)`);
+                } catch (ledgerErr) {
+                  log.error("[cli-ledger] Failed to record response:", ledgerErr.message);
+                }
+
+                const conversationForSkills = `User: ${message}\n\nAssistant: ${fullResponseText}`;
+                extractAndLogSkills(agent, conversationForSkills).catch(() => {});
+
+                const cliTenantId = authClaims?.activeWorkspaceId || "default";
+                logConversationToCortex(agent, message, fullResponseText, "cli", "codex-cli", cliTenantId).catch(() => {});
+                emitConversationComplete(agent, message, fullResponseText, "cli", "codex-cli").catch(() => {});
+                conversationLearner.learn(message, fullResponseText, cliTenantId, agent).catch(() => {});
+              }
+
+              res.write(`data: ${JSON.stringify({ type: "end", code })}\n\n`);
+              res.end();
+            })().catch((err) => {
+              log.error("[cli] Codex close handler error", { error: err.message });
+              if (!res.writableEnded) {
+                res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`);
+                res.end();
+              }
+            });
+            releaseSlot();
+          });
+
+          return;
+        }
 
         // Build claude CLI args
         const args = ["-p", contextPrompt, "--output-format", "stream-json", "--verbose"];

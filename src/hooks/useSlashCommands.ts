@@ -191,8 +191,14 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
       },
       {
         name: 'cli',
-        description: 'Toggle Claude CLI mode (uses subscription)',
+        description: 'Toggle code mode (Codex)',
         usage: '/cli',
+        category: 'session',
+      },
+      {
+        name: 'code',
+        description: 'Toggle code mode (Codex)',
+        usage: '/code',
         category: 'session',
       },
       {
@@ -472,7 +478,8 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           setTimeout(() => actions.setStatusLine(null), 2000);
           break;
         }
-        case 'cli': {
+        case 'cli':
+        case 'code': {
           const newCliMode = !cliMode;
           setCliMode(newCliMode);
           setCliContinue(false);
@@ -480,11 +487,11 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
           actions.addMessage(cliSessionId, {
             role: 'assistant',
             content: newCliMode
-              ? '*Claude CLI mode **enabled** — messages will be sent via Claude CLI (uses subscription, not API credits). Type /cli again to disable.*'
-              : '*Claude CLI mode **disabled** — back to normal API mode.*',
+              ? '*Code mode **enabled** — messages will be sent via Codex CLI. Type /cli or /code again to disable.*'
+              : '*Code mode **disabled** — back to normal API mode.*',
             timestamp: Date.now(),
           });
-          actions.setStatusLine(newCliMode ? 'CLI mode ON' : 'CLI mode OFF');
+          actions.setStatusLine(newCliMode ? 'Code mode ON' : 'Code mode OFF');
           setTimeout(() => actions.setStatusLine(null), 2000);
           break;
         }

@@ -1009,7 +1009,7 @@ export function ChatView() {
                   setShowTerminal(true);
                   if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
                   setTimeout(
-                    () => terminalRef.current?.openTab({ title: 'Claude CLI', cmd: 'claude' }),
+                    () => terminalRef.current?.openTab({ title: 'Codex', cmd: 'codex' }),
                     100,
                   );
                 }}

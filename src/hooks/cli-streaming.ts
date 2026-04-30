@@ -60,11 +60,13 @@ export async function streamViaCLI(
     }
   };
   const isAutoMode = claudeCliMode;
-  actions.setStatusLine(isAutoMode ? 'Starting Claude Code (auto)...' : 'Starting Claude CLI...');
+  actions.setStatusLine(
+    isAutoMode ? 'Starting Codex code mode (auto)...' : 'Starting Claude CLI...',
+  );
   actions.addActivity(
     sessionId,
     'connecting',
-    isAutoMode ? 'Launching Claude Code (autonomous)' : 'Launching Claude CLI',
+    isAutoMode ? 'Launching Codex (autonomous)' : 'Launching Claude CLI',
   );
   ackTimer = setTimeout(() => {
     if (ackSeen) return;
@@ -85,6 +87,7 @@ export async function streamViaCLI(
         continueConversation: cliContinue,
         agentId: activeAgentId,
         autoMode: isAutoMode,
+        provider: isAutoMode ? 'codex' : 'claude',
       }),
       signal: controller.signal,
     });
@@ -108,7 +111,11 @@ export async function streamViaCLI(
         if (!raw) continue;
         try {
           const evt = JSON.parse(raw);
-          if (evt.type === 'ack' || evt.type === 'route' || (evt.type === 'status' && evt.event === 'init')) {
+          if (
+            evt.type === 'ack' ||
+            evt.type === 'route' ||
+            (evt.type === 'status' && evt.event === 'init')
+          ) {
             markAck();
           } else if (evt.type === 'delta' && evt.text) {
             fullResponse += evt.text;

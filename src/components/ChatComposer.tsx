@@ -131,11 +131,11 @@ interface ChatComposerProps {
   // Filtered messages for reply preview
   filteredMessages?: { content: string }[];
 
-  // Claude CLI mode — auto-routes coding tasks to Claude Code CLI
+  // Code mode — auto-routes coding tasks to Codex CLI
   claudeCliMode: boolean;
   setClaudeCliMode: (on: boolean) => void;
 
-  // Open Claude CLI as terminal tab
+  // Open code mode as terminal tab
   onOpenClaudeCli?: () => void;
 
   // Open Shre CLI as terminal tab
@@ -754,7 +754,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     : streaming
                       ? `Queue a task for ${currentAgentName}...`
                       : claudeCliMode
-                        ? 'Claude Code CLI — describe what to build...'
+                        ? 'Codex code mode — describe what to build...'
                         : cliMode
                           ? 'Claude CLI (subscription mode)...'
                           : `Message ${currentAgentName}...`
@@ -980,7 +980,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 </button>
               )}
 
-              {/* Claude CLI — opens as terminal tab */}
+              {/* Code mode — opens as terminal tab */}
               {features['claudeCli'] && (
                 <button
                   tabIndex={-1}
@@ -993,8 +993,8 @@ export function ChatComposer(props: ChatComposerProps) {
                     background: 'rgba(255,255,255,0.04)',
                     border: '1px solid var(--c-border-2)',
                   }}
-                  title="Open Claude CLI in terminal tab"
-                  aria-label="Open Claude CLI in terminal tab"
+                  title="Open Codex code mode in terminal tab"
+                  aria-label="Open Codex code mode in terminal tab"
                 >
                   <svg
                     className="h-4 w-4 sm:h-4 sm:w-4"
@@ -1006,7 +1006,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     <polyline points="16 18 22 12 16 6" />
                     <polyline points="8 6 2 12 8 18" />
                   </svg>
-                  <span className="hidden sm:inline text-[10px] font-medium">CLI</span>
+                  <span className="hidden sm:inline text-[10px] font-medium">Code</span>
                 </button>
               )}
 
