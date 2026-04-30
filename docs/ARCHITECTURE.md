@@ -12,6 +12,8 @@ Frontend and backend stay separated on purpose: the React app owns presentation,
 
 Backend work should be treated as a schema/API discipline and frontend work as a UI/motion discipline. The backend expert should shape data models, database tables, auth flows, and secure API contracts first. The frontend expert should shape layout, CSS, animation, responsive behavior, and accessibility. Generalist delivery is fine, but the review checklist should still split those concerns.
 
+The platform also uses a memory and retrieval pattern that should stay narrow by default: store facts structurally, retrieve the smallest useful context first, keep raw/summary/embedding forms separate, and route work to the smallest capable agent. See [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md) for the concrete pattern.
+
 ```
                                     Shre Platform
                  ┌──────────────────────────────┐

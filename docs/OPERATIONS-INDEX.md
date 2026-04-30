@@ -47,6 +47,7 @@ This is the shared operating pack for every product.
 - [Release Evidence Pack](RELEASE-EVIDENCE-PACK.md)
 - [Retirement Process](RETIREMENT-PROCESS.md)
 - [Production Rollout](PRODUCTION-ROLLOUT.md)
+- [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md)
 
 ## Rule
 
