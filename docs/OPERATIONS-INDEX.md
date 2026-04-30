@@ -16,8 +16,13 @@ This is the shared operating pack for every product.
 - [API Versioning](API-VERSIONING.md)
 - [Customer Handoff Pack](CUSTOMER-HANDOFF.md)
 - [Environment Matrix](ENVIRONMENT-MATRIX.md)
+- [Compliance Register](COMPLIANCE-REGISTER.md)
+- [Backup and Restore Drill](BACKUP-RESTORE-DRILL.md)
+- [Threat Model](THREAT-MODEL.md)
+- [Connector Catalog](CONNECTOR-CATALOG.md)
+- [Launch Approval Checklist](LAUNCH-APPROVAL-CHECKLIST.md)
+- [Legal Docs Pack](LEGAL-DOCS-PACK.md)
 
 ## Rule
 
 If a project needs one of these and it does not exist yet, create it before launch.
-

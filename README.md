@@ -130,6 +130,8 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Operations Index](docs/OPERATIONS-INDEX.md) | Ownership, releases, incidents, observability, data, secrets, evals |
 | [Product Boundaries](docs/PRODUCT-BOUNDARIES.md) | Shre OS vs AROS ownership and dashboard guidance |
 | [Trace Route](docs/TRACE-ROUTE.md) | Before/after screenshot and rollback evidence for visible changes |
+| [Compliance Register](docs/COMPLIANCE-REGISTER.md) | Product-by-product compliance profile tracking |
+| [Launch Approval](docs/LAUNCH-APPROVAL-CHECKLIST.md) | Required signoff before shipping |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |
