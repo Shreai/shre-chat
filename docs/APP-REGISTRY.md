@@ -8,6 +8,7 @@ Use it to decide which README template, connector doc, or agent skill to open fi
 - every app should have a README based on [App README Template](APP-README-TEMPLATE.md)
 - every connector should point back to [Connector Catalog](CONNECTOR-CATALOG.md)
 - every app should identify its domain in [Domain Index](DOMAIN-INDEX.md)
+- every long-lived app should carry category, tags, and keywords in its README
 - if an app crosses jurisdictions or regulated data, check the legal pack before launch
 
 ## Platform Apps

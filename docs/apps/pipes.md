@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Pipes`
 - **App ID:** `pipes`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `workspace`
+- **Tags:** `workspace, mib-deep-link-apps, pipes`
+- **Keywords:** `pipes, Pipes, Automations`
+- **Aliases:** `pipes, pipes`
 - **Domain:** `MIB / Deep-Link`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: workspace
+- search terms: pipes, Pipes, Automations
+- related tags: workspace, mib-deep-link-apps, pipes

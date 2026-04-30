@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Status`
 - **App ID:** `status`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `product`
+- **Tags:** `product, subdomain-apps, status`
+- **Keywords:** `status, Status, Health Monitor`
+- **Aliases:** `status, status`
 - **Domain:** `Subdomain`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: product
+- search terms: status, Status, Health Monitor
+- related tags: product, subdomain-apps, status

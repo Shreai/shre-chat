@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `ShreRoute`
 - **App ID:** `shreroute`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `product`
+- **Tags:** `product, subdomain-apps, shreroute`
+- **Keywords:** `shreroute, ShreRoute, Dev Tool`
+- **Aliases:** `shreroute, shreroute`
 - **Domain:** `Subdomain`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: product
+- search terms: shreroute, ShreRoute, Dev Tool
+- related tags: product, subdomain-apps, shreroute

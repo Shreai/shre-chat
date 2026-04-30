@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `CortexDB`
 - **App ID:** `cortexdb`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `platform`
+- **Tags:** `platform, platform-apps, cortexdb`
+- **Keywords:** `cortexdb, CortexDB, Knowledge DB`
+- **Aliases:** `cortexdb, cortexdb`
 - **Domain:** `Platform`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: platform
+- search terms: cortexdb, CortexDB, Knowledge DB
+- related tags: platform, platform-apps, cortexdb

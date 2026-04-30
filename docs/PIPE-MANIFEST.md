@@ -13,6 +13,9 @@ Pipes connect one app to another. Treat them as versioned integration contracts,
 
 ## Fields
 
+- category
+- tags
+- keywords
 - pipe id
 - pipe name
 - source app

@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Approvals`
 - **App ID:** `approvals`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `workspace`
+- **Tags:** `workspace, mib-deep-link-apps, approvals`
+- **Keywords:** `approvals, Approvals, Pending Approvals`
+- **Aliases:** `approvals, approvals`
 - **Domain:** `MIB / Deep-Link`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: workspace
+- search terms: approvals, Approvals, Pending Approvals
+- related tags: workspace, mib-deep-link-apps, approvals

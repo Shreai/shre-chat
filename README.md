@@ -139,6 +139,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Domain Index](docs/DOMAIN-INDEX.md) | App, connector, and agent shortcut map by domain |
 | [App Registry](docs/APP-REGISTRY.md) | Current app surface with README mapping |
 | [App README Template](docs/APP-README-TEMPLATE.md) | Standard README layout for apps, connectors, and tools |
+| [Indexing Standard](docs/INDEXING-STANDARD.md) | Categories, tags, keywords, and aliases |
 | [App Readmes](docs/apps/README.md) | Generated starter docs for each app in the registry |
 | [Connector Manifest](docs/CONNECTOR-MANIFEST.md) | Per-connector owner, env, and README mapping |
 | [Pipe Manifest](docs/PIPE-MANIFEST.md) | App-to-app flow contract and rollback map |

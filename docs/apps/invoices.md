@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Invoices`
 - **App ID:** `invoices`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `workspace`
+- **Tags:** `workspace, mib-deep-link-apps, invoices`
+- **Keywords:** `invoices, Invoices, Billing & Invoices`
+- **Aliases:** `invoices, invoices`
 - **Domain:** `MIB / Deep-Link`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: workspace
+- search terms: invoices, Invoices, Billing & Invoices
+- related tags: workspace, mib-deep-link-apps, invoices

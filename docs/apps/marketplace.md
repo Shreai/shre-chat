@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Marketplace`
 - **App ID:** `marketplace`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `product`
+- **Tags:** `product, subdomain-apps, marketplace`
+- **Keywords:** `marketplace, Marketplace, Agent Store`
+- **Aliases:** `marketplace, marketplace`
 - **Domain:** `Subdomain`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: product
+- search terms: marketplace, Marketplace, Agent Store
+- related tags: product, subdomain-apps, marketplace

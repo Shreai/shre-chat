@@ -12,6 +12,9 @@ Use it to point each integration at the README, secret location, owner, and envi
 
 ## Fields
 
+- category
+- tags
+- keywords
 - connector id
 - connector name
 - app or domain

@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Centrix ERP`
 - **App ID:** `centrix`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `product`
+- **Tags:** `product, subdomain-apps, centrix`
+- **Keywords:** `centrix, Centrix ERP, Embeddable ERP`
+- **Aliases:** `centrix erp, centrix`
 - **Domain:** `Subdomain`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: product
+- search terms: centrix, Centrix ERP, Embeddable ERP
+- related tags: product, subdomain-apps, centrix

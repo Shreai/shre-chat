@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Nirtek`
 - **App ID:** `pos-site`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `product`
+- **Tags:** `product, subdomain-apps, pos-site`
+- **Keywords:** `pos-site, Nirtek, Main Site`
+- **Aliases:** `nirtek, pos-site`
 - **Domain:** `Subdomain`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: product
+- search terms: pos-site, Nirtek, Main Site
+- related tags: product, subdomain-apps, pos-site

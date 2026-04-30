@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Gateway Status`
 - **App ID:** `router-gateway`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `platform`
+- **Tags:** `platform, platform-apps, router-gateway`
+- **Keywords:** `router-gateway, Gateway Status, AI Gateway`
+- **Aliases:** `gateway status, router-gateway`
 - **Domain:** `Platform`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: platform
+- search terms: router-gateway, Gateway Status, AI Gateway
+- related tags: platform, platform-apps, router-gateway

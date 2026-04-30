@@ -61,10 +61,29 @@ function parseRegistry(md) {
 }
 
 function fillTemplate(template, app) {
+  const sectionSlug = app.section.toLowerCase().replace(/\s+/g, '-');
+  const category =
+    app.appType === 'platform-app'
+      ? 'platform'
+      : app.appType === 'workspace-app'
+      ? 'workspace'
+      : app.appType === 'subdomain-app'
+      ? 'product'
+      : 'connector';
+  const tags = [category, sectionSlug, app.id]
+    .filter(Boolean)
+    .join(', ');
+  const keywords = [app.id, app.name, app.notes]
+    .filter(Boolean)
+    .join(', ');
   const defaults = {
     name: app.name,
     id: app.id,
     type: app.type,
+    category,
+    tags,
+    keywords,
+    aliases: app.name === app.id ? app.id : `${app.name.toLowerCase()}, ${app.id}`,
     domain: app.section.replace(/ Apps$/, '').replace(/\s+/g, ' / '),
     owner: '<owner or team>',
     workspace: '<workspace or tenant>',
@@ -85,6 +104,10 @@ function fillTemplate(template, app) {
     .replaceAll('<app name>', defaults.name)
     .replaceAll('<app id>', defaults.id)
     .replaceAll('app | connector | tool | skill', app.type)
+    .replaceAll('<platform | product | workspace | connector | pipe>', defaults.category)
+    .replaceAll('<comma-separated tags>', defaults.tags)
+    .replaceAll('<comma-separated keywords>', defaults.keywords)
+    .replaceAll('<alternate names or slugs>', defaults.aliases)
     .replaceAll('<domain or product line>', defaults.domain)
     .replaceAll('<person or team>', defaults.owner)
     .replaceAll('<workspace or tenant>', defaults.workspace)
@@ -93,7 +116,10 @@ function fillTemplate(template, app) {
     .replaceAll('<api route or service>', defaults.apiPath)
     .replaceAll('<install command>', defaults.installCommand)
     .replaceAll('<run command>', defaults.runCommand)
-    .replaceAll('<test command>', defaults.testCommand);
+    .replaceAll('<test command>', defaults.testCommand)
+    .replaceAll('primary category:', `primary category: ${defaults.category}`)
+    .replaceAll('search terms:', `search terms: ${defaults.keywords}`)
+    .replaceAll('related tags:', `related tags: ${defaults.tags}`);
 }
 
 async function main() {

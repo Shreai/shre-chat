@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `Shre AI`
 - **App ID:** `shre-platform`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `platform`
+- **Tags:** `platform, platform-apps, shre-platform`
+- **Keywords:** `shre-platform, Shre AI, Dashboard`
+- **Aliases:** `shre ai, shre-platform`
 - **Domain:** `Platform`
 - **Owner:** `<owner or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ npm test
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category: platform
+- search terms: shre-platform, Shre AI, Dashboard
+- related tags: platform, platform-apps, shre-platform

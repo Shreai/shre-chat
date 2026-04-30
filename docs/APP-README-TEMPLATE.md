@@ -8,6 +8,10 @@ Copy it into the app's own folder or docs area and fill in the placeholders.
 - **Name:** `<app name>`
 - **App ID:** `<app id>`
 - **Type:** `app | connector | pipe | tool | skill`
+- **Category:** `<platform | product | workspace | connector | pipe>`
+- **Tags:** `<comma-separated tags>`
+- **Keywords:** `<comma-separated keywords>`
+- **Aliases:** `<alternate names or slugs>`
 - **Domain:** `<domain or product line>`
 - **Owner:** `<person or team>`
 - **Workspace:** `<workspace or tenant>`
@@ -128,3 +132,9 @@ List the agent roles or skills that should be used when working on this app.
 
 - `YYYY-MM-DD` — initial creation
 - `YYYY-MM-DD` — major update
+
+## Indexing Notes
+
+- primary category:
+- search terms:
+- related tags:
