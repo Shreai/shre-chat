@@ -371,7 +371,7 @@ const MessageBubble = memo(function MessageBubble({
         )}
         {/* Name + timestamp + agent badge header */}
         <div
-          className={`flex items-center gap-1.5 mb-0.75 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}
+          className={`flex items-center gap-1.5 mb-1 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}
         >
           {!isUser && <span className="text-[11px]">{agentEmoji}</span>}
           <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: 'var(--c-text-1)' }}>
