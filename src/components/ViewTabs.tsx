@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import type { GatewayMode } from '../preferences-store';
 import { ModelPicker } from './ModelPicker';
 import type { ConversationModeId } from '../preferences-store';
+import type { ConversationRoster } from '../workspace-roster';
 
 interface ViewTabsProps {
   activeView: string;
@@ -48,6 +49,7 @@ interface ViewTabsProps {
   activeAppLabel?: string | null;
   onSetConversationMode?: (mode: ConversationModeId, appId?: string | null) => void;
   onOpenEscalation?: () => void;
+  conversationRoster?: ConversationRoster | null;
 }
 
 export function ViewTabs({
@@ -66,6 +68,7 @@ export function ViewTabs({
   activeAppLabel,
   onSetConversationMode,
   onOpenEscalation,
+  conversationRoster,
 }: ViewTabsProps) {
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerVisible =
@@ -92,17 +95,49 @@ export function ViewTabs({
             </div>
             <div className="min-w-0">
               <div className="truncate text-[14px] font-semibold tracking-[-0.03em] text-[var(--c-text-1)]">
-                {agentName || 'Shre AI'}
+                {conversationRoster?.title || agentName || 'Shre AI'}
               </div>
               <div className="truncate text-[11px] text-[var(--c-text-3)]">
-                {conversationMode === 'code'
-                  ? 'Code mode · autonomous builds and task execution'
-                  : conversationMode === 'apps'
-                    ? `Apps mode${activeAppLabel ? ` · ${activeAppLabel}` : ''}`
-                    : 'General mode · conversation-first operator loop'}
+                {conversationRoster?.subtitle ||
+                  (conversationMode === 'code'
+                    ? 'Code mode · autonomous builds and task execution'
+                    : conversationMode === 'apps'
+                      ? `Apps mode${activeAppLabel ? ` · ${activeAppLabel}` : ''}`
+                      : 'General mode · conversation-first operator loop')}
               </div>
             </div>
           </div>
+          {conversationRoster && conversationRoster.members.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {conversationRoster.members.slice(0, 6).map((member) => (
+                <div
+                  key={member.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] px-2 py-1"
+                >
+                  <span className="text-[11px]">{member.emoji}</span>
+                  <span className="max-w-[100px] truncate text-[10px] font-medium text-[var(--c-text-2)]">
+                    {member.name}
+                  </span>
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{
+                      background:
+                        member.presence === 'active'
+                          ? '#4ade80'
+                          : member.presence === 'away'
+                            ? '#f59e0b'
+                            : 'var(--c-text-5)',
+                    }}
+                  />
+                </div>
+              ))}
+              {conversationRoster.members.length > 6 && (
+                <span className="text-[10px] text-[var(--c-text-4)]">
+                  +{conversationRoster.members.length - 6} more
+                </span>
+              )}
+            </div>
+          )}
           <div className="mt-2 flex items-center gap-1 rounded-full border border-[var(--c-border-1)] bg-[rgba(255,255,255,0.04)] p-1">
             <button
               type="button"
