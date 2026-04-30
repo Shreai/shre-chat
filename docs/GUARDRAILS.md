@@ -21,6 +21,7 @@ Every meaningful change should leave evidence:
 - preview or QA URL when available
 - Playwright trace or screenshot for UI work
 - before and after screenshots or traces for visible changes
+- backend and frontend reviews must each pass their own checklist
 
 ## Audit Checks
 
@@ -47,3 +48,4 @@ When AI adds code, we should verify:
 - rollback plan for user-facing changes
 - version everything that affects behavior
 - do not ship UI changes without a trace-route review
+- do not ship backend API changes without schema and auth review

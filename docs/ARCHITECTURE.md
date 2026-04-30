@@ -10,6 +10,8 @@ AROS can layer on its own theme pack and brand tokens while reusing the shared s
 
 Frontend and backend stay separated on purpose: the React app owns presentation, the Node backend owns auth, routing, and secret-bearing operations, and the browser only talks to server APIs. Shared data should cross that boundary through secure API routes, not through direct secret access in the client bundle.
 
+Backend work should be treated as a schema/API discipline and frontend work as a UI/motion discipline. The backend expert should shape data models, database tables, auth flows, and secure API contracts first. The frontend expert should shape layout, CSS, animation, responsive behavior, and accessibility. Generalist delivery is fine, but the review checklist should still split those concerns.
+
 ```
                                     Shre Platform
                  ┌──────────────────────────────┐
@@ -153,6 +155,7 @@ Every conversation writes to the training WAL (Write-Ahead Log) via `shre-sdk/tr
 - **Input Sanitization:** DOMPurify for rendered markdown
 - **CSP:** Strict Content-Security-Policy headers
 - **Client boundary:** secrets, tokens, and backend credentials stay on the server; the frontend only calls safe API routes
+- **Role boundary:** backend architecture, database schema, and API design are reviewed separately from frontend layout, motion, and visual polish
 
 ## Data Flow: Chat Message
 

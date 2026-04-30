@@ -66,6 +66,22 @@ export const AGENT_META: ChatAgentMeta[] = [
     description: 'Engineering management and planning',
   },
   {
+    id: 'backend-architect',
+    name: 'Backend Architect',
+    emoji: '🧱',
+    group: 'department',
+    domains: ['code', 'architecture'],
+    description: 'Schemas, databases, APIs, auth, and server-side contracts',
+  },
+  {
+    id: 'frontend-designer',
+    name: 'Frontend Designer',
+    emoji: '🎨',
+    group: 'department',
+    domains: ['code', 'design'],
+    description: 'Layout, CSS, motion, accessibility, and product feel',
+  },
+  {
     id: 'product-manager',
     name: 'Product',
     emoji: '🎯',

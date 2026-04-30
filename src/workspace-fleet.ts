@@ -18,12 +18,12 @@ export const DEFAULT_PROJECT_FLEET: FleetRole[] = [
   {
     id: 'frontend',
     title: 'Frontend Agent',
-    responsibility: 'Builds the UI, responsive behavior, and white-label theme layer.',
+    responsibility: 'Owns UI structure, CSS, motion, accessibility, and white-label theme layers.',
   },
   {
     id: 'backend',
     title: 'Backend Agent',
-    responsibility: 'Owns APIs, auth, data model, integrations, and server-side rules.',
+    responsibility: 'Owns schemas, databases, APIs, auth, integrations, and server-side rules.',
   },
   {
     id: 'infra',

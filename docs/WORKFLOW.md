@@ -42,3 +42,4 @@ Need launch docs: yes
 - QA deploys happen before production deploys.
 - Anything shipped by the fleet should have an audit trail and rollback plan.
 - UI and workflow changes should pass through the trace route agent with before/after evidence.
+- Backend and frontend work should be reviewed separately using the full-stack standards doc.
