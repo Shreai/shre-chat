@@ -126,6 +126,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Architecture](docs/ARCHITECTURE.md) | System design, data flow, component map |
 | [Workflow](docs/WORKFLOW.md) | Deployment requests, mesh handoff, and product boundaries |
 | [Full-Stack Standards](docs/FULL-STACK-STANDARDS.md) | Backend/frontend split, schema/API rules, UI/motion rules |
+| [Platform Standards](docs/PLATFORM-STANDARDS.md) | SLA, compliance, transport, coding, database, API, auth, connector rules |
 | [Product Boundaries](docs/PRODUCT-BOUNDARIES.md) | Shre OS vs AROS ownership and dashboard guidance |
 | [Trace Route](docs/TRACE-ROUTE.md) | Before/after screenshot and rollback evidence for visible changes |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
