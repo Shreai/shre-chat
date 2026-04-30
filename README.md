@@ -132,6 +132,10 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Trace Route](docs/TRACE-ROUTE.md) | Before/after screenshot and rollback evidence for visible changes |
 | [Compliance Register](docs/COMPLIANCE-REGISTER.md) | Product-by-product compliance profile tracking |
 | [Launch Approval](docs/LAUNCH-APPROVAL-CHECKLIST.md) | Required signoff before shipping |
+| [Terms and Conditions](docs/TERMS-AND-CONDITIONS.md) | Baseline terms template and review triggers |
+| [Privacy Policy](docs/PRIVACY-POLICY.md) | Privacy notice template and review triggers |
+| [Copyright and IP](docs/COPYRIGHT-IP.md) | Ownership, licensing, and reuse rules |
+| [Jurisdiction Matrix](docs/JURISDICTION-MATRIX.md) | Country-by-country legal review tracker |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

@@ -22,6 +22,10 @@ This is the shared operating pack for every product.
 - [Connector Catalog](CONNECTOR-CATALOG.md)
 - [Launch Approval Checklist](LAUNCH-APPROVAL-CHECKLIST.md)
 - [Legal Docs Pack](LEGAL-DOCS-PACK.md)
+- [Terms and Conditions](TERMS-AND-CONDITIONS.md)
+- [Privacy Policy](PRIVACY-POLICY.md)
+- [Copyright and IP Policy](COPYRIGHT-IP.md)
+- [Jurisdiction Matrix](JURISDICTION-MATRIX.md)
 
 ## Rule
 
