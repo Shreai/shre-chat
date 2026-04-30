@@ -137,6 +137,8 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Copyright and IP](docs/COPYRIGHT-IP.md) | Ownership, licensing, and reuse rules |
 | [Jurisdiction Matrix](docs/JURISDICTION-MATRIX.md) | Country-by-country legal review tracker |
 | [Domain Index](docs/DOMAIN-INDEX.md) | App, connector, and agent shortcut map by domain |
+| [App Registry](docs/APP-REGISTRY.md) | Current app surface with README mapping |
+| [App README Template](docs/APP-README-TEMPLATE.md) | Standard README layout for apps, connectors, and tools |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

@@ -24,6 +24,8 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Ownership Matrix](OWNERSHIP-MATRIX.md) for who owns code, data, deploys, and rollback
 - [Customer Handoff Pack](CUSTOMER-HANDOFF.md) for delivered product handoff
 - [Environment Matrix](ENVIRONMENT-MATRIX.md) for host, database, and deployment targets
+- [App Registry](APP-REGISTRY.md) for the current app surface and README mapping
+- [App README Template](APP-README-TEMPLATE.md) for app, connector, and tool docs
 
 ## Legal And Compliance
 
@@ -85,6 +87,12 @@ These are the default operating roles for project fleets:
 - review [Privacy Policy](PRIVACY-POLICY.md)
 - review [Copyright and IP Policy](COPYRIGHT-IP.md)
 - fill in the jurisdiction row before release
+
+### App Documentation
+
+- start with [App Registry](APP-REGISTRY.md)
+- copy [App README Template](APP-README-TEMPLATE.md)
+- link connectors through [Connector Catalog](CONNECTOR-CATALOG.md)
 
 ## Rule
 

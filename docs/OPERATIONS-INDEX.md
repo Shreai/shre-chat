@@ -27,6 +27,8 @@ This is the shared operating pack for every product.
 - [Copyright and IP Policy](COPYRIGHT-IP.md)
 - [Jurisdiction Matrix](JURISDICTION-MATRIX.md)
 - [Domain Index](DOMAIN-INDEX.md)
+- [App Registry](APP-REGISTRY.md)
+- [App README Template](APP-README-TEMPLATE.md)
 
 ## Rule
 
