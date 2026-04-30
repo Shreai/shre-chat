@@ -1,5 +1,5 @@
 import React from 'react';
-import ports from '../../ports.json';
+import ports from '../ports.json';
 import { usePreferences } from './preferences-store';
 
 // ── Notification sound (Web Audio API — no external files) ──────────

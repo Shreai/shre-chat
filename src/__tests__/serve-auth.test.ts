@@ -13,9 +13,9 @@
  * checking, and the public-path logic from serve.js.
  */
 
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -36,14 +36,27 @@ const json = createJsonHelper();
 const authCookie = createAuthCookieHelper();
 
 let handleAuth: ReturnType<typeof registerAuthRoutes>;
+const TEST_SIGNING_KEY = randomBytes(32);
+const TEST_SIGNING_KEY_PATH = join(homedir(), '.shre', 'auth', 'signing-key.hex');
+let createdSigningKey = false;
 
 beforeAll(() => {
+  if (!existsSync(TEST_SIGNING_KEY_PATH)) {
+    mkdirSync(join(homedir(), '.shre', 'auth'), { recursive: true });
+    writeFileSync(TEST_SIGNING_KEY_PATH, TEST_SIGNING_KEY.toString('hex'));
+    createdSigningKey = true;
+  }
   handleAuth = registerAuthRoutes({ log: log as any });
+});
+
+afterAll(() => {
+  if (createdSigningKey && existsSync(TEST_SIGNING_KEY_PATH)) {
+    unlinkSync(TEST_SIGNING_KEY_PATH);
+  }
 });
 
 // ── JWT test utilities (matching the algorithm in routes/auth.js) ────
 
-const TEST_SIGNING_KEY = randomBytes(32);
 const AUTH_TOKEN_TTL = 7 * 24 * 60 * 60;
 
 function issueTestToken(username: string, role = 'admin', signingKey = TEST_SIGNING_KEY): string {
@@ -98,10 +111,7 @@ function verifyTestToken(token: string, signingKey = TEST_SIGNING_KEY): any {
 }
 
 function issueGateToken(platformToken: string): string {
-  const signingKey = Buffer.from(
-    readFileSync(join(homedir(), '.shre', 'auth', 'signing-key.hex'), 'utf8').trim(),
-    'hex',
-  );
+  const signingKey = Buffer.from(readFileSync(TEST_SIGNING_KEY_PATH, 'utf8').trim(), 'hex');
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const payload = Buffer.from(
     JSON.stringify({

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from './store';
 import { SBadge } from '@shre/ui-kit';
-import ports from '../../ports.json';
+import ports from '../ports.json';
 
 interface CronJob {
   id: string;
