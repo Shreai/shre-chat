@@ -91,6 +91,15 @@ const APPROVAL_EVENT_TYPES = new Set([
   'project.pending_approval',
 ]);
 
+const CHANNEL_PARTICIPANTS: Record<string, string[]> = {
+  general: ['user', 'ellie', 'shre', 'architect', 'founding-engineer', 'compass', 'guardian', 'herald'],
+  code: ['user', 'ellie', 'shre', 'architect', 'founding-engineer', 'weaver', 'guardian'],
+  ops: ['user', 'ellie', 'shre', 'guardian', 'herald', 'pulse', 'compass'],
+  strategy: ['user', 'ellie', 'shre', 'architect', 'chief-scientist', 'compass', 'herald'],
+  alerts: ['user', 'ellie', 'shre', 'guardian', 'herald', 'pulse'],
+  approvals: ['user', 'ellie', 'shre', 'guardian', 'herald'],
+};
+
 export function getWorkspaceChannel(channelId: string): WorkspaceChannel | null {
   return CHANNEL_LOOKUP.get(channelId as WorkspaceChannelId) ?? null;
 }
@@ -115,4 +124,8 @@ export function resolveWorkspaceChannelForEvent(
   if (severity === 'critical' || severity === 'high') return 'alerts';
 
   return null;
+}
+
+export function getChannelParticipants(channelId: string): string[] {
+  return [...new Set(CHANNEL_PARTICIPANTS[channelId] || [])];
 }
