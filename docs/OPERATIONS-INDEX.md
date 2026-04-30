@@ -26,6 +26,7 @@ This is the shared operating pack for every product.
 - [Privacy Policy](PRIVACY-POLICY.md)
 - [Copyright and IP Policy](COPYRIGHT-IP.md)
 - [Jurisdiction Matrix](JURISDICTION-MATRIX.md)
+- [Domain Index](DOMAIN-INDEX.md)
 
 ## Rule
 

@@ -1,0 +1,91 @@
+# Domain Index
+
+This is the quick entry point for apps, connectors, and agent skills in the Shre AI platform.
+Use it to find the right operating docs by domain instead of hunting across folders.
+
+## How To Use
+
+- start with the product or work domain
+- open the app or connector doc that matches the system you are touching
+- follow the linked standards before editing code, flows, or credentials
+- if a domain is regulated or cross-border, check the legal pack and jurisdiction matrix first
+
+## Shre OS And Command Center
+
+- [Workflow](WORKFLOW.md) for mesh requests, product boundaries, and handoff rules
+- [Platform Standards](PLATFORM-STANDARDS.md) for shared operating rules
+- [Full-Stack Standards](FULL-STACK-STANDARDS.md) for backend/frontend separation
+- [Operations Index](OPERATIONS-INDEX.md) for releases, incidents, observability, and change control
+- [Guardrails](GUARDRAILS.md) for definition of done and evidence requirements
+
+## Products And Workspaces
+
+- [Product Boundaries](PRODUCT-BOUNDARIES.md) for Shre OS vs AROS separation
+- [Ownership Matrix](OWNERSHIP-MATRIX.md) for who owns code, data, deploys, and rollback
+- [Customer Handoff Pack](CUSTOMER-HANDOFF.md) for delivered product handoff
+- [Environment Matrix](ENVIRONMENT-MATRIX.md) for host, database, and deployment targets
+
+## Legal And Compliance
+
+- [Legal Docs Pack](LEGAL-DOCS-PACK.md) for terms, privacy, IP, and jurisdiction docs
+- [Terms and Conditions](TERMS-AND-CONDITIONS.md)
+- [Privacy Policy](PRIVACY-POLICY.md)
+- [Copyright and IP Policy](COPYRIGHT-IP.md)
+- [Jurisdiction Matrix](JURISDICTION-MATRIX.md)
+- [Compliance Register](COMPLIANCE-REGISTER.md)
+
+## Backend And API Domains
+
+- [API Reference](API.md)
+- [API Versioning](API-VERSIONING.md)
+- [Connector Catalog](CONNECTOR-CATALOG.md)
+- [Dependency Policy](DEPENDENCY-POLICY.md)
+- [Secrets Rotation](SECRETS-ROTATION.md)
+- [Threat Model](THREAT-MODEL.md)
+
+## Frontend And Design Domains
+
+- [Design Tokens](DESIGN-TOKENS.md)
+- [Trace Route](TRACE-ROUTE.md)
+- [Testing Guide](TESTING.md)
+- [Observability Standard](OBSERVABILITY-STANDARD.md)
+
+## Agent Roles
+
+These are the default operating roles for project fleets:
+
+- coordinator
+- tech stack expert
+- backend expert
+- frontend expert
+- infra expert
+- QA agent
+- security / pentest agent
+- marketing agent
+- support / docs agent
+- audit agent
+- trace-route agent
+
+## Domain Shortcuts
+
+### Retail / Petroleum
+
+- use [Platform Standards](PLATFORM-STANDARDS.md) for the Conexxus rule
+- prefer Conexxus-aligned schemas, connectors, and device behavior
+
+### Regulated Data
+
+- check [Compliance Register](COMPLIANCE-REGISTER.md)
+- check [Launch Approval](LAUNCH-APPROVAL-CHECKLIST.md)
+- check [Jurisdiction Matrix](JURISDICTION-MATRIX.md)
+
+### New Market Launch
+
+- review [Terms and Conditions](TERMS-AND-CONDITIONS.md)
+- review [Privacy Policy](PRIVACY-POLICY.md)
+- review [Copyright and IP Policy](COPYRIGHT-IP.md)
+- fill in the jurisdiction row before release
+
+## Rule
+
+If a domain does not have a linked doc yet, create the doc before wiring new code or adding a connector.

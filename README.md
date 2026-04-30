@@ -136,6 +136,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Privacy Policy](docs/PRIVACY-POLICY.md) | Privacy notice template and review triggers |
 | [Copyright and IP](docs/COPYRIGHT-IP.md) | Ownership, licensing, and reuse rules |
 | [Jurisdiction Matrix](docs/JURISDICTION-MATRIX.md) | Country-by-country legal review tracker |
+| [Domain Index](docs/DOMAIN-INDEX.md) | App, connector, and agent shortcut map by domain |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |
