@@ -119,6 +119,8 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for environment variables, po
 | Document | Description |
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System design, data flow, component map |
+| [Workflow](docs/WORKFLOW.md) | Deployment requests, mesh handoff, and product boundaries |
+| [Product Boundaries](docs/PRODUCT-BOUNDARIES.md) | Shre OS vs AROS ownership and dashboard guidance |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

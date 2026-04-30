@@ -4,6 +4,10 @@
 
 Shre Chat is a browser-first chat UI that can run either through `shre-router` or directly against the local chat service. It runs as a static site with a Node.js backend proxy (`serve.js`) handling auth, streaming, sessions, and sync.
 
+Shre Chat is also the command surface for Shre OS. Product launches may flow through it, but product ownership stays separate from the command center. If a product like AROS needs its own identity, release cadence, or support path, treat it as a separate product with shared platform services rather than a hard fork of the core shell.
+
+AROS can layer on its own theme pack and brand tokens while reusing the shared shell, which gives it a distinct identity without duplicating the core UI.
+
 ```
                                     Shre Platform
                  ┌──────────────────────────────┐
