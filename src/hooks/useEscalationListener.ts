@@ -16,6 +16,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { setPlan, updateTaskStatus, updatePlanStatus, parsePlanTasks } from '../planStore';
 import { isDevSafeMode } from '../env';
+import { resolveWorkspaceChannelForEvent } from '../workspace-channels';
 
 interface EscalationEvent {
   type: string;
@@ -48,6 +49,10 @@ const ESCALATION_TYPES = new Set([
 
 export interface UseEscalationListenerOptions {
   activeSessionId: string | null;
+  openWorkspaceChannel: (
+    channelId: string,
+    opts?: { focus?: boolean; agentId?: string },
+  ) => string;
   addMessage: (
     sessionId: string,
     msg: {
@@ -61,6 +66,7 @@ export interface UseEscalationListenerOptions {
 
 export function useEscalationListener({
   activeSessionId,
+  openWorkspaceChannel,
   addMessage,
 }: UseEscalationListenerOptions): void {
   const devSafeMode = isDevSafeMode();
@@ -122,7 +128,13 @@ export function useEscalationListener({
             return;
           }
 
-          const targetSession = String(data.sessionId || activeSessionIdRef.current || '').trim();
+          const channelId = resolveWorkspaceChannelForEvent(data.type, data);
+          const targetSession = String(
+            data.sessionId ||
+              (channelId ? openWorkspaceChannel(channelId, { focus: false }) : '') ||
+              activeSessionIdRef.current ||
+              '',
+          ).trim();
           if (!targetSession) return;
 
           switch (data.type) {

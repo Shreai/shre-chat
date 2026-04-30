@@ -199,23 +199,30 @@ Return the current Slack/email delivery config and effective status.
 
 ### PUT /api/notification-delivery/config
 
-Persist local Slack/email delivery config in `~/.shre/shre-chat-notification-delivery.json`.
+Persist local Slack/email delivery toggles and account settings in `~/.shre/shre-chat-notification-delivery.json`.
+Secret values such as webhook URLs, route maps, and email recipients should be entered through the secure ingest flow.
 
 **Body:**
 ```json
 {
   "slackEnabled": true,
-  "slackWebhookUrl": "https://hooks.slack.com/services/...",
-  "slackWebhookRoutes": {
-    "fleet": "https://hooks.slack.com/services/...",
-    "project:abc123": "https://hooks.slack.com/services/..."
-  },
   "emailEnabled": true,
-  "emailTo": "alerts@company.com",
   "emailAccount": "default",
   "importantOnly": true
 }
 ```
+
+### POST /api/notification-delivery/secure-link
+
+Create a one-time secure ingest link for vault-backed secrets.
+
+### GET /api/notification-delivery/ingest/:token
+
+Open the secure ingest page for a one-time token.
+
+### POST /api/notification-delivery/ingest/:token
+
+Save secret Slack/email delivery values into the local encrypted vault.
 
 ### POST /api/notification-delivery/test
 

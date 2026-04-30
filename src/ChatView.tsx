@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { ProcessBar, ProcessDetail, useProcessRun } from './components/process-bar';
 import type { ChatMessage } from './router-client';
 import { useApp, generateTitle, getAgent, AGENTS, type Session, type View } from './store';
@@ -45,6 +45,10 @@ import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { ShareSnapshotView } from './components/ShareSnapshotView';
 import { SuggestionsBar } from './components/SuggestionsBar';
 import { ViewTabs } from './components/ViewTabs';
+import {
+  EscalationDrawer,
+  type EscalationFormValues,
+} from './components/EscalationDrawer';
 import { AppsDrawer } from './components/AppsDrawer';
 import { PreviewPanel } from './components/PreviewPanel';
 import { ArtifactCanvas, extractArtifacts, type Artifact } from './components/ArtifactCanvas';
@@ -72,6 +76,7 @@ export function ChatView() {
     return '';
   });
   const [showApps, setShowApps] = useState(false);
+  const [showEscalationDrawer, setShowEscalationDrawer] = useState(false);
   const [showHeaderMore, setShowHeaderMore] = useState(false);
   const headerMoreRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -204,7 +209,11 @@ export function ChatView() {
     fetchTrace,
   } = useTaskTracker({ sessionId: activeSessionId });
 
-  useEscalationListener({ activeSessionId, addMessage: actions.addMessage });
+  useEscalationListener({
+    activeSessionId,
+    openWorkspaceChannel: actions.openWorkspaceChannel,
+    addMessage: actions.addMessage,
+  });
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(() =>
     getModelOverride(activeAgentId),
@@ -374,6 +383,30 @@ export function ChatView() {
     actions,
   });
   const activeAppLabel = appOptions.find((app) => app.id === activeAppId)?.label ?? null;
+  const escalationNoteSeed = useMemo(() => {
+    if (pendingApproval) {
+      const lines = [`Tool: ${pendingApproval.tool}`, `Reason: ${pendingApproval.reason}`];
+      const input = pendingApproval.input || {};
+      if (typeof input.command === 'string' && input.command.trim()) {
+        lines.push(`Command: ${input.command.trim()}`);
+      }
+      if (typeof input.path === 'string' && input.path.trim()) {
+        lines.push(`Path: ${input.path.trim()}`);
+      }
+      const extra = Object.entries(input)
+        .filter(([key]) => key !== 'command' && key !== 'path')
+        .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+      return [...lines, ...extra].join('\n');
+    }
+    if (statusLine?.trim()) return `Current status: ${statusLine.trim()}`;
+    const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+    if (lastUserMessage?.content?.trim()) return lastUserMessage.content.trim();
+    return `Need approval or a handoff for ${activeSession?.title || currentAgent.name}.`;
+  }, [pendingApproval, statusLine, messages, activeSession?.title, currentAgent.name]);
+
+  const escalationSubjectSeed = pendingApproval
+    ? `Approval needed: ${pendingApproval.tool}`
+    : `Blocked on ${activeSession?.title || currentAgent.name}`;
 
   useEffect(() => {
     const next = conversationMode === 'code';
@@ -782,6 +815,95 @@ export function ChatView() {
     virtualizer,
   });
 
+  const handleEscalationSubmit = useCallback(
+    async ({ destinations, note, subject, emailTo }: EscalationFormValues) => {
+      const sessionId = ensureSession();
+      const cleanedNote = note.trim();
+      const cleanedSubject = subject.trim();
+      const cleanedEmailTo = emailTo.trim();
+      const selected = new Set(destinations);
+
+      if (selected.has('chat')) {
+        actions.addMessage(sessionId, {
+          role: 'assistant',
+          content: `[system] Escalation sent to chat${selected.has('slack') ? ', Slack' : ''}${selected.has('email') ? ', email' : ''}.\n\n${cleanedNote}`,
+          timestamp: Date.now(),
+          meta: {
+            system: 'true',
+            type: 'approval.requested',
+            destination: 'chat',
+            subject: cleanedSubject,
+            mode: conversationMode,
+          },
+        });
+        actions.addActivity(sessionId, 'warning', `Escalation logged in chat: ${cleanedSubject}`);
+        actions.addSessionTag(sessionId, 'escalation');
+      }
+
+      if (selected.has('slack')) {
+        const slackRes = await fetch('/api/notification-delivery/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'approval.requested',
+            title: cleanedSubject,
+            body: cleanedNote,
+            source: `shre-chat:${conversationMode}${activeAppId ? `:${activeAppId}` : ''}`,
+            url: window.location.href,
+            channels: ['slack'],
+          }),
+        });
+        if (!slackRes.ok) {
+          throw new Error(`Slack escalation failed (${slackRes.status})`);
+        }
+        actions.addActivity(sessionId, 'warning', `Slack escalation sent: ${cleanedSubject}`);
+        actions.addSessionTag(sessionId, 'slack-escalation');
+      }
+
+      if (selected.has('email')) {
+        if (!cleanedEmailTo) throw new Error('Email recipient is required.');
+        const draftRes = await fetch('/api/email/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: cleanedEmailTo,
+            subject: cleanedSubject,
+            context: cleanedNote,
+          }),
+        });
+        if (!draftRes.ok) {
+          throw new Error(`Email draft failed (${draftRes.status})`);
+        }
+        const draftData = await draftRes.json();
+        const emailBody =
+          typeof draftData?.body === 'string' && draftData.body.trim()
+            ? draftData.body.trim()
+            : cleanedNote;
+        const sendRes = await fetch('/api/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: cleanedEmailTo,
+            subject: cleanedSubject,
+            body: emailBody,
+          }),
+        });
+        if (!sendRes.ok) {
+          throw new Error(`Email send failed (${sendRes.status})`);
+        }
+        actions.addActivity(sessionId, 'warning', `Email escalation sent to ${cleanedEmailTo}`);
+        actions.addSessionTag(sessionId, 'email-escalation');
+      }
+
+      actions.setStatusLine(
+        `Escalation sent${selected.has('email') ? ' via email' : ''}${selected.has('slack') ? ' and Slack' : ''}`,
+      );
+      window.setTimeout(() => actions.setStatusLine(null), 3500);
+      setShowEscalationDrawer(false);
+    },
+    [actions, ensureSession, conversationMode, activeAppId],
+  );
+
   if (!activeAgentId) return null;
 
   return (
@@ -840,6 +962,7 @@ export function ChatView() {
               activeAppId={activeAppId}
               activeAppLabel={activeAppLabel}
               onSetConversationMode={setConversationMode}
+              onOpenEscalation={() => setShowEscalationDrawer(true)}
             />
           }
           content={
@@ -892,6 +1015,7 @@ export function ChatView() {
                 onPullEnd={handlePullEnd}
                 onJumpToLatest={jumpToLatest}
                 {...messageListHandlers}
+                onEscalate={() => setShowEscalationDrawer(true)}
                 onModeSwitchRequest={(mode: string) =>
                   setConversationMode(mode as ConversationModeId)
                 }
@@ -1229,6 +1353,19 @@ export function ChatView() {
         open={showApps}
         onClose={() => setShowApps(false)}
         activeAgentId={activeAgentId}
+      />
+      <EscalationDrawer
+        open={showEscalationDrawer}
+        onClose={() => setShowEscalationDrawer(false)}
+        onSubmit={handleEscalationSubmit}
+        sessionTitle={activeSession?.title || 'Chat'}
+        agentName={currentAgent.name}
+        conversationMode={conversationMode}
+        activeAppLabel={activeAppLabel}
+        pendingApproval={pendingApproval}
+        statusLine={statusLine}
+        initialNote={escalationNoteSeed}
+        initialSubject={escalationSubjectSeed}
       />
       <Suspense fallback={null}>
         <VoiceAssistant

@@ -143,6 +143,12 @@ export interface MessageListProps {
   onContentExpand: (content: string, type: string, title?: string) => void;
   onApprove: (approvalId: string) => void;
   onDeny: (approvalId: string) => void;
+  onEscalate?: (approval: {
+    approvalId: string;
+    tool: string;
+    reason: string;
+    input?: Record<string, unknown>;
+  }) => void;
   onModeSwitchRequest?: (mode: string) => void;
 
   // Virtualizer (passed from parent so it's shared for search navigation)
@@ -209,6 +215,7 @@ export function MessageList(props: MessageListProps) {
     onContentExpand,
     onApprove,
     onDeny,
+    onEscalate,
     virtualizer,
     useVirtual,
   } = props;
@@ -636,6 +643,14 @@ export function MessageList(props: MessageListProps) {
                   >
                     Deny
                   </button>
+                  {onEscalate && (
+                    <button
+                      onClick={() => onEscalate(pendingApproval)}
+                      className="px-3 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs rounded border border-amber-500/30"
+                    >
+                      Escalate
+                    </button>
+                  )}
                 </div>
               </div>
             )}

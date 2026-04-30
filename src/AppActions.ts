@@ -17,6 +17,7 @@ import {
   uid,
   createSession,
   createVoiceSession,
+  findSessionByTag,
   saveTabs,
   saveActiveSession,
   debouncedSaveSessions,
@@ -34,6 +35,7 @@ import {
   saveSessions,
 } from './store';
 import { scopedStorageKey } from './workspace-context';
+import { getWorkspaceChannelTag, getWorkspaceChannelTitle } from './workspace-channels';
 import type { ActivityStatus, ChatMessage } from './router-client';
 
 const FALLBACK_AGENT_ID = 'ellie';
@@ -130,6 +132,32 @@ export function buildActions(deps: ActionDeps): AppActions {
         return next;
       });
       return s.id;
+    },
+
+    openWorkspaceChannel: (channelId, opts = {}) => {
+      const tag = getWorkspaceChannelTag(channelId);
+      const existing = findSessionByTag(sessionsRef.current, tag);
+      if (existing) {
+        if (opts.focus !== false) {
+          actions.switchSession(existing.id);
+          setView('chat');
+        }
+        return existing.id;
+      }
+
+      const session = createSession(getWorkspaceChannelTitle(channelId), opts.agentId || agentRef.current);
+      session.tags = [tag];
+      updateSessions((prev) => [...prev, session]);
+      if (opts.focus !== false) {
+        setOpenTabs((prev) => {
+          const next = [...prev, session.id];
+          saveTabs(next);
+          return next;
+        });
+        actions.switchSession(session.id);
+        setView('chat');
+      }
+      return session.id;
     },
 
     getOrCreateVoiceSession: (agentId: string) => {

@@ -1079,6 +1079,10 @@ export function createSession(title?: string, agentId?: string): Session {
   };
 }
 
+export function findSessionByTag(sessions: Session[], tag: string): Session | null {
+  return sessions.find((session) => session.tags?.includes(tag)) ?? null;
+}
+
 export function createVoiceSession(agentId?: string): Session {
   const normalizedAgentId = agentId === 'nova' ? 'ellie' : agentId;
   return {
@@ -1167,6 +1171,10 @@ export async function shareSession(sessionId: string): Promise<string> {
 
 export interface AppActions {
   newSession: () => string;
+  openWorkspaceChannel: (
+    channelId: string,
+    opts?: { focus?: boolean; agentId?: string },
+  ) => string;
   switchSession: (id: string) => void;
   closeTab: (id: string) => void;
   deleteSession: (id: string) => void;

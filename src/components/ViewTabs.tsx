@@ -47,6 +47,7 @@ interface ViewTabsProps {
   activeAppId?: string | null;
   activeAppLabel?: string | null;
   onSetConversationMode?: (mode: ConversationModeId, appId?: string | null) => void;
+  onOpenEscalation?: () => void;
 }
 
 export function ViewTabs({
@@ -64,6 +65,7 @@ export function ViewTabs({
   activeAppId,
   activeAppLabel,
   onSetConversationMode,
+  onOpenEscalation,
 }: ViewTabsProps) {
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerVisible =
@@ -221,6 +223,33 @@ export function ViewTabs({
       </div>
 
       <div className="ml-auto flex items-center gap-1 shrink-0">
+        {onOpenEscalation && (
+          <button
+            type="button"
+            onClick={onOpenEscalation}
+            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-[rgba(251,191,36,0.12)]"
+            style={{ color: '#fbbf24' }}
+            title="Open escalation drawer"
+          >
+            <svg
+              className="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 2v6" />
+              <path d="M12 16v6" />
+              <path d="m4.93 4.93 4.24 4.24" />
+              <path d="m14.83 14.83 4.24 4.24" />
+              <path d="M2 12h6" />
+              <path d="M16 12h6" />
+              <path d="m4.93 19.07 4.24-4.24" />
+              <path d="m14.83 9.17 4.24-4.24" />
+            </svg>
+            Escalate
+          </button>
+        )}
         {modelPickerVisible && (
           <ModelPicker
             open={!!showModelPicker}

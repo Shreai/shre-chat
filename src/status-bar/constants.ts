@@ -16,6 +16,8 @@ export const NOTIF_ICONS: Record<string, string> = {
   'fleet.task.degraded': '\u26a0\ufe0f',
   'fleet.agent.crash_unrecoverable': '\ud83d\udca5',
   'deploy.monitor.breach': '\ud83d\udea8',
+  'approval.requested': '\ud83d\udd12',
+  'approval.resolved': '\u2705',
   'fleet.code_quality': '\ud83d\udcc8',
   'fleet.done-gate.failed': '\ud83d\uded1',
   'fleet.verify.passed': '\u2705',
@@ -71,6 +73,9 @@ export const IMPORTANT_TYPES = new Set([
   'task.diverged',
   'service.unhealthy',
   'agent.quality_alert',
+  'approval.requested',
+  'approval.resolved',
+  'deploy.monitor.breach',
 ]);
 
 export const NOTIF_FILTERS: { key: NotifFilter; label: string }[] = [

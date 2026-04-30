@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 
 const CONFIG_DIR = join(homedir(), ".shre");
 const CONFIG_PATH = join(CONFIG_DIR, "shre-chat-notification-delivery.json");
@@ -36,7 +36,6 @@ const IMPORTANT_TYPES = new Set([
  * @property {string} slackWebhookUrl
  * @property {Record<string, string>} slackWebhookRoutes
  * @property {string} emailTo
- * @property {Record<string, string>} slackWebhookRoutes
  * @property {boolean} emailEnabled
  * @property {string} emailAccount
  * @property {boolean} importantOnly
@@ -408,7 +407,7 @@ async function sendSlackNotification(payload, config, log) {
     return { ok: true };
   } catch (error) {
     log.warn("Slack delivery failed", { error: String(error) });
-      return { ok: false, error: String(error) };
+    return { ok: false, error: String(error) };
   }
 }
 

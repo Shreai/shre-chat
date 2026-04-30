@@ -96,7 +96,8 @@ For production behind Cloudflare Tunnel, TLS termination happens at the tunnel â
 | `~/.shre/auth/signing-key.hex` | JWT signing key |
 | `~/.shre/tls/` | TLS certificate and key |
 | `~/.shre/training/` | Training data WAL |
-| `~/.shre/shre-chat-notification-delivery.json` | Slack/email notification delivery config and route map |
+| `~/.shre/shre-chat-notification-delivery.json` | Slack/email notification delivery toggles and account settings |
+| `~/.shre/vault/shre-chat-notification-delivery.vault` | Encrypted Slack webhook URLs, route maps, and email recipient secrets |
 | `~/Library/Logs/shre-services/` | Service logs (macOS) |
 
 ## Cloudflare Tunnel

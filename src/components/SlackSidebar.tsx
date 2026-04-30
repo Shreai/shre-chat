@@ -2,45 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AGENTS, getAgent, useApp, type Session } from '../store';
 import { usePreferences, type ConversationModeId } from '../preferences-store';
 import { useAppList } from '../hooks/useAppList';
+import {
+  WORKSPACE_CHANNELS,
+  getWorkspaceChannelTag,
+} from '../workspace-channels';
 
 type SidebarScope = 'channel' | 'dm' | 'app';
-
-const CHANNELS: Array<{
-  id: string;
-  label: string;
-  description: string;
-  mode: ConversationModeId;
-  accent: string;
-}> = [
-  {
-    id: 'general',
-    label: 'general',
-    description: 'Company-wide coordination and default work',
-    mode: 'assistant',
-    accent: '#7c8cff',
-  },
-  {
-    id: 'code',
-    label: 'code',
-    description: 'Autonomous build, debug, and ship loops',
-    mode: 'code',
-    accent: '#4ade80',
-  },
-  {
-    id: 'ops',
-    label: 'ops',
-    description: 'Infra, incidents, approvals, and guardrails',
-    mode: 'ops',
-    accent: '#f59e0b',
-  },
-  {
-    id: 'strategy',
-    label: 'strategy',
-    description: 'Planning, priorities, and decision context',
-    mode: 'strategy',
-    accent: '#f472b6',
-  },
-];
 
 function formatShortTime(ts: number) {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -142,13 +109,8 @@ export function SlackSidebar() {
   };
 
   const openChannel = (channelId: string, mode: ConversationModeId) => {
-    const channel = CHANNELS.find((item) => item.id === channelId);
     setConversationMode(mode, null);
-    openScopedSession({
-      scope: 'channel',
-      id: channelId,
-      title: channel ? `#${channel.label}` : `#${channelId}`,
-    });
+    actions.openWorkspaceChannel(channelId, { focus: true });
   };
 
   const openDm = (agentId: string, title: string) => {
@@ -169,7 +131,7 @@ export function SlackSidebar() {
     });
   };
 
-  const visibleChannels = CHANNELS.filter((channel) =>
+  const visibleChannels = WORKSPACE_CHANNELS.filter((channel) =>
     matches(`${channel.label} ${channel.description}`),
   );
   const visibleAgents = sortedAgents.filter((agent) =>
@@ -319,7 +281,7 @@ export function SlackSidebar() {
             {visibleChannels.map((channel) => {
               const active =
                 conversationMode === channel.mode &&
-                latestSessionForTag(state.sessions, scopeTag('channel', channel.id))?.id ===
+                latestSessionForTag(state.sessions, getWorkspaceChannelTag(channel.id))?.id ===
                   state.activeSessionId;
               return (
                 <NavRow

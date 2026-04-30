@@ -95,6 +95,7 @@ interface NotificationDeliveryConfig {
 
 interface NotificationDeliveryStatus {
   config: NotificationDeliveryConfig;
+  raw?: Partial<NotificationDeliveryConfig>;
   env: {
     slackWebhookConfigured: boolean;
     slackWebhookRoutesConfigured?: boolean;
@@ -260,7 +261,6 @@ export function AdminView() {
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [deliveryStatus, setDeliveryStatus] = useState<NotificationDeliveryStatus | null>(null);
   const [deliveryDraft, setDeliveryDraft] = useState<NotificationDeliveryConfig | null>(null);
-  const [deliveryRoutesText, setDeliveryRoutesText] = useState('');
   const [deliverySaving, setDeliverySaving] = useState(false);
   const [secureIngestLink, setSecureIngestLink] = useState<string | null>(null);
   const [secureLinkLoading, setSecureLinkLoading] = useState(false);
@@ -301,8 +301,7 @@ export function AdminView() {
     setRules(nextRules);
     if (deliveryData) {
       setDeliveryStatus(deliveryData);
-      setDeliveryDraft(deliveryData.config);
-      setDeliveryRoutesText(JSON.stringify(deliveryData.config.slackWebhookRoutes || {}, null, 2));
+      setDeliveryDraft((deliveryData.raw ?? deliveryData.config) as NotificationDeliveryConfig);
     }
     setSelectedRuleId((current) => {
       if (current && nextRules.some((rule) => rule.id === current)) return current;
@@ -470,28 +469,20 @@ export function AdminView() {
     setDeliveryError(null);
     setDeliveryTestResult(null);
     try {
-      let slackWebhookRoutes: Record<string, string> = {};
-      if (deliveryRoutesText.trim()) {
-        const parsed = JSON.parse(deliveryRoutesText) as unknown;
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error('Slack routes must be a JSON object keyed by source or workspace');
-        }
-        slackWebhookRoutes = Object.fromEntries(
-          Object.entries(parsed as Record<string, unknown>)
-            .filter(([, url]) => typeof url === 'string' && url.trim())
-            .map(([key, url]) => [String(key).trim(), String(url).trim()]),
-        );
-      }
       const res = await fetch('/api/notification-delivery/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...deliveryDraft, slackWebhookRoutes }),
+        body: JSON.stringify({
+          slackEnabled: deliveryDraft.slackEnabled,
+          emailEnabled: deliveryDraft.emailEnabled,
+          emailAccount: deliveryDraft.emailAccount,
+          importantOnly: deliveryDraft.importantOnly,
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
       const updated = (await res.json()) as NotificationDeliveryStatus;
       setDeliveryStatus(updated);
-      setDeliveryDraft(updated.config);
-      setDeliveryRoutesText(JSON.stringify(updated.config.slackWebhookRoutes || {}, null, 2));
+      setDeliveryDraft((updated.raw ?? updated.config) as NotificationDeliveryConfig);
       setDeliveryTestResult('Saved notification delivery settings.');
     } catch (err) {
       setDeliveryError(
@@ -653,6 +644,63 @@ export function AdminView() {
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      <div
+                        className="rounded-xl p-3 border"
+                        style={{
+                          background: 'var(--c-bg-1)',
+                          borderColor: 'var(--c-border-2)',
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div>
+                            <div className="font-medium" style={{ color: 'var(--c-text-1)' }}>
+                              Vault secret ingest
+                            </div>
+                            <div className="text-[11px] mt-1" style={{ color: 'var(--c-text-4)' }}>
+                              Generate a one-time secure link to paste Slack webhook URLs, route
+                              maps, and email recipients into the local vault.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={generateSecureLink}
+                            disabled={secureLinkLoading}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                            style={{
+                              background: 'var(--c-bg-2)',
+                              color: 'var(--c-text-2)',
+                              border: '1px solid var(--c-border-2)',
+                              opacity: secureLinkLoading ? 0.7 : 1,
+                            }}
+                          >
+                            {secureLinkLoading ? 'Generating…' : 'Generate secure link'}
+                          </button>
+                        </div>
+                        {secureIngestLink && (
+                          <div className="mt-3 grid gap-2">
+                            <input
+                              readOnly
+                              value={secureIngestLink}
+                              className="w-full rounded-lg px-3 py-2 text-sm outline-none font-mono"
+                              style={{
+                                background: 'var(--c-bg-2)',
+                                border: '1px solid var(--c-border-2)',
+                                color: 'var(--c-text-1)',
+                              }}
+                            />
+                            <a
+                              href={secureIngestLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs underline"
+                              style={{ color: 'var(--c-accent)' }}
+                            >
+                              Open secure ingest page
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <label
                           className="rounded-xl p-3 border"
@@ -677,23 +725,8 @@ export function AdminView() {
                               Slack
                             </span>
                           </div>
-                          <input
-                            value={deliveryDraft.slackWebhookUrl}
-                            onChange={(e) =>
-                              setDeliveryDraft((current) =>
-                                current ? { ...current, slackWebhookUrl: e.target.value } : current,
-                              )
-                            }
-                            placeholder="https://hooks.slack.com/services/..."
-                            className="mt-3 w-full rounded-lg px-3 py-2 text-sm outline-none"
-                            style={{
-                              background: 'var(--c-bg-2)',
-                              border: '1px solid var(--c-border-2)',
-                              color: 'var(--c-text-1)',
-                            }}
-                          />
                           <div className="mt-3 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
-                            Default Slack webhook. Used when no route matches.
+                            Slack webhook URLs are entered through the secure ingest link.
                           </div>
                         </label>
                         <label
@@ -721,21 +754,6 @@ export function AdminView() {
                           </div>
                           <div className="mt-3 grid grid-cols-1 gap-2">
                             <input
-                              value={deliveryDraft.emailTo}
-                              onChange={(e) =>
-                                setDeliveryDraft((current) =>
-                                  current ? { ...current, emailTo: e.target.value } : current,
-                                )
-                              }
-                              placeholder="alerts@company.com"
-                              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                              style={{
-                                background: 'var(--c-bg-2)',
-                                border: '1px solid var(--c-border-2)',
-                                color: 'var(--c-text-1)',
-                              }}
-                            />
-                            <input
                               value={deliveryDraft.emailAccount}
                               onChange={(e) =>
                                 setDeliveryDraft((current) =>
@@ -751,41 +769,11 @@ export function AdminView() {
                               }}
                             />
                           </div>
+                          <div className="mt-3 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                            Email recipient addresses are also saved through the secure ingest link.
+                          </div>
                         </label>
                       </div>
-
-                      <label
-                        className="rounded-xl p-3 border block"
-                        style={{
-                          background: 'var(--c-bg-1)',
-                          borderColor: 'var(--c-border-2)',
-                        }}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium" style={{ color: 'var(--c-text-1)' }}>
-                            Slack route map
-                          </span>
-                          <span className="text-[11px]" style={{ color: 'var(--c-text-4)' }}>
-                            JSON object: source or workspace key → webhook URL
-                          </span>
-                        </div>
-                        <textarea
-                          value={deliveryRoutesText}
-                          onChange={(e) => setDeliveryRoutesText(e.target.value)}
-                          placeholder={`{
-  "fleet": "https://hooks.slack.com/services/...",
-  "shre-router": "https://hooks.slack.com/services/...",
-  "project:abc123": "https://hooks.slack.com/services/..."
-}`}
-                          rows={8}
-                          className="mt-3 w-full rounded-lg px-3 py-2 text-sm outline-none font-mono"
-                          style={{
-                            background: 'var(--c-bg-2)',
-                            border: '1px solid var(--c-border-2)',
-                            color: 'var(--c-text-1)',
-                          }}
-                        />
-                      </label>
 
                       <label
                         className="flex items-center gap-2 text-sm"
