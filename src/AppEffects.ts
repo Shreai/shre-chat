@@ -57,11 +57,20 @@ export function useThemeEffect(theme: Theme) {
 export function useThemeCustomEffect(themeCustom: ThemeCustom) {
   useEffect(() => {
     const el = document.documentElement.style;
-    if (themeCustom.accentColor) {
-      el.setProperty('--c-accent', themeCustom.accentColor);
-      el.setProperty('--c-accent-hover', themeCustom.accentColor + 'cc');
-      el.setProperty('--c-accent-soft', themeCustom.accentColor + '40');
-      el.setProperty('--c-scrollbar', themeCustom.accentColor + '40');
+    document.documentElement.dataset.productPack = themeCustom.themePack || 'custom';
+    const packAccentMap: Record<NonNullable<ThemeCustom['themePack']>, string> = {
+      'shre-os': '#2563eb',
+      aros: '#0f766e',
+      workspace: '#7c3aed',
+      custom: '#2563eb',
+    };
+    const packAccent = themeCustom.themePack ? packAccentMap[themeCustom.themePack] : undefined;
+    const accent = themeCustom.accentColor || packAccent;
+    if (accent) {
+      el.setProperty('--c-accent', accent);
+      el.setProperty('--c-accent-hover', accent + 'cc');
+      el.setProperty('--c-accent-soft', accent + '40');
+      el.setProperty('--c-scrollbar', accent + '40');
     } else {
       el.removeProperty('--c-accent');
       el.removeProperty('--c-accent-hover');

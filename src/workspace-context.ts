@@ -5,6 +5,8 @@ export interface WorkspaceContext {
   isDefault?: boolean;
 }
 
+export type ProductShell = 'shre-os' | 'aros' | 'workspace';
+
 export const AUTH_TOKEN_KEY = 'shre-auth-token';
 export const AUTH_USER_KEY = 'shre-auth-user';
 export const AUTH_WORKSPACE_KEY = 'shre-auth-workspace';
@@ -138,4 +140,15 @@ export function getAppModeForHost(hostname?: string | null): 'chat' | 'documents
 
   if (host === 'shre.nirtek.net') return 'documents';
   return 'chat';
+}
+
+export function getProductShellForHost(hostname?: string | null): ProductShell {
+  const host = normalizeScopePart(
+    hostname ?? (typeof window !== 'undefined' ? window.location.hostname : null),
+    '',
+  ).toLowerCase();
+
+  if (host.includes('mib.nirtek.net') || host.includes('shre')) return 'shre-os';
+  if (host.includes('aros')) return 'aros';
+  return 'workspace';
 }

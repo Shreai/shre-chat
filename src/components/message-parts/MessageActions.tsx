@@ -64,6 +64,7 @@ export function MessageActions({
   onRegenerate,
   onBranch,
   onReaction,
+  onOpenThread,
 }: {
   content: string;
   feedback?: 'like' | 'dislike' | null;
@@ -71,6 +72,7 @@ export function MessageActions({
   onRegenerate?: () => void;
   onBranch?: () => void;
   onReaction?: (emoji: string) => void;
+  onOpenThread?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -280,6 +282,30 @@ export function MessageActions({
               closeMenu();
             }}
           />
+          {onOpenThread && (
+            <MenuAction
+              label="Open thread"
+              icon={
+                <svg
+                  className="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M7 8h10" />
+                  <path d="M7 12h6" />
+                  <path d="M7 16h8" />
+                  <path d="M21 15a2 2 0 0 1-2 2H9l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />
+                </svg>
+              }
+              tone="var(--c-text-2)"
+              onClick={() => {
+                onOpenThread();
+                closeMenu();
+              }}
+            />
+          )}
           <MenuAction
             label={feedback === 'like' ? 'Marked helpful' : 'Helpful'}
             icon={

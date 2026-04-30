@@ -138,6 +138,7 @@ export interface MessageListProps {
   onBranch: (msgIndex: number) => void;
   onReaction: (msgIndex: number, emoji: string) => void;
   onReply: (msgIndex: number) => void;
+  onToggleBookmark: (msgIndex: number) => void;
   onRetry: (msgIndex: number) => void;
   onRunCommand: (cmd: string) => void;
   onContentExpand: (content: string, type: string, title?: string) => void;
@@ -210,6 +211,7 @@ export function MessageList(props: MessageListProps) {
     onBranch,
     onReaction,
     onReply,
+    onToggleBookmark,
     onRetry,
     onRunCommand,
     onContentExpand,
@@ -219,6 +221,43 @@ export function MessageList(props: MessageListProps) {
     virtualizer,
     useVirtual,
   } = props;
+
+  const filteredToOriginalIndices = useMemo(
+    () =>
+      filteredMessages.map((msg) => {
+        const direct = messages.indexOf(msg);
+        if (direct >= 0) return direct;
+        return messages.findIndex(
+          (candidate) =>
+            candidate.timestamp === msg.timestamp &&
+            candidate.role === msg.role &&
+            candidate.content === msg.content,
+        );
+      }),
+    [filteredMessages, messages],
+  );
+
+  const threadStats = useMemo(() => {
+    const stats = new Map<number, { count: number; latestIndex: number; latestPreview: string }>();
+    messages.forEach((msg, idx) => {
+      if (msg.replyTo == null) return;
+      const rootIndex = msg.replyTo;
+      if (rootIndex < 0 || rootIndex >= messages.length) return;
+      const root = messages[rootIndex];
+      const existing = stats.get(rootIndex);
+      const nextPreview =
+        msg.content.replace(/\n/g, ' ').slice(0, 120) || root.content.slice(0, 120);
+      stats.set(rootIndex, {
+        count: (existing?.count || 0) + 1,
+        latestIndex:
+          !existing || (msg.timestamp || 0) >= (messages[existing.latestIndex]?.timestamp || 0)
+            ? idx
+            : existing.latestIndex,
+        latestPreview: nextPreview,
+      });
+    });
+    return stats;
+  }, [messages]);
 
   const renderMessageProps = useCallback(
     (msg: ChatMessage, i: number) => ({
@@ -247,6 +286,7 @@ export function MessageList(props: MessageListProps) {
       onBranch: () => onBranch(i),
       onReaction: (emoji: string) => onReaction(i, emoji),
       onReply: () => onReply(i),
+      onToggleBookmark: () => onToggleBookmark(i),
       replyPreview:
         msg.replyTo != null
           ? ((filteredMessages[msg.replyTo] ?? messages[msg.replyTo])?.content
@@ -257,6 +297,15 @@ export function MessageList(props: MessageListProps) {
       onRetry:
         !streaming && msg.role === 'assistant' && msg.content.startsWith('Error:')
           ? () => onRetry(i)
+          : undefined,
+      threadReplyCount: threadStats.get(filteredToOriginalIndices[i] ?? i)?.count ?? 0,
+      threadLatestReplyPreview:
+        threadStats.get(filteredToOriginalIndices[i] ?? i)?.latestPreview ?? null,
+      onOpenThread:
+        threadStats.get(filteredToOriginalIndices[i] ?? i)?.latestIndex != null
+          ? () => {
+              virtualizer.scrollToIndex(i, { align: 'center' });
+            }
           : undefined,
       onContentExpand,
     }),
@@ -286,9 +335,12 @@ export function MessageList(props: MessageListProps) {
       onBranch,
       onReaction,
       onReply,
+      onToggleBookmark,
       getRunForMessage,
       onRetry,
       onContentExpand,
+      threadStats,
+      virtualizer,
     ],
   );
 

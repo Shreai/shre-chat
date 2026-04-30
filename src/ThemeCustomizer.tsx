@@ -14,6 +14,18 @@ const ACCENT_PRESETS: { name: string; color: string }[] = [
   { name: 'Amber', color: '#d97706' },
 ];
 
+const THEME_PACKS: {
+  id: NonNullable<ThemeCustom['themePack']>;
+  label: string;
+  color: string;
+  note: string;
+}[] = [
+  { id: 'shre-os', label: 'Shre OS', color: '#2563eb', note: 'Command-center blue' },
+  { id: 'aros', label: 'AROS', color: '#0f766e', note: 'Separate product shell' },
+  { id: 'workspace', label: 'Workspace', color: '#7c3aed', note: 'Neutral shared shell' },
+  { id: 'custom', label: 'Custom', color: '#64748b', note: 'Manual override' },
+];
+
 // ── Server preference sync helpers ──
 async function fetchServerPrefs(): Promise<Partial<ThemeCustom> | null> {
   try {
@@ -91,6 +103,7 @@ export function ThemeCustomizer() {
   const currentAccent = themeCustom.accentColor || '#2563eb';
   const currentSize = themeCustom.fontSize || 'md';
   const currentRadius = themeCustom.borderRadius || 'normal';
+  const currentPack = themeCustom.themePack || 'custom';
 
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -160,6 +173,41 @@ export function ThemeCustomizer() {
             </div>
 
             {/* Accent Color */}
+            <div className="mb-3">
+              <div className="text-[10px] font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
+                Theme Pack
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {THEME_PACKS.map((pack) => {
+                  const isActive = currentPack === pack.id;
+                  return (
+                    <button
+                      key={pack.id}
+                      onClick={() =>
+                        update({
+                          themePack: pack.id,
+                          accentColor: pack.id === 'custom' ? themeCustom.accentColor : undefined,
+                        })
+                      }
+                      className="text-left rounded-md px-2 py-1.5 transition-colors border"
+                      style={{
+                        background: isActive ? 'var(--c-accent-soft)' : 'var(--c-bg-card)',
+                        borderColor: isActive ? 'var(--c-accent)' : 'var(--c-border-2)',
+                        color: 'var(--c-text-2)',
+                      }}
+                    >
+                      <div className="text-[11px] font-medium" style={{ color: 'var(--c-text-1)' }}>
+                        {pack.label}
+                      </div>
+                      <div className="text-[9px]" style={{ color: 'var(--c-text-4)' }}>
+                        {pack.note}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="mb-3">
               <div className="text-[10px] font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
                 Accent Color

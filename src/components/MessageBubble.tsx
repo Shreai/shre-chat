@@ -188,6 +188,9 @@ const MessageBubble = memo(function MessageBubble({
   onReply,
   replyPreview,
   onReplyClick,
+  threadReplyCount,
+  threadLatestReplyPreview,
+  onOpenThread,
   processRun,
   onRetry,
   onContentExpand,
@@ -219,6 +222,9 @@ const MessageBubble = memo(function MessageBubble({
   onReply?: () => void;
   replyPreview?: string | null;
   onReplyClick?: () => void;
+  threadReplyCount?: number;
+  threadLatestReplyPreview?: string | null;
+  onOpenThread?: () => void;
   processRun?: ProcessRun | null;
   onRetry?: () => void;
   onContentExpand?: (content: string, type: string, title?: string) => void;
@@ -369,12 +375,31 @@ const MessageBubble = memo(function MessageBubble({
             {replyPreview.length > 80 ? replyPreview.slice(0, 80) + '...' : replyPreview}
           </div>
         )}
+        {threadReplyCount && threadReplyCount > 0 && (
+          <button
+            type="button"
+            onClick={onOpenThread}
+            className="mb-1 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-colors"
+            style={{
+              borderColor: 'var(--c-border-1)',
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-2)',
+            }}
+            title={threadLatestReplyPreview || 'Open thread'}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--c-accent)]" />
+            {threadReplyCount} repl{threadReplyCount === 1 ? 'y' : 'ies'}
+          </button>
+        )}
         {/* Name + timestamp + agent badge header */}
         <div
           className={`flex items-center gap-1.5 mb-1 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}
         >
           {!isUser && <span className="text-[11px]">{agentEmoji}</span>}
-          <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: 'var(--c-text-1)' }}>
+          <span
+            className="text-[12px] font-semibold tracking-[-0.01em]"
+            style={{ color: 'var(--c-text-1)' }}
+          >
             {name}
           </span>
           {!isUser && shortModel && (
@@ -1041,6 +1066,7 @@ const MessageBubble = memo(function MessageBubble({
                   onRegenerate={onRegenerate}
                   onBranch={onBranch}
                   onReaction={onReaction}
+                  onOpenThread={onOpenThread}
                 />
                 {onReply && (
                   <button

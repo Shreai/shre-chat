@@ -586,6 +586,7 @@ export interface ThemeCustom {
   fontSize?: 'sm' | 'md' | 'lg';
   fontFamily?: string;
   borderRadius?: 'sharp' | 'normal' | 'round';
+  themePack?: 'shre-os' | 'aros' | 'workspace' | 'custom';
 }
 
 const THEME_CUSTOM_KEY = 'shre-theme-custom';
@@ -615,6 +616,52 @@ export function saveThemeCustom(custom: ThemeCustom) {
   } catch {
     /* quota */
   }
+}
+
+export interface DeploymentRequest {
+  id: string;
+  projectName: string;
+  owner: string;
+  productShell: 'shre-os' | 'aros' | 'workspace';
+  requestType: 'internal' | 'client' | 'platform';
+  targetNodes: string;
+  environment: string;
+  hosting: string;
+  database: string;
+  frontend: string;
+  backend: string;
+  themePack: 'shre-os' | 'aros' | 'workspace' | 'custom';
+  agents: string;
+  notes: string;
+  status: 'draft' | 'queued' | 'sent' | 'deployed';
+  createdAt: number;
+  updatedAt: number;
+}
+
+const DEPLOYMENT_REQUESTS_KEY = 'shre-deployment-requests';
+
+export function loadDeploymentRequests(): DeploymentRequest[] {
+  return loadFromScopedArray<DeploymentRequest>(
+    DEPLOYMENT_REQUESTS_KEY,
+    DEPLOYMENT_REQUESTS_KEY,
+  ).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function saveDeploymentRequests(requests: DeploymentRequest[]) {
+  try {
+    localStorage.setItem(scopedDataKey(DEPLOYMENT_REQUESTS_KEY), JSON.stringify(requests));
+  } catch {
+    /* quota */
+  }
+}
+
+export function upsertDeploymentRequest(request: DeploymentRequest): DeploymentRequest[] {
+  const current = loadDeploymentRequests();
+  const next = [request, ...current.filter((item) => item.id !== request.id)].sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
+  saveDeploymentRequests(next);
+  return next;
 }
 
 export interface AppState {
@@ -1171,10 +1218,7 @@ export async function shareSession(sessionId: string): Promise<string> {
 
 export interface AppActions {
   newSession: () => string;
-  openWorkspaceChannel: (
-    channelId: string,
-    opts?: { focus?: boolean; agentId?: string },
-  ) => string;
+  openWorkspaceChannel: (channelId: string, opts?: { focus?: boolean; agentId?: string }) => string;
   switchSession: (id: string) => void;
   closeTab: (id: string) => void;
   deleteSession: (id: string) => void;

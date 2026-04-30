@@ -66,11 +66,15 @@ import {
   flushPendingSave,
   loadThemeCustom,
   saveThemeCustom,
+  loadDeploymentRequests,
+  saveDeploymentRequests,
+  upsertDeploymentRequest,
   getAgent,
   getMinimumFleetRoleLabel,
   AGENTS,
   type Session,
 } from '../store';
+import { getProductShellForHost } from '../workspace-context';
 
 // ── Setup / Teardown ─────────────────────────────────────────────────
 
@@ -341,10 +345,51 @@ describe('loadThemeCustom / saveThemeCustom', () => {
   });
 
   it('round-trips theme customization', () => {
-    saveThemeCustom({ accentColor: '#ff0000', fontSize: 'lg' });
+    saveThemeCustom({ accentColor: '#ff0000', fontSize: 'lg', themePack: 'aros' });
     const loaded = loadThemeCustom();
     expect(loaded.accentColor).toBe('#ff0000');
     expect(loaded.fontSize).toBe('lg');
+    expect(loaded.themePack).toBe('aros');
+  });
+});
+
+// ── Deployment requests ─────────────────────────────────────────────
+
+describe('deployment request helpers', () => {
+  it('round-trips deployment requests', () => {
+    expect(loadDeploymentRequests()).toEqual([]);
+    const request = {
+      id: 'req-1',
+      projectName: 'AROS',
+      owner: 'AROS',
+      productShell: 'aros',
+      requestType: 'client',
+      targetNodes: 'Mac 2',
+      environment: 'workspace-first',
+      hosting: 'Customer VPS',
+      database: 'Supabase',
+      frontend: 'Shared shell',
+      backend: 'Node',
+      themePack: 'aros',
+      agents: 'tech stack expert, qa',
+      notes: 'test',
+      status: 'draft',
+      createdAt: 1,
+      updatedAt: 1,
+    } as const;
+    saveDeploymentRequests([request]);
+    expect(loadDeploymentRequests()).toHaveLength(1);
+    const updated = upsertDeploymentRequest({ ...request, notes: 'updated', updatedAt: 2 });
+    expect(updated[0].notes).toBe('updated');
+    expect(loadDeploymentRequests()[0].notes).toBe('updated');
+  });
+});
+
+describe('getProductShellForHost', () => {
+  it('maps known hosts to the right product shell', () => {
+    expect(getProductShellForHost('mib.nirtek.net')).toBe('shre-os');
+    expect(getProductShellForHost('aros.live')).toBe('aros');
+    expect(getProductShellForHost('example.com')).toBe('workspace');
   });
 });
 

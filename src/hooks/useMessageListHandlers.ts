@@ -1,9 +1,11 @@
 import { useCallback } from 'react';
 import type { ChatMessage } from '../router-client';
+import { addBookmark, isMessageBookmarked, removeBookmark } from '../store';
 
 interface UseMessageListHandlersOptions {
   activeSessionId: string | null;
   activeAgentId?: string;
+  sessions: { id: string; agentId: string; messages: ChatMessage[]; title: string }[];
   messages: ChatMessage[];
   filteredMessages: ChatMessage[];
   actions: {
@@ -178,6 +180,22 @@ export function useMessageListHandlers({
     [actions, inputRef],
   );
 
+  const onToggleBookmark = useCallback(
+    (msgIndex: number) => {
+      if (!activeSessionId) return;
+      const existingId = isMessageBookmarked(activeSessionId, msgIndex);
+      if (existingId) {
+        removeBookmark(existingId);
+        actions.setStatusLine('Removed pinned item');
+      } else {
+        const bookmark = addBookmark(activeSessionId, msgIndex, sessions as any);
+        if (bookmark) actions.setStatusLine('Pinned message');
+      }
+      window.dispatchEvent(new Event('shre-bookmarks-changed'));
+    },
+    [activeSessionId, sessions, actions],
+  );
+
   const onRetry = useCallback(
     (msgIndex: number) => {
       if (!activeSessionId) return;
@@ -238,6 +256,7 @@ export function useMessageListHandlers({
     onBranch,
     onReaction,
     onReply,
+    onToggleBookmark,
     onRetry,
     onRunCommand,
     onContentExpand: handleContentExpand,

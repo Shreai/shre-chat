@@ -28,6 +28,7 @@ import type { ChatMessage } from './router-client';
 import { SlackSidebar } from './components/SlackSidebar';
 import { StatusBar } from './StatusBar';
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
+import { ShreOSDock } from './components/ShreOSDock';
 // ChatView lazy-loaded with preload — it's the default view so it starts
 // fetching immediately, but the chunk split keeps the initial bundle small.
 const ChatView = lazy(() => import('./ChatView').then((m) => ({ default: m.ChatView })));
@@ -959,6 +960,9 @@ function MainApp({
             onSwitch={onWorkspaceSwitch}
           />
         )}
+        <div className="px-3 pt-2">
+          <ShreOSDock workspaceName={activeWorkspace?.name} userName={authUser.name} />
+        </div>
         {rmsAnomalies.length > 0 && (
           <div
             style={{

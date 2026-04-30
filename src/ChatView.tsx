@@ -47,10 +47,7 @@ import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { ShareSnapshotView } from './components/ShareSnapshotView';
 import { SuggestionsBar } from './components/SuggestionsBar';
 import { ViewTabs } from './components/ViewTabs';
-import {
-  EscalationDrawer,
-  type EscalationFormValues,
-} from './components/EscalationDrawer';
+import { EscalationDrawer, type EscalationFormValues } from './components/EscalationDrawer';
 import { AppsDrawer } from './components/AppsDrawer';
 import { PreviewPanel } from './components/PreviewPanel';
 import { ArtifactCanvas, extractArtifacts, type Artifact } from './components/ArtifactCanvas';
@@ -400,7 +397,15 @@ export function ChatView() {
         userPresence,
         activeAppLabel,
       }),
-    [activeSession, sessions, activeAgentId, currentAgent.name, activeAppLabel, userName, userPresence],
+    [
+      activeSession,
+      sessions,
+      activeAgentId,
+      currentAgent.name,
+      activeAppLabel,
+      userName,
+      userPresence,
+    ],
   );
   const escalationNoteSeed = useMemo(() => {
     if (pendingApproval) {
@@ -414,7 +419,9 @@ export function ChatView() {
       }
       const extra = Object.entries(input)
         .filter(([key]) => key !== 'command' && key !== 'path')
-        .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+        .map(
+          ([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`,
+        );
       return [...lines, ...extra].join('\n');
     }
     if (statusLine?.trim()) return `Current status: ${statusLine.trim()}`;
@@ -723,6 +730,26 @@ export function ChatView() {
     };
   }, [startRecording, stopRecording]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId?: string; messageIndex?: number }>).detail;
+      if (!detail?.sessionId || typeof detail.messageIndex !== 'number') return;
+      if (detail.sessionId !== activeSessionId) {
+        actions.switchSession(detail.sessionId);
+      }
+      actions.setView('chat');
+      setSelectedMsgIndex(detail.messageIndex);
+      window.setTimeout(() => {
+        const el = document.querySelector(
+          `[data-msg-index="${detail.messageIndex}"]`,
+        ) as HTMLElement | null;
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 80);
+    };
+    window.addEventListener('shre-focus-message', handler as EventListener);
+    return () => window.removeEventListener('shre-focus-message', handler as EventListener);
+  }, [activeSessionId, actions, setSelectedMsgIndex]);
+
   const { handleAbort } = useKeyboardShortcuts({
     streaming,
     wsConnected,
@@ -824,6 +851,7 @@ export function ChatView() {
   const messageListHandlers = useMessageListHandlers({
     activeSessionId,
     activeAgentId,
+    sessions,
     actions,
     setEditingMsgIndex,
     setEditingMsgText,

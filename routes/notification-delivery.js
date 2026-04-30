@@ -484,11 +484,13 @@ export function registerNotificationDeliveryRoutes({ log }) {
    */
   async function handleNotificationDeliveryRoute(req, res, url, { json, collectBody }) {
     if (url.pathname === "/api/notification-delivery/status" && req.method === "GET") {
-      return json(res, getStatus());
+      json(res, getStatus());
+      return true;
     }
 
     if (url.pathname === "/api/notification-delivery/config" && req.method === "GET") {
-      return json(res, { ...getStatus(), raw: loadConfig() });
+      json(res, { ...getStatus(), raw: loadConfig() });
+      return true;
     }
 
     if (url.pathname === "/api/notification-delivery/config" && req.method === "PUT") {
@@ -527,17 +529,20 @@ export function registerNotificationDeliveryRoutes({ log }) {
           saveSecrets(secrets);
         }
         cachedConfig = next;
-        return json(res, { ok: true, ...getStatus() });
+        json(res, { ok: true, ...getStatus() });
+        return true;
       } catch (error) {
         log.error("Failed to save notification delivery config", {}, error);
-        return json(res, { error: "Failed to save config" }, 500);
+        json(res, { error: "Failed to save config" }, 500);
+        return true;
       }
     }
 
     if (url.pathname === "/api/notification-delivery/secure-link" && req.method === "POST") {
       const origin = url.origin || `${req.headers["x-forwarded-proto"] || "http"}://${req.headers.host || "localhost:5510"}`;
       const link = createSecureLink(origin);
-      return json(res, { ok: true, url: link, expiresInMs: INGEST_TTL_MS });
+      json(res, { ok: true, url: link, expiresInMs: INGEST_TTL_MS });
+      return true;
     }
 
     const ingestMatch = url.pathname.match(/^\/api\/notification-delivery\/ingest\/([A-Za-z0-9-]+)$/);
@@ -545,7 +550,8 @@ export function registerNotificationDeliveryRoutes({ log }) {
       const token = ingestMatch[1];
       const entry = getSecureLinkState(token);
       if (!entry) {
-        return json(res, { error: "Link expired or already used" }, 410);
+        json(res, { error: "Link expired or already used" }, 410);
+        return true;
       }
 
       if (req.method === "GET") {
@@ -574,14 +580,17 @@ export function registerNotificationDeliveryRoutes({ log }) {
             emailTo: typeof body.emailTo === "string" ? body.emailTo.trim() : "",
           };
           if (!secrets.slackWebhookUrl && Object.keys(secrets.slackWebhookRoutes).length === 0 && !secrets.emailTo) {
-            return json(res, { error: "No secrets provided" }, 400);
+            json(res, { error: "No secrets provided" }, 400);
+            return true;
           }
           saveSecrets(secrets);
           consumeSecureLink(token);
-          return json(res, { ok: true, message: "Secrets saved to vault" });
+          json(res, { ok: true, message: "Secrets saved to vault" });
+          return true;
         } catch (error) {
           log.error("Failed to save secrets to vault", {}, error);
-          return json(res, { error: "Failed to save secrets" }, 500);
+          json(res, { error: "Failed to save secrets" }, 500);
+          return true;
         }
       }
     }
@@ -589,7 +598,8 @@ export function registerNotificationDeliveryRoutes({ log }) {
     if (url.pathname === "/api/notification-delivery/secure-link" && req.method === "GET") {
       const origin = url.origin || `${req.headers["x-forwarded-proto"] || "http"}://${req.headers.host || "localhost:5510"}`;
       const link = createSecureLink(origin);
-      return json(res, { ok: true, url: link, expiresInMs: INGEST_TTL_MS });
+      json(res, { ok: true, url: link, expiresInMs: INGEST_TTL_MS });
+      return true;
     }
 
     if (url.pathname === "/api/notification-delivery/test" && req.method === "POST") {
@@ -609,7 +619,8 @@ export function registerNotificationDeliveryRoutes({ log }) {
       };
       const channels = Array.isArray(body.channels) ? body.channels : undefined;
       const result = await deliverNotification(payload, { force: true, channels });
-      return json(res, { ok: true, result, config: getStatus() });
+      json(res, { ok: true, result, config: getStatus() });
+      return true;
     }
 
     return false;

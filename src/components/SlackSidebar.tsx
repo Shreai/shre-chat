@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AGENTS, getAgent, useApp, type Session } from '../store';
+import { AGENTS, getAgent, getBookmarks, useApp, type Session } from '../store';
 import { usePreferences, type ConversationModeId } from '../preferences-store';
 import { useAppList } from '../hooks/useAppList';
 import {
@@ -7,6 +7,7 @@ import {
   getChannelParticipants,
   getWorkspaceChannelTag,
 } from '../workspace-channels';
+import { buildPinnedSummaries, buildThreadSummaries } from '../workspace-social';
 
 type SidebarScope = 'channel' | 'dm' | 'app';
 
@@ -48,9 +49,25 @@ export function SlackSidebar() {
   const setConversationMode = usePreferences((s) => s.setConversationMode);
 
   const [query, setQuery] = useState('');
+  const [bookmarkTick, setBookmarkTick] = useState(0);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false,
+  );
 
   const activeAgent = getAgent(state.activeAgentId);
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', sync);
+      return () => mq.removeEventListener('change', sync);
+    }
+    mq.addListener(sync);
+    return () => mq.removeListener(sync);
+  }, []);
 
   useEffect(() => {
     if (!state.sidebarOpen || !isMobile) return;
@@ -59,6 +76,12 @@ export function SlackSidebar() {
       document.body.style.overflow = '';
     };
   }, [isMobile, state.sidebarOpen]);
+
+  useEffect(() => {
+    const handler = () => setBookmarkTick((value) => value + 1);
+    window.addEventListener('shre-bookmarks-changed', handler);
+    return () => window.removeEventListener('shre-bookmarks-changed', handler);
+  }, []);
 
   const sortedAgents = useMemo(
     () =>
@@ -139,6 +162,34 @@ export function SlackSidebar() {
       title: `App · ${label}`,
     });
   };
+
+  const openThreadMessage = (sessionId: string, messageIndex: number) => {
+    const session = state.sessions.find((entry) => entry.id === sessionId);
+    if (!session) return;
+    actions.switchSession(sessionId);
+    actions.setView('chat');
+    if (isMobile) actions.setSidebarOpen(false);
+    window.dispatchEvent(
+      new CustomEvent('shre-focus-message', {
+        detail: { sessionId, messageIndex },
+      }),
+    );
+  };
+
+  const threads = useMemo(
+    () => buildThreadSummaries(state.sessions, { limit: 6 }),
+    [state.sessions],
+  );
+  const pinned = useMemo(
+    () => buildPinnedSummaries(getBookmarks(), state.sessions, { limit: 6 }),
+    [state.sessions, bookmarkTick],
+  );
+  const visibleThreads = threads.filter((thread) =>
+    matches(`${thread.sessionTitle} ${thread.rootPreview} ${thread.latestReplyPreview}`),
+  );
+  const visiblePinned = pinned.filter((pin) =>
+    matches(`${pin.sessionTitle} ${pin.preview} ${pin.note || ''}`),
+  );
 
   const visibleChannels = WORKSPACE_CHANNELS.filter((channel) =>
     matches(`${channel.label} ${channel.description}`),
@@ -390,6 +441,83 @@ export function SlackSidebar() {
             })}
           </Section>
 
+          <Section title="Threads">
+            {visibleThreads.length > 0 ? (
+              visibleThreads.map((thread) => {
+                const active = state.activeSessionId === thread.sessionId && state.view === 'chat';
+                return (
+                  <button
+                    key={thread.id}
+                    type="button"
+                    onClick={() => openThreadMessage(thread.sessionId, thread.rootIndex)}
+                    className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
+                      active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
+                    }`}
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[11px] font-semibold text-[var(--c-text-1)]">
+                      #{thread.replyCount}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
+                          {thread.sessionTitle}
+                        </div>
+                        <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--c-text-4)]">
+                          {formatShortTime(thread.updatedAt)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[12px] text-[var(--c-text-3)]">
+                        {thread.rootPreview}
+                      </div>
+                      <div className="mt-1 truncate text-[11px] text-[var(--c-text-4)]">
+                        Latest: {thread.latestReplyPreview}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState label="No active threads yet" />
+            )}
+          </Section>
+
+          <Section title="Pinned">
+            {visiblePinned.length > 0 ? (
+              visiblePinned.map((pin) => {
+                const active = state.activeSessionId === pin.sessionId && state.view === 'chat';
+                return (
+                  <button
+                    key={pin.id}
+                    type="button"
+                    onClick={() => openThreadMessage(pin.sessionId, pin.messageIndex)}
+                    className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
+                      active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
+                    }`}
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[13px] font-semibold text-[var(--c-accent)]">
+                      •
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
+                          {pin.sessionTitle}
+                        </div>
+                        <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--c-text-4)]">
+                          {formatShortTime(pin.updatedAt)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[12px] text-[var(--c-text-3)]">
+                        {pin.preview}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState label="Pin a message to see it here" />
+            )}
+          </Section>
+
           <Section title="Apps">
             {visibleApps.map((app) => {
               const active = conversationMode === 'apps' && activeAppId === app.id;
@@ -514,6 +642,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       </div>
       <div className="space-y-1.5">{children}</div>
     </section>
+  );
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[var(--c-border-2)] px-3 py-3 text-[12px] text-[var(--c-text-4)]">
+      {label}
+    </div>
   );
 }
 
