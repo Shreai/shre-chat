@@ -7,6 +7,11 @@ import {
   upsertDeploymentRequest,
   uid,
 } from '../store';
+import {
+  DEFAULT_PROJECT_FLEET,
+  buildFleetMarkdown,
+  buildFleetSlackDraft,
+} from '../workspace-fleet';
 import { getProductShellForHost, scopedStorageKey } from '../workspace-context';
 
 type RequestForm = Omit<DeploymentRequest, 'id' | 'status' | 'createdAt' | 'updatedAt'>;
@@ -133,6 +138,14 @@ export function ShreOSDock({ workspaceName, userName }: ShreOSDockProps) {
 
   const markdown = useMemo(() => buildMarkdown(draft), [draft]);
   const slackDraft = useMemo(() => buildSlackDraft(draft), [draft]);
+  const fleetMarkdown = useMemo(
+    () => buildFleetMarkdown(draft.projectName, draft.owner, draft.productShell),
+    [draft.owner, draft.productShell, draft.projectName],
+  );
+  const fleetSlackDraft = useMemo(
+    () => buildFleetSlackDraft(draft.projectName, draft.owner, draft.productShell),
+    [draft.owner, draft.productShell, draft.projectName],
+  );
 
   const applyPack = (themePack: RequestForm['themePack']) => {
     const colorMap: Record<RequestForm['themePack'], string | undefined> = {
@@ -189,6 +202,27 @@ export function ShreOSDock({ workspaceName, userName }: ShreOSDockProps) {
     setFeedback(ok ? 'Request copied' : 'Clipboard blocked');
   };
 
+  const openFleetBrief = () => {
+    const sessionId = actions.newSession();
+    actions.updateSessionTitle(sessionId, `Fleet: ${draft.projectName}`);
+    actions.addSessionTag(sessionId, 'shre-os');
+    actions.addSessionTag(sessionId, 'fleet');
+    actions.addSessionTag(sessionId, draft.productShell);
+    actions.addMessage(sessionId, {
+      role: 'user',
+      content: fleetMarkdown,
+      timestamp: Date.now(),
+      meta: {
+        type: 'fleet.template',
+        shell: draft.productShell,
+      },
+    });
+    actions.switchSession(sessionId);
+    actions.setView('chat');
+    setFeedback(`Fleet brief opened for ${draft.projectName}`);
+    setOpen(false);
+  };
+
   const sendSlack = async () => {
     try {
       const res = await fetch('/api/notification-delivery/test', {
@@ -214,6 +248,33 @@ export function ShreOSDock({ workspaceName, userName }: ShreOSDockProps) {
   const copySlack = async () => {
     const ok = await copyText(slackDraft);
     setFeedback(ok ? 'Slack draft copied' : 'Clipboard blocked');
+  };
+
+  const copyFleet = async () => {
+    const ok = await copyText(fleetMarkdown);
+    setFeedback(ok ? 'Fleet template copied' : 'Clipboard blocked');
+  };
+
+  const sendFleetSlack = async () => {
+    try {
+      const res = await fetch('/api/notification-delivery/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'fleet.template',
+          title: `${draft.projectName} fleet template`,
+          body: fleetSlackDraft,
+          routingKey: 'shre-os',
+          channels: ['slack'],
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setFeedback(`Fleet Slack update sent for ${draft.projectName}`);
+      return true;
+    } catch {
+      setFeedback('Fleet Slack send failed');
+      return false;
+    }
   };
 
   return (
@@ -463,6 +524,37 @@ export function ShreOSDock({ workspaceName, userName }: ShreOSDockProps) {
                     Send Slack update
                   </button>
                 </div>
+
+                <div className="mt-4">
+                  <div
+                    className="text-[11px] font-semibold mb-2"
+                    style={{ color: 'var(--c-text-1)' }}
+                  >
+                    Default fleet
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {DEFAULT_PROJECT_FLEET.map((role) => (
+                      <div
+                        key={role.id}
+                        className="rounded-lg border px-3 py-2"
+                        style={{
+                          background: 'var(--c-bg-card)',
+                          borderColor: 'var(--c-border-2)',
+                        }}
+                      >
+                        <div
+                          className="text-[12px] font-medium"
+                          style={{ color: 'var(--c-text-1)' }}
+                        >
+                          {role.title}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                          {role.responsibility}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="p-4 overflow-y-auto">
@@ -584,6 +676,38 @@ export function ShreOSDock({ workspaceName, userName }: ShreOSDockProps) {
                       </div>
                     )}
                   </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                  <button
+                    onClick={openFleetBrief}
+                    className="rounded-lg px-3 py-2 text-[12px] font-medium"
+                    style={{ background: 'var(--c-accent)', color: '#fff' }}
+                  >
+                    Open fleet brief
+                  </button>
+                  <button
+                    onClick={copyFleet}
+                    className="rounded-lg px-3 py-2 text-[12px] font-medium"
+                    style={{
+                      background: 'var(--c-bg-card)',
+                      color: 'var(--c-text-2)',
+                      border: '1px solid var(--c-border-2)',
+                    }}
+                  >
+                    Copy fleet template
+                  </button>
+                  <button
+                    onClick={sendFleetSlack}
+                    className="rounded-lg px-3 py-2 text-[12px] font-medium"
+                    style={{
+                      background: 'var(--c-bg-card)',
+                      color: 'var(--c-text-2)',
+                      border: '1px solid var(--c-border-2)',
+                    }}
+                  >
+                    Send fleet Slack
+                  </button>
                 </div>
               </div>
             </div>
