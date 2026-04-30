@@ -20,6 +20,10 @@
 | `SHRE_FEED_TOKEN` | — | Auth token for activity feed |
 | `SHRE_CHAT_URL` | `http://localhost:5510` | Public URL (for share links, Cloudflare Tunnel) |
 | `SHRE_DIR` | `~/.shre` | Data directory for sessions, config |
+| `SHRE_SLACK_WEBHOOK_URL` | — | Default Slack webhook for notification fanout |
+| `SHRE_SLACK_WEBHOOK_ROUTES` | — | JSON map of routing keys to Slack webhook URLs |
+| `SHRE_NOTIFICATION_EMAIL_TO` | — | Default email recipient for notification fanout |
+| `SHRE_NOTIFICATION_EMAIL_ACCOUNT` | `default` | Gmail account alias used by the email sender |
 | `CORTEXDB_URL` | `http://127.0.0.1:5400` | CortexDB connection URL |
 | `CORTEX_PG_PASSWORD` | — | PostgreSQL password for CortexDB |
 | `CENTRIX_URL` | — | Centrix ERP URL (for centrix-agent proxy) |
@@ -92,6 +96,7 @@ For production behind Cloudflare Tunnel, TLS termination happens at the tunnel �
 | `~/.shre/auth/signing-key.hex` | JWT signing key |
 | `~/.shre/tls/` | TLS certificate and key |
 | `~/.shre/training/` | Training data WAL |
+| `~/.shre/shre-chat-notification-delivery.json` | Slack/email notification delivery config and route map |
 | `~/Library/Logs/shre-services/` | Service logs (macOS) |
 
 ## Cloudflare Tunnel

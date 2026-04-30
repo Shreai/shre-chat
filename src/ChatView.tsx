@@ -274,6 +274,7 @@ export function ChatView() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const escapeArmedRef = useRef(false);
   const emojiRef = useRef<HTMLDivElement>(null);
 
   const streamBufferRef = useRef('');
@@ -372,6 +373,16 @@ export function ChatView() {
     currentAgentId: currentAgent.id,
     actions,
   });
+  const activeAppLabel = appOptions.find((app) => app.id === activeAppId)?.label ?? null;
+
+  useEffect(() => {
+    const next = conversationMode === 'code';
+    setClaudeCliMode((prev) => {
+      if (prev === next) return prev;
+      localStorage.setItem(scopedStorageKey('shre-claude-cli-mode'), String(next));
+      return next;
+    });
+  }, [conversationMode, setClaudeCliMode]);
 
   const { filteredMessages, lastAssistantMessage, getRunForMessage, useVirtual, virtualizer } =
     useFilteredMessages({ messages, latestTask, runs, scrollRef });
@@ -686,6 +697,8 @@ export function ChatView() {
     setInput,
     setEditingMsgIndex,
     setEditingMsgText,
+    setStatusLine: actions.setStatusLine,
+    escapeArmedRef,
     actions,
     virtualizer,
   });
@@ -823,6 +836,10 @@ export function ChatView() {
                 actions.switchSession(id);
                 setInput('');
               }}
+              conversationMode={conversationMode}
+              activeAppId={activeAppId}
+              activeAppLabel={activeAppLabel}
+              onSetConversationMode={setConversationMode}
             />
           }
           content={

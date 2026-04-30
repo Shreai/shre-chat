@@ -37,6 +37,7 @@ import { scopedStorageKey } from './workspace-context';
 import type { ActivityStatus, ChatMessage } from './router-client';
 
 const FALLBACK_AGENT_ID = 'ellie';
+const AGENT_KEY = scopedKey('shre-active-agent');
 
 function scopedKey(base: string): string {
   return scopedStorageKey(base);

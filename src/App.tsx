@@ -25,7 +25,7 @@ import {
   loadDrafts,
 } from './store';
 import type { ChatMessage } from './router-client';
-import { Sidebar } from './Sidebar';
+import { SlackSidebar } from './components/SlackSidebar';
 import { StatusBar } from './StatusBar';
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
 // ChatView lazy-loaded with preload — it's the default view so it starts
@@ -1013,7 +1013,7 @@ function MainApp({
         )}
         <div className="flex flex-1 min-h-0">
           <div className={`swipe-indicator ${swipeActive ? 'swipe-active' : ''}`} />
-          <Sidebar />
+          <SlackSidebar />
           <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
             <Suspense fallback={<LazyFallback />}>
               <ChatView />

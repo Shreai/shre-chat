@@ -83,6 +83,29 @@ interface RuleRow {
   agent_profile: AgentProfile;
 }
 
+interface NotificationDeliveryConfig {
+  slackEnabled: boolean;
+  slackWebhookUrl: string;
+  slackWebhookRoutes: Record<string, string>;
+  emailEnabled: boolean;
+  emailTo: string;
+  emailAccount: string;
+  importantOnly: boolean;
+}
+
+interface NotificationDeliveryStatus {
+  config: NotificationDeliveryConfig;
+  env: {
+    slackWebhookConfigured: boolean;
+    slackWebhookRoutesConfigured?: boolean;
+    emailToConfigured: boolean;
+  };
+  shreChat: {
+    enabled: boolean;
+  };
+  path: string;
+}
+
 interface SharedSkillRanking {
   skillKey: string;
   usageCount: number;
@@ -235,6 +258,12 @@ export function AdminView() {
   const [selectedAgentResumeError, setSelectedAgentResumeError] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [rules, setRules] = useState<RuleRow[]>([]);
+  const [deliveryStatus, setDeliveryStatus] = useState<NotificationDeliveryStatus | null>(null);
+  const [deliveryDraft, setDeliveryDraft] = useState<NotificationDeliveryConfig | null>(null);
+  const [deliveryRoutesText, setDeliveryRoutesText] = useState('');
+  const [deliverySaving, setDeliverySaving] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [deliveryTestResult, setDeliveryTestResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingApprovalId, setSavingApprovalId] = useState<string | null>(null);
@@ -248,10 +277,11 @@ export function AdminView() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setError(null);
-    const [agentData, approvalData, ruleData] = await Promise.all([
+    const [agentData, approvalData, ruleData, deliveryData] = await Promise.all([
       fetchApi<AgentSummary[]>('/api/marketplace/agents'),
       fetchApi<{ approvals?: ApprovalRow[] }>('/v1/approvals?status=pending&limit=100'),
       fetchApi<{ rules?: RuleRow[] }>('/v1/rules?limit=200'),
+      fetchApi<NotificationDeliveryStatus>('/api/notification-delivery/config'),
     ]);
 
     if (!agentData && !approvalData && !ruleData) {
@@ -267,6 +297,11 @@ export function AdminView() {
     });
     setApprovals(approvalData?.approvals ?? []);
     setRules(nextRules);
+    if (deliveryData) {
+      setDeliveryStatus(deliveryData);
+      setDeliveryDraft(deliveryData.config);
+      setDeliveryRoutesText(JSON.stringify(deliveryData.config.slackWebhookRoutes || {}, null, 2));
+    }
     setSelectedRuleId((current) => {
       if (current && nextRules.some((rule) => rule.id === current)) return current;
       return nextRules[0]?.id ?? null;
@@ -427,6 +462,77 @@ export function AdminView() {
     setRuleEditorError(null);
   }
 
+  async function saveDeliveryConfig() {
+    if (!deliveryDraft) return;
+    setDeliverySaving(true);
+    setDeliveryError(null);
+    setDeliveryTestResult(null);
+    try {
+      let slackWebhookRoutes: Record<string, string> = {};
+      if (deliveryRoutesText.trim()) {
+        const parsed = JSON.parse(deliveryRoutesText) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('Slack routes must be a JSON object keyed by source or workspace');
+        }
+        slackWebhookRoutes = Object.fromEntries(
+          Object.entries(parsed as Record<string, unknown>)
+            .filter(([, url]) => typeof url === 'string' && url.trim())
+            .map(([key, url]) => [String(key).trim(), String(url).trim()]),
+        );
+      }
+      const res = await fetch('/api/notification-delivery/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...deliveryDraft, slackWebhookRoutes }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const updated = (await res.json()) as NotificationDeliveryStatus;
+      setDeliveryStatus(updated);
+      setDeliveryDraft(updated.config);
+      setDeliveryRoutesText(JSON.stringify(updated.config.slackWebhookRoutes || {}, null, 2));
+      setDeliveryTestResult('Saved notification delivery settings.');
+    } catch (err) {
+      setDeliveryError(
+        err instanceof Error ? err.message : 'Failed to save notification delivery config',
+      );
+    } finally {
+      setDeliverySaving(false);
+    }
+  }
+
+  async function testDelivery(channels?: Array<'slack' | 'email'>) {
+    setDeliverySaving(true);
+    setDeliveryError(null);
+    setDeliveryTestResult(null);
+    try {
+      const res = await fetch('/api/notification-delivery/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Shre Chat delivery test',
+          body: 'This is a test notification from the Admin Console.',
+          routingKey: 'admin-ui',
+          channels,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const result = (await res.json()) as {
+        result?: { channels?: Record<string, { ok?: boolean; skipped?: boolean; error?: string }> };
+      };
+      const summary = Object.entries(result.result?.channels || {})
+        .map(
+          ([key, value]) =>
+            `${key}: ${value.ok ? 'sent' : value.skipped ? 'skipped' : value.error || 'failed'}`,
+        )
+        .join(', ');
+      setDeliveryTestResult(summary || 'Test notification sent.');
+    } catch (err) {
+      setDeliveryError(err instanceof Error ? err.message : 'Failed to send test notification');
+    } finally {
+      setDeliverySaving(false);
+    }
+  }
+
   return (
     <div
       className="flex-1 flex flex-col h-full overflow-hidden"
@@ -516,256 +622,569 @@ export function AdminView() {
             </div>
 
             {tab === 'overview' && (
-              <SectionCard
-                title="Agent Roster"
-                subtitle="Marketplace and platform agent health at a glance"
-              >
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
-                  <div
-                    className="rounded-xl px-3 py-2.5"
-                    style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
-                  >
-                    <div
-                      className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
-                      style={{ color: 'var(--c-text-5)' }}
-                    >
-                      Avg Quality
-                    </div>
-                    <div
-                      className="text-lg font-bold"
-                      style={{ color: avgQuality > 80 ? '#4ade80' : '#f59e0b' }}
-                    >
-                      {avgQuality.toFixed(0)}%
-                    </div>
-                  </div>
-                  <div
-                    className="rounded-xl px-3 py-2.5"
-                    style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
-                  >
-                    <div
-                      className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
-                      style={{ color: 'var(--c-text-5)' }}
-                    >
-                      Approval Guardrails
-                    </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--c-text-2)' }}>
-                      Sensitive actions pause for human review
-                    </div>
-                  </div>
-                  <div
-                    className="rounded-xl px-3 py-2.5"
-                    style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
-                  >
-                    <div
-                      className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
-                      style={{ color: 'var(--c-text-5)' }}
-                    >
-                      Agent Profiles
-                    </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--c-text-2)' }}>
-                      Tools, memory, knowledge, and approvals live per rule
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  className="rounded-lg overflow-hidden"
-                  style={{ border: '1px solid var(--c-border-2)' }}
+              <>
+                <SectionCard
+                  title="Notification Delivery"
+                  subtitle="Slack and email fanout for important alerts; shre-chat is the built-in in-app channel"
                 >
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr style={{ background: 'var(--c-bg-1)' }}>
-                        <th
-                          className="text-left px-3 py-2 font-semibold"
-                          style={{ color: 'var(--c-text-4)' }}
-                        >
-                          Agent
-                        </th>
-                        <th
-                          className="text-right px-3 py-2 font-semibold"
-                          style={{ color: 'var(--c-text-4)' }}
-                        >
-                          Tasks
-                        </th>
-                        <th
-                          className="text-right px-3 py-2 font-semibold"
-                          style={{ color: 'var(--c-text-4)' }}
-                        >
-                          Quality
-                        </th>
-                        <th
-                          className="text-right px-3 py-2 font-semibold"
-                          style={{ color: 'var(--c-text-4)' }}
-                        >
-                          Cost
-                        </th>
-                        <th
-                          className="text-center px-3 py-2 font-semibold"
-                          style={{ color: 'var(--c-text-4)' }}
-                        >
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agents.map((a, i) => (
-                        <tr
-                          key={a.id}
-                          onClick={() => setSelectedAgentId(a.id)}
-                          className="cursor-pointer"
+                  {!deliveryDraft ? (
+                    <div className="text-sm" style={{ color: 'var(--c-text-4)' }}>
+                      Loading notification config...
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label
+                          className="rounded-xl p-3 border"
                           style={{
-                            background:
-                              selectedAgentId === a.id
-                                ? 'rgba(99,102,241,0.10)'
-                                : i % 2 === 0
-                                  ? 'var(--c-bg-1)'
-                                  : 'var(--c-bg-2)',
+                            background: 'var(--c-bg-1)',
+                            borderColor: 'var(--c-border-2)',
                           }}
                         >
-                          <td className="px-3 py-2 flex items-center gap-1.5">
-                            <span>{a.identity?.emoji || '🤖'}</span>
-                            <div className="min-w-0">
-                              <div className="truncate" style={{ color: 'var(--c-text-2)' }}>
-                                {a.name}
-                              </div>
-                              <div
-                                className="text-[9px] truncate"
-                                style={{ color: 'var(--c-text-5)' }}
-                              >
-                                {a.id}
-                              </div>
-                              {getMinimumFleetRoleLabel(a.id) && (
-                                <div className="mt-0.5">
-                                  <span
-                                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium"
-                                    style={{
-                                      background: 'var(--c-bg-3)',
-                                      color: 'var(--c-text-4)',
-                                    }}
-                                  >
-                                    {getMinimumFleetRoleLabel(a.id)}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="text-right px-3 py-2" style={{ color: 'var(--c-text-3)' }}>
-                            {a.stats?.totalTasks ?? 0}
-                          </td>
-                          <td
-                            className="text-right px-3 py-2"
-                            style={{
-                              color: (a.stats?.successRate ?? 0) > 80 ? '#4ade80' : '#f59e0b',
-                            }}
-                          >
-                            {(a.stats?.successRate ?? 0).toFixed(0)}%
-                          </td>
-                          <td className="text-right px-3 py-2" style={{ color: 'var(--c-text-3)' }}>
-                            {fmtUsd(a.costs?.totalCostUsd ?? 0)}
-                          </td>
-                          <td className="text-center px-3 py-2">
-                            <span
-                              className="inline-block w-2 h-2 rounded-full"
-                              style={{ background: a.status === 'active' ? '#4ade80' : '#a1a1aa' }}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={deliveryDraft.slackEnabled}
+                              onChange={(e) =>
+                                setDeliveryDraft((current) =>
+                                  current
+                                    ? { ...current, slackEnabled: e.target.checked }
+                                    : current,
+                                )
+                              }
                             />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            <span className="font-medium" style={{ color: 'var(--c-text-1)' }}>
+                              Slack
+                            </span>
+                          </div>
+                          <input
+                            value={deliveryDraft.slackWebhookUrl}
+                            onChange={(e) =>
+                              setDeliveryDraft((current) =>
+                                current ? { ...current, slackWebhookUrl: e.target.value } : current,
+                              )
+                            }
+                            placeholder="https://hooks.slack.com/services/..."
+                            className="mt-3 w-full rounded-lg px-3 py-2 text-sm outline-none"
+                            style={{
+                              background: 'var(--c-bg-2)',
+                              border: '1px solid var(--c-border-2)',
+                              color: 'var(--c-text-1)',
+                            }}
+                          />
+                          <div className="mt-3 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                            Default Slack webhook. Used when no route matches.
+                          </div>
+                        </label>
+                        <label
+                          className="rounded-xl p-3 border"
+                          style={{
+                            background: 'var(--c-bg-1)',
+                            borderColor: 'var(--c-border-2)',
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={deliveryDraft.emailEnabled}
+                              onChange={(e) =>
+                                setDeliveryDraft((current) =>
+                                  current
+                                    ? { ...current, emailEnabled: e.target.checked }
+                                    : current,
+                                )
+                              }
+                            />
+                            <span className="font-medium" style={{ color: 'var(--c-text-1)' }}>
+                              Email
+                            </span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2">
+                            <input
+                              value={deliveryDraft.emailTo}
+                              onChange={(e) =>
+                                setDeliveryDraft((current) =>
+                                  current ? { ...current, emailTo: e.target.value } : current,
+                                )
+                              }
+                              placeholder="alerts@company.com"
+                              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                              style={{
+                                background: 'var(--c-bg-2)',
+                                border: '1px solid var(--c-border-2)',
+                                color: 'var(--c-text-1)',
+                              }}
+                            />
+                            <input
+                              value={deliveryDraft.emailAccount}
+                              onChange={(e) =>
+                                setDeliveryDraft((current) =>
+                                  current ? { ...current, emailAccount: e.target.value } : current,
+                                )
+                              }
+                              placeholder="Gmail account name"
+                              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                              style={{
+                                background: 'var(--c-bg-2)',
+                                border: '1px solid var(--c-border-2)',
+                                color: 'var(--c-text-1)',
+                              }}
+                            />
+                          </div>
+                        </label>
+                      </div>
 
-                <div className="mt-4">
-                  <SectionCard
-                    title="Selected Agent Resume"
-                    subtitle="Shared skill rankings for the currently selected agent"
-                  >
-                    {!selectedAgentId ? (
-                      <div
-                        className="text-sm py-8 text-center"
-                        style={{ color: 'var(--c-text-4)' }}
+                      <label
+                        className="rounded-xl p-3 border block"
+                        style={{
+                          background: 'var(--c-bg-1)',
+                          borderColor: 'var(--c-border-2)',
+                        }}
                       >
-                        Select an agent row to inspect shared skill rankings.
-                      </div>
-                    ) : selectedAgentResumeError ? (
-                      <div className="text-sm py-8 text-center" style={{ color: '#f87171' }}>
-                        {selectedAgentResumeError}
-                      </div>
-                    ) : selectedAgentResumeLoading ? (
-                      <div
-                        className="text-sm py-8 text-center"
-                        style={{ color: 'var(--c-text-4)' }}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium" style={{ color: 'var(--c-text-1)' }}>
+                            Slack route map
+                          </span>
+                          <span className="text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                            JSON object: source or workspace key → webhook URL
+                          </span>
+                        </div>
+                        <textarea
+                          value={deliveryRoutesText}
+                          onChange={(e) => setDeliveryRoutesText(e.target.value)}
+                          placeholder={`{
+  "fleet": "https://hooks.slack.com/services/...",
+  "shre-router": "https://hooks.slack.com/services/...",
+  "project:abc123": "https://hooks.slack.com/services/..."
+}`}
+                          rows={8}
+                          className="mt-3 w-full rounded-lg px-3 py-2 text-sm outline-none font-mono"
+                          style={{
+                            background: 'var(--c-bg-2)',
+                            border: '1px solid var(--c-border-2)',
+                            color: 'var(--c-text-1)',
+                          }}
+                        />
+                      </label>
+
+                      <label
+                        className="flex items-center gap-2 text-sm"
+                        style={{ color: 'var(--c-text-2)' }}
                       >
-                        Loading resume…
-                      </div>
-                    ) : selectedAgentResume.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                        {selectedAgentResume.slice(0, 6).map((rank) => (
+                        <input
+                          type="checkbox"
+                          checked={deliveryDraft.importantOnly}
+                          onChange={(e) =>
+                            setDeliveryDraft((current) =>
+                              current ? { ...current, importantOnly: e.target.checked } : current,
+                            )
+                          }
+                        />
+                        Only deliver important alerts externally
+                      </label>
+
+                      {deliveryStatus && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
                           <div
-                            key={rank.skillKey}
-                            className="rounded-2xl p-3"
+                            className="rounded-lg px-3 py-2"
                             style={{
                               background: 'var(--c-bg-1)',
                               border: '1px solid var(--c-border-2)',
                             }}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div
-                                  className="text-sm font-semibold truncate"
-                                  style={{ color: 'var(--c-text-1)' }}
-                                >
-                                  {rank.skillKey}
-                                </div>
-                                <div
-                                  className="text-[10px] mt-0.5"
-                                  style={{ color: 'var(--c-text-4)' }}
-                                >
-                                  {rank.usageCount} uses · {rank.successRate.toFixed(1)}% success
-                                </div>
-                              </div>
-                              <span
-                                className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
-                                style={{
-                                  color: rank.promotable ? 'var(--c-success)' : 'var(--c-text-4)',
-                                  background: rank.promotable
-                                    ? 'rgba(52,211,153,0.12)'
-                                    : 'rgba(255,255,255,0.04)',
-                                }}
-                              >
-                                {rank.promotable ? 'Promotable' : 'Observed'}
-                              </span>
-                            </div>
-                            <div
-                              className="mt-2 flex flex-wrap gap-2 text-[10px]"
-                              style={{ color: 'var(--c-text-4)' }}
-                            >
-                              <span>Score {rank.rankingScore.toFixed(2)}</span>
-                              <span>Last {rank.lastOutcome}</span>
-                              {rank.averageLatencyMs !== null && (
-                                <span>{rank.averageLatencyMs}ms avg</span>
-                              )}
-                            </div>
-                            <div
-                              className="mt-2 text-[10px] leading-5"
-                              style={{ color: 'var(--c-text-5)' }}
-                            >
-                              {rank.reason}
+                            <div style={{ color: 'var(--c-text-5)' }}>Slack webhook</div>
+                            <div style={{ color: 'var(--c-text-2)' }}>
+                              {deliveryStatus.config.slackEnabled &&
+                              deliveryStatus.config.slackWebhookUrl
+                                ? 'Configured'
+                                : deliveryStatus.env.slackWebhookConfigured
+                                  ? 'Configured via env'
+                                  : 'Missing'}
                             </div>
                           </div>
-                        ))}
+                          <div
+                            className="rounded-lg px-3 py-2"
+                            style={{
+                              background: 'var(--c-bg-1)',
+                              border: '1px solid var(--c-border-2)',
+                            }}
+                          >
+                            <div style={{ color: 'var(--c-text-5)' }}>Slack routes</div>
+                            <div style={{ color: 'var(--c-text-2)' }}>
+                              {Object.keys(deliveryStatus.config.slackWebhookRoutes || {}).length >
+                              0
+                                ? `${Object.keys(deliveryStatus.config.slackWebhookRoutes).length} route(s)`
+                                : 'None'}
+                            </div>
+                          </div>
+                          <div
+                            className="rounded-lg px-3 py-2"
+                            style={{
+                              background: 'var(--c-bg-1)',
+                              border: '1px solid var(--c-border-2)',
+                            }}
+                          >
+                            <div style={{ color: 'var(--c-text-5)' }}>Email target</div>
+                            <div style={{ color: 'var(--c-text-2)' }}>
+                              {deliveryStatus.config.emailEnabled && deliveryStatus.config.emailTo
+                                ? 'Configured'
+                                : deliveryStatus.env.emailToConfigured
+                                  ? 'Configured via env'
+                                  : 'Missing'}
+                            </div>
+                          </div>
+                          <div
+                            className="rounded-lg px-3 py-2"
+                            style={{
+                              background: 'var(--c-bg-1)',
+                              border: '1px solid var(--c-border-2)',
+                            }}
+                          >
+                            <div style={{ color: 'var(--c-text-5)' }}>In-app</div>
+                            <div style={{ color: 'var(--c-text-2)' }}>
+                              shre-chat notifications enabled
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {deliveryError && (
+                        <div
+                          className="text-sm rounded-lg px-3 py-2"
+                          style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171' }}
+                        >
+                          {deliveryError}
+                        </div>
+                      )}
+                      {deliveryTestResult && (
+                        <div
+                          className="text-sm rounded-lg px-3 py-2"
+                          style={{ background: 'rgba(34,197,94,0.12)', color: '#4ade80' }}
+                        >
+                          {deliveryTestResult}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={saveDeliveryConfig}
+                          disabled={deliverySaving}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                          style={{
+                            background: 'var(--c-accent)',
+                            color: 'var(--c-on-accent)',
+                            opacity: deliverySaving ? 0.7 : 1,
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => testDelivery(['slack'])}
+                          disabled={deliverySaving}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                          style={{
+                            background: 'var(--c-bg-2)',
+                            color: 'var(--c-text-2)',
+                            border: '1px solid var(--c-border-2)',
+                            opacity: deliverySaving ? 0.7 : 1,
+                          }}
+                        >
+                          Test Slack
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => testDelivery(['email'])}
+                          disabled={deliverySaving}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                          style={{
+                            background: 'var(--c-bg-2)',
+                            color: 'var(--c-text-2)',
+                            border: '1px solid var(--c-border-2)',
+                            opacity: deliverySaving ? 0.7 : 1,
+                          }}
+                        >
+                          Test Email
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => testDelivery()}
+                          disabled={deliverySaving}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                          style={{
+                            background: 'var(--c-bg-2)',
+                            color: 'var(--c-text-2)',
+                            border: '1px solid var(--c-border-2)',
+                            opacity: deliverySaving ? 0.7 : 1,
+                          }}
+                        >
+                          Test All
+                        </button>
                       </div>
-                    ) : (
+                    </div>
+                  )}
+                </SectionCard>
+
+                <SectionCard
+                  title="Agent Roster"
+                  subtitle="Marketplace and platform agent health at a glance"
+                >
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+                    <div
+                      className="rounded-xl px-3 py-2.5"
+                      style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
+                    >
                       <div
-                        className="text-sm py-8 text-center"
-                        style={{ color: 'var(--c-text-4)' }}
+                        className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                        style={{ color: 'var(--c-text-5)' }}
                       >
-                        No shared skill rankings available for this agent yet.
+                        Avg Quality
                       </div>
-                    )}
-                  </SectionCard>
-                </div>
-              </SectionCard>
+                      <div
+                        className="text-lg font-bold"
+                        style={{ color: avgQuality > 80 ? '#4ade80' : '#f59e0b' }}
+                      >
+                        {avgQuality.toFixed(0)}%
+                      </div>
+                    </div>
+                    <div
+                      className="rounded-xl px-3 py-2.5"
+                      style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
+                    >
+                      <div
+                        className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                        style={{ color: 'var(--c-text-5)' }}
+                      >
+                        Approval Guardrails
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--c-text-2)' }}>
+                        Sensitive actions pause for human review
+                      </div>
+                    </div>
+                    <div
+                      className="rounded-xl px-3 py-2.5"
+                      style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-border-2)' }}
+                    >
+                      <div
+                        className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                        style={{ color: 'var(--c-text-5)' }}
+                      >
+                        Agent Profiles
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--c-text-2)' }}>
+                        Tools, memory, knowledge, and approvals live per rule
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="rounded-lg overflow-hidden"
+                    style={{ border: '1px solid var(--c-border-2)' }}
+                  >
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr style={{ background: 'var(--c-bg-1)' }}>
+                          <th
+                            className="text-left px-3 py-2 font-semibold"
+                            style={{ color: 'var(--c-text-4)' }}
+                          >
+                            Agent
+                          </th>
+                          <th
+                            className="text-right px-3 py-2 font-semibold"
+                            style={{ color: 'var(--c-text-4)' }}
+                          >
+                            Tasks
+                          </th>
+                          <th
+                            className="text-right px-3 py-2 font-semibold"
+                            style={{ color: 'var(--c-text-4)' }}
+                          >
+                            Quality
+                          </th>
+                          <th
+                            className="text-right px-3 py-2 font-semibold"
+                            style={{ color: 'var(--c-text-4)' }}
+                          >
+                            Cost
+                          </th>
+                          <th
+                            className="text-center px-3 py-2 font-semibold"
+                            style={{ color: 'var(--c-text-4)' }}
+                          >
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {agents.map((a, i) => (
+                          <tr
+                            key={a.id}
+                            onClick={() => setSelectedAgentId(a.id)}
+                            className="cursor-pointer"
+                            style={{
+                              background:
+                                selectedAgentId === a.id
+                                  ? 'rgba(99,102,241,0.10)'
+                                  : i % 2 === 0
+                                    ? 'var(--c-bg-1)'
+                                    : 'var(--c-bg-2)',
+                            }}
+                          >
+                            <td className="px-3 py-2 flex items-center gap-1.5">
+                              <span>{a.identity?.emoji || '🤖'}</span>
+                              <div className="min-w-0">
+                                <div className="truncate" style={{ color: 'var(--c-text-2)' }}>
+                                  {a.name}
+                                </div>
+                                <div
+                                  className="text-[9px] truncate"
+                                  style={{ color: 'var(--c-text-5)' }}
+                                >
+                                  {a.id}
+                                </div>
+                                {getMinimumFleetRoleLabel(a.id) && (
+                                  <div className="mt-0.5">
+                                    <span
+                                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium"
+                                      style={{
+                                        background: 'var(--c-bg-3)',
+                                        color: 'var(--c-text-4)',
+                                      }}
+                                    >
+                                      {getMinimumFleetRoleLabel(a.id)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td
+                              className="text-right px-3 py-2"
+                              style={{ color: 'var(--c-text-3)' }}
+                            >
+                              {a.stats?.totalTasks ?? 0}
+                            </td>
+                            <td
+                              className="text-right px-3 py-2"
+                              style={{
+                                color: (a.stats?.successRate ?? 0) > 80 ? '#4ade80' : '#f59e0b',
+                              }}
+                            >
+                              {(a.stats?.successRate ?? 0).toFixed(0)}%
+                            </td>
+                            <td
+                              className="text-right px-3 py-2"
+                              style={{ color: 'var(--c-text-3)' }}
+                            >
+                              {fmtUsd(a.costs?.totalCostUsd ?? 0)}
+                            </td>
+                            <td className="text-center px-3 py-2">
+                              <span
+                                className="inline-block w-2 h-2 rounded-full"
+                                style={{
+                                  background: a.status === 'active' ? '#4ade80' : '#a1a1aa',
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4">
+                    <SectionCard
+                      title="Selected Agent Resume"
+                      subtitle="Shared skill rankings for the currently selected agent"
+                    >
+                      {!selectedAgentId ? (
+                        <div
+                          className="text-sm py-8 text-center"
+                          style={{ color: 'var(--c-text-4)' }}
+                        >
+                          Select an agent row to inspect shared skill rankings.
+                        </div>
+                      ) : selectedAgentResumeError ? (
+                        <div className="text-sm py-8 text-center" style={{ color: '#f87171' }}>
+                          {selectedAgentResumeError}
+                        </div>
+                      ) : selectedAgentResumeLoading ? (
+                        <div
+                          className="text-sm py-8 text-center"
+                          style={{ color: 'var(--c-text-4)' }}
+                        >
+                          Loading resume…
+                        </div>
+                      ) : selectedAgentResume.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {selectedAgentResume.slice(0, 6).map((rank) => (
+                            <div
+                              key={rank.skillKey}
+                              className="rounded-2xl p-3"
+                              style={{
+                                background: 'var(--c-bg-1)',
+                                border: '1px solid var(--c-border-2)',
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div
+                                    className="text-sm font-semibold truncate"
+                                    style={{ color: 'var(--c-text-1)' }}
+                                  >
+                                    {rank.skillKey}
+                                  </div>
+                                  <div
+                                    className="text-[10px] mt-0.5"
+                                    style={{ color: 'var(--c-text-4)' }}
+                                  >
+                                    {rank.usageCount} uses · {rank.successRate.toFixed(1)}% success
+                                  </div>
+                                </div>
+                                <span
+                                  className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
+                                  style={{
+                                    color: rank.promotable ? 'var(--c-success)' : 'var(--c-text-4)',
+                                    background: rank.promotable
+                                      ? 'rgba(52,211,153,0.12)'
+                                      : 'rgba(255,255,255,0.04)',
+                                  }}
+                                >
+                                  {rank.promotable ? 'Promotable' : 'Observed'}
+                                </span>
+                              </div>
+                              <div
+                                className="mt-2 flex flex-wrap gap-2 text-[10px]"
+                                style={{ color: 'var(--c-text-4)' }}
+                              >
+                                <span>Score {rank.rankingScore.toFixed(2)}</span>
+                                <span>Last {rank.lastOutcome}</span>
+                                {rank.averageLatencyMs !== null && (
+                                  <span>{rank.averageLatencyMs}ms avg</span>
+                                )}
+                              </div>
+                              <div
+                                className="mt-2 text-[10px] leading-5"
+                                style={{ color: 'var(--c-text-5)' }}
+                              >
+                                {rank.reason}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          className="text-sm py-8 text-center"
+                          style={{ color: 'var(--c-text-4)' }}
+                        >
+                          No shared skill rankings available for this agent yet.
+                        </div>
+                      )}
+                    </SectionCard>
+                  </div>
+                </SectionCard>
+              </>
             )}
 
             {tab === 'approvals' && (

@@ -37,6 +37,7 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
 import { registerHandoffRoutes } from "./routes/handoff.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerNotificationDeliveryRoutes } from "./routes/notification-delivery.js";
 import { registerPushRoutes } from "./routes/push.js";
 import { initVoiceQualityMonitor, recordVoiceFailure, getVoiceQualityStats } from "./routes/voice-quality-monitor.js";
 import { createConversationEvaluator } from "./routes/conversation-evaluator.js";
@@ -1768,6 +1769,7 @@ const handleHealth = registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, g
 const handleReports = registerReportRoutes({ log, chatDb });
 const handleHandoff = registerHandoffRoutes({ log, chatDb });
 const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb });
+const notificationDelivery = registerNotificationDeliveryRoutes({ log });
 const { handlePushRoute, sendPushToAll } = registerPushRoutes({ log, chatDb });
 const handleCliLedger = registerCliLedgerRoutes({ log });
 const handleCliHandoff = registerCliHandoffRoutes({ log });
@@ -2218,6 +2220,8 @@ async function requestHandler(req, res) {
   if (await handleReports(req, res, url, _routeUtils)) return;
   // Agent handoff routes
   if (await handleHandoff(req, res, url, _routeUtils)) return;
+  // Notification delivery config routes
+  if (await notificationDelivery.handleNotificationDeliveryRoute(req, res, url, _routeUtils)) return;
   // Notification routes
   if (await handleNotifications(req, res, url, _routeUtils)) return;
   // Web Push routes (subscribe/unsubscribe/vapid-key)
@@ -7967,6 +7971,19 @@ function broadcastNotification(type, data) {
       url: "/",
     }).catch(() => {});
   }
+
+  notificationDelivery.deliverNotification({
+    type,
+    title: data.title || type.replace(/\./g, " "),
+    body: data.body || data.summary || data.message || "",
+    source: data.source || data.service || data.agent || "shre-chat",
+    routingKey: data.routingKey || data.workspaceId || data.projectId || data.source || data.service || data.agent || type,
+    url: data.url || "/",
+    severity: data.severity || data.level || null,
+    ts: Date.now(),
+  }).catch((err) => {
+    log.warn("Notification delivery failed", { type, error: String(err) });
+  });
 }
 
 // ── Panel push — notify connected clients when task/agent/service events fire ──

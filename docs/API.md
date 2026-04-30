@@ -191,6 +191,43 @@ View a shared session (public, no auth).
 
 ---
 
+## Notification Delivery
+
+### GET /api/notification-delivery/config
+
+Return the current Slack/email delivery config and effective status.
+
+### PUT /api/notification-delivery/config
+
+Persist local Slack/email delivery config in `~/.shre/shre-chat-notification-delivery.json`.
+
+**Body:**
+```json
+{
+  "slackEnabled": true,
+  "slackWebhookUrl": "https://hooks.slack.com/services/...",
+  "slackWebhookRoutes": {
+    "fleet": "https://hooks.slack.com/services/...",
+    "project:abc123": "https://hooks.slack.com/services/..."
+  },
+  "emailEnabled": true,
+  "emailTo": "alerts@company.com",
+  "emailAccount": "default",
+  "importantOnly": true
+}
+```
+
+### POST /api/notification-delivery/test
+
+Send a test notification to Slack and/or email.
+
+**Body:**
+```json
+{ "channels": ["slack", "email"] }
+```
+
+---
+
 ## Search
 
 ### GET /api/search?q=query
