@@ -31,6 +31,11 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Pipe Manifest](PIPE-MANIFEST.md) for app-to-app contract flows
 - [Pipes Starter Docs](pipes/README.md) for pipe-specific templates
 - [Governance Review](GOVERNANCE-REVIEW.md) for policy review cadence and gaps
+- [CI/CD Operations](CI-CD-OPERATIONS.md) for build and deploy flow
+- [Exception Process](EXCEPTION-PROCESS.md) for controlled overrides
+- [Model and Tool Access](MODEL-TOOL-ACCESS.md) for least-privilege model access
+- [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md) for supply chain checks
+- [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md) for untrusted content handling
 
 ## Legal And Compliance
 

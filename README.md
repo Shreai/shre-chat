@@ -144,6 +144,11 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Connector Manifest](docs/CONNECTOR-MANIFEST.md) | Per-connector owner, env, and README mapping |
 | [Pipe Manifest](docs/PIPE-MANIFEST.md) | App-to-app flow contract and rollback map |
 | [Governance Review](docs/GOVERNANCE-REVIEW.md) | How we review rules, gaps, and exceptions |
+| [CI/CD Operations](docs/CI-CD-OPERATIONS.md) | Build, QA, deploy, and rollback flow |
+| [Exception Process](docs/EXCEPTION-PROCESS.md) | Approved overrides with expiry and scope |
+| [Model and Tool Access](docs/MODEL-TOOL-ACCESS.md) | Least-privilege agent and model access |
+| [Dependency and License Review](docs/DEPENDENCY-LICENSE-REVIEW.md) | Supply-chain and redistribution review |
+| [Prompt Injection Safety](docs/PROMPT-INJECTION-SAFETY.md) | Untrusted content and tool output defense |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

@@ -35,6 +35,11 @@ This is the shared operating pack for every product.
 - [Pipe Manifest](PIPE-MANIFEST.md)
 - [Pipes Starter Docs](pipes/README.md)
 - [Governance Review](GOVERNANCE-REVIEW.md)
+- [CI/CD Operations](CI-CD-OPERATIONS.md)
+- [Exception Process](EXCEPTION-PROCESS.md)
+- [Model and Tool Access](MODEL-TOOL-ACCESS.md)
+- [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md)
+- [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md)
 
 ## Rule
 
