@@ -19,6 +19,7 @@ Every project should have these docs before launch:
 - [Exception Process](EXCEPTION-PROCESS.md)
 - [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md)
 - [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md)
+- [Delivery Control](DELIVERY-CONTROL.md)
 
 ## Growth Docs
 
@@ -48,6 +49,7 @@ If the project is moving toward beta, launch, or growth, add:
 Every project should end up with:
 
 - a product context or scope doc
+- a delivery control record
 - a service catalog entry
 - a release evidence pack
 - a rollback path

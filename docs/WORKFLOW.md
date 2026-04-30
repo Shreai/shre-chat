@@ -41,6 +41,7 @@ Need launch docs: yes
 - the base must be present before build mode starts
 - projects may customize stack and design, but the base docs and review loop stay in place
 - if a project is missing the base docs, treat that as a launch blocker
+- every project should have a [Delivery Control](DELIVERY-CONTROL.md) record before scope is accepted
 
 ## Growth Operating Base
 

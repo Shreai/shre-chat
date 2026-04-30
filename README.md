@@ -159,6 +159,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Memory and Retrieval Blueprint](docs/MEMORY-RETRIEVAL-BLUEPRINT.md) | Structured memory, compression, and agent routing |
 | [Project Operating Base](docs/PROJECT-OPERATING-BASE.md) | Default pack every new project inherits |
 | [Growth Operating Base](docs/GROWTH-OPERATING-BASE.md) | Beta, launch, and growth work |
+| [Delivery Control](docs/DELIVERY-CONTROL.md) | Requirements, SOWs, milestones, and budgets |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

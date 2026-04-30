@@ -50,6 +50,7 @@ This is the shared operating pack for every product.
 - [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md)
 - [Project Operating Base](PROJECT-OPERATING-BASE.md)
 - [Growth Operating Base](GROWTH-OPERATING-BASE.md)
+- [Delivery Control](DELIVERY-CONTROL.md)
 
 ## Rule
 

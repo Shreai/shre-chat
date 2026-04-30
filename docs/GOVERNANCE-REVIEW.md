@@ -19,6 +19,7 @@ The goal is to keep Shre OS policy alive, testable, and aligned with the actual 
 - if a task touches a specialized domain, the agent must also follow the relevant domain doc before making changes
 - every new project must include the project operating base before build mode starts
 - every product headed toward beta or launch must include the growth operating base before growth work starts
+- every project or change request must include a delivery control record before work starts
 - if rules conflict, follow the higher-priority rule and escalate the gap through governance review
 - if an agent cannot load the rules, it must stop and ask for a safe fallback instead of guessing
 
