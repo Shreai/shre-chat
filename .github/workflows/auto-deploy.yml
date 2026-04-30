@@ -26,8 +26,14 @@ jobs:
     env:
       DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
     steps:
+      - name: Validate production deploy target
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "Production deploy target is missing. Set DEPLOY_HOOK_URL before merging to main/master."
+            exit 1
+          fi
+
       - name: Trigger deploy hook
-        if: env.DEPLOY_HOOK_URL != ''
         run: |
           curl -fsSL -X POST "$DEPLOY_HOOK_URL" \
             -H 'Content-Type: application/json' \

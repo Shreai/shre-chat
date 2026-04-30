@@ -45,6 +45,7 @@ This is the shared operating pack for every product.
 - [Service Catalog](SERVICE-CATALOG.md)
 - [Release Evidence Pack](RELEASE-EVIDENCE-PACK.md)
 - [Retirement Process](RETIREMENT-PROCESS.md)
+- [Production Rollout](PRODUCTION-ROLLOUT.md)
 
 ## Rule
 

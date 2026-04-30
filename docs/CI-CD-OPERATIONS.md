@@ -40,7 +40,7 @@ It is the operating standard for builds, pipelines, promotions, and rollback.
 ## Environment Promotion
 
 - dev to QA requires automated checks and a QA target
-- QA to production requires approval and a healthy QA run
+- QA to production requires approval, a healthy QA run, and a configured production target
 - customer-hosted deployments should use the customer's target and credentials
 - Nirlab-hosted internal products use the shared platform target
 

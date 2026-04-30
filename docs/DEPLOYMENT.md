@@ -27,9 +27,12 @@ Required GitHub secrets:
 
 - `DEPLOY_HOOK_URL`
 
+Production deploy will fail if the target secret is missing.
+
 ## Safety Rules
 
 - QA first, production second
 - do not skip tests or build
 - do not deploy if the QA target secrets are missing
+- do not merge to production branches until the production hook is configured
 - keep the rollback path documented before production release

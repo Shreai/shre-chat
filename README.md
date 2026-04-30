@@ -154,6 +154,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Service Catalog](docs/SERVICE-CATALOG.md) | Canonical list of services and ownership |
 | [Release Evidence Pack](docs/RELEASE-EVIDENCE-PACK.md) | Minimum proof required for a release |
 | [Retirement Process](docs/RETIREMENT-PROCESS.md) | Clean deprecation and archival flow |
+| [Production Rollout](docs/PRODUCTION-ROLLOUT.md) | Final QA-to-prod promotion flow |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

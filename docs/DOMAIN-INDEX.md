@@ -41,6 +41,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Service Catalog](SERVICE-CATALOG.md) for the service map
 - [Release Evidence Pack](RELEASE-EVIDENCE-PACK.md) for release proof
 - [Retirement Process](RETIREMENT-PROCESS.md) for clean deprecation and archive
+- [Production Rollout](PRODUCTION-ROLLOUT.md) for QA-to-prod promotion
 
 ## Legal And Compliance
 
