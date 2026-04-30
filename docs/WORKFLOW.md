@@ -42,6 +42,7 @@ Need launch docs: yes
 - projects may customize stack and design, but the base docs and review loop stay in place
 - if a project is missing the base docs, treat that as a launch blocker
 - every project should have a [Delivery Control](DELIVERY-CONTROL.md) record before scope is accepted
+- every project with meaningful delivery risk should have a [Risk Register](RISK-REGISTER.md)
 
 ## Growth Operating Base
 

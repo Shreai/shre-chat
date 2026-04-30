@@ -47,6 +47,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Project Operating Base](PROJECT-OPERATING-BASE.md) for the default pack every project inherits
 - [Growth Operating Base](GROWTH-OPERATING-BASE.md) for beta, launch, and growth work
 - [Delivery Control](DELIVERY-CONTROL.md) for requirements, SOWs, milestones, and budgets
+- [Risk Register](RISK-REGISTER.md) for material project and release risks
 
 ## Legal And Compliance
 

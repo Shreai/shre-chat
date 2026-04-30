@@ -20,6 +20,7 @@ Every project should have these docs before launch:
 - [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md)
 - [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md)
 - [Delivery Control](DELIVERY-CONTROL.md)
+- [Risk Register](RISK-REGISTER.md)
 
 ## Growth Docs
 
@@ -52,6 +53,7 @@ Every project should end up with:
 - a delivery control record
 - a service catalog entry
 - a release evidence pack
+- a risk register when the project has meaningful delivery or launch risk
 - a rollback path
 - a retirement path
 - a legal/compliance review when applicable

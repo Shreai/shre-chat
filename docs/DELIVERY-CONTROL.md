@@ -52,6 +52,7 @@ The SOW should include:
 - token estimate
 - owner and approvers
 - risk notes
+- risk register link when risk is meaningful
 
 ## Milestone Planning
 
@@ -128,6 +129,10 @@ Each project or change should leave behind:
 - actuals
 - approvals
 - acceptance evidence
+
+## Risk
+
+If the request introduces material risk, link the [Risk Register](RISK-REGISTER.md) and update it alongside the SOW.
 
 ## Rule
 
