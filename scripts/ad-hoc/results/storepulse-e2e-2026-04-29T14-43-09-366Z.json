@@ -1,0 +1,32 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777473765274",
+  "ranAt": "2026-04-29T14:43:09.367Z",
+  "summary": {
+    "passed": 1,
+    "failed": 0,
+    "byModel": {
+      "qwen2.5:0.5b": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 23531,
+        "ttfbMs": 23531,
+        "length": 122,
+        "excerpt": "In the world of stores, there are a lot of things to do with your store. You need to have some questions for me. Let's it.",
+        "text": "In the world of stores, there are a lot of things to do with your store. You need to have some questions for me. Let's it."
+      }
+    }
+  ]
+}

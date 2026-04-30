@@ -95,7 +95,7 @@ export function SpendView() {
       if (cancelled) return;
 
       if (!s && !m && !p) {
-        setError('Could not reach shre-router. Is it running?');
+        setError('Could not reach the gateway service. Is it running?');
       }
       setSummary(s);
       setByModel(m ?? []);
@@ -136,7 +136,7 @@ export function SpendView() {
           Provider Spend
         </span>
         <span className="text-[10px] font-mono" style={{ color: 'var(--c-text-5)' }}>
-          via shre-router
+          via gateway service
         </span>
       </div>
 

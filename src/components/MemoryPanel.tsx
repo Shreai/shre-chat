@@ -115,14 +115,14 @@ export function MemoryPanel({ open, onClose, tenantId, agentId }: Props) {
           if (Array.isArray(shared.facts) && shared.facts.length > 0) {
             setSharedFacts(
               shared.facts
-                .map((entry) => ({
+                .map((entry: SharedFact) => ({
                   fact: entry.fact || '',
                   category: entry.category || 'decision',
                   confidence: typeof entry.confidence === 'number' ? entry.confidence : 0.5,
                   sourceAgent: entry.sourceAgent || 'unknown',
                   sharedAt: entry.sharedAt || new Date().toISOString(),
                 }))
-                .filter((entry) => entry.fact),
+                .filter((entry: SharedFact) => entry.fact),
             );
           }
         }

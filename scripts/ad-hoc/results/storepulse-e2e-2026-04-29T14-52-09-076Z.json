@@ -1,0 +1,117 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777474324088",
+  "ranAt": "2026-04-29T14:52:09.079Z",
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "byModel": {
+      "direct-analytics": 6
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 2,
+        "category": "sales-yesterday",
+        "ask": "How did we do yesterday?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 7,
+        "ttfbMs": 7,
+        "length": 68,
+        "excerpt": "**Store** yesterday: - I do not have yesterday's summary loaded yet.",
+        "text": "**Store** yesterday:\n- I do not have yesterday's summary loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 4,
+        "category": "mtd",
+        "ask": "Give me month-to-date sales and transactions."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 8,
+        "ttfbMs": 8,
+        "length": 71,
+        "excerpt": "**Store** month-to-date: - I do not have month-to-date data loaded yet.",
+        "text": "**Store** month-to-date:\n- I do not have month-to-date data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 6,
+        "category": "top-vendors",
+        "ask": "Which vendors generated the most revenue this week?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 7,
+        "ttfbMs": 7,
+        "length": 66,
+        "excerpt": "**Store** vendors: - I do not have vendor revenue data loaded yet.",
+        "text": "**Store** vendors:\n- I do not have vendor revenue data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 8,
+        "category": "cashier-perf",
+        "ask": "Which cashier had the most transactions today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 2,
+        "ttfbMs": 2,
+        "length": 83,
+        "excerpt": "**Store** cashier performance: - I do not have cashier performance data loaded yet.",
+        "text": "**Store** cashier performance:\n- I do not have cashier performance data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 10,
+        "category": "discounts",
+        "ask": "How much did we discount this week and on which items?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 16,
+        "ttfbMs": 16,
+        "length": 92,
+        "excerpt": "**Store** discounts: - Today: **$0.00** - Week-to-date: **$0.00** - Month-to-date: **$0.00**",
+        "text": "**Store** discounts:\n- Today: **$0.00**\n- Week-to-date: **$0.00**\n- Month-to-date: **$0.00**"
+      }
+    },
+    {
+      "prompt": {
+        "id": 12,
+        "category": "avg-ticket",
+        "ask": "What is the average ticket trend over the last 7 days?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 5,
+        "ttfbMs": 5,
+        "length": 125,
+        "excerpt": "**Store** average ticket snapshot: - Today: **$0.00** - Yesterday: **$0.00** - Week-to-date: **$0.00** - Last week: **$0.00**",
+        "text": "**Store** average ticket snapshot:\n- Today: **$0.00**\n- Yesterday: **$0.00**\n- Week-to-date: **$0.00**\n- Last week: **$0.00**"
+      }
+    }
+  ]
+}

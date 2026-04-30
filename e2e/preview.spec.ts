@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { switchView } from './view-switch';
 
 test.describe('Preview — rendering & file type support', () => {
   test.setTimeout(60_000);
@@ -29,11 +30,11 @@ test.describe('Preview — rendering & file type support', () => {
         const lib = JSON.parse(localStorage.getItem('shre-preview-library') || '[]');
         lib.unshift(entry);
         localStorage.setItem('shre-preview-library', JSON.stringify(lib.slice(0, 20)));
-        window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
       },
       { content, title, type },
     );
-    await page.waitForTimeout(800);
+    await switchView(page, 'preview');
+    await expect(page.locator('[data-preview-ready="true"]')).toBeVisible({ timeout: 30_000 });
   }
 
   // ═══════════ HTML Tests ═══════════
@@ -76,6 +77,7 @@ test.describe('Preview — rendering & file type support', () => {
     const json = `{"name":"AROS","agents":17,"status":"active"}`;
     await injectPreview(page, json, 'data.json', 'json');
 
+    await expect(page.locator('[data-preview-ready="true"]')).toBeVisible();
     await expect(page.locator('pre', { hasText: 'AROS' })).toBeVisible();
   });
 
@@ -85,6 +87,7 @@ test.describe('Preview — rendering & file type support', () => {
     const txt = `Service Status Report\n=====================\nshre-router: healthy`;
     await injectPreview(page, txt, 'status.txt', 'txt');
 
+    await expect(page.locator('[data-preview-ready="true"]')).toBeVisible();
     await expect(page.locator('pre', { hasText: 'Service Status Report' })).toBeVisible();
   });
 
@@ -127,9 +130,9 @@ test.describe('Preview — rendering & file type support', () => {
       ];
       localStorage.setItem('shre-preview-library', JSON.stringify(entries));
       sessionStorage.setItem('shre-preview-html', JSON.stringify(entries[0]));
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
     });
-    await page.waitForTimeout(800);
+    await switchView(page, 'preview');
+    await expect(page.locator('[data-preview-ready="true"]')).toBeVisible({ timeout: 30_000 });
 
     // Use .first() to avoid strict mode on duplicate text (toolbar + sidebar)
     await expect(page.locator('text=report.html').first()).toBeVisible();
@@ -172,6 +175,7 @@ test.describe('Preview — rendering & file type support', () => {
 
   test('Clear deselects active preview', async ({ page }) => {
     await injectPreview(page, '<h1>Clear me</h1>', 'clear-test.html', 'html');
+    await expect(page.locator('[data-preview-ready="true"]')).toBeVisible();
     await expect(page.locator('iframe[title="HTML Preview"]')).toBeVisible();
 
     await page.locator('button', { hasText: 'Clear' }).first().click();

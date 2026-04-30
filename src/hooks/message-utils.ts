@@ -3,11 +3,13 @@
 // its dependencies explicitly so callers retain control of React state.
 
 import type { ChatMessage } from '../router-client';
+import { isDevSafeMode } from '../env';
 
 export async function fetchSuggestions(
   assistantResponse: string,
   setSuggestions: (s: string[]) => void,
 ): Promise<void> {
+  if (isDevSafeMode()) return;
   try {
     const res = await fetch('/api/suggestions', {
       method: 'POST',

@@ -1,0 +1,32 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "2",
+  "sessionKey": "e2e-1777471869918",
+  "ranAt": "2026-04-29T14:11:13.166Z",
+  "summary": {
+    "passed": 1,
+    "failed": 0,
+    "byModel": {
+      "direct-sales": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 1,
+        "category": "sales-today",
+        "ask": "What are today's sales?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 2399,
+        "ttfbMs": 2399,
+        "length": 127,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$64.83** - Transactions: **7** - Average Ticket: $9.26 - Tax: $4.80 - Discounts: $0.00",
+        "text": "**Party Liquor** today:\n- Total Sales: **$64.83**\n- Transactions: **7**\n- Average Ticket: $9.26\n- Tax: $4.80\n- Discounts: $0.00"
+      }
+    }
+  ]
+}

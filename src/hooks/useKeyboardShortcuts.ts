@@ -14,21 +14,23 @@ export interface UseKeyboardShortcutsParams {
   setSelectedMsgIndex: React.Dispatch<React.SetStateAction<number | null>>;
   chatSearchOpen: boolean;
   setChatSearchOpen: (v: boolean) => void;
-  chatSearchRef: React.RefObject<HTMLInputElement>;
+  chatSearchRef: React.RefObject<HTMLInputElement | null>;
   closeChatSearch: () => void;
   globalSearchOpen: boolean;
   setGlobalSearchOpen: (v: boolean) => void;
-  globalSearchRef: React.RefObject<HTMLInputElement>;
+  globalSearchRef: React.RefObject<HTMLInputElement | null>;
   shortcutsOpen: boolean;
   setShortcutsOpen: (v: boolean) => void;
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean | ((prev: boolean) => boolean)) => void;
   abortRef: React.MutableRefObject<AbortController | null>;
-  inputRef: React.RefObject<HTMLTextAreaElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   pendingEditSendRef: React.MutableRefObject<boolean>;
   setInput: (v: string) => void;
   setEditingMsgIndex: (v: number | null) => void;
   setEditingMsgText: (v: string) => void;
+  setStatusLine: (v: string | null) => void;
+  escapeArmedRef: React.MutableRefObject<boolean>;
   actions: Pick<AppActions, 'newSession' | 'switchSession' | 'replaceSessionMessages'>;
   virtualizer: {
     scrollToIndex: (
@@ -65,6 +67,8 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
     setInput,
     setEditingMsgIndex,
     setEditingMsgText,
+    setStatusLine,
+    escapeArmedRef,
     actions,
     virtualizer,
   } = params;
@@ -88,11 +92,21 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
 
-      // Escape to cancel streaming
-      if (e.key === 'Escape' && streaming) {
+      // Escape pauses streaming on first press, cancels on second press.
+      if (e.key === 'Escape') {
         e.preventDefault();
-        handleAbort();
-        return;
+        if (streaming) {
+          if (escapeArmedRef.current) {
+            escapeArmedRef.current = false;
+            setStatusLine(null);
+            handleAbort();
+          } else {
+            escapeArmedRef.current = true;
+            setStatusLine('Paused. Press Esc again to cancel.');
+          }
+          return;
+        }
+        escapeArmedRef.current = false;
       }
 
       // Cmd/Ctrl+K for new chat
@@ -169,6 +183,8 @@ export function useKeyboardShortcuts(params: UseKeyboardShortcutsParams) {
     globalSearchRef,
     setShortcutsOpen,
     setShowModelPicker,
+    setStatusLine,
+    escapeArmedRef,
   ]);
 
   // Message keyboard navigation (when textarea is NOT focused)

@@ -1,0 +1,257 @@
+{
+  "base": "https://storepulse.nirtek.net",
+  "workspace": "2",
+  "sessionKey": "e2e-1777410838604",
+  "ranAt": "2026-04-28T21:16:15.147Z",
+  "summary": {
+    "passed": 11,
+    "failed": 4,
+    "byModel": {
+      "direct-sales": 7,
+      "error": 4,
+      "qwen2.5:0.5b": 3,
+      "auto": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 1,
+        "category": "sales-today",
+        "ask": "What are today's sales?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 262,
+        "ttfbMs": 260,
+        "length": 135,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$1,726.59** - Transactions: **59** - Average Ticket: $29.26 - Tax: $127.89 - Discounts: $12.50",
+        "text": "**Party Liquor** today:\n- Total Sales: **$1,726.59**\n- Transactions: **59**\n- Average Ticket: $29.26\n- Tax: $127.89\n- Discounts: $12.50"
+      }
+    },
+    {
+      "prompt": {
+        "id": 2,
+        "category": "sales-yesterday",
+        "ask": "How did we do yesterday?"
+      },
+      "result": {
+        "ok": false,
+        "http": 502,
+        "error": "<!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 7]>    <html class=\"no-js ie7 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 8]>    <html class=\"no-",
+        "elapsedMs": 30641
+      }
+    },
+    {
+      "prompt": {
+        "id": 3,
+        "category": "wtd-vs-lastweek",
+        "ask": "How did I perform this week vs last week?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 1439,
+        "ttfbMs": 1437,
+        "length": 215,
+        "excerpt": "**Party Liquor** this week vs last week: - This week sales: **$4,373.36** - Last week sales: **$35,748.40** - Change: **down $31,375.04** (-87.8%) - This week transactions: **190** - Last week transactions: **1227**",
+        "text": "**Party Liquor** this week vs last week:\n- This week sales: **$4,373.36**\n- Last week sales: **$35,748.40**\n- Change: **down $31,375.04** (-87.8%)\n- This week transactions: **190**\n- Last week transactions: **1227**"
+      }
+    },
+    {
+      "prompt": {
+        "id": 4,
+        "category": "mtd",
+        "ask": "Give me month-to-date sales and transactions."
+      },
+      "result": {
+        "ok": false,
+        "http": 502,
+        "error": "<!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 7]>    <html class=\"no-js ie7 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 8]>    <html class=\"no-",
+        "elapsedMs": 30449
+      }
+    },
+    {
+      "prompt": {
+        "id": 5,
+        "category": "top-items",
+        "ask": "What are the top 5 selling items today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 1797,
+        "ttfbMs": 1796,
+        "length": 135,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$1,726.59** - Transactions: **59** - Average Ticket: $29.26 - Tax: $127.89 - Discounts: $12.50",
+        "text": "**Party Liquor** today:\n- Total Sales: **$1,726.59**\n- Transactions: **59**\n- Average Ticket: $29.26\n- Tax: $127.89\n- Discounts: $12.50"
+      }
+    },
+    {
+      "prompt": {
+        "id": 6,
+        "category": "top-vendors",
+        "ask": "Which vendors generated the most revenue this week?"
+      },
+      "result": {
+        "ok": false,
+        "http": 502,
+        "error": "<!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 7]>    <html class=\"no-js ie7 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 8]>    <html class=\"no-",
+        "elapsedMs": 41262
+      }
+    },
+    {
+      "prompt": {
+        "id": 7,
+        "category": "hourly-pattern",
+        "ask": "Show me the hourly sales pattern for today."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 1541,
+        "ttfbMs": 1540,
+        "length": 135,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$1,823.09** - Transactions: **61** - Average Ticket: $29.89 - Tax: $135.04 - Discounts: $12.50",
+        "text": "**Party Liquor** today:\n- Total Sales: **$1,823.09**\n- Transactions: **61**\n- Average Ticket: $29.89\n- Tax: $135.04\n- Discounts: $12.50"
+      }
+    },
+    {
+      "prompt": {
+        "id": 8,
+        "category": "cashier-perf",
+        "ask": "Which cashier had the most transactions today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 773,
+        "ttfbMs": 768,
+        "length": 105,
+        "excerpt": "The most transactions happened by the cashier this morning are:  Cashier had the most transactions today.",
+        "text": "The most transactions happened by the cashier this morning are:\n\nCashier had the most transactions today."
+      }
+    },
+    {
+      "prompt": {
+        "id": 9,
+        "category": "department-mix",
+        "ask": "Break down sales by department today."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 402,
+        "ttfbMs": 401,
+        "length": 135,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$1,823.09** - Transactions: **61** - Average Ticket: $29.89 - Tax: $135.04 - Discounts: $12.50",
+        "text": "**Party Liquor** today:\n- Total Sales: **$1,823.09**\n- Transactions: **61**\n- Average Ticket: $29.89\n- Tax: $135.04\n- Discounts: $12.50"
+      }
+    },
+    {
+      "prompt": {
+        "id": 10,
+        "category": "discounts",
+        "ask": "How much did we discount this week and on which items?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 1893,
+        "ttfbMs": 1893,
+        "length": 37,
+        "excerpt": "I'may some of the same things as you.",
+        "text": "I'may some of the same things as you."
+      }
+    },
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 1861,
+        "ttfbMs": 1861,
+        "length": 44,
+        "excerpt": "I'me a helpin' to 'Party! I'm not a 'party'!",
+        "text": "I'me a helpin' to 'Party! I'm not a 'party'!"
+      }
+    },
+    {
+      "prompt": {
+        "id": 12,
+        "category": "avg-ticket",
+        "ask": "What is the average ticket trend over the last 7 days?"
+      },
+      "result": {
+        "ok": false,
+        "http": 500,
+        "error": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1777410957112\",\"status\":\"in_progress\",\"model\":\"auto\",\"output\":[]}}\n\nevent: response.output_item.added\ndata: {\"type\":\"res",
+        "elapsedMs": 12722
+      }
+    },
+    {
+      "prompt": {
+        "id": 13,
+        "category": "tax-collected",
+        "ask": "How much sales tax did we collect today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 429,
+        "ttfbMs": 429,
+        "length": 135,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$1,823.09** - Transactions: **61** - Average Ticket: $29.89 - Tax: $135.04 - Discounts: $12.50",
+        "text": "**Party Liquor** today:\n- Total Sales: **$1,823.09**\n- Transactions: **61**\n- Average Ticket: $29.89\n- Tax: $135.04\n- Discounts: $12.50"
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "auto",
+        "elapsedMs": 9786,
+        "ttfbMs": 9786,
+        "length": 115,
+        "excerpt": "**Void/Refund Report:**  | Invoice | Date | Cashier | Amount | |---|---|---|---| | No data found. | ? | ? | $0.00 |",
+        "text": "**Void/Refund Report:**\n\n| Invoice | Date | Cashier | Amount |\n|---|---|---|---|\n| No data found. | ? | ? | $0.00 |"
+      }
+    },
+    {
+      "prompt": {
+        "id": 15,
+        "category": "compare-day",
+        "ask": "Compare today vs yesterday — sales, ticket count, average ticket."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 651,
+        "ttfbMs": 647,
+        "length": 135,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$1,823.09** - Transactions: **61** - Average Ticket: $29.89 - Tax: $135.04 - Discounts: $12.50",
+        "text": "**Party Liquor** today:\n- Total Sales: **$1,823.09**\n- Transactions: **61**\n- Average Ticket: $29.89\n- Tax: $135.04\n- Discounts: $12.50"
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { switchView } from './view-switch';
 
 test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => {
   test.setTimeout(60_000);
@@ -104,9 +105,7 @@ test.describe('Agent 4: Ecosystem — app drawer, iframes, integrations', () => 
   // ═══════════ Iframe View Loading ═══════════
 
   test('Router Gateway view loads status panel', async ({ page }) => {
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'router-gateway' }));
-    });
+    await switchView(page, 'router-gateway');
     await page.waitForTimeout(1500);
 
     const heading = page.locator('h2:has-text("Router Gateway")').first();

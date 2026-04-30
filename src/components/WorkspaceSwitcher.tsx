@@ -54,7 +54,7 @@ export function WorkspaceSwitcher({
         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
       >
         <span className="w-2 h-2 rounded-full bg-green-500" />
-        <span className="font-medium truncate max-w-[120px]">{activeWorkspace.name}</span>
+        <span className="font-medium truncate max-w-[80px] sm:max-w-[120px]">{activeWorkspace.name}</span>
         {roleBadge(activeWorkspace.role)}
         <svg
           className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -67,7 +67,7 @@ export function WorkspaceSwitcher({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1">
+        <div className="absolute top-full left-0 mt-1 w-56 max-w-[calc(100vw-12px)] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1">
           <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
             Workspaces
           </div>

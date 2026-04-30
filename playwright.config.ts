@@ -165,6 +165,14 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
+    // ── Agent 13: Shared Memory Sync (live update badge + refresh) ──
+    {
+      name: 'memory-sync',
+      testMatch: /shared-memory\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
     // ── Visual regression (baseline screenshots, update with --update-snapshots) ──
     {
       name: 'visual-regression',

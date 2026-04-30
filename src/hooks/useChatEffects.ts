@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
+import { getStoredAuth } from '../AppAuth';
 import {
   setAgent,
   fetchAllAgentMessages,
@@ -8,16 +9,15 @@ import {
   type RouterModel,
 } from '../router-client';
 import {
-  isWSConnected,
   startHealthPoll,
   stopHealthPoll,
   onHealthChange,
-  abortChatWS,
   abortAllStreams,
   retryConnection,
 } from '../gateway-ws';
 import { loadScrollPositions, saveScrollPositions, type Session, type AppActions } from '../store';
 import { showDesktopNotification, getModelOverride, setModelOverride } from '../chat-utils';
+import { isDevSafeMode } from '../env';
 
 export interface SharedSnapshot {
   title: string;
@@ -50,8 +50,8 @@ export interface UseChatEffectsParams {
     | 'getDraft'
     | 'setStatusLine'
   >;
-  scrollRef: React.RefObject<HTMLDivElement>;
-  inputRef: React.RefObject<HTMLTextAreaElement>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   streamFlushRaf: React.MutableRefObject<number | null>;
   streamBufferRef: React.MutableRefObject<string>;
   sendingRef: React.MutableRefObject<boolean>;
@@ -63,13 +63,13 @@ export interface UseChatEffectsParams {
   setCompareModels: (v: string[] | ((prev: string[]) => string[])) => void;
   showEmoji: boolean;
   setShowEmoji: (v: boolean) => void;
-  emojiRef: React.RefObject<HTMLDivElement>;
+  emojiRef: React.RefObject<HTMLDivElement | null>;
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
-  modelPickerRef: React.RefObject<HTMLDivElement>;
+  modelPickerRef: React.RefObject<HTMLDivElement | null>;
   comparePickerOpen: boolean;
   setComparePickerOpen: (v: boolean) => void;
-  comparePickerRef: React.RefObject<HTMLDivElement>;
+  comparePickerRef: React.RefObject<HTMLDivElement | null>;
   setShareUrl: (v: string | null) => void;
   setSharedSnapshot: (v: SharedSnapshot | null) => void;
   setSharedLoading: (v: boolean) => void;
@@ -160,6 +160,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   const recentWSSendRef = useRef(false);
   const HISTORY_MAX = Infinity;
   const HISTORY_KEY = 'shre-sent-history';
+  const devSafeMode = isDevSafeMode();
   const [initHistory] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
@@ -169,6 +170,31 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
   });
   const sentHistoryRef = useRef<string[]>(initHistory);
   const sentHistoryIdxRef = useRef(initHistory.length);
+
+  if (devSafeMode) {
+    return {
+      scrollPositionsRef,
+      prevMsgCount,
+      newMsgStartIndex,
+      initialLoadDone,
+      showJumpToLatest: false,
+      setShowJumpToLatest: () => void 0,
+      userNearBottomRef,
+      handleScroll: () => void 0,
+      jumpToLatest: () => void 0,
+      pullRefreshing: false,
+      pullDistance: 0,
+      handlePullStart: () => void 0,
+      handlePullMove: () => void 0,
+      handlePullEnd: () => void 0,
+      PULL_THRESHOLD,
+      sentHistoryRef,
+      sentHistoryIdxRef,
+      HISTORY_MAX,
+      HISTORY_KEY,
+      recentWSSendRef,
+    };
+  }
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -209,10 +235,15 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
   // Fetch live model list from shre-router
   useEffect(() => {
+    if (devSafeMode) return;
     let cancelled = false;
     const load = () => {
-      fetchAvailableModels().then((models) => {
+      Promise.all([
+        fetchAvailableModels(),
+        fetch('/api/router/health').then(async (res) => (res.ok ? res.json() : null)).catch(() => null),
+      ]).then(([models, routerHealth]) => {
         if (cancelled) return;
+        const routerHealthy = routerHealth?.status === 'ok' || routerHealth?.ready === true;
         if (models.length > 0) {
           setDynamicModels(models);
           setRouterUp(true);
@@ -228,13 +259,16 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
             const valid = prev.filter((id) => validIds.has(id));
             return valid.length !== prev.length ? valid : prev;
           });
-        } else {
-          setRouterUp(false);
+          return;
         }
+
+        // If the router health check is up but the model catalog is empty or slow,
+        // keep the UI in an uncertain/healthy state rather than false-negative down.
+        setRouterUp(routerHealthy ? true : false);
       });
     };
     load();
-    const interval = setInterval(load, 5 * 60 * 1000);
+    const interval = setInterval(load, 60 * 1000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -263,6 +297,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
   // Collect and send client system info on mount
   useEffect(() => {
+    if (devSafeMode) return;
     const sendClientInfo = async () => {
       try {
         const info = {
@@ -301,9 +336,11 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
   // Sync messages from router session files on agent change
   useEffect(() => {
+    if (devSafeMode) return;
     let cancelled = false;
 
     async function syncFromRouter() {
+      if (!getStoredAuth()) return;
       const isInitialSync = syncedAgentRef.current !== activeAgentId;
       if (isInitialSync) {
         actions.setSyncing(true);
@@ -433,7 +470,7 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
 
     syncFromRouter();
     const iv = setInterval(async () => {
-      if (streaming || isWSConnected() || recentWSSendRef.current) return;
+      if (streaming || recentWSSendRef.current) return;
       await syncFromRouter();
     }, 15000);
     return () => {
@@ -663,9 +700,6 @@ export function useChatEffects(params: UseChatEffectsParams): UseChatEffectsRetu
       }
       abortRef.current?.abort();
       abortRef.current = null;
-      if (isWSConnected()) {
-        abortChatWS(activeAgentId, 'main');
-      }
       if (streamFlushRaf.current) {
         clearTimeout(streamFlushRaf.current);
         streamFlushRaf.current = null;

@@ -4,6 +4,7 @@
  */
 import {
   useEffect,
+  useLayoutEffect,
   useCallback,
   type MutableRefObject,
   type Dispatch,
@@ -37,6 +38,12 @@ import { isDevSafeMode } from './env';
 import { scopedStorageKey } from './workspace-context';
 
 const THEME_KEY = 'shre-theme';
+
+declare global {
+  interface Window {
+    __shreSwitchView?: (view: View) => void;
+  }
+}
 
 // ── Theme application ──
 export function useThemeEffect(theme: Theme) {
@@ -358,13 +365,22 @@ export function useCrossTabSync(
 
 // ── Custom view event handler ──
 export function useViewSwitchEvent(setView: Dispatch<SetStateAction<View>>) {
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const v = (e as CustomEvent<string>).detail as View;
+  useLayoutEffect(() => {
+    const bridge = (v: View) => {
       if (v) setView(v);
     };
+    const handler = (e: Event) => {
+      const v = (e as CustomEvent<string>).detail as View;
+      bridge(v);
+    };
+    window.__shreSwitchView = bridge;
     window.addEventListener('shre:switch-view', handler);
-    return () => window.removeEventListener('shre:switch-view', handler);
+    return () => {
+      window.removeEventListener('shre:switch-view', handler);
+      if (window.__shreSwitchView === bridge) {
+        delete window.__shreSwitchView;
+      }
+    };
   }, [setView]);
 }
 

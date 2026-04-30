@@ -10,7 +10,6 @@ const LEGACY_MODEL_KEY = 'shre-model-overrides';
 
 export type TTSProvider = 'auto' | 'elevenlabs' | 'personaplex';
 export type GatewayMode = 'router' | 'direct';
-export const ALLOW_DIRECT_MODE = import.meta.env.VITE_ENABLE_DIRECT_MODE === 'true';
 
 // Feature keys that can be toggled on/off
 export type FeatureKey =
@@ -60,6 +59,9 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
 const _isLocal =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+export const ALLOW_DIRECT_MODE =
+  import.meta.env.VITE_ENABLE_DIRECT_MODE === 'true' || _isLocal;
 
 export const DEFAULT_FEATURES: Record<FeatureKey, boolean> = {
   terminal: _isLocal,

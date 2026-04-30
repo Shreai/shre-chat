@@ -52,6 +52,7 @@ import {
 import { ViewNavHeader } from './ViewNavHeader';
 import { buildActions, type ActionDeps } from './AppActions';
 import { DocumentsView } from './DocumentsView';
+import { PreviewView } from './PreviewView';
 import {
   useThemeEffect,
   useThemeCustomEffect,
@@ -82,7 +83,6 @@ const AgentFeedView = lazy(() =>
 const AgentSocialView = lazy(() =>
   import('./AgentSocialView').then((m) => ({ default: m.AgentSocialView })),
 );
-const PreviewView = lazy(() => import('./PreviewView').then((m) => ({ default: m.PreviewView })));
 const SpendView = lazy(() => import('./SpendView').then((m) => ({ default: m.SpendView })));
 const BriefingView = lazy(() =>
   import('./BriefingView').then((m) => ({ default: m.BriefingView })),
@@ -897,10 +897,34 @@ function MainApp({
     typeof window !== 'undefined' &&
     (window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true);
+  const isWidgetMode =
+    typeof window !== 'undefined' &&
+    (() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        return (
+          params.get('widget') === '1' ||
+          params.get('widget') === 'true' ||
+          params.get('embed') === '1' ||
+          window.self !== window.top
+        );
+      } catch {
+        return false;
+      }
+    })();
 
   const mainContent =
     mode === 'documents' ? (
       <DocumentsView authUser={authUser} userProfile={userProfile} onLogout={onLogout} />
+    ) : isWidgetMode ? (
+      <div
+        className={`widget-shell h-full w-full ${isPWA ? 'pwa-mode' : ''}`}
+        style={{ background: 'var(--c-bg-1)' }}
+      >
+        <Suspense fallback={<LazyFallback />}>
+          <ChatView />
+        </Suspense>
+      </div>
     ) : (
       <div
         className={`h-full flex flex-col${isPWA ? ' pwa-mode' : ''}`}

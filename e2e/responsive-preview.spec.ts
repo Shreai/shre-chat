@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { switchView } from './view-switch';
 
 /**
  * Responsive Preview Testing
@@ -269,8 +270,8 @@ test.describe('Chat UI — Responsive (auth required)', () => {
             type: 'html',
           };
           sessionStorage.setItem('shre-preview-html', JSON.stringify(entry));
-          window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
         });
+        await switchView(page, 'preview');
         await page.waitForTimeout(1000);
         const { sw, cw } = await page.evaluate(() => ({
           sw: document.documentElement.scrollWidth,

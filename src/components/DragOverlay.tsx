@@ -1,6 +1,8 @@
 import React from 'react';
 
 export function DragOverlay(_props: { isDragging?: boolean } = {}) {
+  if (!_props.isDragging) return null;
+
   return (
     <div
       className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none"

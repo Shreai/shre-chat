@@ -6,7 +6,6 @@
  * for programmatic discovery.
  */
 
-import { mib007Link } from './chat-utils';
 import type { View } from './store';
 
 export interface SitemapEntry {
@@ -199,61 +198,6 @@ export const SITEMAP: SitemapEntry[] = [
     keywords: ['finetune', 'fine-tuning', 'training', 'lora', 'model'],
   },
 
-  // ── External (MIB007) ──
-  {
-    id: 'mib-tasks',
-    label: 'Tasks (MIB007)',
-    description: 'Full task management in MIB007 — Kanban, filters, bulk actions, dependencies',
-    category: 'external',
-    type: 'external',
-    url: mib007Link('tasks'),
-    keywords: ['mib tasks', 'kanban', 'full tasks'],
-  },
-  {
-    id: 'mib-projects',
-    label: 'Projects (MIB007)',
-    description: 'Full project management in MIB007 — project details, issues, goals',
-    category: 'external',
-    type: 'external',
-    url: mib007Link('projects'),
-    keywords: ['mib projects', 'project detail'],
-  },
-  {
-    id: 'mib-agents',
-    label: 'Agents (MIB007)',
-    description: 'Agent management in MIB007 — DNA profiles, runs, task history, configuration',
-    category: 'external',
-    type: 'external',
-    url: mib007Link('agents/all'),
-    keywords: ['mib agents', 'agent management', 'agent list'],
-  },
-  {
-    id: 'mib-issues',
-    label: 'Issues (MIB007)',
-    description: 'Issue tracker in MIB007 — bugs, features, backlog management',
-    category: 'external',
-    type: 'external',
-    url: mib007Link('issues'),
-    keywords: ['mib issues', 'bugs', 'issue tracker'],
-  },
-  {
-    id: 'mib-reminders',
-    label: 'Reminders (MIB007)',
-    description: 'Reminder management in MIB007',
-    category: 'external',
-    type: 'external',
-    url: mib007Link('reminders'),
-    keywords: ['mib reminders'],
-  },
-  {
-    id: 'mib-home',
-    label: 'MIB007 Home',
-    description: 'MIB007 main dashboard — overview of agents, tasks, issues, projects',
-    category: 'external',
-    type: 'external',
-    url: mib007Link('home'),
-    keywords: ['mib', 'mib007', 'home', 'dashboard', 'main'],
-  },
   {
     id: 'investor',
     label: 'Investor Dashboard',

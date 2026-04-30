@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp, getAgent } from './store';
 import { usePreferences } from './preferences-store';
-import { getStoredWorkspaceId } from './workspace-context';
 import { getOrRequestStream, releaseCachedStream } from './hooks/useVoiceRecording';
-import { MemoryPanel } from './components/MemoryPanel';
 import { RoutingModeIndicator, StatusBarGatewayPill } from './status-bar/GatewayIndicators';
 import { NotificationPanel } from './status-bar/NotificationPanel';
+import { isDevSafeMode } from './env';
 import type {
   LiveAgent,
   LiveService,
@@ -19,13 +18,10 @@ import { formatCountdown } from './status-bar/helpers';
 
 export function StatusBar() {
   const { state, actions } = useApp();
+  const devSafeMode = isDevSafeMode();
   const [data, setData] = useState<StatusBarData>(EMPTY_DATA);
   const micEnabled = usePreferences((s) => s.micEnabled);
   const setMicEnabled = usePreferences((s) => s.setMicEnabled);
-  const focusMode = usePreferences((s) => s.focusMode);
-  const setFocusMode = usePreferences((s) => s.setFocusMode);
-  const traceEnabled = usePreferences((s) => s.traceEnabled);
-  const setTraceEnabled = usePreferences((s) => s.setTraceEnabled);
   const [recording, setRecording] = useState(false);
   const [now, setNow] = useState(Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -34,7 +30,6 @@ export function StatusBar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
-  const [memoryOpen, setMemoryOpen] = useState(false);
   const [notifFilter, setNotifFilter] = useState<NotifFilter>('all');
   const [liveTasks, setLiveTasks] = useState<LiveTask[]>([]);
   const [liveTasksLoading, setLiveTasksLoading] = useState(false);
@@ -59,6 +54,7 @@ export function StatusBar() {
 
   // Fetch status bar data
   const fetchStatus = useCallback(async () => {
+    if (devSafeMode) return;
     try {
       const token =
         sessionStorage.getItem('shre-auth-token') || localStorage.getItem('shre-auth-token');
@@ -80,10 +76,11 @@ export function StatusBar() {
     } catch {
       // Silently fail — status bar is non-critical
     }
-  }, []);
+  }, [devSafeMode]);
 
   // Fetch notification unread count
   const fetchUnreadCount = useCallback(async () => {
+    if (devSafeMode) return;
     try {
       const token =
         sessionStorage.getItem('shre-auth-token') || localStorage.getItem('shre-auth-token');
@@ -101,10 +98,11 @@ export function StatusBar() {
     } catch {
       /* non-critical */
     }
-  }, [unreadCount]);
+  }, [devSafeMode, unreadCount]);
 
   // Fetch full notification list
   const fetchNotifications = useCallback(async () => {
+    if (devSafeMode) return;
     try {
       const token =
         sessionStorage.getItem('shre-auth-token') || localStorage.getItem('shre-auth-token');
@@ -132,7 +130,7 @@ export function StatusBar() {
     } catch {
       /* non-critical */
     }
-  }, []);
+  }, [devSafeMode]);
 
   // Mark a notification as read
   const markRead = useCallback(async (id: string) => {
@@ -191,6 +189,11 @@ export function StatusBar() {
 
   // Fetch live tasks for the Tasks tab
   const fetchLiveTasks = useCallback(async () => {
+    if (devSafeMode) {
+      setLiveTasks([]);
+      setLiveTasksLoading(false);
+      return;
+    }
     setLiveTasksLoading(true);
     try {
       const token =
@@ -227,10 +230,15 @@ export function StatusBar() {
       /* non-critical */
     }
     setLiveTasksLoading(false);
-  }, []);
+  }, [devSafeMode]);
 
   // Fetch live agents for the Agents tab
   const fetchLiveAgents = useCallback(async () => {
+    if (devSafeMode) {
+      setLiveAgents([]);
+      setLiveAgentsLoading(false);
+      return;
+    }
     setLiveAgentsLoading(true);
     try {
       const token =
@@ -246,10 +254,15 @@ export function StatusBar() {
       /* non-critical */
     }
     setLiveAgentsLoading(false);
-  }, []);
+  }, [devSafeMode]);
 
   // Fetch live services for the Services tab
   const fetchLiveServices = useCallback(async () => {
+    if (devSafeMode) {
+      setLiveServices([]);
+      setLiveServicesLoading(false);
+      return;
+    }
     setLiveServicesLoading(true);
     try {
       const token =
@@ -265,7 +278,7 @@ export function StatusBar() {
       /* non-critical */
     }
     setLiveServicesLoading(false);
-  }, []);
+  }, [devSafeMode]);
 
   // ── Task actions ──
   const authHeaders = useCallback((): Record<string, string> => {
@@ -360,6 +373,7 @@ export function StatusBar() {
 
   // Fetch live data when respective tabs are selected + auto-refresh every 30s
   useEffect(() => {
+    if (devSafeMode) return;
     if (!bellOpen) return;
     const fetchForTab = () => {
       if (notifFilter === 'tasks') fetchLiveTasks();
@@ -375,10 +389,11 @@ export function StatusBar() {
     fetchForTab();
     const interval = setInterval(fetchForTab, 30_000);
     return () => clearInterval(interval);
-  }, [bellOpen, notifFilter, fetchLiveTasks, fetchLiveAgents, fetchLiveServices]);
+  }, [devSafeMode, bellOpen, notifFilter, fetchLiveTasks, fetchLiveAgents, fetchLiveServices]);
 
   // WebSocket for real-time panel updates
   useEffect(() => {
+    if (devSafeMode) return;
     if (!bellOpen) return;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let ws: WebSocket | null = null;
@@ -431,6 +446,7 @@ export function StatusBar() {
       ws?.close();
     };
   }, [
+    devSafeMode,
     bellOpen,
     notifFilter,
     fetchLiveTasks,
@@ -442,6 +458,7 @@ export function StatusBar() {
 
   // Close notification panel on outside click
   useEffect(() => {
+    if (devSafeMode) return;
     if (!bellOpen) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -450,10 +467,11 @@ export function StatusBar() {
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [bellOpen]);
+  }, [devSafeMode, bellOpen]);
 
   // Fetch on mount (deferred by 2s), then every 60s
   useEffect(() => {
+    if (devSafeMode) return;
     const initial = setTimeout(() => {
       fetchStatus();
       fetchUnreadCount();
@@ -466,7 +484,7 @@ export function StatusBar() {
       clearTimeout(initial);
       clearInterval(id);
     };
-  }, [fetchStatus, fetchUnreadCount]);
+  }, [devSafeMode, fetchStatus, fetchUnreadCount]);
 
   // Tick the countdown every 30s
   useEffect(() => {
@@ -878,139 +896,6 @@ export function StatusBar() {
           )}
         </button>
       </div>
-
-      {/* Focus mode toggle — hides system/cron/automated messages */}
-      <button
-        onClick={() => setFocusMode(!focusMode)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          border: 'none',
-          cursor: 'pointer',
-          background: focusMode
-            ? 'var(--c-accent, #6366f1)'
-            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
-          color: focusMode ? '#fff' : 'var(--c-text-3)',
-          transition: 'all 0.2s ease',
-          flexShrink: 0,
-        }}
-        title={
-          focusMode
-            ? 'Focus mode ON — system events hidden. Click to show all'
-            : 'Focus mode OFF — showing all messages. Click to hide system events'
-        }
-        aria-label={focusMode ? 'Disable focus mode' : 'Enable focus mode'}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {focusMode ? (
-            <>
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
-            </>
-          ) : (
-            <>
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 5v-2M12 21v-2M7.05 7.05L5.64 5.64M18.36 18.36l-1.41-1.41M5 12H3M21 12h-2M7.05 16.95l-1.41 1.41M18.36 5.64l-1.41 1.41" />
-            </>
-          )}
-        </svg>
-      </button>
-
-      {/* Memory panel toggle */}
-      <button
-        onClick={() => setMemoryOpen(!memoryOpen)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          border: 'none',
-          cursor: 'pointer',
-          background: memoryOpen
-            ? 'rgba(139, 92, 246, 0.25)'
-            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
-          color: memoryOpen ? '#8b5cf6' : 'var(--c-text-3)',
-          transition: 'all 0.2s ease',
-          flexShrink: 0,
-        }}
-        title="Memory — view learned facts and patterns"
-        aria-label="Toggle memory panel"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 2a9 9 0 0 0-9 9c0 3.9 2.5 7.1 6 8.3V21h6v-1.7c3.5-1.2 6-4.4 6-8.3a9 9 0 0 0-9-9z" />
-          <path d="M9 21h6" />
-        </svg>
-      </button>
-      <MemoryPanel
-        open={memoryOpen}
-        onClose={() => setMemoryOpen(false)}
-        tenantId={getStoredWorkspaceId()}
-        agentId={state.activeAgentId}
-      />
-
-      {/* Trace toggle — conversation traceroute */}
-      <button
-        onClick={() => setTraceEnabled(!traceEnabled)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          border: 'none',
-          cursor: 'pointer',
-          background: traceEnabled
-            ? 'rgba(245, 158, 11, 0.25)'
-            : 'var(--c-bg-hover, rgba(255,255,255,0.08))',
-          color: traceEnabled ? '#f59e0b' : 'var(--c-text-3)',
-          transition: 'all 0.2s ease',
-          flexShrink: 0,
-        }}
-        title={
-          traceEnabled
-            ? 'Trace ON — showing request pipeline per message'
-            : 'Trace OFF — enable to see request flow details'
-        }
-        aria-label={traceEnabled ? 'Disable trace mode' : 'Enable trace mode'}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-        </svg>
-      </button>
 
       {/* Mic button — persistent on/off with permission check */}
       <button

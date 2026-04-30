@@ -112,11 +112,11 @@ function fallbackRouterConfigAgents() {
     _cachedRouterConfigAgents = getAgentModels();
   } catch {
     _cachedRouterConfigAgents = {
-      _default: "ollama/qwen3:8b",
+      _default: "google/gemini-2.5-flash",
       _councilDefault: "ollama/qwen3:8b",
-      shre: "ollama/aros:14b",
-      main: "ollama/aros:14b",
-      ellie: "ollama/aros:14b",
+      shre: "google/gemini-2.5-flash",
+      main: "google/gemini-2.5-flash",
+      ellie: "google/gemini-2.5-flash",
       storepulse: "ollama-remote/shre-ft:latest",
       support: "ollama/qwen3:8b",
     };

@@ -109,7 +109,11 @@ export function HtmlCodeBlock({
     } catch (err) {
       console.debug('save preview to localStorage', err);
     }
-    window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
+    if (window.__shreSwitchView) {
+      window.__shreSwitchView('preview');
+    } else {
+      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
+    }
   };
 
   return (

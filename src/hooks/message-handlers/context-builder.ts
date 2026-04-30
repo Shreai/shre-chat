@@ -4,6 +4,7 @@
  */
 import type { ChatMessage } from '../../router-client';
 import { mib007Link } from '../../chat-utils';
+import type { UploadedFile } from '../../store';
 import {
   buildRuntimeContextPacket,
   type RuntimeEvidenceItem,
@@ -37,6 +38,74 @@ interface SessionContextData {
     target?: string;
     result?: string;
   }>;
+}
+
+const MAX_ATTACHMENT_EVIDENCE_CHARS = 800;
+const MAX_ATTACHMENT_EVIDENCE_ITEMS = 4;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function getAttachmentExt(name: string): string {
+  return name.split('.').pop()?.toLowerCase() || '';
+}
+
+function isTextLikeAttachment(file: UploadedFile): boolean {
+  const ext = getAttachmentExt(file.name);
+  return (
+    file.type.startsWith('text/') ||
+    file.type === 'application/json' ||
+    file.type === 'application/xml' ||
+    ['csv', 'md', 'txt', 'log', 'json', 'yaml', 'yml', 'xml', 'html', 'htm', 'tsv', 'svg'].includes(
+      ext,
+    )
+  );
+}
+
+function decodeAttachmentText(dataUrl: string): string {
+  const base64 = dataUrl.split(',')[1];
+  if (!base64) return '';
+  try {
+    return atob(base64);
+  } catch {
+    return '';
+  }
+}
+
+function summarizeAttachmentEvidence(file: UploadedFile): RuntimeEvidenceItem {
+  const ext = getAttachmentExt(file.name);
+  const header = `[attachment] ${file.name} (${file.type || ext || 'unknown'}, ${formatFileSize(
+    file.size,
+  )})`;
+
+  if (!isTextLikeAttachment(file)) {
+    return {
+      source: `attachment:${file.id}`,
+      text: `${header}\nBinary or rendered file attached; content not extracted into the packet.`,
+    };
+  }
+
+  const text = decodeAttachmentText(file.dataUrl);
+  if (!text) {
+    return {
+      source: `attachment:${file.id}`,
+      text: `${header}\nText-like attachment could not be decoded.`,
+    };
+  }
+
+  const excerpt = text
+    .replace(/\u0000/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .slice(0, MAX_ATTACHMENT_EVIDENCE_CHARS);
+
+  return {
+    source: `attachment:${file.id}`,
+    text: `${header}\n${excerpt}${text.length > MAX_ATTACHMENT_EVIDENCE_CHARS ? '\n…' : ''}`,
+  };
 }
 
 /**
@@ -244,6 +313,7 @@ export function buildScopedRuntimePacket(
     sessionContext: string;
     contextHealth: Record<string, 'ok' | 'missing' | 'error'>;
   },
+  attachedFiles: UploadedFile[] = [],
 ): RuntimeContextPacket {
   const evidence: RuntimeEvidenceItem[] = [];
   if (sources.taskContext.trim()) {
@@ -257,6 +327,9 @@ export function buildScopedRuntimePacket(
       source: 'session_context',
       text: sources.sessionContext.trim(),
     });
+  }
+  for (const file of attachedFiles.slice(0, MAX_ATTACHMENT_EVIDENCE_ITEMS)) {
+    evidence.push(summarizeAttachmentEvidence(file));
   }
 
   const packet = buildRuntimeContextPacket(scope, evidence);

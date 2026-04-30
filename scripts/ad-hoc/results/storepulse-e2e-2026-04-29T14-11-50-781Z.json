@@ -1,0 +1,76 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "2",
+  "sessionKey": "e2e-1777471876790",
+  "ranAt": "2026-04-29T14:11:50.782Z",
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "byModel": {
+      "direct-sales": 2,
+      "error": 2
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 1,
+        "category": "sales-today",
+        "ask": "What are today's sales?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 334,
+        "ttfbMs": 334,
+        "length": 127,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$64.83** - Transactions: **7** - Average Ticket: $9.26 - Tax: $4.80 - Discounts: $0.00",
+        "text": "**Party Liquor** today:\n- Total Sales: **$64.83**\n- Transactions: **7**\n- Average Ticket: $9.26\n- Tax: $4.80\n- Discounts: $0.00"
+      }
+    },
+    {
+      "prompt": {
+        "id": 5,
+        "category": "top-items",
+        "ask": "What are the top 5 selling items today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 438,
+        "ttfbMs": 438,
+        "length": 127,
+        "excerpt": "**Party Liquor** today: - Total Sales: **$64.83** - Transactions: **7** - Average Ticket: $9.26 - Tax: $4.80 - Discounts: $0.00",
+        "text": "**Party Liquor** today:\n- Total Sales: **$64.83**\n- Transactions: **7**\n- Average Ticket: $9.26\n- Tax: $4.80\n- Discounts: $0.00"
+      }
+    },
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": false,
+        "http": 403,
+        "error": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1777471892355\",\"status\":\"in_progress\",\"model\":\"auto\",\"output\":[]}}\n\nevent: response.output_item.added\ndata: {\"type\":\"res",
+        "elapsedMs": 399
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": false,
+        "http": 403,
+        "error": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1777471910776\",\"status\":\"in_progress\",\"model\":\"auto\",\"output\":[]}}\n\nevent: response.output_item.added\ndata: {\"type\":\"res",
+        "elapsedMs": 18416
+      }
+    }
+  ]
+}

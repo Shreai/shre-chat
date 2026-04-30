@@ -261,7 +261,7 @@ export function TasksView() {
           <div className="text-center py-12" style={{ color: 'var(--c-text-4)' }}>
             <div className="text-lg mb-2">No tasks found</div>
             <div className="text-[13px]">
-              Tasks created by agents or from chat will appear here.
+              Tasks created by agents or from MIB007 will appear here.
             </div>
           </div>
         )}
@@ -439,7 +439,7 @@ function TaskRow({
               />
             )}
             <a
-              href={mib007Link(`tasks`)}
+              href={mib007Link('tasks', `id=${task.id}`)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] px-2 py-1 rounded transition-colors hover:bg-white/5"

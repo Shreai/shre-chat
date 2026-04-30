@@ -103,6 +103,10 @@ export function CostDashboardView() {
   const [budgets, setBudgets] = useState<BudgetInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const safeTimeline = Array.isArray(timeline) ? timeline : [];
+  const safeByModel = Array.isArray(byModel) ? byModel : [];
+  const safeByAgent = Array.isArray(byAgent) ? byAgent : [];
+  const safeBudgets = Array.isArray(budgets) ? budgets : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -142,34 +146,34 @@ export function CostDashboardView() {
     };
   }, [range]);
 
-  const timelineChart: ChartData | null = timeline.length
+  const timelineChart: ChartData | null = safeTimeline.length
     ? {
         type: 'line',
-        labels: timeline.map((t) => t.bucket.slice(5, 10)),
-        datasets: [{ label: 'Cost ($)', data: timeline.map((t) => t.costUsd), color: '#60a5fa' }],
+        labels: safeTimeline.map((t) => t.bucket.slice(5, 10)),
+        datasets: [{ label: 'Cost ($)', data: safeTimeline.map((t) => t.costUsd), color: '#60a5fa' }],
         options: { showLegend: true, currency: true },
       }
     : null;
 
-  const modelChart: ChartData | null = byModel.length
+  const modelChart: ChartData | null = safeByModel.length
     ? {
         type: 'pie',
-        labels: byModel.map((m) => m.model),
-        datasets: [{ label: 'Cost', data: byModel.map((m) => m.costUsd) }],
+        labels: safeByModel.map((m) => m.model),
+        datasets: [{ label: 'Cost', data: safeByModel.map((m) => m.costUsd) }],
         options: { showLegend: true, currency: true },
       }
     : null;
 
-  const agentChart: ChartData | null = byAgent.length
+  const agentChart: ChartData | null = safeByAgent.length
     ? {
         type: 'bar',
-        labels: byAgent.map((a) => a.agent),
-        datasets: [{ label: 'Cost ($)', data: byAgent.map((a) => a.costUsd), color: '#f59e0b' }],
+        labels: safeByAgent.map((a) => a.agent),
+        datasets: [{ label: 'Cost ($)', data: safeByAgent.map((a) => a.costUsd), color: '#f59e0b' }],
         options: { showValues: true, currency: true },
       }
     : null;
 
-  const exportData = byAgent.map((a) => ({
+  const exportData = safeByAgent.map((a) => ({
     agent: a.agent,
     requests: a.requests,
     costUsd: a.costUsd,
@@ -304,7 +308,7 @@ export function CostDashboardView() {
                   Budget Status
                 </h3>
                 <div className="space-y-1.5">
-                  {budgets.map((b) => {
+      {safeBudgets.map((b) => {
                     const dailyPct =
                       b.dailyLimitUsd > 0
                         ? Math.min(100, (b.spentTodayUsd / b.dailyLimitUsd) * 100)

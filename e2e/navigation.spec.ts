@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { switchView } from './view-switch';
 
 test.describe('Agent 2: Navigation — views, sidebar, routing', () => {
   test.setTimeout(60_000);
@@ -14,9 +15,7 @@ test.describe('Agent 2: Navigation — views, sidebar, routing', () => {
   // ═══════════ View Switching ═══════════
 
   test('can switch to preview view and back', async ({ page }) => {
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
-    });
+    await switchView(page, 'preview');
     await page.waitForTimeout(800);
     // Preview view should show library or empty state
     const previewIndicator = page.locator('text=Preview').first();
@@ -27,18 +26,14 @@ test.describe('Agent 2: Navigation — views, sidebar, routing', () => {
     if (await backBtn.isVisible().catch(() => false)) {
       await backBtn.click();
     } else {
-      await page.evaluate(() => {
-        window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'chat' }));
-      });
+      await switchView(page, 'chat');
     }
     await page.waitForTimeout(500);
     await expect(page.locator('#shre-chat-textarea')).toBeVisible();
   });
 
   test('can switch to activity view', async ({ page }) => {
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'activity' }));
-    });
+    await switchView(page, 'activity');
     await page.waitForTimeout(800);
     // Should show activity content or empty state
     const activityContent = page.locator('text=/activity|feed|recent/i').first();
@@ -49,9 +44,7 @@ test.describe('Agent 2: Navigation — views, sidebar, routing', () => {
   });
 
   test('can switch to tasks view', async ({ page }) => {
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'tasks' }));
-    });
+    await switchView(page, 'tasks');
     await page.waitForTimeout(800);
     const tasksContent = page.locator('text=/task|todo|backlog/i').first();
     const visible = await tasksContent.isVisible({ timeout: 3000 }).catch(() => false);
@@ -61,9 +54,7 @@ test.describe('Agent 2: Navigation — views, sidebar, routing', () => {
   });
 
   test('can switch to spend view', async ({ page }) => {
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'spend' }));
-    });
+    await switchView(page, 'spend');
     await page.waitForTimeout(800);
     const spendContent = page.locator('text=/spend|cost|usage|budget/i').first();
     const visible = await spendContent.isVisible({ timeout: 3000 }).catch(() => false);
@@ -73,9 +64,7 @@ test.describe('Agent 2: Navigation — views, sidebar, routing', () => {
   });
 
   test('can switch to marketplace view', async ({ page }) => {
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'marketplace' }));
-    });
+    await switchView(page, 'marketplace');
     await page.waitForTimeout(800);
     const marketContent = page.locator('text=/marketplace|agent|catalog/i').first();
     const visible = await marketContent.isVisible({ timeout: 3000 }).catch(() => false);

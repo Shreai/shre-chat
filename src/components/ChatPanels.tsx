@@ -17,6 +17,7 @@ import { ToolPicker } from './ToolPicker';
 import type { TTSProvider, GatewayMode, ConversationModeId } from '../preferences-store';
 import type { ToolOption } from '../hooks/useToolList';
 import { HeaderMoreMenu } from './HeaderMoreMenu';
+import { ChatSettingsDrawer } from './ChatSettingsDrawer';
 import { ShareBar } from './ShareBar';
 import { ContextBar } from './ContextBar';
 import { ChatSearchBar } from './ChatSearchBar';
@@ -24,6 +25,7 @@ import { AppsDrawer } from './AppsDrawer';
 import { SystemPromptEditor } from './SystemPromptEditor';
 import { SummaryModal } from './SummaryModal';
 import { SessionAnalyticsModal } from './SessionAnalyticsModal';
+import { getProviderLockLabel } from '../model-families';
 
 interface ChatPanelsProps {
   showTerminal?: boolean;
@@ -70,7 +72,7 @@ interface ChatPanelsProps {
   MODEL_CONTEXT_LIMITS: Record<string, number>;
   dynamicModelsCount: number;
   currentAgent: { name: string; id: string; emoji: string };
-  modelPickerRef: React.RefObject<HTMLDivElement>;
+  modelPickerRef: React.RefObject<HTMLDivElement | null>;
   ensureSession: () => string;
   // Voice provider
   ttsProvider: TTSProvider;
@@ -81,7 +83,7 @@ interface ChatPanelsProps {
   // Header more menu
   showHeaderMore: boolean;
   setShowHeaderMore: (v: boolean) => void;
-  headerMoreRef: React.RefObject<HTMLDivElement>;
+  headerMoreRef: React.RefObject<HTMLDivElement | null>;
   routerMode: boolean;
   handleToggleRouterMode: () => void;
   gatewayMode: GatewayMode;
@@ -91,7 +93,7 @@ interface ChatPanelsProps {
   handleToggleCompare: (len: number) => void;
   setCompareStreams: (v: Record<string, any>) => void;
   setCompareWinner: (v: string | null) => void;
-  comparePickerRef: React.RefObject<HTMLDivElement>;
+  comparePickerRef: React.RefObject<HTMLDivElement | null>;
   handleOpenSystemPrompt: () => void;
   compact: boolean;
   notifSound: boolean;
@@ -109,7 +111,7 @@ interface ChatPanelsProps {
   showApps: boolean;
   setShowApps: (v: boolean) => void;
   view: View;
-  importInputRef: React.RefObject<HTMLInputElement>;
+  importInputRef: React.RefObject<HTMLInputElement | null>;
   // WS state
   wsFailed: boolean;
   setWsFailed: (v: boolean) => void;
@@ -125,7 +127,7 @@ interface ChatPanelsProps {
   selectedModelForContext: string | null;
   // Search
   chatSearchOpen: boolean;
-  chatSearchRef: React.RefObject<HTMLInputElement>;
+  chatSearchRef: React.RefObject<HTMLInputElement | null>;
   chatSearch: string;
   setChatSearch: (v: string) => void;
   closeChatSearch: () => void;
@@ -170,10 +172,10 @@ export function ChatPanels(props: any) {
     AVAILABLE_MODELS,
     MODEL_CONTEXT_LIMITS,
     dynamicModelsCount,
-    currentAgent,
-    modelPickerRef,
-    ttsProvider,
-    setTtsProvider,
+  currentAgent,
+  modelPickerRef,
+  ttsProvider,
+  setTtsProvider,
     ensureSession,
     onOpenVoiceChat,
     onOpenRealtimeVoice,
@@ -236,6 +238,7 @@ export function ChatPanels(props: any) {
 
   const [modePickerOpen, setModePickerOpen] = useState(false);
   const modePickerRef = useRef<HTMLDivElement>(null);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [toolPickerOpen, setToolPickerOpen] = useState(false);
   const toolPickerRef = useRef<HTMLDivElement>(null);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
@@ -359,14 +362,10 @@ export function ChatPanels(props: any) {
             onClose={() => setShowModelPicker(false)}
             selectedModel={selectedModel}
             onSelectModel={(modelId) => {
-              const providerLabels: Record<string, string> = {
-                'provider:openai': 'ChatGPT',
-                'provider:anthropic': 'Claude',
-                'provider:ollama': 'Local',
-                'provider:google': 'Google',
-              };
               const prevName =
-                providerLabels[selectedModel ?? ''] ??
+                (selectedModel?.startsWith('provider:')
+                  ? getProviderLockLabel(selectedModel)
+                  : undefined) ??
                 AVAILABLE_MODELS.find((m: { id: string; name: string }) => m.id === selectedModel)
                   ?.name ??
                 selectedModel ??
@@ -375,7 +374,9 @@ export function ChatPanels(props: any) {
               setModelOverride(activeAgentId, modelId);
               const sid = ensureSession();
               const newName =
-                providerLabels[modelId ?? ''] ??
+                (modelId?.startsWith('provider:')
+                  ? getProviderLockLabel(modelId)
+                  : undefined) ??
                 AVAILABLE_MODELS.find((m: { id: string; name: string }) => m.id === modelId)
                   ?.name ??
                 modelId ??
@@ -440,7 +441,7 @@ export function ChatPanels(props: any) {
                 <div
                   className="absolute right-0 z-50 rounded-xl overflow-hidden shadow-2xl voice-picker-dropdown"
                   style={{
-                    width: 220,
+                    width: 'min(220px, calc(100vw - 24px))',
                     top: '100%',
                     marginTop: 4,
                     background: 'var(--c-bg-2)',
@@ -559,7 +560,7 @@ export function ChatPanels(props: any) {
                 <div
                   className="absolute right-0 z-50 rounded-xl overflow-hidden shadow-2xl lang-picker-dropdown"
                   style={{
-                    width: 200,
+                    width: 'min(200px, calc(100vw - 24px))',
                     top: '100%',
                     marginTop: 4,
                     maxHeight: 'min(360px, calc(100vh - 100px))',
@@ -710,7 +711,7 @@ export function ChatPanels(props: any) {
               onToggleNotifSound={handleToggleNotifSound}
               messages={messages}
               userName={userName}
-              currentAgentName={currentAgent.name}
+              onOpenSettings={() => setShowSettingsDrawer(true)}
               summarizing={summarizing}
               onSummarize={handleSummarize}
               onOpenAnalytics={() => setShowAnalytics(true)}
@@ -851,6 +852,14 @@ export function ChatPanels(props: any) {
         isOpen={showAnalytics}
         onClose={() => setShowAnalytics(false)}
         messages={messages}
+      />
+
+      <ChatSettingsDrawer
+        open={showSettingsDrawer}
+        onClose={() => setShowSettingsDrawer(false)}
+        currentAgentId={currentAgent.id}
+        currentAgentName={currentAgent.name}
+        onOpenModelPicker={() => setShowModelPicker(true)}
       />
     </>
   );

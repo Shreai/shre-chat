@@ -15,6 +15,24 @@ interface TraceRecord {
   service: string;
   totalMs?: number;
   status: 'ok' | 'error' | 'partial';
+  error?: string;
+  errorEnvelope?: {
+    code: string;
+    message: string;
+    stage: string;
+    retryable: boolean;
+    whereToLook: string;
+    remediation: string[];
+    summary: string;
+    traceId?: string;
+    sessionId?: string;
+    agentId?: string;
+    model?: string;
+    provider?: string;
+    tool?: string;
+    cause?: string;
+    details?: Record<string, unknown>;
+  };
   spans: TraceSpan[];
   executionPlan?: Array<{
     stepId: string;
@@ -159,6 +177,11 @@ function humanizeStatus(status: string): string {
   return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function humanizeStage(stage?: string): string {
+  if (!stage) return 'Unknown';
+  return stage.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function ExecutionPlanRow({ step }: { step: NonNullable<TraceRecord['executionPlan']>[number] }) {
   const color = STEP_COLORS[step.status] || '#6b7280';
   const icon = STEP_ICONS[step.status] || '?';
@@ -260,6 +283,7 @@ export function MessageTraceDrawer({
         : '#f59e0b'
     : '#6b7280';
   const executionPlan = trace?.executionPlan || [];
+  const errorEnvelope = trace?.errorEnvelope;
 
   return (
     <div style={{ marginTop: 4 }}>
@@ -440,6 +464,59 @@ export function MessageTraceDrawer({
                     </>
                   )}
                   {trace.request.promptLen && <span>Prompt: {trace.request.promptLen} chars</span>}
+                </div>
+              )}
+
+              {trace.status === 'error' && (trace.error || errorEnvelope) && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(239,68,68,0.22)',
+                    background: 'rgba(239,68,68,0.08)',
+                    display: 'grid',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444' }}>
+                      {errorEnvelope?.code || 'CHAT_ERROR'}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>
+                      Stage: {humanizeStage(errorEnvelope?.stage)}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>
+                      {errorEnvelope?.retryable ? 'Retryable' : 'Not retryable'}
+                    </span>
+                    {errorEnvelope?.whereToLook && (
+                      <span style={{ fontSize: 10, color: 'var(--c-text-4)' }}>
+                        Inspect: {errorEnvelope.whereToLook}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--c-text-2)', lineHeight: 1.35 }}>
+                    {errorEnvelope?.summary || trace.error}
+                  </div>
+                  {errorEnvelope?.remediation?.length ? (
+                    <div style={{ fontSize: 10, color: 'var(--c-text-4)', lineHeight: 1.35 }}>
+                      {errorEnvelope.remediation.map((step, i) => (
+                        <div key={`${step}-${i}`}>• {step}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {errorEnvelope?.cause && (
+                    <div
+                      style={{
+                        fontSize: 9,
+                        color: 'var(--c-text-5)',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {errorEnvelope.cause}
+                    </div>
+                  )}
                 </div>
               )}
             </>

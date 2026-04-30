@@ -7,6 +7,7 @@ import {
   summarizeRuntimeScope,
   verifyRuntimeAnswer,
 } from '../runtime-contract';
+import { buildScopedRuntimePacket } from '../hooks/message-handlers/context-builder';
 
 describe('runtime contract planner', () => {
   it('scopes POS reconciliation to CRM, POS, and Accounting tools', () => {
@@ -41,6 +42,34 @@ describe('runtime contract planner', () => {
     expect(packet.evidence).toHaveLength(1);
     expect(prompt).toContain('Allowed tools');
     expect(prompt).toContain('invoice inv_456 is unpaid');
+  });
+
+  it('folds attached text files into runtime evidence', () => {
+    const scope = buildRuntimeScope('Review the attached reconciliation sheet', 'org_123');
+    const packet = buildScopedRuntimePacket(
+      scope,
+      {
+        taskContext: '',
+        sessionContext: '',
+        contextHealth: { tasks: 'ok', crossSession: 'ok' },
+      },
+      [
+        {
+          id: 'file_1',
+          name: 'recon.csv',
+          size: 42,
+          type: 'text/csv',
+          sessionId: 's1',
+          sessionTitle: 'Chat',
+          agentId: 'shre',
+          uploadedAt: Date.now(),
+          dataUrl: `data:text/csv;base64,${btoa('invoice_id,amount\ninv_1,182.4')}`,
+        },
+      ],
+    );
+
+    expect(packet.evidence.some((item) => item.source === 'attachment:file_1')).toBe(true);
+    expect(packet.evidence.some((item) => item.text.includes('inv_1'))).toBe(true);
   });
 
   it('predicts bottlenecks for slow or broad execution paths', () => {

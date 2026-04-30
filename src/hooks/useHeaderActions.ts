@@ -8,6 +8,7 @@ import {
   type GatewayMode,
   type ConversationModeId,
 } from '../preferences-store';
+import { isDevSafeMode } from '../env';
 
 interface UseHeaderActionsOptions {
   activeSessionId: string | null;
@@ -32,9 +33,51 @@ export function useHeaderActions({
   currentAgentId,
   actions,
 }: UseHeaderActionsOptions) {
+  if (isDevSafeMode()) {
+    return {
+      routerMode: false,
+      setRouterMode: () => void 0,
+      gatewayMode: 'router' as GatewayMode,
+      handleSetGatewayMode: () => void 0,
+      compareMode: false,
+      setCompareMode: () => void 0,
+      comparePickerOpen: false,
+      setComparePickerOpen: () => void 0,
+      showSystemPrompt: false,
+      setShowSystemPrompt: () => void 0,
+      systemPromptDraft: '',
+      setSystemPromptDraft: () => void 0,
+      summarizing: false,
+      showSummary: false,
+      setShowSummary: () => void 0,
+      summaryText: '',
+      showAnalytics: false,
+      setShowAnalytics: () => void 0,
+      shareUrl: null,
+      setShareUrl: () => void 0,
+      shareLoading: false,
+      shareCopied: false,
+      setShareCopied: () => void 0,
+      notifSound: false,
+      setNotifSound: () => void 0,
+      handleToggleRouterMode: () => void 0,
+      handleToggleCompare: () => void 0,
+      handleOpenSystemPrompt: () => void 0,
+      handleToggleNotifSound: () => void 0,
+      handleSummarize: () => void 0,
+      handleShare: () => void 0,
+      handleCopyMarkdown: () => void 0,
+      handleDownloadMd: () => void 0,
+      handleDownloadJson: () => void 0,
+      handleSaveSystemPrompt: () => void 0,
+      conversationMode: 'assistant' as ConversationModeId,
+      activeAppId: null,
+      setConversationMode: () => void 0,
+    };
+  }
   const gatewayMode = usePreferences((s) => s.gatewayMode);
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
-  // Legacy flag — always false (all routing via shre-router)
+  // Legacy flag — direct/local mode is controlled separately via gateway mode.
   const routerMode = false;
   const [compareMode, setCompareMode] = useState(false);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
@@ -66,7 +109,7 @@ export function useHeaderActions({
   }, [currentAgentId]); // intentionally only depend on agentId change
 
   const handleToggleRouterMode = useCallback(() => {
-    // Legacy toggle — now just ensures router mode
+    // Legacy toggle — now just pins the gateway back to router mode.
     setGatewayMode('router');
   }, [setGatewayMode]);
 

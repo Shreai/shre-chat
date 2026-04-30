@@ -653,7 +653,9 @@ export function registerAuthRoutes({ log }) {
     // ── SSO from shre-auth-gate ──
     if (url.pathname === "/api/auth/gate-sso" && req.method === "GET") {
       const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
-      const gateToken = cookies.find(c => c.startsWith("shre_gate_token="))?.split("=")[1];
+      const gateToken =
+        cookies.find(c => c.startsWith("__shre_gate="))?.split("=")[1] ||
+        cookies.find(c => c.startsWith("shre_gate_token="))?.split("=")[1];
       
       if (!gateToken) {
         log.debug("[auth] No gate token found in cookies");
@@ -661,30 +663,44 @@ export function registerAuthRoutes({ log }) {
       }
 
       try {
+        const gateClaims = verifyAuthToken(gateToken);
+        const platformToken = gateClaims?.platformToken;
+        if (!platformToken) {
+          log.debug("[auth] Gate token missing platform token");
+          return json(res, { sso: false }, 200);
+        }
+
         const authUrl = process.env.SHRE_AUTH_URL || "http://127.0.0.1:5455";
-        const valRes = await fetch(`${authUrl}/v1/verify`, {
-          headers: { "Authorization": `Bearer ${gateToken}` },
+        const valRes = await fetch(`${authUrl}/v1/auth/validate-user`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: platformToken }),
           signal: AbortSignal.timeout(3000)
         });
 
         if (valRes.ok) {
           const valData = await valRes.json();
-          // Generate a local token matching these claims
-          const token = signAuthToken({
-            sub: valData.claims.sub,
-            username: valData.claims.username,
-            role: valData.claims.role || "user"
-          });
-          
-          res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
+          const claims = valData.claims || {};
+          const username = claims.username || claims.email || claims.sub || "user";
+          const workspaceId = claims.activeWorkspaceId || null;
+          const workspaceName = claims.activeWorkspaceName || null;
+          res.setHeader("Set-Cookie", authCookie("shre_token", platformToken, AUTH_TOKEN_TTL, req));
           return json(res, {
             sso: true,
-            token,
+            token: platformToken,
             user: {
-              username: valData.claims.username,
-              name: valData.claims.name || valData.claims.username,
-              role: valData.claims.role
-            }
+              username,
+              name: claims.name || username,
+              role: claims.role || "user"
+            },
+            workspace: workspaceId ? { id: workspaceId, name: workspaceName || workspaceId, role: claims.role || "user" } : undefined,
+            workspaces: Array.isArray(claims.workspaceIds)
+              ? claims.workspaceIds.map((id) => ({
+                  id,
+                  name: id === workspaceId ? (workspaceName || id) : id,
+                  role: claims.role || "user",
+                }))
+              : undefined
           });
         }
       } catch (err) {

@@ -1,4 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  MODEL_FAMILIES,
+  getFamilyLabel,
+  groupModelsByFamily,
+  getProviderLockLabel,
+} from '../model-families';
 
 export interface ModelInfo {
   id: string;
@@ -9,59 +15,12 @@ export interface ModelInfo {
 }
 
 /**
- * Two-level model picker: provider groups → individual models.
+ * Two-level model picker: provider families → individual models.
  *
- * - Auto: routing gates decide the best model per task
- * - Provider lock: constrain to a provider (router picks best model)
+ * - Auto: gateway routing decides the best model per task
+ * - Family lock: constrain to a provider family (gateway picks best model)
  * - Specific model: lock to an exact model ID
  */
-
-interface ProviderGroup {
-  key: string;
-  label: string;
-  icon: string;
-  providerKeys: string[]; // match against model id prefix
-}
-
-const PROVIDER_GROUPS: ProviderGroup[] = [
-  {
-    key: 'ollama',
-    label: 'Local',
-    icon: '\uD83D\uDDA5\uFE0F',
-    providerKeys: ['ollama', 'ollama-remote'],
-  },
-  {
-    key: 'anthropic',
-    label: 'Claude',
-    icon: '\uD83D\uDFE3',
-    providerKeys: ['anthropic', 'claude-cli'],
-  },
-  { key: 'openai', label: 'OpenAI', icon: '\uD83D\uDFE2', providerKeys: ['openai'] },
-  { key: 'google', label: 'Google', icon: '\uD83D\uDD35', providerKeys: ['google'] },
-  { key: 'other', label: 'Other', icon: '\u26AA', providerKeys: [] }, // catch-all
-];
-
-function getProviderGroup(modelId: string): string {
-  const prefix = modelId.split('/')[0];
-  for (const g of PROVIDER_GROUPS) {
-    if (g.providerKeys.includes(prefix)) return g.key;
-  }
-  return 'other';
-}
-
-function groupModels(models: ModelInfo[]): Map<string, ModelInfo[]> {
-  const groups = new Map<string, ModelInfo[]>();
-  for (const g of PROVIDER_GROUPS) groups.set(g.key, []);
-  for (const m of models) {
-    const key = getProviderGroup(m.id);
-    groups.get(key)!.push(m);
-  }
-  // Remove empty groups (except 'other' which we always skip if empty)
-  for (const [key, list] of groups) {
-    if (list.length === 0) groups.delete(key);
-  }
-  return groups;
-}
 
 interface ModelPickerProps {
   open: boolean;
@@ -71,7 +30,7 @@ interface ModelPickerProps {
   onSelectModel: (modelId: string | null) => void;
   models: ModelInfo[];
   agentName: string;
-  pickerRef: React.RefObject<HTMLDivElement>;
+  pickerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 /** Get short display name for the selected model */
@@ -79,9 +38,7 @@ function getSelectedLabel(selectedModel: string | null, models: ModelInfo[]): st
   if (!selectedModel) return 'Auto';
   // Provider-level lock
   if (selectedModel.startsWith('provider:')) {
-    const pKey = selectedModel.replace('provider:', '');
-    const group = PROVIDER_GROUPS.find((g) => g.key === pKey || g.providerKeys.includes(pKey));
-    return group?.label || pKey;
+    return getProviderLockLabel(selectedModel);
   }
   // Specific model
   const m = models.find((x) => x.id === selectedModel);
@@ -100,6 +57,7 @@ export function ModelPicker({
 }: ModelPickerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const expandedFamily = expandedGroup as (typeof MODEL_FAMILIES)[number]['key'] | null;
 
   // Reset expanded group when closing
   useEffect(() => {
@@ -134,11 +92,18 @@ export function ModelPicker({
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose, expandedGroup]);
 
-  const grouped = groupModels(models);
+  const grouped = groupModelsByFamily(models);
 
   const isAutoSelected = !selectedModel;
   const isProviderSelected = (groupKey: string) => selectedModel === `provider:${groupKey}`;
   const isModelSelected = (modelId: string) => selectedModel === modelId;
+  const selectedTextStyle = {
+    background: 'var(--c-accent-soft)',
+    color: 'var(--c-accent)',
+    borderRadius: '6px',
+    padding: '0 4px',
+    display: 'inline-block',
+  } as const;
 
   return (
     <div ref={pickerRef} style={{ position: 'relative' }}>
@@ -225,7 +190,7 @@ export function ModelPicker({
                       >
                         <polyline points="15 18 9 12 15 6" />
                       </svg>
-                      {PROVIDER_GROUPS.find((g) => g.key === expandedGroup)?.label} Models
+                      {expandedFamily ? getFamilyLabel(expandedFamily) : ''} Models
                     </button>
                   ) : (
                     'AI Model'
@@ -240,9 +205,9 @@ export function ModelPicker({
             {/* Body */}
             <div className="flex-1 overflow-y-auto overscroll-contain py-1">
               {expandedGroup ? (
-                /* ── Individual models for expanded provider ── */
+                /* ── Individual models for expanded family ── */
                 <>
-                  {/* Provider-level lock option — only for known providers, not the catch-all "other" group */}
+                  {/* Family-level lock option — only for known families, not the catch-all "other" group */}
                   {expandedGroup !== 'other' && (
                     <>
                       <button
@@ -270,9 +235,27 @@ export function ModelPicker({
                       >
                         <span className="text-[13px] w-5 text-center opacity-60">*</span>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-medium">Auto (best from provider)</div>
-                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-                            Router picks optimal model
+                          <div
+                            className="text-[12px] font-medium"
+                            style={{
+                              color: isProviderSelected(expandedGroup)
+                                ? 'var(--c-accent)'
+                                : 'inherit',
+                              ...(isProviderSelected(expandedGroup) ? selectedTextStyle : null),
+                            }}
+                          >
+                            Auto (best from provider)
+                          </div>
+                          <div
+                            className="text-[10px]"
+                            style={{
+                              color: isProviderSelected(expandedGroup)
+                                ? 'var(--c-accent)'
+                                : 'var(--c-text-4)',
+                              ...(isProviderSelected(expandedGroup) ? selectedTextStyle : null),
+                            }}
+                          >
+                            Gateway picks optimal model
                           </div>
                         </div>
                         {isProviderSelected(expandedGroup) && <CheckIcon />}
@@ -286,7 +269,7 @@ export function ModelPicker({
                   )}
 
                   {/* Individual models */}
-                  {(grouped.get(expandedGroup) || []).map((m) => {
+                  {(grouped.get(expandedFamily ?? 'other') || []).map((m) => {
                     const active = isModelSelected(m.id);
                     const offline = m.connected === false;
                     return (
@@ -318,10 +301,20 @@ export function ModelPicker({
                       >
                         <span className="text-[13px] w-5 text-center">{m.icon}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-medium truncate">{m.name}</div>
+                          <div
+                            className={`text-[12px] truncate ${
+                              active ? 'font-semibold' : 'font-medium'
+                            }`}
+                            style={active ? selectedTextStyle : undefined}
+                          >
+                            {m.name}
+                          </div>
                           <div
                             className="text-[10px] truncate"
-                            style={{ color: 'var(--c-text-4)' }}
+                            style={{
+                              color: active ? 'var(--c-accent)' : 'var(--c-text-4)',
+                              ...(active ? selectedTextStyle : null),
+                            }}
                           >
                             {m.id}
                           </div>
@@ -362,8 +355,22 @@ export function ModelPicker({
                   >
                     <span className="text-lg w-7 text-center">{'\u26A1'}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium">Auto</div>
-                      <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                      <div
+                        className="text-[13px] font-medium"
+                        style={{
+                          color: isAutoSelected ? 'var(--c-accent)' : 'inherit',
+                          ...(isAutoSelected ? selectedTextStyle : null),
+                        }}
+                      >
+                        Auto
+                      </div>
+                      <div
+                        className="text-[10px]"
+                        style={{
+                          color: isAutoSelected ? 'var(--c-accent)' : 'var(--c-text-4)',
+                          ...(isAutoSelected ? selectedTextStyle : null),
+                        }}
+                      >
                         Best model per task
                         {' \u00B7 '}
                         {models.filter((m) => m.connected !== false).length} models online
@@ -374,8 +381,8 @@ export function ModelPicker({
 
                   <div className="mx-3 my-1" style={{ borderTop: '1px solid var(--c-border-2)' }} />
 
-                  {/* Provider groups */}
-                  {PROVIDER_GROUPS.map((group) => {
+                  {/* Provider families */}
+                  {MODEL_FAMILIES.map((group) => {
                     const groupModels = grouped.get(group.key);
                     if (!groupModels || groupModels.length === 0) return null;
 
@@ -414,8 +421,21 @@ export function ModelPicker({
                       >
                         <span className="text-lg w-7 text-center">{group.icon}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-medium">{group.label}</div>
-                          <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                          <div
+                            className={`text-[13px] ${
+                              highlighted ? 'font-semibold' : 'font-medium'
+                            }`}
+                            style={highlighted ? selectedTextStyle : undefined}
+                          >
+                            {group.label}
+                          </div>
+                          <div
+                            className="text-[10px]"
+                            style={{
+                              color: highlighted ? 'var(--c-accent)' : 'var(--c-text-4)',
+                              ...(highlighted ? selectedTextStyle : null),
+                            }}
+                          >
                             {onlineCount} model{onlineCount !== 1 ? 's' : ''} online
                             {hasModelSelected && (
                               <span style={{ color: 'var(--c-accent)' }}>

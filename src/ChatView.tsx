@@ -513,13 +513,21 @@ export function ChatView() {
     mentionRef,
     mentionFiltered,
     mentionAgent,
+    appFiltered,
+    appOpen,
+    setAppOpen,
+    appIndex,
+    setAppIndex,
+    appRef,
     clearMention,
     onMentionSelect,
+    onAppSelect,
     extractMention,
   } = useMentions({
     input,
     setInput,
     agents: AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, group: a.group })),
+    apps: appOptions,
     inputRef,
   });
 
@@ -695,6 +703,12 @@ export function ChatView() {
     setMentionIndex,
     setMentionOpen,
     onMentionSelect,
+    appOpen,
+    appFiltered,
+    appIndex,
+    setAppIndex,
+    setAppOpen,
+    onAppSelect,
     editingQueueId,
     setEditingQueueId,
     setEditingQueueText,
@@ -1079,6 +1093,12 @@ export function ChatView() {
                 setMentionIndex={setMentionIndex}
                 onMentionSelect={onMentionSelect}
                 mentionAgent={mentionAgent}
+                appOpen={appOpen}
+                appFiltered={appFiltered}
+                appIndex={appIndex}
+                appRef={appRef}
+                setAppIndex={setAppIndex}
+                onAppSelect={onAppSelect}
                 replyToIndex={state.replyToIndex}
                 replyToContent={
                   state.replyToIndex !== null

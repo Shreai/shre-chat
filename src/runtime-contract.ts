@@ -87,7 +87,7 @@ const CONTRACT = runtimeContract as RuntimeContractDoc;
 
 const DOMAIN_KEYWORDS: Record<string, RegExp> = {
   crm: /\b(customer|account|lead|contact|client|crm)\b/i,
-  pos: /\b(pos|point of sale|checkout|register|transaction|sale|receipt|payment)\b/i,
+  pos: /\b(pos|bos|point of sale|checkout|register|transaction|sale|receipt|payment)\b/i,
   accounting: /\b(accounting|invoice|journal|ledger|reconciliation|bookkeeping|debit|credit)\b/i,
   erp: /\b(erp|inventory|purchase order|po\b|fulfillment|supply chain)\b/i,
   scheduling: /\b(schedule|shift|rota|roster|calendar|availability|work hours)\b/i,

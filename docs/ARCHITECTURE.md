@@ -2,35 +2,31 @@
 
 ## System Overview
 
-Shre Chat is a browser-first chat UI that connects to the Shre AI platform via shre-router. It runs as a static site with a Node.js backend proxy (`serve.js`) handling auth, streaming, sessions, and WebSocket.
+Shre Chat is a browser-first chat UI that can run either through `shre-router` or directly against the local chat service. It runs as a static site with a Node.js backend proxy (`serve.js`) handling auth, streaming, sessions, and sync.
 
 ```
                                     Shre Platform
-                                    ┌─────────────────────┐
-  Browser (React SPA)               │  shre-router :5497  │
-  ┌──────────────────┐    HTTP/SSE  │  ┌───────────────┐  │
-  │ ChatView         ├─────────────►│  │ Trust Gate    │  │
-  │ Sidebar          │              │  │ Budget Check  │  │
-  │ StatusBar        │              │  │ RAG Injection │  │
-  │ TerminalView     │              │  │ Model Routing │  │
-  │ VoiceAssistant   │              │  │ Cost Tracking │  │
-  └────────┬─────────┘              │  └───────────────┘  │
-           │                        └─────────────────────┘
-           │ WebSocket                        │
-           ▼                                  ▼
-  ┌──────────────────┐              ┌─────────────────────┐
-  │ serve.js :5510   │              │  AI Providers       │
-  │ ┌──────────────┐ │              │  Ollama, OpenAI,    │
-  │ │ Auth (JWT)   │ │              │  Anthropic, Google  │
-  │ │ Session DB   │ │              └─────────────────────┘
-  │ │ SSE Proxy    │ │
-  │ │ PTY Terminal │ │              ┌─────────────────────┐
-  │ │ Voice Proxy  │ │              │  Platform Services  │
-  │ │ Heartbeat    │ │              │  shre-tasks :5460   │
-  │ │ Training WAL │ │              │  shre-fleet :5498   │
-  │ └──────────────┘ │              │  shre-auth  :5455   │
-  └──────────────────┘              │  shre-meter :5495   │
-                                    └─────────────────────┘
+                 ┌──────────────────────────────┐
+                 │      shre-router :5497       │
+                 │  trust gate / policy / sync   │
+                 └───────────────┬───────────────┘
+                                 │ async sync
+                                 ▼
+  Browser (React SPA)   HTTP/SSE ┌─────────────────────┐
+  ┌──────────────────┐──────────►│  serve.js :5510     │
+  │ ChatView         │           │  ┌──────────────┐   │
+  │ Sidebar          │           │  │ Local direct │   │
+  │ StatusBar        │           │  │ chat path    │   │
+  │ TerminalView     │           │  │ Auth (JWT)   │   │
+  │ VoiceAssistant   │           │  │ Session DB   │   │
+  └────────┬─────────┘           │  │ SSE Proxy    │   │
+           │ WebSocket            │  │ PTY Terminal │   │
+           ▼                      │  │ Voice Proxy  │   │
+  ┌──────────────────┐            │  │ Heartbeat    │   │
+  │ local providers   │            │  │ Training WAL │   │
+  │ Ollama, OpenAI,   │            │  └──────────────┘   │
+  │ Anthropic, Google │            └─────────────────────┘
+  └──────────────────┘
 ```
 
 ## Frontend Architecture
@@ -96,8 +92,9 @@ store.ts
 
 `serve.js` is a single-file Node.js HTTP server (~7200 lines) that handles:
 
-Direct mode is disabled by default. If explicitly enabled, `/api/direct/v1/chat` is still rewritten
-through `shre-router` with a forced local-model route rather than bypassing platform policy.
+Direct mode is local-first. If enabled, `/api/direct/v1/chat` streams from the local model path,
+persists the conversation locally, and syncs a learning record back to `shre-router`
+asynchronously.
 
 ### Request Pipeline
 
@@ -110,6 +107,7 @@ Incoming Request
     ├── JWT Auth Check (except PUBLIC_PATHS)
     │
     ├── /api/auth/*     → Auth module (routes/auth.js)
+    ├── /api/direct/*   → Local direct chat path with async router sync
     ├── /api/router/*   → SSE proxy to shre-router
     ├── /api/sessions/* → Session module (routes/sessions.js)
     ├── /api/voice/*    → Voice module (routes/voice.js)
@@ -154,12 +152,12 @@ Every conversation writes to the training WAL (Write-Ahead Log) via `shre-sdk/tr
 ```
 1. User types in ChatComposer → Ctrl+Enter
 2. store.addMessage(userMsg)
-3. router-client.ts → POST /api/router/v1/chat (SSE)
+3. router-client.ts → POST /api/direct/v1/chat when direct mode is enabled, otherwise POST /api/router/v1/chat (SSE)
 4. serve.js:
    a. Validates JWT, extracts user claims
-   b. Injects x-tenant-id, x-user-id, x-channel headers
-   c. Proxies the request to shre-router without mutating the payload
-   d. Lets shre-router perform routing, context loading, tool execution, and policy checks
+   b. Routes direct mode to local model execution and persists it locally
+   c. Proxies router mode to shre-router without mutating the payload
+   d. Syncs direct-mode learning records back to shre-router asynchronously
 5. SSE events stream back:
    - delta: partial token → store.appendToken()
    - done: full response → store.finalizeMessage()

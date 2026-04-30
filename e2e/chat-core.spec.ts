@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { switchView } from './view-switch';
 
 test.describe('Agent 1: Chat Core — messaging, sessions, tabs', () => {
   test.setTimeout(60_000);
@@ -129,13 +130,9 @@ test.describe('Agent 1: Chat Core — messaging, sessions, tabs', () => {
     await textarea.fill('Draft message for persistence test');
 
     // Navigate away and back
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
-    });
+    await switchView(page, 'preview');
     await page.waitForTimeout(500);
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'chat' }));
-    });
+    await switchView(page, 'chat');
     await page.waitForTimeout(500);
 
     // Check if draft survived (if draft persistence is implemented)

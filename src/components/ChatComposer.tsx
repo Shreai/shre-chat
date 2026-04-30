@@ -12,6 +12,17 @@ const EmojiPicker = lazy(() =>
   ),
 );
 
+type AppMentionItem = {
+  id: string;
+  label: string;
+  subtitle: string;
+  icon?: string;
+  category?: string;
+  activated: boolean;
+  skillCount: number;
+  assignedAgents?: string[];
+};
+
 interface ChatComposerProps {
   input: string;
   setInput: (val: string) => void;
@@ -29,9 +40,9 @@ interface ChatComposerProps {
   messages: { role: string; content: string }[];
 
   // Refs
-  inputRef: React.RefObject<HTMLTextAreaElement>;
-  fileRef: React.RefObject<HTMLInputElement>;
-  emojiRef: React.RefObject<HTMLDivElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  emojiRef: React.RefObject<HTMLDivElement | null>;
 
   // File handling
   pendingFiles: UploadedFile[];
@@ -75,18 +86,24 @@ interface ChatComposerProps {
   slashOpen: boolean;
   slashFiltered: { name: string; description: string; usage: string; category?: string }[];
   slashIndex: number;
-  slashRef: React.RefObject<HTMLDivElement>;
+  slashRef: React.RefObject<HTMLDivElement | null>;
   setSlashIndex: (val: number) => void;
   onSlashSelect: (cmd: string) => void;
 
-  // Mentions (@@)
+  // Mentions (@)
   mentionOpen: boolean;
   mentionFiltered: { id: string; name: string; emoji: string; group: string }[];
   mentionIndex: number;
-  mentionRef: React.RefObject<HTMLDivElement>;
+  mentionRef: React.RefObject<HTMLDivElement | null>;
   setMentionIndex: (val: number) => void;
   onMentionSelect: (agent: { id: string; name: string; emoji: string; group: string }) => void;
   mentionAgent: { id: string; name: string; emoji: string } | null;
+  appOpen: boolean;
+  appFiltered: AppMentionItem[];
+  appIndex: number;
+  appRef: React.RefObject<HTMLDivElement | null>;
+  setAppIndex: (val: number | ((prev: number) => number)) => void;
+  onAppSelect: (app: AppMentionItem) => void;
 
   // Reply
   replyToIndex: number | null;
@@ -187,6 +204,12 @@ export function ChatComposer(props: ChatComposerProps) {
     setMentionIndex,
     onMentionSelect,
     mentionAgent,
+    appOpen,
+    appFiltered,
+    appIndex,
+    appRef,
+    setAppIndex,
+    onAppSelect,
     replyToIndex,
     replyToContent,
     onCancelReply,
@@ -272,7 +295,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
       {/* Follow-up suggestion chips */}
       {suggestions.length > 0 && !streaming && (
-        <div className="px-2 sm:px-4 py-2 shrink-0 flex flex-wrap gap-2 justify-center max-w-3xl mx-auto">
+        <div className="px-2 sm:px-4 py-2 shrink-0 flex flex-wrap gap-2 justify-center w-full">
           {suggestions.map((s, i) => (
             <button
               key={i}
@@ -305,7 +328,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
       {/* Input area */}
       <div
-        className="px-2 sm:px-4 py-1 shrink-0 mobile-safe-bottom mobile-input-sticky mobile-input-area relative"
+        className="px-0 py-0.5 shrink-0 mobile-safe-bottom mobile-input-sticky mobile-input-area relative"
         style={{ background: 'var(--c-bg-2)', borderTop: '1px solid var(--c-border-2)' }}
       >
         {/* ARIA live region for voice status announcements */}
@@ -327,7 +350,7 @@ export function ChatComposer(props: ChatComposerProps) {
         {slashOpen && slashFiltered.length > 0 && (
           <div
             ref={slashRef}
-            className="max-w-3xl mx-auto mb-1 rounded-lg overflow-hidden shadow-lg"
+            className="w-full mb-1 rounded-lg overflow-hidden shadow-lg"
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
@@ -409,11 +432,11 @@ export function ChatComposer(props: ChatComposerProps) {
           </div>
         )}
 
-        {/* @@ Mention dropdown */}
+        {/* @ Mention dropdown */}
         {mentionOpen && mentionFiltered.length > 0 && (
           <div
             ref={mentionRef}
-            className="max-w-3xl mx-auto mb-1 rounded-lg overflow-hidden shadow-lg"
+            className="w-full mb-1 rounded-lg overflow-hidden shadow-lg"
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
@@ -464,11 +487,66 @@ export function ChatComposer(props: ChatComposerProps) {
           </div>
         )}
 
-        <div className="max-w-3xl mx-auto overflow-hidden transition-all" id="shre-input-box">
+        {/* # App dropdown */}
+        {appOpen && appFiltered.length > 0 && (
+          <div
+            ref={appRef}
+            className="w-full mb-1 rounded-lg overflow-hidden shadow-lg"
+            style={{
+              background: 'var(--c-bg-2)',
+              border: '1px solid var(--c-border-2)',
+              maxHeight: '240px',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              style={{ color: 'var(--c-text-4)', borderBottom: '1px solid var(--c-border-1)' }}
+            >
+              Select App
+            </div>
+            {appFiltered.map((app, i) => (
+              <button
+                key={app.id}
+                data-app-active={i === appIndex ? 'true' : 'false'}
+                className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                style={{
+                  background: i === appIndex ? 'var(--c-bg-hover)' : 'transparent',
+                  color: 'var(--c-text-1)',
+                }}
+                onMouseEnter={() => setAppIndex(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onAppSelect(app);
+                }}
+              >
+                <span className="flex items-center justify-center w-6 h-6 rounded text-sm">
+                  {app.icon || '▣'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{app.label}</div>
+                  <div className="text-xs truncate" style={{ color: 'var(--c-text-4)' }}>
+                    {app.subtitle || app.category || 'App scope'}
+                  </div>
+                </div>
+                {!!app.skillCount && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded"
+                    style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
+                  >
+                    {app.skillCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="w-full overflow-hidden transition-all" id="shre-input-box">
           {/* Reply preview bar */}
           {replyToIndex !== null && replyToContent && (
             <div
-              className="flex items-center gap-2 px-4 py-2 text-xs rounded-lg mb-1"
+              className="flex items-center gap-2 px-4 py-1.5 text-xs rounded-lg mb-1"
               style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-3)' }}
             >
               <svg
@@ -512,7 +590,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {/* Editing indicator */}
           {(editingMsgIndex !== null || editingQueueId !== null) && (
             <div
-              className="flex items-center gap-2 px-2 py-1 text-[11px] rounded-lg mb-1"
+              className="flex items-center gap-2 px-2 py-0.5 text-[11px] rounded-lg mb-1"
               style={{ background: 'var(--c-bg-active)', color: 'var(--c-accent)' }}
             >
               <svg
@@ -555,7 +633,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {/* Mention agent badge */}
           {mentionAgent && (
             <div
-              className="flex items-center gap-1.5 px-3 py-1 text-[11px]"
+              className="flex items-center gap-1.5 px-3 py-0.5 text-[11px]"
               style={{ color: 'var(--c-accent)' }}
             >
               <span>{mentionAgent.emoji}</span>
@@ -688,7 +766,7 @@ export function ChatComposer(props: ChatComposerProps) {
             autoCorrect="off"
             spellCheck={false}
             aria-label="Message input"
-            className="w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
+            className="w-full px-4 pt-2 pb-0.5 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
             style={{ color: 'var(--c-text-1)', minHeight: '44px' }}
             onFocus={() => {
               // On mobile, scroll textarea into view when keyboard opens
@@ -705,14 +783,18 @@ export function ChatComposer(props: ChatComposerProps) {
           />
 
           {/* Toolbar row */}
-          <div className="flex items-center justify-between px-2 py-1.5">
+          <div className="flex items-center justify-between px-2 py-0.5">
             <div className="flex items-center gap-0.5">
               {/* Attach */}
               <button
                 tabIndex={-1}
                 onClick={() => fileRef.current?.click()}
                 className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                style={{ color: 'var(--c-text-2)' }}
+                style={{
+                  color: 'var(--c-text-1)',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--c-border-2)',
+                }}
                 title="Attach file"
                 aria-label="Attach file"
               >
@@ -733,7 +815,11 @@ export function ChatComposer(props: ChatComposerProps) {
                   tabIndex={-1}
                   onClick={() => setShowEmoji(!showEmoji)}
                   className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                  style={{ color: showEmoji ? 'var(--c-accent)' : 'var(--c-text-2)' }}
+                  style={{
+                    color: showEmoji ? 'var(--c-accent)' : 'var(--c-text-1)',
+                    background: showEmoji ? 'rgba(99,141,255,0.10)' : 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--c-border-2)',
+                  }}
                   title="Emoji"
                   aria-label="Insert emoji"
                 >
@@ -798,7 +884,15 @@ export function ChatComposer(props: ChatComposerProps) {
                   }}
                   onContextMenu={(e) => e.preventDefault()}
                   className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : ''}`}
-                  style={isRecording ? {} : { color: 'var(--c-text-2)' }}
+                  style={
+                    isRecording
+                      ? {}
+                      : {
+                          color: 'var(--c-text-1)',
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid var(--c-border-2)',
+                        }
+                  }
                   title={isRecording ? 'Tap to stop' : 'Tap for voice input'}
                   aria-label={isRecording ? 'Stop recording' : 'Voice input'}
                 >
@@ -858,7 +952,15 @@ export function ChatComposer(props: ChatComposerProps) {
                     }
                   }}
                   className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
-                  style={voiceMode ? {} : { color: 'var(--c-text-2)' }}
+                  style={
+                    voiceMode
+                      ? {}
+                      : {
+                          color: 'var(--c-text-1)',
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid var(--c-border-2)',
+                        }
+                  }
                   title={voiceMode ? 'Deactivate hands-free mode' : 'Activate hands-free mode'}
                   aria-label={voiceMode ? 'Deactivate hands-free' : 'Activate hands-free'}
                 >
@@ -886,7 +988,11 @@ export function ChatComposer(props: ChatComposerProps) {
                     if (onOpenClaudeCli) onOpenClaudeCli();
                   }}
                   className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                  style={{ color: 'var(--c-text-2)' }}
+                  style={{
+                    color: 'var(--c-text-1)',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--c-border-2)',
+                  }}
                   title="Open Claude CLI in terminal tab"
                   aria-label="Open Claude CLI in terminal tab"
                 >
@@ -912,7 +1018,11 @@ export function ChatComposer(props: ChatComposerProps) {
                     if (onOpenShreCli) onOpenShreCli();
                   }}
                   className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1"
-                  style={{ color: 'var(--c-text-2)' }}
+                  style={{
+                    color: 'var(--c-text-1)',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--c-border-2)',
+                  }}
                   title="Open Shre CLI in terminal tab"
                   aria-label="Open Shre CLI in terminal tab"
                 >
@@ -941,7 +1051,15 @@ export function ChatComposer(props: ChatComposerProps) {
                   tabIndex={-1}
                   onClick={onToggleTerminal}
                   className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${showTerminal ? 'bg-violet-500/20 text-violet-400' : ''}`}
-                  style={showTerminal ? {} : { color: 'var(--c-text-2)' }}
+                  style={
+                    showTerminal
+                      ? {}
+                      : {
+                          color: 'var(--c-text-1)',
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid var(--c-border-2)',
+                        }
+                  }
                   title={showTerminal ? 'Close terminal' : 'Open terminal'}
                   aria-label={showTerminal ? 'Close terminal' : 'Open terminal'}
                 >
@@ -1035,14 +1153,22 @@ export function ChatComposer(props: ChatComposerProps) {
                     }
                   }}
                   className="h-7 w-7 rounded-lg flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
-                  style={
-                    input.trim() && !syncing
-                      ? {
-                          background: streaming ? 'var(--c-accent-soft)' : 'var(--c-accent)',
-                          color: streaming ? 'var(--c-accent)' : 'var(--c-on-accent)',
-                        }
-                      : { color: 'var(--c-text-4)', opacity: 0.5 }
-                  }
+                  style={{
+                    background:
+                      input.trim() && !syncing
+                        ? streaming
+                          ? 'var(--c-accent-soft)'
+                          : 'var(--c-accent)'
+                        : 'rgba(255,255,255,0.04)',
+                    color:
+                      input.trim() && !syncing
+                        ? streaming
+                          ? 'var(--c-accent)'
+                          : 'var(--c-on-accent)'
+                        : 'var(--c-text-1)',
+                    border: '1px solid var(--c-border-2)',
+                    opacity: input.trim() && !syncing ? 1 : 0.6,
+                  }}
                   aria-disabled={!input.trim() || syncing || !writeEnabled}
                   title={
                     !writeEnabled

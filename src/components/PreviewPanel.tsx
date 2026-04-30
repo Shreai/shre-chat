@@ -1,7 +1,6 @@
-import React, { lazy, Suspense } from 'react';
+import React from 'react';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
-
-const ContentCard = lazy(() => import('./ContentCard'));
+import ContentCard from './ContentCard';
 
 interface PreviewPanelProps {
   content: { content: string; type: string; title?: string };
@@ -9,6 +8,63 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ content, onClose }: PreviewPanelProps) {
+  const openInNewTab = () => {
+    if (!content?.content) return;
+    const type = content.type || 'html';
+    if (type === 'html' || type === 'markdown') {
+      const w = window.open('', '_blank');
+      if (w) {
+        const html =
+          type === 'markdown'
+            ? `<!DOCTYPE html><html><body>${content.content}</body></html>`
+            : content.content;
+        w.document.write(html);
+        w.document.close();
+      }
+      return;
+    }
+
+    const blob = new Blob([content.content], {
+      type: type === 'json' ? 'application/json' : type === 'csv' ? 'text/csv' : 'text/plain',
+    });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  const downloadFile = () => {
+    if (!content?.content) return;
+    const type = content.type || 'txt';
+    const extMap: Record<string, string> = {
+      html: 'html',
+      markdown: 'md',
+      csv: 'csv',
+      json: 'json',
+      txt: 'txt',
+      chart: 'json',
+      table: 'csv',
+      pdf: 'pdf',
+    };
+    const blob = new Blob([content.content], {
+      type:
+        type === 'html'
+          ? 'text/html'
+          : type === 'markdown'
+            ? 'text/markdown'
+            : type === 'csv'
+              ? 'text/csv'
+              : type === 'json'
+                ? 'application/json'
+                : 'text/plain',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${content.title || 'preview'}.${extMap[type] || 'txt'}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex-1 min-h-0 flex flex-col" style={{ background: 'var(--c-bg-1)' }}>
       <div
@@ -49,19 +105,38 @@ export function PreviewPanel({ content, onClose }: PreviewPanelProps) {
       </div>
       <div className="flex-1 overflow-auto p-4">
         <ViewErrorBoundary viewName="Content Preview">
-          <Suspense
-            fallback={
-              <div
-                className="flex items-center justify-center h-full"
-                style={{ color: 'var(--c-text-4)' }}
-              >
-                Loading...
-              </div>
-            }
-          >
-            <ContentCard type={content.type} content={content.content} title={content.title} />
-          </Suspense>
+          <ContentCard type={content.type} content={content.content} title={content.title} />
         </ViewErrorBoundary>
+      </div>
+      <div
+        className="flex items-center gap-2 px-4 py-2 shrink-0"
+        style={{ borderTop: '1px solid var(--c-border-2)' }}
+      >
+        <button
+          onClick={openInNewTab}
+          className="px-2 py-1 rounded text-xs hover:opacity-80"
+          style={{
+            background: 'var(--c-bg-2)',
+            color: 'var(--c-text-2)',
+            border: '1px solid var(--c-border-2)',
+          }}
+        >
+          Open in Tab
+        </button>
+        <button
+          onClick={downloadFile}
+          className="px-2 py-1 rounded text-xs hover:opacity-80"
+          style={{
+            background: 'var(--c-bg-2)',
+            color: 'var(--c-text-2)',
+            border: '1px solid var(--c-border-2)',
+          }}
+        >
+          Download
+        </button>
+        <button onClick={onClose} className="px-2 py-1 rounded text-xs" style={{ color: 'var(--c-text-4)' }}>
+          Clear
+        </button>
       </div>
     </div>
   );

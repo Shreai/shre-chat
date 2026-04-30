@@ -1,0 +1,50 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777474087279",
+  "ranAt": "2026-04-29T14:48:34.713Z",
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "byModel": {
+      "direct-inventory": 1,
+      "direct-voids": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-inventory",
+        "elapsedMs": 11,
+        "ttfbMs": 10,
+        "length": 73,
+        "excerpt": "**Store** inventory: - I do not have inventory loaded for this store yet.",
+        "text": "**Store** inventory:\n- I do not have inventory loaded for this store yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-voids",
+        "elapsedMs": 6,
+        "ttfbMs": 6,
+        "length": 154,
+        "excerpt": "**Store** today's void/refund summary: - No live sales snapshot is loaded yet for today. - No voids or refunds are currently flagged in the live snapshot.",
+        "text": "**Store** today's void/refund summary:\n- No live sales snapshot is loaded yet for today.\n- No voids or refunds are currently flagged in the live snapshot."
+      }
+    }
+  ]
+}

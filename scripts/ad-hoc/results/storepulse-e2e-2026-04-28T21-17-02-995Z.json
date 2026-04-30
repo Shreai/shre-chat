@@ -1,0 +1,83 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "2",
+  "sessionKey": "e2e-1777410992254",
+  "ranAt": "2026-04-28T21:17:02.997Z",
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "byModel": {
+      "qwen2.5:0.5b": 4
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 2,
+        "category": "sales-yesterday",
+        "ask": "How did we do yesterday?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 9650,
+        "ttfbMs": 9650,
+        "length": 142,
+        "excerpt": "Yesterday, we had a great time playing games with my friends. We also have been to the beach and had fun parties, and got some yummy food too!",
+        "text": "Yesterday, we had a great time playing games with my friends. We also have been to the beach and had fun parties, and got some yummy food too!"
+      }
+    },
+    {
+      "prompt": {
+        "id": 4,
+        "category": "mtd",
+        "ask": "Give me month-to-date sales and transactions."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 4110,
+        "ttfbMs": 4110,
+        "length": 39,
+        "excerpt": "I'month-to-date sales and transactions.",
+        "text": "I'month-to-date sales and transactions."
+      }
+    },
+    {
+      "prompt": {
+        "id": 6,
+        "category": "top-vendors",
+        "ask": "Which vendors generated the most revenue this week?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 2120,
+        "ttfbMs": 2120,
+        "length": 548,
+        "excerpt": "It looks like you're talking about a lot of things. I'm not sure to talk about much helpfull things, but i'm not sure to helpful things. I've been not sure that i'm not sure. So i'm not sure that i'm not. But i'm not. Yo",
+        "text": "It looks like you're talking about a lot of things. I'm not sure to talk about much helpfull things, but i'm not sure to helpful things. I've been not sure that i'm not sure. So i'm not sure that i'm not. But i'm not. You are. It sounds like we're having a lot of fun and interesting conversations. Let's not be talking about the most important things. And this is where i'm in this.\nI'm not sure that I'm not. So i'm not. But i'm not. It looks like you're talkin with me. I'm not sure that u're not. So I'm not. Not, but I'm, but I'm, but I'm not."
+      }
+    },
+    {
+      "prompt": {
+        "id": 12,
+        "category": "avg-ticket",
+        "ask": "What is the average ticket trend over the last 7 days?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 14592,
+        "ttfbMs": 14592,
+        "length": 279,
+        "excerpt": "The average daily ticket sales for a specific day or week can vary greatly, but generally in the US market. For example tuesday, the average daily ticket sales were $10.50. The average daily ticket sales are higher than ",
+        "text": "The average daily ticket sales for a specific day or week can vary greatly, but generally in the US market. For example tuesday, the average daily ticket sales were $10.50. The average daily ticket sales are higher than on this particular day compared to that same day's average."
+      }
+    }
+  ]
+}

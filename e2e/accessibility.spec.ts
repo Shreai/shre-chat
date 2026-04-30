@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { switchView } from './view-switch';
 import AxeBuilder from '@axe-core/playwright';
 
 test.describe('Agent 6: Accessibility & Edge Cases', () => {
@@ -235,9 +236,7 @@ test.describe('Agent 6: Accessibility & Edge Cases', () => {
   test("rapid navigation doesn't crash", async ({ page }) => {
     const views = ['preview', 'activity', 'tasks', 'chat', 'spend', 'chat'];
     for (const view of views) {
-      await page.evaluate((v) => {
-        window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: v }));
-      }, view);
+      await switchView(page, view);
       await page.waitForTimeout(200);
     }
     // Should end on chat without crash

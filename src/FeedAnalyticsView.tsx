@@ -48,6 +48,10 @@ export function FeedAnalyticsView() {
   const [severityFilter, setSeverityFilter] = useState<Set<string>>(
     new Set(['critical', 'warning', 'info']),
   );
+  const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
+  const byCategory = Array.isArray(data?.byCategory) ? data.byCategory : [];
+  const byAgent = Array.isArray(data?.byAgent) ? data.byAgent : [];
+  const bySeverity = Array.isArray(data?.bySeverity) ? data.bySeverity : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -70,32 +74,32 @@ export function FeedAnalyticsView() {
     };
   }, [range]);
 
-  const timelineChart: ChartData | null = data?.timeline.length
+  const timelineChart: ChartData | null = timeline.length
     ? {
         type: 'line',
-        labels: data.timeline.map((t) => t.day.slice(5)),
-        datasets: [{ label: 'Events', data: data.timeline.map((t) => t.count), color: '#60a5fa' }],
+        labels: timeline.map((t) => t.day.slice(5)),
+        datasets: [{ label: 'Events', data: timeline.map((t) => t.count), color: '#60a5fa' }],
         options: { showLegend: true },
       }
     : null;
 
-  const categoryChart: ChartData | null = data?.byCategory.length
+  const categoryChart: ChartData | null = byCategory.length
     ? {
         type: 'pie',
-        labels: data.byCategory.map((c) => c.category),
-        datasets: [{ label: 'Events', data: data.byCategory.map((c) => c.count) }],
+        labels: byCategory.map((c) => c.category),
+        datasets: [{ label: 'Events', data: byCategory.map((c) => c.count) }],
         options: { showLegend: true },
       }
     : null;
 
-  const agentChart: ChartData | null = data?.byAgent.length
+  const agentChart: ChartData | null = byAgent.length
     ? {
         type: 'bar',
-        labels: data.byAgent.slice(0, 10).map((a) => a.agent),
+        labels: byAgent.slice(0, 10).map((a) => a.agent),
         datasets: [
           {
             label: 'Events',
-            data: data.byAgent.slice(0, 10).map((a) => a.count),
+            data: byAgent.slice(0, 10).map((a) => a.count),
             color: '#a78bfa',
           },
         ],
@@ -103,7 +107,7 @@ export function FeedAnalyticsView() {
       }
     : null;
 
-  const exportData = data?.byAgent.map((a) => ({ agent: a.agent, events: a.count })) ?? [];
+  const exportData = byAgent.map((a) => ({ agent: a.agent, events: a.count }));
 
   return (
     <div
@@ -165,7 +169,7 @@ export function FeedAnalyticsView() {
               border: `1px solid ${severityFilter.has(s) ? (SEVERITY_COLORS[s] || '#60a5fa') + '44' : 'var(--c-border-2)'}`,
             }}
           >
-            {s} {data?.bySeverity.find((x) => x.severity === s)?.count ?? 0}
+            {s} {bySeverity.find((x) => x.severity === s)?.count ?? 0}
           </button>
         ))}
         {data && (

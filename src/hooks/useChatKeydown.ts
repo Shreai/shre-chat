@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback } from 'react';
-import type { MentionItem } from './useMentions';
+import type { AppMentionItem, MentionItem } from './useMentions';
 import type { ChatMessage } from '../router-client';
 
 export interface UseChatKeydownParams {
@@ -18,6 +18,13 @@ export interface UseChatKeydownParams {
   setMentionIndex: (v: number | ((prev: number) => number)) => void;
   setMentionOpen: (v: boolean) => void;
   onMentionSelect: (agent: MentionItem) => void;
+  // App mentions
+  appOpen: boolean;
+  appFiltered: AppMentionItem[];
+  appIndex: number;
+  setAppIndex: (v: number | ((prev: number) => number)) => void;
+  setAppOpen: (v: boolean) => void;
+  onAppSelect: (app: AppMentionItem) => void;
   // Editing
   editingQueueId: string | null;
   setEditingQueueId: (v: string | null) => void;
@@ -58,6 +65,12 @@ export function useChatKeydown(params: UseChatKeydownParams) {
     setMentionIndex,
     setMentionOpen,
     onMentionSelect,
+    appOpen,
+    appFiltered,
+    appIndex,
+    setAppIndex,
+    setAppOpen,
+    onAppSelect,
     editingQueueId,
     setEditingQueueId,
     setEditingQueueText,
@@ -120,7 +133,7 @@ export function useChatKeydown(params: UseChatKeydownParams) {
         }
       }
 
-      // @@ Mention dropdown navigation
+      // @ Mention dropdown navigation
       if (mentionOpen && mentionFiltered.length > 0) {
         if (e.key === 'ArrowUp') {
           e.preventDefault();
@@ -141,6 +154,31 @@ export function useChatKeydown(params: UseChatKeydownParams) {
         if (e.key === 'Escape') {
           e.preventDefault();
           setMentionOpen(false);
+          return;
+        }
+      }
+
+      // # App dropdown navigation
+      if (appOpen && appFiltered.length > 0) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setAppIndex((prev) => (prev - 1 + appFiltered.length) % appFiltered.length);
+          return;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setAppIndex((prev) => (prev + 1) % appFiltered.length);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          const selected = appFiltered[appIndex];
+          if (selected) onAppSelect(selected);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setAppOpen(false);
           return;
         }
       }
@@ -209,7 +247,7 @@ export function useChatKeydown(params: UseChatKeydownParams) {
           sentHistoryIdxRef.current = hist.length;
         }
         handleSend();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' && !input.trim()) {
         const hist = sentHistoryRef.current;
         if (hist.length === 0) return;
         e.preventDefault();
@@ -219,7 +257,7 @@ export function useChatKeydown(params: UseChatKeydownParams) {
           sentHistoryIdxRef.current = idx;
           setInput(hist[idx]);
         }
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' && !input.trim()) {
         const hist = sentHistoryRef.current;
         if (hist.length === 0) return;
         const cur = sentHistoryIdxRef.current;

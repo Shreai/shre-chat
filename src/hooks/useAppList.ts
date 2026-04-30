@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { fetchAvailableApps, type RouterApp } from '../router-client';
+import { isDevSafeMode } from '../env';
 
 const FALLBACK_APPS = [
   { id: 'aros', name: 'AROS', description: 'RapidRMS POS intelligence' },
@@ -20,18 +21,24 @@ export interface AppOption {
   category?: string;
   activated: boolean;
   skillCount: number;
+  assignedAgents?: string[];
 }
 
 export function useAppList() {
+  const devSafeMode = isDevSafeMode();
   const [dynamicApps, setDynamicApps] = useState<RouterApp[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    if (devSafeMode) {
+      setLoaded(true);
+      return;
+    }
     fetchAvailableApps().then((apps) => {
       if (apps.length > 0) setDynamicApps(apps);
       setLoaded(true);
     });
-  }, []);
+  }, [devSafeMode]);
 
   const appOptions: AppOption[] = useMemo(() => {
     if (dynamicApps.length > 0) {
@@ -43,6 +50,7 @@ export function useAppList() {
         category: a.category,
         activated: a.activated,
         skillCount: a.skillCount,
+        assignedAgents: a.assignedAgents,
       }));
     }
     return FALLBACK_APPS.map((a) => ({

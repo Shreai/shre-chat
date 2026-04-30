@@ -20,7 +20,7 @@ interface GlobalSearchModalProps {
   onSearch?: () => void;
   onResultClick?: (result: SearchResult) => void;
   onSelect?: (sessionId: string, resultIndex: number) => void;
-  inputRef?: React.RefObject<HTMLInputElement>;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export function GlobalSearchModal({

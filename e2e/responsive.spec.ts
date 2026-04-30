@@ -1,4 +1,5 @@
 import { test, expect, devices } from '@playwright/test';
+import { switchView } from './view-switch';
 
 /**
  * Agent 8: Responsive & Device Testing
@@ -300,8 +301,8 @@ test.describe('Agent 8: Responsive — devices, sizes, orientations', () => {
     await page.evaluate(() => {
       const entry = { id: 'resp_test', title: 'test.html', html: '<h1>Mobile Preview</h1>', savedAt: Date.now(), type: 'html' };
       sessionStorage.setItem('shre-preview-html', JSON.stringify(entry));
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'preview' }));
     });
+    await switchView(page, 'preview');
     await page.waitForTimeout(800);
 
     // Preview should render without horizontal overflow
@@ -315,9 +316,7 @@ test.describe('Agent 8: Responsive — devices, sizes, orientations', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#shre-chat-textarea:not([disabled])', { timeout: 30_000 });
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('shre:switch-view', { detail: 'tasks' }));
-    });
+    await switchView(page, 'tasks');
     await page.waitForTimeout(800);
 
     // No horizontal overflow

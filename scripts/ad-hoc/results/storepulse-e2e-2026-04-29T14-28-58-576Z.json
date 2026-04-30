@@ -1,0 +1,41 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777472920929",
+  "ranAt": "2026-04-29T14:28:58.577Z",
+  "summary": {
+    "passed": 0,
+    "failed": 2,
+    "byModel": {
+      "error": 2
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": false,
+        "http": 403,
+        "error": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1777472921595\",\"status\":\"in_progress\",\"model\":\"auto\",\"output\":[]}}\n\nevent: response.output_item.added\ndata: {\"type\":\"res",
+        "elapsedMs": 293
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": false,
+        "http": 403,
+        "error": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1777472938567\",\"status\":\"in_progress\",\"model\":\"auto\",\"output\":[]}}\n\nevent: response.output_item.added\ndata: {\"type\":\"res",
+        "elapsedMs": 16974
+      }
+    }
+  ]
+}

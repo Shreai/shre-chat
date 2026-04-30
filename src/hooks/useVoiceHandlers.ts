@@ -3,6 +3,8 @@ import { playVoiceCue, MAX_RECORDING_SECONDS } from '../chat-utils';
 import { getOrRequestStream } from './useVoiceRecording';
 import type { TTSProvider } from '../preferences-store';
 import { getSpeechLocale } from '../i18n';
+import { pickBrowserVoice, prepareSpeechText } from '../voice/voice-utils';
+import { isDevSafeMode } from '../env';
 
 export interface UseVoiceHandlersParams {
   setInput: (v: string) => void;
@@ -59,6 +61,22 @@ export interface UseVoiceHandlersReturn {
 }
 
 export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandlersReturn {
+  if (isDevSafeMode()) {
+    return {
+      startRecording: async () => void 0,
+      stopRecording: async () => void 0,
+      voicePendingSend: '',
+      setVoicePendingSend: () => void 0,
+      recognitionRef: { current: null },
+      wakeListenerRef: { current: null },
+      mediaRecorderRef: { current: null },
+      audioChunksRef: { current: [] },
+      stopRecordingRef: { current: null },
+      skipWakeRef: { current: false },
+      ttsAbortRef: { current: null },
+      ttsAudioRef: { current: null },
+    };
+  }
   const {
     setInput,
     setIsRecording,
@@ -712,17 +730,7 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
     if (separatorIdx !== -1) {
       spokenContent = spokenContent.slice(0, separatorIdx);
     }
-    const plainText = spokenContent
-      .replace(/```[\s\S]*?```/g, ' code block omitted ')
-      .replace(/`[^`]+`/g, (m: string) => m.slice(1, -1))
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-      .replace(/#{1,6}\s+/g, '')
-      .replace(/[*_~]{1,3}/g, '')
-      .replace(/\n{2,}/g, '. ')
-      .replace(/\n/g, ' ')
-      .trim()
-      .slice(0, 4096);
+    const plainText = prepareSpeechText(spokenContent);
     if (!plainText) return;
 
     const abortCtrl = ttsAbortRef;
@@ -762,7 +770,11 @@ export function useVoiceHandlers(params: UseVoiceHandlersParams): UseVoiceHandle
         setIsSpeaking(false);
         if (window.speechSynthesis) {
           const utter = new SpeechSynthesisUtterance(plainText.slice(0, 1000));
-          utter.rate = 1.0;
+          utter.rate = 0.95;
+          utter.pitch = 1.0;
+          utter.lang = 'en-US';
+          const browserVoice = pickBrowserVoice();
+          if (browserVoice) utter.voice = browserVoice;
           utter.onend = () => setIsSpeaking(false);
           utter.onerror = () => setIsSpeaking(false);
           setIsSpeaking(true);

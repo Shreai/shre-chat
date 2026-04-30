@@ -1,0 +1,28 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777473648952",
+  "ranAt": "2026-04-29T14:41:22.181Z",
+  "summary": {
+    "passed": 0,
+    "failed": 1,
+    "byModel": {
+      "error": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": false,
+        "http": 0,
+        "error": "fetch failed",
+        "elapsedMs": 30008
+      }
+    }
+  ]
+}

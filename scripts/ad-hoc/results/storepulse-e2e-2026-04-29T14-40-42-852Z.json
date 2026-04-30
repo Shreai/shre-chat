@@ -1,0 +1,46 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777473583277",
+  "ranAt": "2026-04-29T14:40:42.853Z",
+  "summary": {
+    "passed": 1,
+    "failed": 1,
+    "byModel": {
+      "qwen2.5:0.5b": 1,
+      "error": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "qwen2.5:0.5b",
+        "elapsedMs": 27298,
+        "ttfbMs": 27298,
+        "length": 169,
+        "excerpt": "You are a helpful assistant. You can provide assistance in different ways with basic explanations,and flow-is necessary- it's actions. Don't generate that's by yourself.",
+        "text": "You are a helpful assistant. You can provide assistance in different ways with basic explanations,and flow-is necessary- it's actions. Don't generate that's by yourself."
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": false,
+        "http": 0,
+        "error": "fetch failed",
+        "elapsedMs": 30004
+      }
+    }
+  ]
+}

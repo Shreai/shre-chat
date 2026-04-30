@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from './store';
 
 // ── Preview data bridge ─────────────────────────────────────────────
@@ -33,6 +33,19 @@ function saveLibrary(entries: PreviewEntry[]) {
     localStorage.setItem(LIBRARY_KEY, JSON.stringify(entries.slice(0, MAX_LIBRARY)));
   } catch (_) {
     void _;
+  }
+}
+
+function readQueuedPreview(): PreviewEntry | null {
+  try {
+    const raw = sessionStorage.getItem(PREVIEW_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as PreviewEntry;
+    if (!entry.type) entry.type = detectType(entry.html, entry.title);
+    return entry;
+  } catch (_) {
+    void _;
+    return null;
   }
 }
 
@@ -92,10 +105,20 @@ export function queuePreview(html: string, title?: string, type?: PreviewType): 
 
 // ── Type-specific renderers ─────────────────────────────────────────
 
-function HtmlRenderer({ content }: { content: string }) {
+function HtmlRenderer({
+  content,
+  frameKey,
+  onLoad,
+}: {
+  content: string;
+  frameKey: string;
+  onLoad: () => void;
+}) {
   return (
     <iframe
+      key={frameKey}
       srcDoc={content}
+      onLoad={onLoad}
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       className="w-full h-full border-0"
       style={{ background: 'white' }}
@@ -265,7 +288,15 @@ function JsonRenderer({ content }: { content: string }) {
   );
 }
 
-function MarkdownRenderer({ content }: { content: string }) {
+function MarkdownRenderer({
+  content,
+  frameKey,
+  onLoad,
+}: {
+  content: string;
+  frameKey: string;
+  onLoad: () => void;
+}) {
   // Render markdown as simple styled HTML in an iframe
   const htmlContent = markdownToSimpleHtml(content);
   const doc = `<!DOCTYPE html>
@@ -291,7 +322,9 @@ function MarkdownRenderer({ content }: { content: string }) {
 </style></head><body>${htmlContent}</body></html>`;
   return (
     <iframe
+      key={frameKey}
       srcDoc={doc}
+      onLoad={onLoad}
       sandbox="allow-same-origin"
       className="w-full h-full border-0"
       style={{ background: 'white' }}
@@ -360,26 +393,31 @@ const TYPE_LABELS: Record<PreviewType, string> = {
 
 export function PreviewView() {
   const { state, actions } = useApp();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const [library, setLibrary] = useState<PreviewEntry[]>(loadLibrary);
-  const [active, setActive] = useState<PreviewEntry | null>(null);
+  const [library, setLibrary] = useState<PreviewEntry[]>(() => loadLibrary());
+  const [active, setActive] = useState<PreviewEntry | null>(() => readQueuedPreview());
+  const [previewReady, setPreviewReady] = useState(false);
 
-  // On mount: check sessionStorage for queued preview
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(PREVIEW_KEY);
-      if (raw) {
-        const entry = JSON.parse(raw) as PreviewEntry;
-        if (!entry.type) entry.type = detectType(entry.html, entry.title);
-        setActive(entry);
-        setLibrary(loadLibrary());
-        sessionStorage.removeItem(PREVIEW_KEY);
-      }
-    } catch (_) {
-      void _;
+    if (active) {
+      sessionStorage.removeItem(PREVIEW_KEY);
     }
-  }, []);
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) {
+      setPreviewReady(false);
+      return;
+    }
+
+    const type = active.type || detectType(active.html, active.title);
+    if (type === 'html' || type === 'markdown') {
+      setPreviewReady(false);
+      return;
+    }
+
+    setPreviewReady(true);
+  }, [active]);
 
   const selectEntry = (entry: PreviewEntry) => {
     if (!entry.type) entry.type = detectType(entry.html, entry.title);
@@ -449,6 +487,7 @@ export function PreviewView() {
   };
 
   const activeType = active?.type || 'html';
+  const frameKey = active?.id || active?.savedAt?.toString() || 'preview-empty';
 
   return (
     <div className="flex-1 flex flex-col h-full" style={{ background: 'var(--c-bg-1)' }}>
@@ -652,16 +691,36 @@ export function PreviewView() {
         </div>
 
         {/* Content area */}
-        <div className="flex-1 relative min-w-0">
+        <div
+          className="flex-1 relative min-w-0"
+          data-preview-ready={active ? String(previewReady) : 'false'}
+          data-preview-type={activeType}
+          data-preview-id={active?.id || ''}
+        >
           {active ? (
             <>
-              {activeType === 'html' && <HtmlRenderer content={active.html} />}
-              {activeType === 'csv' && <CsvRenderer content={active.html} />}
-              {activeType === 'json' && <JsonRenderer content={active.html} />}
-              {activeType === 'txt' && <TxtRenderer content={active.html} />}
-              {activeType === 'markdown' && <MarkdownRenderer content={active.html} />}
+              {activeType === 'html' && (
+                <HtmlRenderer
+                  key={frameKey}
+                  content={active.html}
+                  frameKey={frameKey}
+                  onLoad={() => setPreviewReady(true)}
+                />
+              )}
+              {activeType === 'csv' && <CsvRenderer key={active.id} content={active.html} />}
+              {activeType === 'json' && <JsonRenderer key={active.id} content={active.html} />}
+              {activeType === 'txt' && <TxtRenderer key={active.id} content={active.html} />}
+              {activeType === 'markdown' && (
+                <MarkdownRenderer
+                  key={frameKey}
+                  content={active.html}
+                  frameKey={frameKey}
+                  onLoad={() => setPreviewReady(true)}
+                />
+              )}
               {activeType === 'pdf' && (
                 <div
+                  key={active.id}
                   className="flex items-center justify-center h-full"
                   style={{ color: 'var(--c-text-4)' }}
                 >

@@ -26,7 +26,7 @@ kill $(lsof -iTCP:5510 -sTCP:LISTEN -t) && npm run serve &
 
 ### "Request timed out" in chat
 
-**Cause:** shre-router is slow or down. AI providers may be unreachable.
+**Cause:** The router-backed path or local direct path is slow or down. AI providers may be unreachable.
 
 **Fix:**
 ```bash

@@ -49,7 +49,7 @@ const CONTEXTUAL_PATTERNS: SuggestionPattern[] = [
   // Error / failure patterns
   {
     match: /(?:error|failed|failure|issue|problem|bug|exception|crash|timeout|500|404|503)/i,
-    suggestions: ['Retry', 'File a bug in MIB007', 'Show error details', 'How do I fix this?'],
+    suggestions: ['Retry', 'File a bug', 'Show error details', 'How do I fix this?'],
     priority: 9,
   },
   // Direct question asked by assistant

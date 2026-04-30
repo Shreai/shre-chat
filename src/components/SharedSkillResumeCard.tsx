@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isDevSafeMode } from '../env';
 
 interface SharedSkillRanking {
   skillKey: string;
@@ -15,6 +16,9 @@ interface SharedSkillRanking {
 }
 
 export function SharedSkillResumeCard({ agentId }: { agentId: string | null }) {
+  if (isDevSafeMode()) {
+    return null;
+  }
   const [rankings, setRankings] = useState<SharedSkillRanking[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -28,7 +28,7 @@ export interface UseChatSearchReturn {
   >;
   globalSearching: boolean;
   setGlobalSearching: React.Dispatch<React.SetStateAction<boolean>>;
-  globalSearchRef: React.RefObject<HTMLInputElement>;
+  globalSearchRef: React.RefObject<HTMLInputElement | null>;
   // In-conversation search
   chatSearchOpen: boolean;
   setChatSearchOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -36,7 +36,7 @@ export interface UseChatSearchReturn {
   setChatSearch: React.Dispatch<React.SetStateAction<string>>;
   chatSearchIndex: number;
   setChatSearchIndex: React.Dispatch<React.SetStateAction<number>>;
-  chatSearchRef: React.RefObject<HTMLInputElement>;
+  chatSearchRef: React.RefObject<HTMLInputElement | null>;
   // Computed
   chatSearchResults: number[];
   chatSearchNavigate: (dir: 1 | -1) => void;

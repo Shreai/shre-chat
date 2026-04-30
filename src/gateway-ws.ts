@@ -1,8 +1,8 @@
 /**
- * Router Gateway WebSocket Client
+ * Gateway WebSocket Client
  *
- * Connects to Router Gateway via WebSocket (same protocol as native chat UI).
- * This ensures Shre Chat and the Router share the same sessions.
+ * Connects to the gateway WebSocket path used by the router-backed flow.
+ * This keeps the router session path available for the modes that still use it.
  *
  * Features:
  * - Auto-reconnect with exponential backoff via partysocket (1s -> 2s -> 4s -> 8s -> 16s max)

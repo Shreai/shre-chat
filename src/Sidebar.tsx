@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp, AGENTS, getAgent, DOMAIN_META, type Session } from './store';
+import { getStoredAuth } from './AppAuth';
 import { fetchAllAgentMessages } from './router-client';
 import { onStreamChange, type ActiveStream } from './gateway-ws';
-import { ThemeCustomizer } from './ThemeCustomizer';
-import { IdentityVerifyButton } from './IdentityVerifyButton';
 import { PoweredByNirlab } from '@shre/ui-kit';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { SharedSkillResumeCard } from './components/SharedSkillResumeCard';
@@ -32,6 +31,14 @@ function getTagColor(tag: string) {
   return TAG_COLORS[tag] || DEFAULT_TAG_COLOR;
 }
 
+interface MinimumFleetRole {
+  id: string;
+  name: string;
+  agentId: string;
+  purpose: string;
+  topSkills: string[];
+}
+
 export function Sidebar() {
   const { state, actions } = useApp();
   const { sessions, activeSessionId, activeAgentId, view, sidebarOpen, theme } = state;
@@ -55,6 +62,7 @@ export function Sidebar() {
   const features = usePreferences((s) => s.features);
 
   const [streamingAgents, setStreamingAgents] = useState<Map<string, string>>(new Map());
+  const [minimumFleet, setMinimumFleet] = useState<MinimumFleetRole[]>([]);
   useEffect(() => {
     const update = (streams: ActiveStream[]) => {
       const map = new Map<string, string>();
@@ -62,6 +70,22 @@ export function Sidebar() {
       setStreamingAgents(map);
     };
     return onStreamChange(update);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/agents/minimum-fleet')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { fleet?: MinimumFleetRole[] } | null) => {
+        if (cancelled || !data?.fleet) return;
+        setMinimumFleet(data.fleet);
+      })
+      .catch(() => {
+        void 0;
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -89,6 +113,7 @@ export function Sidebar() {
   }, [sessions]);
 
   const preloadAgents = () => {
+    if (!getStoredAuth()) return;
     const coreAgents = AGENTS.filter((a) => a.group === 'core');
     for (const agent of coreAgents) {
       if (preloadedAgents.current.has(agent.id)) continue;
@@ -508,52 +533,100 @@ export function Sidebar() {
 
                 <div className="flex-1 overflow-y-auto">
                   {groupByMode === 'role'
-                    ? /* ── Role-based grouping (original) ── */
-                      (['core', 'department', 'council'] as const).map((group) => {
-                        const allGroupAgents = AGENTS.filter((a) => a.group === group);
-                        const groupAgents = agentSearch.trim()
-                          ? allGroupAgents.filter(
-                              (a) =>
-                                a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
-                                a.id.toLowerCase().includes(agentSearch.toLowerCase()) ||
-                                a.model.toLowerCase().includes(agentSearch.toLowerCase()) ||
-                                (a.domains || []).some((d) =>
-                                  d.toLowerCase().includes(agentSearch.toLowerCase()),
-                                ) ||
-                                (a.description || '')
-                                  .toLowerCase()
-                                  .includes(agentSearch.toLowerCase()),
-                            )
-                          : allGroupAgents;
-                        if (groupAgents.length === 0) return null;
+                    ? (() => {
+                        const q = agentSearch.trim().toLowerCase();
+                        const filteredMinimumFleet = minimumFleet.filter((role) => {
+                          if (!q) return true;
+                          const agent = getAgent(role.agentId);
+                          return (
+                            role.name.toLowerCase().includes(q) ||
+                            role.agentId.toLowerCase().includes(q) ||
+                            role.purpose.toLowerCase().includes(q) ||
+                            role.topSkills.some((skill) => skill.toLowerCase().includes(q)) ||
+                            agent.name.toLowerCase().includes(q)
+                          );
+                        });
+
+                        const groupedAgents = (['core', 'department', 'council'] as const)
+                          .map((group) => {
+                            const allGroupAgents = AGENTS.filter((a) => a.group === group);
+                            const groupAgents = q
+                              ? allGroupAgents.filter(
+                                  (a) =>
+                                    a.name.toLowerCase().includes(q) ||
+                                    a.id.toLowerCase().includes(q) ||
+                                    a.model.toLowerCase().includes(q) ||
+                                    (a.domains || []).some((d) => d.toLowerCase().includes(q)) ||
+                                    (a.description || '').toLowerCase().includes(q),
+                                )
+                              : allGroupAgents;
+                            return groupAgents.length > 0 ? { group, groupAgents } : null;
+                          })
+                          .filter(
+                            (
+                              item,
+                            ): item is {
+                              group: 'core' | 'department' | 'council';
+                              groupAgents: typeof AGENTS;
+                            } => !!item,
+                          );
+
                         return (
-                          <div key={group}>
-                            <div
-                              className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2"
-                              style={{ color: 'var(--c-text-4)', background: 'var(--c-bg-3)' }}
-                            >
-                              {group === 'core'
-                                ? 'Core'
-                                : group === 'department'
-                                  ? 'Department'
-                                  : 'Council'}
-                            </div>
-                            {groupAgents.map((agent) => (
-                              <AgentPickerRow
-                                key={agent.id}
-                                agent={agent}
-                                activeAgentId={activeAgentId}
-                                streamingAgents={streamingAgents}
-                                onSelect={() => {
-                                  actions.setActiveAgent(agent.id);
-                                  setShowAgentPicker(false);
-                                  if (window.innerWidth < 768) actions.setSidebarOpen(false);
-                                }}
-                              />
+                          <>
+                            {filteredMinimumFleet.length > 0 && (
+                              <div>
+                                <div
+                                  className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2"
+                                  style={{ color: 'var(--c-accent)', background: 'var(--c-bg-3)' }}
+                                >
+                                  Minimum Fleet
+                                </div>
+                                {filteredMinimumFleet.map((role) => (
+                                  <MinimumFleetRow
+                                    key={role.id}
+                                    role={role}
+                                    agent={getAgent(role.agentId)}
+                                    activeAgentId={activeAgentId}
+                                    streamingAgents={streamingAgents}
+                                    onSelect={() => {
+                                      actions.setActiveAgent(role.agentId);
+                                      setShowAgentPicker(false);
+                                      if (window.innerWidth < 768) actions.setSidebarOpen(false);
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            {groupedAgents.map(({ group, groupAgents }) => (
+                              <div key={group}>
+                                <div
+                                  className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2"
+                                  style={{ color: 'var(--c-text-4)', background: 'var(--c-bg-3)' }}
+                                >
+                                  {group === 'core'
+                                    ? 'Core'
+                                    : group === 'department'
+                                      ? 'Department'
+                                      : 'Council'}
+                                </div>
+                                {groupAgents.map((agent) => (
+                                  <AgentPickerRow
+                                    key={agent.id}
+                                    agent={agent}
+                                    activeAgentId={activeAgentId}
+                                    streamingAgents={streamingAgents}
+                                    onSelect={() => {
+                                      actions.setActiveAgent(agent.id);
+                                      setShowAgentPicker(false);
+                                      if (window.innerWidth < 768) actions.setSidebarOpen(false);
+                                    }}
+                                  />
+                                ))}
+                              </div>
                             ))}
-                          </div>
+                          </>
                         );
-                      })
+                      })()
                     : /* ── Domain-based grouping ── */
                       (() => {
                         const domainAgentsMap = new Map<string, typeof AGENTS>();
@@ -1054,8 +1127,6 @@ export function Sidebar() {
                   </svg>
                 )}
               </button>
-              <IdentityVerifyButton />
-              <ThemeCustomizer />
               <button
                 onClick={() => actions.toggleTheme()}
                 className="p-1.5 rounded-lg transition-colors"
@@ -1482,6 +1553,112 @@ function AgentPickerRow({
             )}
           </div>
         )}
+      </div>
+      {agent.id === activeAgentId && (
+        <svg
+          className="h-4 w-4 shrink-0"
+          style={{ color: 'var(--c-accent)' }}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function MinimumFleetRow({
+  role,
+  agent,
+  activeAgentId,
+  streamingAgents,
+  onSelect,
+}: {
+  role: {
+    id: string;
+    name: string;
+    agentId: string;
+    purpose: string;
+    topSkills: string[];
+  };
+  agent: import('./store').Agent;
+  activeAgentId: string;
+  streamingAgents: Map<string, string>;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full flex items-start gap-3 px-4 py-2.5 text-left transition-colors"
+      style={{
+        background: agent.id === activeAgentId ? 'var(--c-accent-soft)' : 'transparent',
+        color: agent.id === activeAgentId ? 'var(--c-accent)' : 'var(--c-text-2)',
+      }}
+      onMouseEnter={(e) => {
+        if (agent.id !== activeAgentId) e.currentTarget.style.background = 'var(--c-bg-hover)';
+      }}
+      onMouseLeave={(e) => {
+        if (agent.id !== activeAgentId)
+          e.currentTarget.style.background =
+            agent.id === activeAgentId ? 'var(--c-accent-soft)' : 'transparent';
+      }}
+    >
+      <span className="text-lg relative shrink-0">
+        {agent.emoji}
+        {streamingAgents.has(agent.id) && (
+          <span
+            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
+            style={{
+              background:
+                streamingAgents.get(agent.id) === 'thinking'
+                  ? 'var(--c-warning)'
+                  : 'var(--c-success)',
+              boxShadow: `0 0 6px ${streamingAgents.get(agent.id) === 'thinking' ? 'var(--c-warning)' : 'var(--c-success)'}`,
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }}
+          />
+        )}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium">{role.name}</div>
+          <div
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+            style={{
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-4)',
+              border: '1px solid var(--c-border-2)',
+            }}
+          >
+            {role.agentId}
+          </div>
+        </div>
+        <div className="text-[10px] truncate mt-0.5" style={{ color: 'var(--c-text-4)' }}>
+          {role.purpose}
+        </div>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {role.topSkills.slice(0, 4).map((skill) => (
+            <span
+              key={skill}
+              className="inline-block px-1.5 py-px rounded text-[8px] font-medium"
+              style={{
+                background: 'rgba(99,141,255,0.14)',
+                color: 'var(--c-accent)',
+                border: '1px solid rgba(99,141,255,0.22)',
+              }}
+            >
+              {skill}
+            </span>
+          ))}
+          {role.topSkills.length > 4 && (
+            <span className="text-[8px]" style={{ color: 'var(--c-text-4)' }}>
+              +{role.topSkills.length - 4}
+            </span>
+          )}
+        </div>
       </div>
       {agent.id === activeAgentId && (
         <svg

@@ -4,7 +4,7 @@
  */
 import type { MutableRefObject } from 'react';
 import type { VoiceAction, VoicePhase } from '../voiceStateMachine';
-import { stripMd } from './voice-utils';
+import { pickBrowserVoice, prepareSpeechText } from './voice-utils';
 
 export interface TTSDeps {
   ttsVoice: string;
@@ -37,7 +37,7 @@ export function createSpeak(deps: TTSDeps) {
 
   return function speak(text: string): Promise<void> {
     return new Promise((resolve) => {
-      const plain = stripMd(text);
+      const plain = prepareSpeechText(text);
       if (!plain) {
         resolve();
         return;
@@ -171,7 +171,11 @@ export function createSpeak(deps: TTSDeps) {
             console.log('[voice-tts] falling back to browser speechSynthesis');
             if (window.speechSynthesis) {
               const u = new SpeechSynthesisUtterance(plain.slice(0, 1000));
-              u.rate = 1.0;
+              u.rate = 0.95;
+              u.pitch = 1.0;
+              u.lang = 'en-US';
+              const browserVoice = pickBrowserVoice();
+              if (browserVoice) u.voice = browserVoice;
               const ft = setTimeout(() => {
                 window.speechSynthesis.cancel();
                 done();
@@ -246,7 +250,11 @@ export function createSpeak(deps: TTSDeps) {
             .catch(() => {
               if (window.speechSynthesis) {
                 const u = new SpeechSynthesisUtterance(plain.slice(0, 1000));
-                u.rate = 1.0;
+                u.rate = 0.95;
+                u.pitch = 1.0;
+                u.lang = 'en-US';
+                const browserVoice = pickBrowserVoice();
+                if (browserVoice) u.voice = browserVoice;
                 const ft = setTimeout(() => {
                   window.speechSynthesis.cancel();
                   done();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { ChatMessage } from '../router-client';
 import type { Session } from '../store';
 import { exportSessions, importSessions } from '../store';
@@ -6,11 +6,8 @@ import { ECOSYSTEM_APPS } from '../chat-utils';
 import {
   usePreferences,
   ALLOW_DIRECT_MODE,
-  FEATURE_LABELS,
   type GatewayMode,
-  type FeatureKey,
 } from '../preferences-store';
-import { OAuthSetup } from './OAuthSetup';
 
 export interface HeaderMoreMenuProps {
   open: boolean;
@@ -23,7 +20,7 @@ export interface HeaderMoreMenuProps {
   // Compare
   compareMode: boolean;
   onToggleCompare: () => void;
-  comparePickerRef: React.RefObject<HTMLDivElement>;
+  comparePickerRef: React.RefObject<HTMLDivElement | null>;
   // System prompt
   activeSession: Session | undefined;
   onOpenSystemPrompt: () => void;
@@ -36,7 +33,7 @@ export interface HeaderMoreMenuProps {
   // Messages
   messages: ChatMessage[];
   userName: string;
-  currentAgentName: string;
+  onOpenSettings: () => void;
   // Summarize
   summarizing: boolean;
   onSummarize: () => void;
@@ -56,7 +53,7 @@ export interface HeaderMoreMenuProps {
   onSetView: (v: string) => void;
   // Export/Import
   sessions: Session[];
-  importInputRef: React.RefObject<HTMLInputElement>;
+  importInputRef: React.RefObject<HTMLInputElement | null>;
   onImportSessions: () => void;
 }
 
@@ -78,7 +75,7 @@ export function HeaderMoreMenu({
   onToggleNotifSound,
   messages,
   userName,
-  currentAgentName,
+  onOpenSettings,
   summarizing,
   onSummarize,
   onOpenAnalytics,
@@ -95,10 +92,7 @@ export function HeaderMoreMenu({
   onImportSessions,
 }: HeaderMoreMenuProps) {
   const features = usePreferences((s) => s.features);
-  const setFeature = usePreferences((s) => s.setFeature);
-  const [showFeatureSettings, setShowFeatureSettings] = useState(false);
-  const [showOAuthSetup, setShowOAuthSetup] = useState(false);
-  const feat = (key: FeatureKey) => features[key] ?? false;
+  const feat = (key: string) => features[key as keyof typeof features] ?? false;
 
   if (!open) return null;
 
@@ -106,17 +100,17 @@ export function HeaderMoreMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="absolute right-0 top-full mt-1 z-[60] w-56 rounded-xl shadow-xl py-1"
+        className="absolute right-0 top-full mt-1 z-[60] w-56 max-w-[calc(100vw-12px)] rounded-xl shadow-xl py-1"
         style={{
           background: 'var(--c-bg-2)',
           border: '1px solid var(--c-border-2)',
           maxHeight: 'min(580px, calc(100dvh - 80px))',
           overflowY: 'auto',
         }}
-      >
-        <SectionLabel>Gateway</SectionLabel>
+        >
+          <SectionLabel>Chat Path</SectionLabel>
         <GatewayOption
-          label="Shre Router"
+          label="Router (Shared)"
           description="Trust gate, RAG, scoring"
           color="#3b82f6"
           active={gatewayMode === 'router'}
@@ -137,6 +131,29 @@ export function HeaderMoreMenu({
             }}
           />
         )}
+
+        <Divider />
+
+        <button
+          onClick={() => {
+            onOpenSettings();
+            onClose();
+          }}
+          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
+          style={{ color: 'var(--c-text-1)' }}
+        >
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          Settings
+        </button>
 
         <Divider />
 
@@ -761,9 +778,11 @@ export function HeaderMoreMenu({
 
         <Divider />
 
-        {/* ── Feature Settings ── */}
         <button
-          onClick={() => setShowFeatureSettings(!showFeatureSettings)}
+          onClick={() => {
+            onOpenSettings();
+            onClose();
+          }}
           className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
           style={{ color: 'var(--c-text-1)' }}
         >
@@ -774,89 +793,11 @@ export function HeaderMoreMenu({
             stroke="currentColor"
             strokeWidth="1.8"
           >
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
             <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
-          Feature Settings
-          <svg
-            className="h-3 w-3 ml-auto transition-transform"
-            style={{
-              transform: showFeatureSettings ? 'rotate(180deg)' : 'rotate(0deg)',
-              color: 'var(--c-text-4)',
-            }}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          Settings
         </button>
-
-        {showFeatureSettings && (
-          <div className="px-2 pb-2">
-            {(Object.keys(FEATURE_LABELS) as FeatureKey[]).map((key) => (
-              <label
-                key={key}
-                className="flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/5"
-                style={{ color: 'var(--c-text-2)' }}
-              >
-                <span className="text-[12px]">{FEATURE_LABELS[key]}</span>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setFeature(key, !features[key]);
-                  }}
-                  className="relative w-8 h-[18px] rounded-full transition-colors"
-                  style={{
-                    background: features[key] ? 'var(--c-accent)' : 'var(--c-bg-3)',
-                  }}
-                >
-                  <span
-                    className="absolute top-[2px] w-[14px] h-[14px] rounded-full transition-all"
-                    style={{
-                      left: features[key] ? 14 : 2,
-                      background: features[key] ? '#fff' : 'var(--c-text-4)',
-                    }}
-                  />
-                </button>
-              </label>
-            ))}
-          </div>
-        )}
-
-        {/* ── Claude OAuth ── */}
-        <button
-          onClick={() => setShowOAuthSetup(!showOAuthSetup)}
-          className="w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors hover:bg-white/5"
-          style={{ color: 'var(--c-text-1)' }}
-        >
-          <svg
-            className="h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          >
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-          </svg>
-          AI Providers
-          <svg
-            className="h-3 w-3 ml-auto transition-transform"
-            style={{
-              transform: showOAuthSetup ? 'rotate(180deg)' : 'rotate(0deg)',
-              color: 'var(--c-text-4)',
-            }}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        {showOAuthSetup && <OAuthSetup onClose={() => setShowOAuthSetup(false)} />}
 
         <Divider />
 

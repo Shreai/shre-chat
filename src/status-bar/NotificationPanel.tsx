@@ -7,7 +7,7 @@ import type { LiveAgent, LiveService, LiveTask, NotifFilter, Notification } from
 
 export interface NotificationPanelProps {
   bellOpen: boolean;
-  panelRef: RefObject<HTMLDivElement>;
+  panelRef: RefObject<HTMLDivElement | null>;
   notifications: Notification[];
   notifFilter: NotifFilter;
   liveTasks: LiveTask[];

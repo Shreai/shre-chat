@@ -26,7 +26,7 @@ export function useGatewayConnection(
   const [wsBannerFlash, setWsBannerFlash] = useState<'connected' | null>(null);
   const [offlineQueue, setOfflineQueue] = useState<QueuedMessage[]>([]);
 
-  // Gateway WS disabled — all chat routes through shre-router via HTTP/SSE.
+  // Gateway WS disabled — chat now uses HTTP/SSE, with direct mode able to run locally.
   // Only subscribe to stream stall events (HTTP-based).
   useEffect(() => {
     const unsubStall = subscribeStreamStall();

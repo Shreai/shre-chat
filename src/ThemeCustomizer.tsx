@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, type ThemeCustom } from './store';
+import { isDevSafeMode } from './env';
 
 const ACCENT_PRESETS: { name: string; color: string }[] = [
   { name: 'Blue', color: '#2563eb' },
@@ -41,12 +42,14 @@ async function pushServerPrefs(theme: ThemeCustom): Promise<void> {
 export function ThemeCustomizer() {
   const { state, actions } = useApp();
   const { themeCustom } = state;
+  const devSafeMode = isDevSafeMode();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // On mount: fetch server prefs and apply if present (overrides localStorage)
   useEffect(() => {
+    if (devSafeMode) return;
     let cancelled = false;
     fetchServerPrefs().then((serverTheme) => {
       if (cancelled || !serverTheme) return;
@@ -59,7 +62,7 @@ export function ThemeCustomizer() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [devSafeMode]);
 
   // Close on outside click (check both the portal panel and the button wrapper)
   useEffect(() => {
@@ -77,12 +80,12 @@ export function ThemeCustomizer() {
   const update = (patch: Partial<ThemeCustom>) => {
     const next = { ...themeCustom, ...patch };
     actions.setThemeCustom(next);
-    pushServerPrefs(next);
+    if (!devSafeMode) pushServerPrefs(next);
   };
 
   const reset = () => {
     actions.setThemeCustom({});
-    pushServerPrefs({});
+    if (!devSafeMode) pushServerPrefs({});
   };
 
   const currentAccent = themeCustom.accentColor || '#2563eb';

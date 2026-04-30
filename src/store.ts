@@ -235,7 +235,7 @@ export async function fetchAgentCapabilities(): Promise<void> {
   }
 }
 
-const DEFAULT_MODEL = 'ollama/qwen3:8b';
+const DEFAULT_MODEL = 'google/gemini-2.5-flash';
 
 const ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? 'https://127.0.0.1:5497';
 

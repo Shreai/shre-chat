@@ -14,6 +14,7 @@ interface Props {
     selectedBundle?: string | null,
   ) => void;
   onSkip: () => void;
+  mode?: 'app' | 'cli' | 'documents';
 }
 
 interface AgentBundle {
@@ -80,7 +81,7 @@ const COMM_STYLES = [
 
 const PHASE_LABELS = ['Identity', 'Connect', 'Activate'];
 
-export function OnboardingView({ profile, onComplete, onSkip }: Props) {
+export function OnboardingView({ profile, onComplete, onSkip, mode = 'app' }: Props) {
   const [phase, setPhase] = useState(0);
   const [p, setP] = useState<UserProfile>({ ...profile });
   const [saving, setSaving] = useState(false);
@@ -94,6 +95,23 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
   const [testing, setTesting] = useState<string | null>(null);
   const [bundles, setBundles] = useState<AgentBundle[]>([]);
   const [selectedBundle, setSelectedBundle] = useState<string | null>(null);
+  const isCliMode = mode === 'cli';
+  const title = isCliMode ? 'Welcome to Shre CLI' : 'Welcome to Shre AI';
+  const subtitle = isCliMode
+    ? 'Set up your terminal profile once. We will reuse it every time you open Shre CLI.'
+    : 'Tell us about yourself so your AI assistants can personalize their help';
+  const phaseOneTitle = isCliMode ? 'Set up your CLI identity' : 'Welcome to Shre AI';
+  const phaseOneCopy = isCliMode
+    ? 'This gives Shre CLI the right identity, defaults, and workspace context.'
+    : 'Tell us about yourself so your AI assistants can personalize their help';
+  const phaseTwoTitle = isCliMode ? 'Optional CLI data sources' : 'Connect a data source';
+  const phaseTwoCopy = isCliMode
+    ? 'You can connect a source now or skip and finish setup with defaults.'
+    : 'Optional — connect your POS or import data so AI can start analyzing right away';
+  const phaseThreeTitle = isCliMode ? 'Choose your CLI team' : 'Choose your AI team';
+  const phaseThreeCopy = isCliMode
+    ? 'Pick a bundle of agents for the terminal workflow. You can change this later.'
+    : 'Pick a bundle of AI agents to start with — you can add more later';
 
   const update = (partial: Partial<UserProfile>) => setP((prev) => ({ ...prev, ...partial }));
   const updateBiz = (partial: Partial<UserProfile['business']>) =>
@@ -307,10 +325,10 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
     <div key="identity" className="space-y-5">
       <div className="text-center">
         <h2 className="text-xl font-semibold" style={{ color: 'var(--c-text-1)' }}>
-          Welcome to Shre AI
+          {phaseOneTitle}
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--c-text-4)' }}>
-          Tell us about yourself so your AI assistants can personalize their help
+          {phaseOneCopy}
         </p>
       </div>
       <div className="space-y-3">
@@ -351,7 +369,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
           <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
             Team size
           </label>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {BIZ_SIZES.map((s) => (
               <button
                 key={s.value}
@@ -376,10 +394,10 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
     <div key="connect" className="space-y-5">
       <div className="text-center">
         <h2 className="text-xl font-semibold" style={{ color: 'var(--c-text-1)' }}>
-          Connect a data source
+          {phaseTwoTitle}
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--c-text-4)' }}>
-          Optional — connect your POS or import data so AI can start analyzing right away
+          {phaseTwoCopy}
         </p>
       </div>
 
@@ -502,10 +520,10 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
     <div key="activate" className="space-y-5">
       <div className="text-center">
         <h2 className="text-xl font-semibold" style={{ color: 'var(--c-text-1)' }}>
-          Choose your AI team
+          {phaseThreeTitle}
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--c-text-4)' }}>
-          Pick a bundle of AI agents to start with — you can add more later
+          {phaseThreeCopy}
         </p>
       </div>
       <div className="space-y-2">
@@ -559,7 +577,7 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-text-3)' }}>
           How should AI communicate with you?
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {COMM_STYLES.map((s) => (
             <button
               key={s.value}
@@ -587,12 +605,12 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-[100svh] flex items-start sm:items-center justify-center px-3 py-3 sm:p-4 overflow-y-auto overscroll-contain"
       style={{ background: 'var(--c-bg-1)' }}
     >
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-2xl">
         {/* Phase indicator */}
-        <div className="flex justify-center gap-3 mb-6">
+        <div className="flex flex-wrap justify-center gap-3 mb-4 sm:mb-6">
           {PHASE_LABELS.map((label, i) => (
             <div key={i} className="flex items-center gap-2">
               <div
@@ -612,81 +630,85 @@ export function OnboardingView({ profile, onComplete, onSkip }: Props) {
         </div>
 
         <div
-          className="rounded-2xl p-6"
+          className="rounded-2xl sm:rounded-3xl border flex flex-col max-h-[calc(100svh-8rem)] sm:max-h-[calc(100svh-9rem)] overflow-hidden"
           style={{ background: 'var(--c-bg-2)', border: '1px solid var(--c-border-1)' }}
         >
-          {warning && (
-            <div
-              className="mb-4 px-3 py-2 rounded-lg text-xs"
-              style={{
-                background: 'rgba(234,179,8,0.1)',
-                color: 'rgb(202,138,4)',
-                border: '1px solid rgba(234,179,8,0.2)',
-              }}
-            >
-              {warning}
-            </div>
-          )}
-          {phases[phase]}
-
-          <div
-            className="flex items-center justify-between mt-6 pt-4"
-            style={{ borderTop: '1px solid var(--c-border-2)' }}
-          >
-            {phase > 0 ? (
-              <button
-                onClick={() => setPhase(phase - 1)}
-                className="text-sm px-4 py-2 rounded-lg"
-                style={{ color: 'var(--c-text-3)' }}
-              >
-                Back
-              </button>
-            ) : (
-              <button
-                onClick={onSkip}
-                className="text-sm px-4 py-2 rounded-lg"
-                style={{ color: 'var(--c-text-5)' }}
-              >
-                Skip for now
-              </button>
-            )}
-            <div className="flex items-center gap-2">
-              {phase === 1 && (
-                <button
-                  onClick={() => {
-                    fetch('/api/onboarding/unified/skip-connect', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({}),
-                    }).catch(() => {});
-                    setPhase(2);
-                  }}
-                  className="text-sm px-4 py-2 rounded-lg"
-                  style={{ color: 'var(--c-text-4)' }}
-                >
-                  Skip
-                </button>
-              )}
-              <button
-                onClick={handlePhaseComplete}
-                disabled={!canAdvance || saving}
-                className="text-sm px-5 py-2 rounded-lg font-medium transition-colors"
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 sm:py-6">
+            {warning && (
+              <div
+                className="mb-4 px-3 py-2 rounded-lg text-xs"
                 style={{
-                  background: canAdvance && !saving ? 'var(--c-accent)' : 'var(--c-border-2)',
-                  color: canAdvance && !saving ? '#fff' : 'var(--c-text-5)',
+                  background: 'rgba(234,179,8,0.1)',
+                  color: 'rgb(202,138,4)',
+                  border: '1px solid rgba(234,179,8,0.2)',
                 }}
               >
-                {saving ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
-                    Saving...
-                  </span>
-                ) : phase === 2 ? (
-                  'Get Started'
-                ) : (
-                  'Next'
+                {warning}
+              </div>
+            )}
+            <div className="min-h-0">{phases[phase]}</div>
+          </div>
+
+          <div
+            className="shrink-0 border-t px-4 sm:px-6 py-4 bg-[rgba(255,255,255,0.02)]"
+            style={{ borderColor: 'var(--c-border-2)' }}
+          >
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+              {phase > 0 ? (
+                <button
+                  onClick={() => setPhase(phase - 1)}
+                  className="text-sm px-4 py-2 rounded-lg self-start"
+                  style={{ color: 'var(--c-text-3)' }}
+                >
+                  Back
+                </button>
+              ) : (
+                <button
+                  onClick={onSkip}
+                  className="text-sm px-4 py-2 rounded-lg self-start"
+                  style={{ color: 'var(--c-text-5)' }}
+                >
+                  Skip for now
+                </button>
+              )}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {phase === 1 && (
+                  <button
+                    onClick={() => {
+                      fetch('/api/onboarding/unified/skip-connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({}),
+                      }).catch(() => {});
+                      setPhase(2);
+                    }}
+                    className="text-sm px-4 py-2 rounded-lg"
+                    style={{ color: 'var(--c-text-4)' }}
+                  >
+                    Skip
+                  </button>
                 )}
-              </button>
+                <button
+                  onClick={handlePhaseComplete}
+                  disabled={!canAdvance || saving}
+                  className="text-sm px-5 py-2 rounded-lg font-medium transition-colors"
+                  style={{
+                    background: canAdvance && !saving ? 'var(--c-accent)' : 'var(--c-border-2)',
+                    color: canAdvance && !saving ? '#fff' : 'var(--c-text-5)',
+                  }}
+                >
+                  {saving ? (
+                    <span className="flex items-center gap-2">
+                      <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                      Saving...
+                    </span>
+                  ) : phase === 2 ? (
+                    isCliMode ? 'Start CLI' : 'Get Started'
+                  ) : (
+                    'Next'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

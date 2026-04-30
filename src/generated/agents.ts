@@ -34,14 +34,6 @@ export const AGENT_META: ChatAgentMeta[] = [
     description: 'Platform Brain — full platform access',
   },
   {
-    id: 'nova',
-    name: 'Nova',
-    emoji: '🌟',
-    group: 'core',
-    domains: ['research', 'analytics'],
-    description: 'Public assistant — general queries and research',
-  },
-  {
     id: 'ellie',
     name: 'Ellie',
     emoji: '✨',

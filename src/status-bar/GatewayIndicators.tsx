@@ -8,9 +8,9 @@ export function RoutingModeIndicator() {
   const config: Record<GatewayMode, { label: string; color: string; title: string }> = {
     router: { label: 'Router', color: '#3b82f6', title: 'Shre Router — trust gate, RAG, scoring' },
     direct: {
-      label: 'Direct',
+      label: 'Local',
       color: '#22c55e',
-      title: 'Direct local mode — explicitly enabled only',
+      title: 'Direct local mode — local model path with async router sync',
     },
   };
   const modes: GatewayMode[] = ALLOW_DIRECT_MODE ? ['router', 'direct'] : ['router'];
@@ -55,8 +55,8 @@ export function StatusBarGatewayPill() {
   const setGatewayMode = usePreferences((s) => s.setGatewayMode);
   const modes: GatewayMode[] = ALLOW_DIRECT_MODE ? ['router', 'direct'] : ['router'];
   const cfg: Record<GatewayMode, { label: string; color: string }> = {
-    router: { label: 'R', color: '#3b82f6' },
-    direct: { label: 'D', color: '#22c55e' },
+    router: { label: 'Router', color: '#3b82f6' },
+    direct: { label: 'Local', color: '#22c55e' },
   };
   const c = cfg[gatewayMode];
   return (
@@ -79,7 +79,7 @@ export function StatusBarGatewayPill() {
         border: `1px solid ${c.color}30`,
         cursor: 'pointer',
       }}
-      title={`Gateway: ${gatewayMode} — click to cycle`}
+      title={`Gateway: ${gatewayMode === 'direct' ? 'local' : 'router'} — click to cycle`}
     >
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.color }} />
       {c.label}

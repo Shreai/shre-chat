@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LoginView } from './LoginView';
+import { isDevSafeMode } from './env';
 
 // ── Auth state ──
 const AUTH_TOKEN_KEY = 'shre-auth-token';
 const AUTH_USER_KEY = 'shre-auth-user';
 const AUTH_WORKSPACE_KEY = 'shre-auth-workspace';
 const AUTH_WORKSPACES_KEY = 'shre-auth-workspaces';
+const DEV_SAFE_MODE = isDevSafeMode();
 
 export interface AuthWorkspace {
   id: string;
@@ -19,6 +21,7 @@ export interface AuthUser {
   name: string;
   role: string;
   id?: string;
+  email?: string;
   isSuperAdmin?: boolean;
 }
 
@@ -30,12 +33,15 @@ export interface AuthState {
 }
 
 export function getStoredAuth(): AuthState | null {
+  if (DEV_SAFE_MODE) return null;
   try {
     const token = sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
-    const user = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || 'null');
+    const rawUser = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || 'null');
+    const user = rawUser ? normalizeAuthUser(rawUser) : null;
     if (token && user) {
       sessionStorage.setItem(AUTH_TOKEN_KEY, token);
       localStorage.setItem(AUTH_TOKEN_KEY, token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
       const workspace = JSON.parse(localStorage.getItem(AUTH_WORKSPACE_KEY) || 'null');
       const workspaces = JSON.parse(localStorage.getItem(AUTH_WORKSPACES_KEY) || 'null');
       return { token, user, workspace, workspaces };
@@ -148,6 +154,7 @@ function isReplayableBody(body: BodyInit | null | undefined): boolean {
 
 /** Install the auth-aware fetch interceptor. Idempotent — safe to call on login/logout. */
 export function installAuthFetch() {
+  if (DEV_SAFE_MODE) return;
   // Already installed? No need to re-wrap.
   if ((window.fetch as { __shreAuthWrapped?: boolean }).__shreAuthWrapped) return;
 
@@ -206,6 +213,18 @@ interface PendingWorkspaceSelection {
   workspaces: AuthWorkspace[];
   tempToken: string;
   user: any;
+}
+
+function normalizeAuthUser(user: any): AuthUser {
+  const username = String(user?.username || user?.email || user?.id || '').trim();
+  return {
+    ...user,
+    username,
+    email: user?.email,
+    id: user?.id,
+    name: user?.name || username,
+    role: user?.role || 'user',
+  };
 }
 
 /**
@@ -281,8 +300,9 @@ export function useAuth(devBypass: boolean) {
           if (data.sso && data.token && data.user) {
             sessionStorage.setItem(AUTH_TOKEN_KEY, data.token);
             localStorage.setItem(AUTH_TOKEN_KEY, data.token);
-            localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
-            setAuthState({ token: data.token, user: data.user });
+            const normalizedUser = normalizeAuthUser(data.user);
+            localStorage.setItem(AUTH_USER_KEY, JSON.stringify(normalizedUser));
+            setAuthState({ token: data.token, user: normalizedUser });
             installAuthFetch();
           }
           clearTimeout(timeout);
@@ -295,19 +315,30 @@ export function useAuth(devBypass: boolean) {
     }
   }, []);
 
+  useEffect(() => {
+    if (!devBypass) return;
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(AUTH_WORKSPACE_KEY);
+    localStorage.removeItem(AUTH_WORKSPACES_KEY);
+    resetCsrfToken();
+  }, [devBypass]);
+
   const handleLogin = useCallback((token: string, user: AuthUser, loginData?: any) => {
+    const normalizedUser = normalizeAuthUser(user);
     if (loginData?.requiresWorkspaceSelection) {
       setPendingWorkspaceSelection({
         workspaces: loginData.workspaces,
         tempToken: loginData.tempToken,
-        user: loginData.user || user,
+        user: normalizeAuthUser(loginData.user || user),
       });
       return;
     }
 
     sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     localStorage.setItem(AUTH_TOKEN_KEY, token);
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(normalizedUser));
     if (loginData?.workspace) {
       localStorage.setItem(AUTH_WORKSPACE_KEY, JSON.stringify(loginData.workspace));
     }
@@ -319,17 +350,18 @@ export function useAuth(devBypass: boolean) {
     ensureCsrfToken().catch(() => {});
     setAuthState({
       token,
-      user,
+      user: normalizedUser,
       workspace: loginData?.workspace,
       workspaces: loginData?.workspaces,
     });
     const params = new URLSearchParams(window.location.search);
-    const redirect = params.get('redirect');
-    if (redirect) {
+    const redirectTarget = params.get('redirect') || params.get('next');
+    if (redirectTarget) {
       try {
-        const url = new URL(redirect);
-        if (url.hostname.endsWith('.nirtek.net')) {
-          window.location.href = redirect;
+        const url = new URL(redirectTarget, window.location.origin);
+        const isAllowedHost = url.origin === window.location.origin || url.hostname.endsWith('.nirtek.net');
+        if (isAllowedHost) {
+          window.location.href = url.toString();
           return;
         }
       } catch (err) {

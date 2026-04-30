@@ -1,0 +1,46 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777473797029",
+  "ranAt": "2026-04-29T14:43:50.415Z",
+  "summary": {
+    "passed": 1,
+    "failed": 1,
+    "byModel": {
+      "auto": 1,
+      "error": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "auto",
+        "elapsedMs": 3058,
+        "ttfbMs": 3057,
+        "length": 38,
+        "excerpt": "MIB007 connection failed: fetch failed",
+        "text": "MIB007 connection failed: fetch failed"
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": false,
+        "http": 0,
+        "error": "fetch failed",
+        "elapsedMs": 30013
+      }
+    }
+  ]
+}

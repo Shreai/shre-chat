@@ -119,7 +119,7 @@ export interface UseSlashCommandsReturn {
   setSlashOpen: (v: boolean) => void;
   slashIndex: number;
   setSlashIndex: (v: number | ((prev: number) => number)) => void;
-  slashRef: React.RefObject<HTMLDivElement>;
+  slashRef: React.RefObject<HTMLDivElement | null>;
   slashFiltered: SlashCommand[];
   executeSlashCommand: (commandStr: string) => void;
 }

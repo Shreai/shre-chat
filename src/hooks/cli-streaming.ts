@@ -5,6 +5,9 @@
 import type { MutableRefObject } from 'react';
 import type { AppActions } from '../store';
 
+const ACK_TIMEOUT_MS = 5000;
+const MAX_ACK_ATTEMPTS = 2;
+
 export interface StreamViaCLIDeps {
   cliContinue: boolean;
   claudeCliMode: boolean;
@@ -26,6 +29,7 @@ export async function streamViaCLI(
   text: string,
   sessionId: string,
   deps: StreamViaCLIDeps,
+  attempt = 1,
 ): Promise<void> {
   const {
     cliContinue,
@@ -44,6 +48,17 @@ export async function streamViaCLI(
   const controller = new AbortController();
   abortRef.current = controller;
   let fullResponse = '';
+  let ackSeen = false;
+  let ackTimedOut = false;
+  let ackTimer: ReturnType<typeof setTimeout> | null = null;
+  const markAck = () => {
+    if (ackSeen) return;
+    ackSeen = true;
+    if (ackTimer) {
+      clearTimeout(ackTimer);
+      ackTimer = null;
+    }
+  };
   const isAutoMode = claudeCliMode;
   actions.setStatusLine(isAutoMode ? 'Starting Claude Code (auto)...' : 'Starting Claude CLI...');
   actions.addActivity(
@@ -51,6 +66,15 @@ export async function streamViaCLI(
     'connecting',
     isAutoMode ? 'Launching Claude Code (autonomous)' : 'Launching Claude CLI',
   );
+  ackTimer = setTimeout(() => {
+    if (ackSeen) return;
+    ackTimedOut = true;
+    try {
+      controller.abort();
+    } catch {
+      /* ignore */
+    }
+  }, ACK_TIMEOUT_MS);
   try {
     const res = await fetch('/api/cli/chat', {
       method: 'POST',
@@ -84,7 +108,9 @@ export async function streamViaCLI(
         if (!raw) continue;
         try {
           const evt = JSON.parse(raw);
-          if (evt.type === 'delta' && evt.text) {
+          if (evt.type === 'ack' || evt.type === 'route' || (evt.type === 'status' && evt.event === 'init')) {
+            markAck();
+          } else if (evt.type === 'delta' && evt.text) {
             fullResponse += evt.text;
             bufferToken(fullResponse);
             actions.setStatusLine(
@@ -223,11 +249,20 @@ export async function streamViaCLI(
       setCliContinue(true);
     }
   } catch (err) {
+    if (ackTimer) {
+      clearTimeout(ackTimer);
+      ackTimer = null;
+    }
     if (streamFlushRaf.current) {
       clearTimeout(streamFlushRaf.current);
       streamFlushRaf.current = null;
     }
     streamBufferRef.current = '';
+    if (ackTimedOut && attempt < MAX_ACK_ATTEMPTS) {
+      actions.addActivity(sessionId, 'connecting', 'Claude CLI ack timed out, retrying...');
+      actions.setStatusLine('Retrying Claude CLI...');
+      return streamViaCLI(text, sessionId, deps, attempt + 1);
+    }
     const errMsg = err instanceof Error ? err.message : 'CLI error';
     if (fullResponse) {
       actions.addMessage(sessionId, {
@@ -243,6 +278,11 @@ export async function streamViaCLI(
       actions.setStreamText('');
       actions.addActivity(sessionId, 'error', `CLI error: ${errMsg}`);
       throw err;
+    }
+  } finally {
+    if (ackTimer) {
+      clearTimeout(ackTimer);
+      ackTimer = null;
     }
   }
 }

@@ -13,9 +13,13 @@
  * checking, and the public-path logic from serve.js.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import {
+  createMockLogger,
   createMockReq,
   createMockRes,
   createJsonHelper,
@@ -23,6 +27,19 @@ import {
   createAuthCookieHelper,
   getJsonResponse,
 } from './route-test-helpers';
+import { registerAuthRoutes } from '../../routes/auth.js';
+
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
+const log = createMockLogger();
+const json = createJsonHelper();
+const authCookie = createAuthCookieHelper();
+
+let handleAuth: ReturnType<typeof registerAuthRoutes>;
+
+beforeAll(() => {
+  handleAuth = registerAuthRoutes({ log: log as any });
+});
 
 // ── JWT test utilities (matching the algorithm in routes/auth.js) ────
 
@@ -78,6 +95,27 @@ function verifyTestToken(token: string, signingKey = TEST_SIGNING_KEY): any {
   } catch {
     return null;
   }
+}
+
+function issueGateToken(platformToken: string): string {
+  const signingKey = Buffer.from(
+    readFileSync(join(homedir(), '.shre', 'auth', 'signing-key.hex'), 'utf8').trim(),
+    'hex',
+  );
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: 'rapidnir',
+      name: 'Nir',
+      email: 'nirlab@nirlab.com',
+      platformToken,
+      platform: 'web',
+      iat: Date.now(),
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+    }),
+  ).toString('base64url');
+  const sig = createHmac('sha256', signingKey).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${sig}`;
 }
 
 // ── PUBLIC_PATHS from the real serve.js ──────────────────────────────
@@ -275,5 +313,54 @@ describe('PUBLIC_PATHS — sync check with real serve.js', () => {
 
   it('REAL_PUBLIC_PATHS has exactly 7 entries (update if serve.js changes)', () => {
     expect(REAL_PUBLIC_PATHS.size).toBe(7);
+  });
+});
+
+describe('GET /api/auth/gate-sso', () => {
+  afterEach(() => {
+    fetchMock.mockReset();
+  });
+
+  it('accepts __shre_gate and returns workspace context', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          valid: true,
+          claims: {
+            sub: 'user-123',
+            username: 'rapidnir',
+            name: 'Nir',
+            role: 'owner',
+            activeWorkspaceId: 'ws-1',
+            activeWorkspaceName: 'Nirlab',
+            workspaceIds: ['ws-1', 'ws-2'],
+            isSuperAdmin: true,
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const gateToken = issueGateToken('platform-token-123');
+    const req = createMockReq({
+      method: 'GET',
+      url: '/api/auth/gate-sso',
+      headers: { Cookie: `__shre_gate=${gateToken}` },
+    });
+    const res = createMockRes();
+    const url = new URL('/api/auth/gate-sso', 'http://localhost');
+    const rateLimit = createRateLimitHelper();
+    await handleAuth(req, res, url, { json, rateLimit, authCookie });
+
+    const { status, body } = await getJsonResponse(res._promise);
+    expect(status).toBe(200);
+    expect(body.sso).toBe(true);
+    expect(body.user.username).toBe('rapidnir');
+    expect(body.workspace).toEqual({ id: 'ws-1', name: 'Nirlab', role: 'owner' });
+    expect(body.workspaces).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/v1/auth/validate-user'),
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });

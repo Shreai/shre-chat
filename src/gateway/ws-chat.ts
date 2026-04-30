@@ -125,6 +125,41 @@ export async function sendChatWS(
     }
   }, 10_000);
 
+  const terminalStates = new Set([
+    'final',
+    'done',
+    'completed',
+    'response.completed',
+    'response.output_text.done',
+  ]);
+
+  function extractTerminalText(content: unknown): string {
+    if (Array.isArray(content)) {
+      return content
+        .map((block: any) => {
+          if (typeof block?.text === 'string') return block.text;
+          if (block?.type === 'output_text' && typeof block.text === 'string') return block.text;
+          return '';
+        })
+        .join('');
+    }
+    if (typeof content === 'string') return content;
+    return '';
+  }
+
+  function clearStreamTimers() {
+    clearInterval(streamTimeoutTimer);
+    clearInterval(streamStallTimer);
+    if (stallNotified) notifyStreamStall({ state: 'clear', agentId, sessionKey });
+  }
+
+  function finishStream(text: string) {
+    clearStreamTimers();
+    unsubscribe();
+    finalizeStream();
+    callbacks.onDone(text || fullText);
+  }
+
   const unsubscribe = onEvent('chat', (payload) => {
     try {
       lastEventAt = Date.now();
@@ -215,43 +250,19 @@ export async function sendChatWS(
       } else if (payload.state === 'compacting' || payload.state === 'summarizing') {
         callbacks.onStatus?.(payload.state);
         updateStreamStatus('compacting');
-      } else if (payload.state === 'final') {
-        const content = payload.message?.content;
-        let finalText = '';
-        if (Array.isArray(content)) {
-          finalText = content
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text)
-            .join('');
-        } else if (typeof content === 'string') {
-          finalText = content;
-        }
-        clearInterval(streamTimeoutTimer);
-        clearInterval(streamStallTimer);
-        if (stallNotified) notifyStreamStall({ state: 'clear', agentId, sessionKey });
-        unsubscribe();
-        finalizeStream();
-        callbacks.onDone(finalText || fullText);
+      } else if (terminalStates.has(String(payload.state))) {
+        finishStream(extractTerminalText(payload.message?.content));
       } else if (payload.state === 'aborted') {
-        clearInterval(streamTimeoutTimer);
-        clearInterval(streamStallTimer);
-        if (stallNotified) notifyStreamStall({ state: 'clear', agentId, sessionKey });
-        unsubscribe();
-        finalizeStream();
-        callbacks.onDone(fullText);
+        finishStream(fullText);
       } else if (payload.state === 'error') {
-        clearInterval(streamTimeoutTimer);
-        clearInterval(streamStallTimer);
-        if (stallNotified) notifyStreamStall({ state: 'clear', agentId, sessionKey });
+        clearStreamTimers();
         unsubscribe();
         finalizeStream();
         callbacks.onError(payload.errorMessage || 'Unknown error');
       }
     } catch (handlerErr) {
       console.error(`[ws] stream handler error for agent ${agentId}:`, handlerErr);
-      clearInterval(streamTimeoutTimer);
-      clearInterval(streamStallTimer);
-      if (stallNotified) notifyStreamStall({ state: 'clear', agentId, sessionKey });
+      clearStreamTimers();
       unsubscribe();
       finalizeStream();
       callbacks.onError(`Stream handler error: ${handlerErr}`);
@@ -292,9 +303,7 @@ export async function sendChatWS(
     callbacks.onStatus?.('thinking');
   } catch (err) {
     console.error('[ws] chat.send FAILED:', err);
-    clearInterval(streamTimeoutTimer);
-    clearInterval(streamStallTimer);
-    if (stallNotified) notifyStreamStall({ state: 'clear', agentId, sessionKey });
+    clearStreamTimers();
     unsubscribe();
     finalizeStream();
     throw err;

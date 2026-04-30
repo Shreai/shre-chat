@@ -30,7 +30,7 @@ interface UseFilteredMessagesOptions {
   messages: ChatMessage[];
   latestTask: { id: string; status: string } | null;
   runs: ProcessRun[];
-  scrollRef: RefObject<HTMLDivElement>;
+  scrollRef: RefObject<HTMLDivElement | null>;
 }
 
 export function useFilteredMessages({

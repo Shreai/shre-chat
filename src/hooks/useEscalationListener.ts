@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { setPlan, updateTaskStatus, updatePlanStatus, parsePlanTasks } from '../planStore';
+import { isDevSafeMode } from '../env';
 
 interface EscalationEvent {
   type: string;
@@ -45,7 +46,7 @@ const ESCALATION_TYPES = new Set([
   'conversation.reopened',
 ]);
 
-interface UseEscalationListenerOptions {
+export interface UseEscalationListenerOptions {
   activeSessionId: string | null;
   addMessage: (
     sessionId: string,
@@ -62,6 +63,7 @@ export function useEscalationListener({
   activeSessionId,
   addMessage,
 }: UseEscalationListenerOptions): void {
+  const devSafeMode = isDevSafeMode();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSessionIdRef = useRef(activeSessionId);
@@ -84,6 +86,7 @@ export function useEscalationListener({
   );
 
   useEffect(() => {
+    if (devSafeMode) return;
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${proto}//${location.host}/ws/notifications`);
@@ -119,17 +122,14 @@ export function useEscalationListener({
             return;
           }
 
-          const currentSession = activeSessionIdRef.current;
-          if (!currentSession) return;
-
-          // Filter: only process events for the current session (or unscoped events)
-          if (data.sessionId && data.sessionId !== currentSession) return;
+          const targetSession = String(data.sessionId || activeSessionIdRef.current || '').trim();
+          if (!targetSession) return;
 
           switch (data.type) {
             case 'ellie.escalation': {
               const agentName = data.agentName || data.source || 'An agent';
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 `${agentName} couldn't complete your request. Ellie is investigating and will follow up.`,
                 'ellie.escalation',
               );
@@ -140,7 +140,7 @@ export function useEscalationListener({
               // Resolution message from Ellie — add as a real assistant message
               const content = data.content || data.body || '';
               if (content) {
-                addMessage(currentSession, {
+                addMessage(targetSession, {
                   role: 'assistant',
                   content,
                   timestamp: Date.now(),
@@ -152,7 +152,7 @@ export function useEscalationListener({
 
             case 'escalation.resolved': {
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 'Ellie resolved the issue.',
                 'escalation.resolved',
               );
@@ -161,7 +161,7 @@ export function useEscalationListener({
 
             case 'escalation.failed': {
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 "Escalation couldn't be resolved. The Architecture Council has been notified.",
                 'escalation.failed',
               );
@@ -170,7 +170,7 @@ export function useEscalationListener({
 
             case 'project_fallback': {
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 'Project decomposition unavailable — creating single task instead.',
                 'project_fallback',
               );
@@ -201,7 +201,7 @@ export function useEscalationListener({
               }
 
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 `[project_pending] Project plan ready — ${subtaskCount} tasks.${planText}\nProject ID: ${projectId}`,
                 'project.pending_approval',
               );
@@ -213,7 +213,7 @@ export function useEscalationListener({
               const budgetMsg =
                 (data as Record<string, unknown>).message ||
                 `Budget ${data.type === 'budget_blocked' ? 'exceeded' : 'warning'} for agent ${(data as Record<string, unknown>).agentId || 'unknown'}.`;
-              injectSystemMessage(currentSession, String(budgetMsg), data.type);
+              injectSystemMessage(targetSession, String(budgetMsg), data.type);
               break;
             }
 
@@ -226,7 +226,7 @@ export function useEscalationListener({
               const reason = d.reason || '';
               const risk = d.risk || 'medium';
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 `[browser_approval] Approval ID: ${approvalId}\nAction: ${action}\nTarget: ${target}\nAgent: ${agent}\nReason: ${reason}\nRisk: ${risk}`,
                 'approval.requested',
               );
@@ -242,7 +242,7 @@ export function useEscalationListener({
               const tag = status === 'approved' ? '[browser_approved]' : '[browser_denied]';
               const verb = status === 'approved' ? 'approved — executing' : 'denied — cancelled';
               injectSystemMessage(
-                currentSession,
+                targetSession,
                 `${tag} Browser ${String(action).replace('browser_', '')} ${verb}${target ? ` (${target})` : ''}${agent ? ` for ${agent}` : ''}`,
                 'approval.resolved',
               );
@@ -322,7 +322,7 @@ export function useEscalationListener({
                   message = `[project_progress] ${taskTitle}${progress ? ` — ${progress}` : ''}`;
               }
 
-              injectSystemMessage(currentSession, message, `project_progress.${subtype}`);
+              injectSystemMessage(targetSession, message, `project_progress.${subtype}`);
               break;
             }
 
@@ -334,7 +334,7 @@ export function useEscalationListener({
               const preview = String((data as Record<string, unknown>).preview || '').slice(0, 200);
               const icon = action === 'create' ? '📄' : '✏️';
               const msg = `[file_diff] ${icon} ${agent} ${action}d ${filePath} (${lines} lines)${preview ? `\n\`\`\`\n${preview}\n\`\`\`` : ''}`;
-              injectSystemMessage(currentSession, msg, 'file_diff');
+              injectSystemMessage(targetSession, msg, 'file_diff');
               break;
             }
           }
@@ -367,5 +367,5 @@ export function useEscalationListener({
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [injectSystemMessage, addMessage]);
+  }, [devSafeMode, injectSystemMessage, addMessage]);
 }

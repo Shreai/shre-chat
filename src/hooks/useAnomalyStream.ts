@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { isDevSafeMode } from '../env';
 
 export interface Anomaly {
   type: 'low_stock' | 'labor_overrun' | 'sales_drop' | 'high_voids' | 'clear';
@@ -71,6 +72,14 @@ export function useAnomalyStream({
   baseUrl = RAPIDRMS_SSE_BASE,
   onCritical,
 }: UseAnomalyStreamOptions = {}): UseAnomalyStreamResult {
+  if (isDevSafeMode()) {
+    return {
+      anomalies: [],
+      criticalCount: 0,
+      connected: false,
+      dismiss: () => void 0,
+    };
+  }
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [connected, setConnected] = useState(false);
   const [dismissed, setDismissed] = useState(false);

@@ -20,6 +20,8 @@ const TYPE_ICONS: Record<string, string> = {
   chart: '\u{1F4CA}',
   table: '\u{1F4CB}',
   pdf: '\u{1F4C4}',
+  txt: 'TXT',
+  markdown: 'MD',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -28,6 +30,8 @@ const TYPE_LABELS: Record<string, string> = {
   chart: 'Chart',
   table: 'Table',
   pdf: 'PDF',
+  txt: 'TXT',
+  markdown: 'Markdown',
 };
 
 const INLINE_MAX_ROWS = 20;
@@ -40,12 +44,17 @@ function HtmlPreview({ content }: { content: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
 
-  const srcdoc = `<!DOCTYPE html>
+  const isFullDoc =
+    content.trimStart().startsWith('<!DOCTYPE') || content.trimStart().startsWith('<html');
+  const bodyHtml = isFullDoc ? content : content;
+  const srcdoc = isFullDoc
+    ? content
+    : `<!DOCTYPE html>
 <html><head><style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:14px;padding:12px;overflow:auto}
   a{color:#58a6ff}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border:1px solid #30363d}
-</style></head><body>${content}<script>
+</style></head><body>${bodyHtml}<script>
   const h=()=>parent.postMessage({type:'iframe-height',height:document.body.scrollHeight},'*');
   h();new MutationObserver(h).observe(document.body,{childList:true,subtree:true});
   window.addEventListener('load',h);
@@ -71,9 +80,86 @@ function HtmlPreview({ content }: { content: string }) {
       srcDoc={srcdoc}
       sandbox="allow-scripts allow-same-origin"
       style={{ border: 'none', width: '100%', height, display: 'block', borderRadius: 6 }}
-      title="HTML preview"
+      title="HTML Preview"
     />
   );
+}
+
+function TxtPreview({ content }: { content: string }) {
+  return (
+    <pre
+      style={{
+        margin: 0,
+        padding: 12,
+        color: 'var(--c-text-2)',
+        fontSize: 12,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+      }}
+    >
+      {content}
+    </pre>
+  );
+}
+
+function MarkdownPreview({ content }: { content: string }) {
+  const html = markdownToSimpleHtml(content);
+  const srcdoc = `<!DOCTYPE html>
+<html><head><style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:white;color:#1e293b;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;padding:24px;line-height:1.7}
+  h1{font-size:28px;font-weight:800;margin:24px 0 12px;color:#0f172a}
+  h2{font-size:22px;font-weight:700;margin:20px 0 10px;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
+  h3{font-size:18px;font-weight:600;margin:16px 0 8px;color:#1e293b}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0;padding-left:24px}
+  li{margin:4px 0}
+  code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:13px;font-family:'JetBrains Mono',monospace}
+  pre{background:#0d1117;color:#e6edf3;padding:16px;border-radius:8px;overflow-x:auto;margin:12px 0;font-size:13px}
+  pre code{background:none;padding:0;color:inherit}
+  table{border-collapse:collapse;width:100%;margin:12px 0}
+  th,td{padding:8px 12px;border:1px solid #e2e8f0;text-align:left;font-size:13px}
+  th{background:#f8fafc;font-weight:600}
+  blockquote{border-left:3px solid #2563eb;padding:8px 16px;margin:12px 0;color:#475569;background:#f8fafc;border-radius:0 4px 4px 0}
+  strong{font-weight:600}
+  a{color:#2563eb}
+  hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0}
+</style></head><body>${html}</body></html>`;
+  return (
+    <iframe
+      srcDoc={srcdoc}
+      sandbox="allow-same-origin"
+      className="w-full h-full border-0"
+      style={{ background: 'white' }}
+      title="Markdown Preview"
+    />
+  );
+}
+
+function markdownToSimpleHtml(md: string): string {
+  let html = md
+    .replace(
+      /```(\w*)\n([\s\S]*?)```/g,
+      (_m, _lang, code) => `<pre><code>${escHtml(String(code).trim())}</code></pre>`,
+    )
+    .replace(/^---+$/gm, '<hr>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^[*-] (.+)$/gm, '<li>$1</li>')
+    .replace(/^(?!<[a-z])([\w].+)$/gm, '<p>$1</p>');
+  html = html.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+  return html;
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function TablePreview({ content }: { content: string }) {
@@ -406,9 +492,11 @@ export default function ContentCard({
       <div style={{ maxHeight: CARD_MAX_H, overflow: 'hidden', position: 'relative' }}>
         <div style={{ padding: type === 'html' ? 0 : 4 }}>
           {type === 'html' && <HtmlPreview content={content} />}
+          {type === 'txt' && <TxtPreview content={content} />}
           {type === 'json' && <JsonPreview content={content} />}
           {type === 'chart' && <ChartPreview content={content} chartType={chartType} />}
           {type === 'table' && <TablePreview content={content} />}
+          {type === 'markdown' && <MarkdownPreview content={content} />}
           {type === 'pdf' && <PdfPreview content={content} />}
         </div>
         {/* Fade gradient at bottom */}

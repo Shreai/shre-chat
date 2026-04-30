@@ -326,7 +326,7 @@ export function startHealthPoll() {
   if (healthPollTimer) return;
 
   // Health poll only reports server reachability — no WS reconnect.
-  // Gateway WS is disabled; all chat routes through HTTP/SSE via shre-router.
+  // Gateway WS is disabled; chat now uses HTTP/SSE through either the router-backed path or local direct mode.
   pollHealth().then((up) => {
     notifyHealth(up);
   });
@@ -363,6 +363,7 @@ export function getModelApi(modelId: string): string {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('openai/')) return 'openai';
   if (modelId.startsWith('google/')) return 'google-generative-ai';
+  if (modelId.startsWith('moonshot/')) return 'moonshot';
   if (modelId.startsWith('ollama')) return 'ollama';
   return 'anthropic';
 }
@@ -372,6 +373,7 @@ export function getProviderName(modelId: string): string {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('openai/')) return 'openai';
   if (modelId.startsWith('google/')) return 'google';
+  if (modelId.startsWith('moonshot/')) return 'moonshot';
   if (modelId.startsWith('ollama')) return 'ollama';
   return 'anthropic';
 }

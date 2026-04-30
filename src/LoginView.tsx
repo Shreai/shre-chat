@@ -14,6 +14,18 @@ const REMEMBER_KEY = 'shre_remember_user';
 
 type AuthMode = 'login' | 'signup';
 
+function buildGateLoginUrl(): string {
+  const redirect = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const isLocalHost =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '::1';
+  if (isLocalHost) {
+    return `http://127.0.0.1:5431/__gate/login?redirect=${encodeURIComponent(redirect)}`;
+  }
+  return `/__gate/login?redirect=${encodeURIComponent(redirect)}`;
+}
+
 export function LoginView({ onLogin }: LoginProps) {
   const appMode = getAppModeForHost(
     typeof window !== 'undefined' ? window.location.hostname : null,
@@ -47,6 +59,7 @@ export function LoginView({ onLogin }: LoginProps) {
   const [otpCode, setOtpCode] = useState('');
   const [otpUsername, setOtpUsername] = useState('');
   const [trustDevice, setTrustDevice] = useState(true);
+  const gateLoginUrl = buildGateLoginUrl();
 
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -242,7 +255,7 @@ export function LoginView({ onLogin }: LoginProps) {
                   : 'Create your account'
                 : isDocumentsHost
                   ? 'Sign in to upload and organize documents'
-                  : 'Sign in to continue'}
+                  : 'Sign in with shre-auth'}
           </p>
         </div>
 
@@ -254,6 +267,36 @@ export function LoginView({ onLogin }: LoginProps) {
             boxShadow: '0 8px 40px rgba(0,0,0,0.3)',
           }}
         >
+          {!needs2FA && mode === 'login' && (
+            <div
+              className="rounded-[14px] p-4 mb-5"
+              style={{
+                background: 'linear-gradient(180deg, rgba(99,141,255,0.12), rgba(255,255,255,0.04))',
+                border: '1px solid rgba(99,141,255,0.18)',
+              }}
+            >
+              <div className="text-[12px] font-semibold" style={{ color: 'var(--c-text-1)' }}>
+                Continue with shre-auth
+              </div>
+              <div className="mt-1 text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+                Shared login for password, passcode, workspace selection, and 2FA.
+              </div>
+              <SButton
+                type="button"
+                onClick={() => {
+                  window.location.href = gateLoginUrl;
+                }}
+                className="w-full h-10 mt-3 text-[13px] font-semibold"
+                style={{
+                  borderRadius: 10,
+                  background: 'var(--c-accent, #638dff)',
+                }}
+              >
+                Open SSO Login
+              </SButton>
+            </div>
+          )}
+
           {/* Mode tabs — shown when not in 2FA flow */}
           {!needs2FA && (
             <div

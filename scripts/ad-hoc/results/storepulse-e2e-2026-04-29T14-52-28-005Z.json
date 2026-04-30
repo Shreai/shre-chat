@@ -1,0 +1,273 @@
+{
+  "base": "http://127.0.0.1:8899",
+  "workspace": "party-liquor",
+  "sessionKey": "e2e-1777474331902",
+  "ranAt": "2026-04-29T14:52:28.007Z",
+  "summary": {
+    "passed": 15,
+    "failed": 0,
+    "byModel": {
+      "direct-sales": 7,
+      "direct-analytics": 6,
+      "direct-inventory": 1,
+      "direct-voids": 1
+    }
+  },
+  "results": [
+    {
+      "prompt": {
+        "id": 1,
+        "category": "sales-today",
+        "ask": "What are today's sales?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 9,
+        "ttfbMs": 9,
+        "length": 50,
+        "excerpt": "**Store** today: - No sales data is available yet.",
+        "text": "**Store** today:\n- No sales data is available yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 2,
+        "category": "sales-yesterday",
+        "ask": "How did we do yesterday?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 7,
+        "ttfbMs": 7,
+        "length": 68,
+        "excerpt": "**Store** yesterday: - I do not have yesterday's summary loaded yet.",
+        "text": "**Store** yesterday:\n- I do not have yesterday's summary loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 3,
+        "category": "wtd-vs-lastweek",
+        "ask": "How did I perform this week vs last week?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 4,
+        "ttfbMs": 4,
+        "length": 90,
+        "excerpt": "**Store** week comparison: - I don't have both week-to-date and last-week data loaded yet.",
+        "text": "**Store** week comparison:\n- I don't have both week-to-date and last-week data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 4,
+        "category": "mtd",
+        "ask": "Give me month-to-date sales and transactions."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 3,
+        "ttfbMs": 3,
+        "length": 71,
+        "excerpt": "**Store** month-to-date: - I do not have month-to-date data loaded yet.",
+        "text": "**Store** month-to-date:\n- I do not have month-to-date data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 5,
+        "category": "top-items",
+        "ask": "What are the top 5 selling items today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 4,
+        "ttfbMs": 4,
+        "length": 50,
+        "excerpt": "**Store** today: - No sales data is available yet.",
+        "text": "**Store** today:\n- No sales data is available yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 6,
+        "category": "top-vendors",
+        "ask": "Which vendors generated the most revenue this week?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 9,
+        "ttfbMs": 9,
+        "length": 66,
+        "excerpt": "**Store** vendors: - I do not have vendor revenue data loaded yet.",
+        "text": "**Store** vendors:\n- I do not have vendor revenue data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 7,
+        "category": "hourly-pattern",
+        "ask": "Show me the hourly sales pattern for today."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 3,
+        "ttfbMs": 3,
+        "length": 50,
+        "excerpt": "**Store** today: - No sales data is available yet.",
+        "text": "**Store** today:\n- No sales data is available yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 8,
+        "category": "cashier-perf",
+        "ask": "Which cashier had the most transactions today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 2,
+        "ttfbMs": 2,
+        "length": 83,
+        "excerpt": "**Store** cashier performance: - I do not have cashier performance data loaded yet.",
+        "text": "**Store** cashier performance:\n- I do not have cashier performance data loaded yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 9,
+        "category": "department-mix",
+        "ask": "Break down sales by department today."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 3,
+        "ttfbMs": 3,
+        "length": 50,
+        "excerpt": "**Store** today: - No sales data is available yet.",
+        "text": "**Store** today:\n- No sales data is available yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 10,
+        "category": "discounts",
+        "ask": "How much did we discount this week and on which items?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 3,
+        "ttfbMs": 3,
+        "length": 92,
+        "excerpt": "**Store** discounts: - Today: **$0.00** - Week-to-date: **$0.00** - Month-to-date: **$0.00**",
+        "text": "**Store** discounts:\n- Today: **$0.00**\n- Week-to-date: **$0.00**\n- Month-to-date: **$0.00**"
+      }
+    },
+    {
+      "prompt": {
+        "id": 11,
+        "category": "inventory-low",
+        "ask": "List items where stock is running low."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-inventory",
+        "elapsedMs": 2,
+        "ttfbMs": 2,
+        "length": 73,
+        "excerpt": "**Store** inventory: - I do not have inventory loaded for this store yet.",
+        "text": "**Store** inventory:\n- I do not have inventory loaded for this store yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 12,
+        "category": "avg-ticket",
+        "ask": "What is the average ticket trend over the last 7 days?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-analytics",
+        "elapsedMs": 2,
+        "ttfbMs": 2,
+        "length": 125,
+        "excerpt": "**Store** average ticket snapshot: - Today: **$0.00** - Yesterday: **$0.00** - Week-to-date: **$0.00** - Last week: **$0.00**",
+        "text": "**Store** average ticket snapshot:\n- Today: **$0.00**\n- Yesterday: **$0.00**\n- Week-to-date: **$0.00**\n- Last week: **$0.00**"
+      }
+    },
+    {
+      "prompt": {
+        "id": 13,
+        "category": "tax-collected",
+        "ask": "How much sales tax did we collect today?"
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 4,
+        "ttfbMs": 3,
+        "length": 50,
+        "excerpt": "**Store** today: - No sales data is available yet.",
+        "text": "**Store** today:\n- No sales data is available yet."
+      }
+    },
+    {
+      "prompt": {
+        "id": 14,
+        "category": "refunds-voids",
+        "ask": "Any refunds or voids today? Summarize them."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-voids",
+        "elapsedMs": 2,
+        "ttfbMs": 2,
+        "length": 154,
+        "excerpt": "**Store** today's void/refund summary: - No live sales snapshot is loaded yet for today. - No voids or refunds are currently flagged in the live snapshot.",
+        "text": "**Store** today's void/refund summary:\n- No live sales snapshot is loaded yet for today.\n- No voids or refunds are currently flagged in the live snapshot."
+      }
+    },
+    {
+      "prompt": {
+        "id": 15,
+        "category": "compare-day",
+        "ask": "Compare today vs yesterday — sales, ticket count, average ticket."
+      },
+      "result": {
+        "ok": true,
+        "http": 200,
+        "model": "direct-sales",
+        "elapsedMs": 5,
+        "ttfbMs": 5,
+        "length": 50,
+        "excerpt": "**Store** today: - No sales data is available yet.",
+        "text": "**Store** today:\n- No sales data is available yet."
+      }
+    }
+  ]
+}

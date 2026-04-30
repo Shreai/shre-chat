@@ -377,6 +377,137 @@ describe('sendMessage — preview gate (HTTP 409)', () => {
     expect(body.previewConfirmed).toBe('prv_testtoken1234');
   });
 
+  it('forwards mentionContext in the /v1/chat request body', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(`data: {"type":"done"}\n\n`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+
+    await sendMessage(
+      'update party liquor sales',
+      [],
+      '',
+      { onToken: () => {}, onDone: () => {}, onError: () => {} },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        agentId: 'aros-agent',
+        appId: 'party-liquor',
+        explicit: true,
+        scopeTags: ['pos', 'tools'],
+      },
+    );
+
+    const chatCall = fetchMock.mock.calls.find((c) => {
+      const url = String(c[0]);
+      const init = c[1] as RequestInit | undefined;
+      return url.includes('/v1/chat') && init?.method === 'POST';
+    });
+    expect(chatCall).toBeTruthy();
+    const body = JSON.parse(String((chatCall![1] as RequestInit).body));
+    expect(body.mentionContext).toEqual({
+      agentId: 'aros-agent',
+      appId: 'party-liquor',
+      explicit: true,
+      scopeTags: ['pos', 'tools'],
+    });
+  });
+
+  it('completes from the HTTP SSE stream without requiring websocket chat', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        [
+          'data: {"type":"delta","text":"Hello"}',
+          '',
+          'data: {"type":"done","usage":{"input_tokens":12,"output_tokens":1}}',
+          '',
+        ].join('\n'),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        },
+      ),
+    );
+
+    const onToken = vi.fn();
+    const onDone = vi.fn();
+    const onError = vi.fn();
+    const onStatus = vi.fn();
+
+    await sendMessage('hello', [], '', {
+      onToken,
+      onDone,
+      onError,
+      onStatus,
+    });
+
+    expect(onToken).toHaveBeenCalledWith('Hello');
+    expect(onDone).toHaveBeenCalledWith('Hello');
+    expect(onError).not.toHaveBeenCalled();
+    expect(onStatus.mock.calls.map((call) => call[0])).toEqual([
+      'connecting',
+      'writing',
+      'done',
+    ]);
+    const chatCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/v1/chat'));
+    expect(chatCalls).toHaveLength(1);
+    expect(String(chatCalls[0][0])).toContain('/v1/chat');
+  });
+
+  it('uses the direct local chat endpoint when direct mode is enabled', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        [
+          'data: {"type":"delta","text":"Direct"}',
+          '',
+          'data: {"type":"done","text":"Direct"}',
+          '',
+        ].join('\n'),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        },
+      ),
+    );
+
+    await sendMessage(
+      'hello',
+      [],
+      '',
+      { onToken: () => {}, onDone: () => {}, onError: () => {} },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+
+    const directCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes('/api/direct/v1/chat'),
+    );
+    expect(directCall).toBeTruthy();
+  });
+
   it('falls back to generic error for a 409 with an unexpected body', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('{"unrelated": true}', {
@@ -397,5 +528,36 @@ describe('sendMessage — preview gate (HTTP 409)', () => {
 
     expect(onPreviewRequired).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalled();
+  });
+
+  it('retries a 5xx stream response without streaming and completes', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('Smart gateway failure', { status: 500 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: 'Fallback answer' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+    const onDone = vi.fn();
+    const onError = vi.fn();
+    const onStatus = vi.fn();
+
+    await sendMessage('hello', [], '', {
+      onToken: () => {},
+      onDone,
+      onError,
+      onStatus,
+    });
+
+    expect(onDone).toHaveBeenCalledWith('Fallback answer');
+    expect(onError).not.toHaveBeenCalled();
+    expect(onStatus.mock.calls.some((call) => call[0] === 'warning')).toBe(true);
+
+    const chatCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/v1/chat'));
+    expect(chatCalls).toHaveLength(2);
+    const retryBody = JSON.parse(String((chatCalls[1][1] as RequestInit).body));
+    expect(retryBody.stream).toBe(false);
   });
 });

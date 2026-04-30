@@ -7,7 +7,7 @@
  *   2. Multi-question recognition — does the AI parse and answer all parts of compound messages?
  *
  * Routes through: shre-chat → shre-router /v1/chat → LLM → response
- * Falls back to:  shre-router /v1/chat directly if shre-chat proxy is slow
+ * Direct mode can also run through `/api/direct/v1/chat` for local-model testing.
  */
 
 const ROUTER_URL = 'http://127.0.0.1:5497';

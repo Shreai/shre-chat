@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ECOSYSTEM_APPS, MARKETPLACE_EMBED_APPS } from '../chat-utils';
+import { isDevSafeMode } from '../env';
 
 interface AppsDrawerProps {
   open?: boolean;
@@ -18,6 +19,7 @@ interface AppEntry {
 }
 
 export function AppsDrawer({ open = true, onClose }: AppsDrawerProps) {
+  const devSafeMode = isDevSafeMode();
   const [embedApp, setEmbedApp] = useState<{
     id: string;
     name: string;
@@ -27,6 +29,7 @@ export function AppsDrawer({ open = true, onClose }: AppsDrawerProps) {
   // Fetch activated marketplace apps
   const [marketplaceApps, setMarketplaceApps] = useState<AppEntry[]>([]);
   useEffect(() => {
+    if (devSafeMode) return;
     fetch('/api/marketplace/activated-apps')
       .then((r) => (r.ok ? r.json() : []))
       .then((data: { appIds?: string[] }) => {
@@ -39,7 +42,7 @@ export function AppsDrawer({ open = true, onClose }: AppsDrawerProps) {
         setMarketplaceApps(embedded);
       })
       .catch(() => {});
-  }, []);
+  }, [devSafeMode]);
 
   const allApps: AppEntry[] = [...ECOSYSTEM_APPS, ...marketplaceApps];
 

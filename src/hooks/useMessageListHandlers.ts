@@ -40,8 +40,8 @@ interface UseMessageListHandlersOptions {
     ) => void;
   };
   pendingEditSendRef: React.MutableRefObject<boolean>;
-  inputRef: React.RefObject<HTMLTextAreaElement>;
-  terminalRef: React.RefObject<{ sendCommand: (cmd: string) => void }>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  terminalRef: React.RefObject<{ sendCommand: (cmd: string) => void } | null>;
   setLightboxSrc: (src: string | null) => void;
   sendFeedbackToRapidRMS: (msgIndex: number, feedback: 'like' | 'dislike') => void;
   handleContentExpand: (content: string, type: string, title?: string) => void;

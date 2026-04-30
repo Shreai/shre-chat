@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePreferences, type TTSProvider } from '../preferences-store';
+import { isDevSafeMode } from '../env';
 
 export interface UseVoiceRecordingReturn {
   isRecording: boolean;
@@ -118,6 +119,55 @@ if (typeof window !== 'undefined') {
 }
 
 export function useVoiceRecording(): UseVoiceRecordingReturn {
+  if (isDevSafeMode()) {
+    return {
+      isRecording: false,
+      setIsRecording: () => void 0,
+      voicePhase: 'idle',
+      setVoicePhase: () => void 0,
+      interimTranscript: '',
+      setInterimTranscript: () => void 0,
+      audioLevel: 0,
+      setAudioLevel: () => void 0,
+      recordingDuration: 0,
+      setRecordingDuration: () => void 0,
+      isSpeaking: false,
+      setIsSpeaking: () => void 0,
+      voiceAnnouncement: '',
+      setVoiceAnnouncement: () => void 0,
+      voiceAssistantOpen: false,
+      setVoiceAssistantOpen: () => void 0,
+      isHandsFree: false,
+      setIsHandsFree: () => void 0,
+      voiceMode: false,
+      setVoiceMode: () => void 0,
+      ttsVoice: 'nova',
+      setTtsVoice: () => void 0,
+      ttsProvider: 'auto',
+      setTtsProvider: () => void 0,
+      speechSupported: false,
+      analyserRef: { current: null },
+      audioCtxRef: { current: null },
+      levelRafRef: { current: 0 },
+      recordingTimerRef: { current: null },
+      interimTranscriptRef: { current: '' },
+      audioLevelRawRef: { current: 0 },
+      voiceSessionIdRef: { current: 0 },
+      voiceFinalTranscriptRef: { current: '' },
+      levelThrottleRef: { current: 0 },
+      silenceStartRef: { current: 0 },
+      isHandsFreeRef: { current: false },
+      lastSpokenMsgRef: { current: '' },
+      SILENCE_THRESHOLD: 0.06,
+      SILENCE_TIMEOUT_MS: 3000,
+      hasSpeechRecognition: false,
+      clearInterimAfter: () => void 0,
+      cleanupAudioLevel: () => void 0,
+      releaseCachedStream,
+      micToast: false,
+      setMicToast: () => void 0,
+    };
+  }
   const [isRecording, setIsRecording] = useState(false);
   const [voicePhase, setVoicePhase] = useState<'idle' | 'waiting' | 'recording' | 'transcribing'>(
     'idle',
