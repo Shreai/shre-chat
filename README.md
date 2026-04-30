@@ -149,6 +149,11 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Model and Tool Access](docs/MODEL-TOOL-ACCESS.md) | Least-privilege agent and model access |
 | [Dependency and License Review](docs/DEPENDENCY-LICENSE-REVIEW.md) | Supply-chain and redistribution review |
 | [Prompt Injection Safety](docs/PROMPT-INJECTION-SAFETY.md) | Untrusted content and tool output defense |
+| [Policy Enforcement](docs/POLICY-ENFORCEMENT.md) | Concrete checks for rules, manifests, and deploys |
+| [Role Capability Matrix](docs/ROLE-CAPABILITY-MATRIX.md) | What each role can read, write, approve, and deploy |
+| [Service Catalog](docs/SERVICE-CATALOG.md) | Canonical list of services and ownership |
+| [Release Evidence Pack](docs/RELEASE-EVIDENCE-PACK.md) | Minimum proof required for a release |
+| [Retirement Process](docs/RETIREMENT-PROCESS.md) | Clean deprecation and archival flow |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

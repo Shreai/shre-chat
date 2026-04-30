@@ -40,6 +40,11 @@ This is the shared operating pack for every product.
 - [Model and Tool Access](MODEL-TOOL-ACCESS.md)
 - [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md)
 - [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md)
+- [Policy Enforcement](POLICY-ENFORCEMENT.md)
+- [Role Capability Matrix](ROLE-CAPABILITY-MATRIX.md)
+- [Service Catalog](SERVICE-CATALOG.md)
+- [Release Evidence Pack](RELEASE-EVIDENCE-PACK.md)
+- [Retirement Process](RETIREMENT-PROCESS.md)
 
 ## Rule
 
