@@ -18,6 +18,7 @@ The goal is to keep Shre OS policy alive, testable, and aligned with the actual 
 - every agent must follow the platform rules where they apply to the task
 - if a task touches a specialized domain, the agent must also follow the relevant domain doc before making changes
 - every new project must include the project operating base before build mode starts
+- every project should define how the fleet will build, maintain, upgrade, and expand the product
 - every product headed toward beta or launch must include the growth operating base before growth work starts
 - every project or change request must include a delivery control record before work starts
 - every material project or release risk must be tracked in the risk register

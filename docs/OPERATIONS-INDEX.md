@@ -49,6 +49,7 @@ This is the shared operating pack for every product.
 - [Production Rollout](PRODUCTION-ROLLOUT.md)
 - [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md)
 - [Project Operating Base](PROJECT-OPERATING-BASE.md)
+- [Fleet Lifecycle](FLEET-LIFECYCLE.md)
 - [Growth Operating Base](GROWTH-OPERATING-BASE.md)
 - [Delivery Control](DELIVERY-CONTROL.md)
 - [Risk Register](RISK-REGISTER.md)

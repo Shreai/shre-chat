@@ -158,6 +158,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Production Rollout](docs/PRODUCTION-ROLLOUT.md) | Final QA-to-prod promotion flow |
 | [Memory and Retrieval Blueprint](docs/MEMORY-RETRIEVAL-BLUEPRINT.md) | Structured memory, compression, and agent routing |
 | [Project Operating Base](docs/PROJECT-OPERATING-BASE.md) | Default pack every new project inherits |
+| [Fleet Lifecycle](docs/FLEET-LIFECYCLE.md) | Build, maintain, upgrade, and expand the product |
 | [Growth Operating Base](docs/GROWTH-OPERATING-BASE.md) | Beta, launch, and growth work |
 | [Delivery Control](docs/DELIVERY-CONTROL.md) | Requirements, SOWs, milestones, and budgets |
 | [Risk Register](docs/RISK-REGISTER.md) | Material project and release risks |

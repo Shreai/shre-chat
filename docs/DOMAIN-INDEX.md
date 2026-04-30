@@ -45,6 +45,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Production Rollout](PRODUCTION-ROLLOUT.md) for QA-to-prod promotion
 - [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md) for structured memory and agent routing
 - [Project Operating Base](PROJECT-OPERATING-BASE.md) for the default pack every project inherits
+- [Fleet Lifecycle](FLEET-LIFECYCLE.md) for build, maintain, upgrade, and expand phases
 - [Growth Operating Base](GROWTH-OPERATING-BASE.md) for beta, launch, and growth work
 - [Delivery Control](DELIVERY-CONTROL.md) for requirements, SOWs, milestones, and budgets
 - [Risk Register](RISK-REGISTER.md) for material project and release risks

@@ -1,7 +1,7 @@
 # Project Operating Base
 
 This is the default starting pack for every new project in Shre OS.
-It keeps memory, routing, review, security, and release behavior consistent across workspaces.
+It keeps memory, routing, review, security, release behavior, and the fleet lifecycle consistent across workspaces.
 
 ## Required Docs
 
@@ -21,6 +21,7 @@ Every project should have these docs before launch:
 - [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md)
 - [Delivery Control](DELIVERY-CONTROL.md)
 - [Risk Register](RISK-REGISTER.md)
+- [Fleet Lifecycle](FLEET-LIFECYCLE.md)
 
 ## Enterprise Docs
 
@@ -53,6 +54,7 @@ If the project is moving toward beta, launch, or growth, add:
 - one owner per write area
 - one audit path per release
 - one rollback path per deployment
+- one lifecycle plan per product
 
 ## Default Deliverables
 
@@ -65,6 +67,8 @@ Every project should end up with:
 - a risk register when the project has meaningful delivery or launch risk
 - a rollback path
 - a retirement path
+- a maintain-and-upgrade plan
+- an expansion plan when the product has a future beyond launch
 - a legal/compliance review when applicable
 - a growth plan when the project is intended for market adoption
 - a portfolio or continuity view when the project is strategic or high-availability
