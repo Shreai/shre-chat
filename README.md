@@ -141,6 +141,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [App README Template](docs/APP-README-TEMPLATE.md) | Standard README layout for apps, connectors, and tools |
 | [App Readmes](docs/apps/README.md) | Generated starter docs for each app in the registry |
 | [Connector Manifest](docs/CONNECTOR-MANIFEST.md) | Per-connector owner, env, and README mapping |
+| [Pipe Manifest](docs/PIPE-MANIFEST.md) | App-to-app flow contract and rollback map |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

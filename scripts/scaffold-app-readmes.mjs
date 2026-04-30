@@ -128,7 +128,8 @@ async function main() {
     const adjusted = content
       .replaceAll('](APP-REGISTRY.md)', '](../APP-REGISTRY.md)')
       .replaceAll('](DOMAIN-INDEX.md)', '](../DOMAIN-INDEX.md)')
-      .replaceAll('](CONNECTOR-CATALOG.md)', '](../CONNECTOR-CATALOG.md)');
+      .replaceAll('](CONNECTOR-CATALOG.md)', '](../CONNECTOR-CATALOG.md)')
+      .replaceAll('](PIPE-MANIFEST.md)', '](../PIPE-MANIFEST.md)');
     await writeFile(outPath, adjusted, 'utf8');
     indexLines.push(`| \`${app.id}\` | ${app.name} | ${app.type} | [${app.slug}.md](${app.slug}.md) |`);
   }

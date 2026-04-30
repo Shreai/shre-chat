@@ -23,3 +23,4 @@ Track every external integration with an owner and scope.
 - document how to revoke access
 - pair every connector entry with a manifest row in [Connector Manifest](CONNECTOR-MANIFEST.md)
 - link connector docs back to the app README template when the connector belongs to a specific app
+- app-to-app pipes use [Pipe Manifest](PIPE-MANIFEST.md) instead of the generic connector format

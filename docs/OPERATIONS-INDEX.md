@@ -31,6 +31,8 @@ This is the shared operating pack for every product.
 - [App README Template](APP-README-TEMPLATE.md)
 - [App Readmes](apps/README.md)
 - [Connector Manifest](CONNECTOR-MANIFEST.md)
+- [Pipe Manifest](PIPE-MANIFEST.md)
+- [Pipes Starter Docs](pipes/README.md)
 
 ## Rule
 
