@@ -102,20 +102,32 @@ export function buildConversationRoster(args: {
   currentAgentId: string;
   currentAgentName: string;
   userName: string;
+  userPresence?: PresenceState;
   activeAppLabel?: string | null;
 }): ConversationRoster {
-  const { session, sessions, agents, currentAgentId, currentAgentName, userName, activeAppLabel } = args;
+  const {
+    session,
+    sessions,
+    agents,
+    currentAgentId,
+    currentAgentName,
+    userName,
+    userPresence = 'active',
+    activeAppLabel,
+  } = args;
   const channelId = parseChannelId(session?.tags);
   const dmId = parseDmId(session?.tags);
 
   if (channelId) {
     const participantIds = unique(['user', currentAgentId, ...(CHANNEL_PARTICIPANTS[channelId] || [])]);
     const members = participantIds
-      .map((id) =>
-        id === 'user'
-          ? makeMember(id, agents, sessions, currentAgentId, session, true, userName)
-          : makeMember(id, agents, sessions, currentAgentId, session),
-      )
+      .map((id) => {
+        if (id === 'user') {
+          const userMember = makeMember(id, agents, sessions, currentAgentId, session, true, userName);
+          return userMember ? { ...userMember, presence: userPresence } : null;
+        }
+        return makeMember(id, agents, sessions, currentAgentId, session);
+      })
       .filter((item): item is WorkspaceMember => Boolean(item));
     return {
       kind: 'channel',
@@ -128,11 +140,13 @@ export function buildConversationRoster(args: {
   if (dmId) {
     const participants = unique(['user', dmId]);
     const members = participants
-      .map((id) =>
-        id === 'user'
-          ? makeMember(id, agents, sessions, currentAgentId, session, true, userName)
-          : makeMember(id, agents, sessions, currentAgentId, session),
-      )
+      .map((id) => {
+        if (id === 'user') {
+          const userMember = makeMember(id, agents, sessions, currentAgentId, session, true, userName);
+          return userMember ? { ...userMember, presence: userPresence } : null;
+        }
+        return makeMember(id, agents, sessions, currentAgentId, session);
+      })
       .filter((item): item is WorkspaceMember => Boolean(item));
     return {
       kind: 'dm',
@@ -148,7 +162,7 @@ export function buildConversationRoster(args: {
       title: `App · ${activeAppLabel}`,
       subtitle: 'Workspace app context',
       members: [
-        makeMember('user', agents, sessions, currentAgentId, session, true, userName)!,
+        { ...makeMember('user', agents, sessions, currentAgentId, session, true, userName)!, presence: userPresence },
         makeMember(currentAgentId, agents, sessions, currentAgentId, session)!,
       ],
     };
@@ -159,7 +173,7 @@ export function buildConversationRoster(args: {
     title: 'General',
     subtitle: 'Workspace coordination',
     members: [
-      makeMember('user', agents, sessions, currentAgentId, session, true, userName)!,
+      { ...makeMember('user', agents, sessions, currentAgentId, session, true, userName)!, presence: userPresence },
       makeMember(currentAgentId, agents, sessions, currentAgentId, session)!,
     ],
   };
