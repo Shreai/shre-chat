@@ -48,6 +48,7 @@ This is the shared operating pack for every product.
 - [Retirement Process](RETIREMENT-PROCESS.md)
 - [Production Rollout](PRODUCTION-ROLLOUT.md)
 - [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md)
+- [Project Operating Base](PROJECT-OPERATING-BASE.md)
 
 ## Rule
 

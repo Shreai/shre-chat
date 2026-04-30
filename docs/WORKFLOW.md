@@ -35,6 +35,13 @@ Need launch docs: yes
 - If the work has its own owner, brand, support flow, release cadence, or docs, treat it as a separate product.
 - If the work is only a shared control-plane capability, keep it inside Shre OS.
 
+## Project Operating Base
+
+- every new project should inherit the [Project Operating Base](PROJECT-OPERATING-BASE.md)
+- the base must be present before build mode starts
+- projects may customize stack and design, but the base docs and review loop stay in place
+- if a project is missing the base docs, treat that as a launch blocker
+
 ## Guardrails
 
 - Docs do not count as delivery.

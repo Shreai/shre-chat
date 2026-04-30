@@ -44,6 +44,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Retirement Process](RETIREMENT-PROCESS.md) for clean deprecation and archive
 - [Production Rollout](PRODUCTION-ROLLOUT.md) for QA-to-prod promotion
 - [Memory and Retrieval Blueprint](MEMORY-RETRIEVAL-BLUEPRINT.md) for structured memory and agent routing
+- [Project Operating Base](PROJECT-OPERATING-BASE.md) for the default pack every project inherits
 
 ## Legal And Compliance
 

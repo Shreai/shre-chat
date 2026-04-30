@@ -20,6 +20,7 @@ It applies to internal work, client work, and white-labeled products unless a st
 - every release has code, tests, build output, and evidence
 - visible changes need before/after trace evidence
 - every product declares its compliance profile before launch
+- every project inherits the shared project operating base
 
 ## Transport
 
