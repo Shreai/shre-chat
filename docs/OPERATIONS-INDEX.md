@@ -29,6 +29,8 @@ This is the shared operating pack for every product.
 - [Domain Index](DOMAIN-INDEX.md)
 - [App Registry](APP-REGISTRY.md)
 - [App README Template](APP-README-TEMPLATE.md)
+- [App Readmes](apps/README.md)
+- [Connector Manifest](CONNECTOR-MANIFEST.md)
 
 ## Rule
 

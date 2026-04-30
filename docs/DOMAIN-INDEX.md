@@ -26,6 +26,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Environment Matrix](ENVIRONMENT-MATRIX.md) for host, database, and deployment targets
 - [App Registry](APP-REGISTRY.md) for the current app surface and README mapping
 - [App README Template](APP-README-TEMPLATE.md) for app, connector, and tool docs
+- [App Readmes](apps/README.md) for generated starter docs per app
 
 ## Legal And Compliance
 
@@ -41,6 +42,7 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [API Reference](API.md)
 - [API Versioning](API-VERSIONING.md)
 - [Connector Catalog](CONNECTOR-CATALOG.md)
+- [Connector Manifest](CONNECTOR-MANIFEST.md)
 - [Dependency Policy](DEPENDENCY-POLICY.md)
 - [Secrets Rotation](SECRETS-ROTATION.md)
 - [Threat Model](THREAT-MODEL.md)

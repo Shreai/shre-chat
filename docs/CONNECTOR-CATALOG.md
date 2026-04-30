@@ -21,4 +21,5 @@ Track every external integration with an owner and scope.
 - never add a connector without a named owner
 - keep test/sandbox credentials separate from production
 - document how to revoke access
-
+- pair every connector entry with a manifest row in [Connector Manifest](CONNECTOR-MANIFEST.md)
+- link connector docs back to the app README template when the connector belongs to a specific app
