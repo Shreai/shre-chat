@@ -22,6 +22,8 @@
 | `SHRE_DIR` | `~/.shre` | Data directory for sessions, config |
 | `SHRE_SLACK_WEBHOOK_URL` | — | Default Slack webhook for notification fanout |
 | `SHRE_SLACK_WEBHOOK_ROUTES` | — | JSON map of routing keys to Slack webhook URLs |
+| `DEPLOY_HOOK_URL_QA` | — | QA deploy hook used by GitHub Actions |
+| `DEPLOY_HOOK_URL` | — | Production deploy hook used by GitHub Actions |
 | `SHRE_NOTIFICATION_EMAIL_TO` | — | Default email recipient for notification fanout |
 | `SHRE_NOTIFICATION_EMAIL_ACCOUNT` | `default` | Gmail account alias used by the email sender |
 | `CORTEXDB_URL` | `http://127.0.0.1:5400` | CortexDB connection URL |

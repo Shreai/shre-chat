@@ -104,6 +104,11 @@ npm run test:android
 
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for environment variables, ports, and auth setup.
 
+## Deployment
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the QA and production deploy lanes.
+See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and release safety rules.
+
 ## Dependencies
 
 | Service | Port | Required | Purpose |
@@ -125,5 +130,7 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for environment variables, po
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |
 | [Configuration](docs/CONFIGURATION.md) | Environment variables, ports, auth |
+| [Deployment](docs/DEPLOYMENT.md) | QA and production deploy lanes |
+| [Guardrails](docs/GUARDRAILS.md) | Definition of done, evidence, audit, and release rules |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and fixes |
 | [CLAUDE.md](CLAUDE.md) | AI assistant context (auto-loaded) |

@@ -34,3 +34,10 @@ Need launch docs: yes
 
 - If the work has its own owner, brand, support flow, release cadence, or docs, treat it as a separate product.
 - If the work is only a shared control-plane capability, keep it inside Shre OS.
+
+## Guardrails
+
+- Docs do not count as delivery.
+- Every change needs code, tests, build output, and a runtime path.
+- QA deploys happen before production deploys.
+- Anything shipped by the fleet should have an audit trail and rollback plan.

@@ -1,0 +1,68 @@
+name: Deploy QA
+
+on:
+  push:
+    branches:
+      - qa
+  workflow_dispatch:
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build project
+        run: npm run build
+
+      - name: Deploy to QA hook
+        env:
+          DEPLOY_HOOK_URL_QA: ${{ secrets.DEPLOY_HOOK_URL_QA }}
+          QA_DEPLOY_HOST: ${{ secrets.QA_DEPLOY_HOST }}
+          QA_DEPLOY_USER: ${{ secrets.QA_DEPLOY_USER }}
+          QA_DEPLOY_KEY: ${{ secrets.QA_DEPLOY_KEY }}
+          QA_DEPLOY_PATH: ${{ secrets.QA_DEPLOY_PATH }}
+          QA_DEPLOY_APP_NAME: ${{ secrets.QA_DEPLOY_APP_NAME }}
+        run: |
+          if [ -n "$DEPLOY_HOOK_URL_QA" ]; then
+            curl -fsSL -X POST "$DEPLOY_HOOK_URL_QA" \
+              -H 'Content-Type: application/json' \
+              -d "{\"source\":\"shre-chat\",\"event\":\"qa-deploy\",\"environment\":\"qa\",\"commit\":\"${{ github.sha }}\",\"branch\":\"${{ github.ref_name }}\"}"
+            exit 0
+          fi
+
+          if [ -n "$QA_DEPLOY_HOST" ] && [ -n "$QA_DEPLOY_USER" ] && [ -n "$QA_DEPLOY_KEY" ] && [ -n "$QA_DEPLOY_PATH" ]; then
+            mkdir -p ~/.ssh
+            printf '%s\n' "$QA_DEPLOY_KEY" > ~/.ssh/qa_deploy_key
+            chmod 600 ~/.ssh/qa_deploy_key
+            ssh-keyscan -H "$QA_DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+            scp -i ~/.ssh/qa_deploy_key -r dist/* "$QA_DEPLOY_USER@$QA_DEPLOY_HOST:$QA_DEPLOY_PATH/"
+
+            if [ -n "$QA_DEPLOY_APP_NAME" ]; then
+              ssh -i ~/.ssh/qa_deploy_key "$QA_DEPLOY_USER@$QA_DEPLOY_HOST" "cd '$QA_DEPLOY_PATH' && (pm2 restart '$QA_DEPLOY_APP_NAME' || npm start)"
+            fi
+            exit 0
+          fi
+
+          echo "QA deploy target is missing. Set DEPLOY_HOOK_URL_QA or the QA_DEPLOY_* secrets."
+          exit 1
+
+      - name: Notify QA deploy
+        if: always()
+        run: |
+          echo "✅ QA deploy completed"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
