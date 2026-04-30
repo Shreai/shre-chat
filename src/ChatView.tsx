@@ -36,6 +36,7 @@ import { useModelList } from './hooks/useModelList';
 import { useAppList } from './hooks/useAppList';
 import { useToolList } from './hooks/useToolList';
 import { useEscalationListener } from './hooks/useEscalationListener';
+import { useWorkspacePresence } from './hooks/useWorkspacePresence';
 import { buildConversationRoster } from './workspace-roster';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { MessageQueue } from './components/MessageQueue';
@@ -314,6 +315,9 @@ export function ChatView() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages ?? [];
   const userName = state.userProfile?.name?.split(' ')[0] || 'You';
+  const userPresence = useWorkspacePresence({
+    userId: state.userProfile?.id || state.userProfile?.name || 'anonymous',
+  });
 
   const {
     pendingFiles,
@@ -393,9 +397,10 @@ export function ChatView() {
         currentAgentId: activeAgentId,
         currentAgentName: currentAgent.name,
         userName,
+        userPresence,
         activeAppLabel,
       }),
-    [activeSession, sessions, activeAgentId, currentAgent.name, activeAppLabel, userName],
+    [activeSession, sessions, activeAgentId, currentAgent.name, activeAppLabel, userName, userPresence],
   );
   const escalationNoteSeed = useMemo(() => {
     if (pendingApproval) {
