@@ -22,6 +22,7 @@ Every project should have these docs before launch:
 - [Delivery Control](DELIVERY-CONTROL.md)
 - [Risk Register](RISK-REGISTER.md)
 - [Fleet Lifecycle](FLEET-LIFECYCLE.md)
+- [Agent Assignment](AGENT-ASSIGNMENT.md)
 
 ## Enterprise Docs
 
