@@ -5,6 +5,13 @@
 This document defines the shared operating rules for every product built on Shre OS.
 It applies to internal work, client work, and white-labeled products unless a stricter customer standard overrides it.
 
+## Platform Rule Loading
+
+- every model used in the platform should read this document before acting on a task
+- every agent should follow this document where it applies to the task
+- agents should also read the relevant domain, product, connector, or pipe document before making changes in that area
+- if a task touches legal, compliance, or jurisdiction, the legal pack and governance review also apply
+
 ## Non-Negotiables
 
 - workspace-first and multi-tenant by default
@@ -150,4 +157,3 @@ When a Conexxus standard exists, prefer it over ad hoc message shapes.
 - connector scopes reviewed
 - trace-route evidence captured
 - rollback plan documented
-

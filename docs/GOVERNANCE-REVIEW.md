@@ -12,6 +12,14 @@ The goal is to keep Shre OS policy alive, testable, and aligned with the actual 
 - legal / compliance reviewer: checks terms, privacy, IP, jurisdiction, and regulated-data implications
 - human product owner: makes the final tradeoff decision
 
+## Model And Agent Rule
+
+- every model must read the current platform rules before acting on a task
+- every agent must follow the platform rules where they apply to the task
+- if a task touches a specialized domain, the agent must also follow the relevant domain doc before making changes
+- if rules conflict, follow the higher-priority rule and escalate the gap through governance review
+- if an agent cannot load the rules, it must stop and ask for a safe fallback instead of guessing
+
 ## Cadence
 
 - weekly: active product and launch-critical policy review
