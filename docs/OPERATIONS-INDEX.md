@@ -52,6 +52,10 @@ This is the shared operating pack for every product.
 - [Growth Operating Base](GROWTH-OPERATING-BASE.md)
 - [Delivery Control](DELIVERY-CONTROL.md)
 - [Risk Register](RISK-REGISTER.md)
+- [Portfolio Governance](PORTFOLIO-GOVERNANCE.md)
+- [Architecture Decisions](ARCHITECTURE-DECISIONS.md)
+- [Vendor Risk](VENDOR-RISK.md)
+- [Business Continuity](BUSINESS-CONTINUITY.md)
 
 ## Rule
 

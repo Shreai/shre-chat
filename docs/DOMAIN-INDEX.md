@@ -48,6 +48,10 @@ Use it to find the right operating docs by domain instead of hunting across fold
 - [Growth Operating Base](GROWTH-OPERATING-BASE.md) for beta, launch, and growth work
 - [Delivery Control](DELIVERY-CONTROL.md) for requirements, SOWs, milestones, and budgets
 - [Risk Register](RISK-REGISTER.md) for material project and release risks
+- [Portfolio Governance](PORTFOLIO-GOVERNANCE.md) for strategic prioritization and funding
+- [Architecture Decisions](ARCHITECTURE-DECISIONS.md) for major technical choices
+- [Vendor Risk](VENDOR-RISK.md) for third-party and supplier risk
+- [Business Continuity](BUSINESS-CONTINUITY.md) for recovery and resilience planning
 
 ## Legal And Compliance
 

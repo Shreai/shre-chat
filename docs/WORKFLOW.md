@@ -44,6 +44,13 @@ Need launch docs: yes
 - every project should have a [Delivery Control](DELIVERY-CONTROL.md) record before scope is accepted
 - every project with meaningful delivery risk should have a [Risk Register](RISK-REGISTER.md)
 
+## Enterprise Add-Ons
+
+- strategic, multi-team, or customer-facing-at-scale projects should add the enterprise docs from the project base
+- vendor-heavy work should add [Vendor Risk](VENDOR-RISK.md)
+- high-availability work should add [Business Continuity](BUSINESS-CONTINUITY.md)
+- major technical choices should be recorded in [Architecture Decisions](ARCHITECTURE-DECISIONS.md)
+
 ## Growth Operating Base
 
 - projects headed toward beta or launch should inherit the [Growth Operating Base](GROWTH-OPERATING-BASE.md)

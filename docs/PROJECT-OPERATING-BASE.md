@@ -22,6 +22,15 @@ Every project should have these docs before launch:
 - [Delivery Control](DELIVERY-CONTROL.md)
 - [Risk Register](RISK-REGISTER.md)
 
+## Enterprise Docs
+
+If the project is strategic, multi-team, customer-facing at scale, or vendor-heavy, add:
+
+- [Portfolio Governance](PORTFOLIO-GOVERNANCE.md)
+- [Architecture Decisions](ARCHITECTURE-DECISIONS.md)
+- [Vendor Risk](VENDOR-RISK.md)
+- [Business Continuity](BUSINESS-CONTINUITY.md)
+
 ## Growth Docs
 
 If the project is moving toward beta, launch, or growth, add:
@@ -58,6 +67,7 @@ Every project should end up with:
 - a retirement path
 - a legal/compliance review when applicable
 - a growth plan when the project is intended for market adoption
+- a portfolio or continuity view when the project is strategic or high-availability
 
 ## Rule
 

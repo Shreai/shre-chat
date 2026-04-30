@@ -161,6 +161,10 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Growth Operating Base](docs/GROWTH-OPERATING-BASE.md) | Beta, launch, and growth work |
 | [Delivery Control](docs/DELIVERY-CONTROL.md) | Requirements, SOWs, milestones, and budgets |
 | [Risk Register](docs/RISK-REGISTER.md) | Material project and release risks |
+| [Portfolio Governance](docs/PORTFOLIO-GOVERNANCE.md) | Strategic prioritization and funding |
+| [Architecture Decisions](docs/ARCHITECTURE-DECISIONS.md) | Major technical choice log |
+| [Vendor Risk](docs/VENDOR-RISK.md) | Third-party and supplier risk |
+| [Business Continuity](docs/BUSINESS-CONTINUITY.md) | Recovery and resilience planning |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

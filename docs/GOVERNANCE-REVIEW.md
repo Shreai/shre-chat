@@ -21,6 +21,7 @@ The goal is to keep Shre OS policy alive, testable, and aligned with the actual 
 - every product headed toward beta or launch must include the growth operating base before growth work starts
 - every project or change request must include a delivery control record before work starts
 - every material project or release risk must be tracked in the risk register
+- strategic projects should include portfolio governance, vendor risk, business continuity, and architecture decisions as applicable
 - if rules conflict, follow the higher-priority rule and escalate the gap through governance review
 - if an agent cannot load the rules, it must stop and ask for a safe fallback instead of guessing
 
