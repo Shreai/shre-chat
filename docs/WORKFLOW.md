@@ -41,3 +41,4 @@ Need launch docs: yes
 - Every change needs code, tests, build output, and a runtime path.
 - QA deploys happen before production deploys.
 - Anything shipped by the fleet should have an audit trail and rollback plan.
+- UI and workflow changes should pass through the trace route agent with before/after evidence.

@@ -259,6 +259,15 @@ export const AGENT_META: ChatAgentMeta[] = [
     description: 'Documentation agent — generates docs, screenshots',
   },
   {
+    id: 'trace-route',
+    name: 'Trace Route',
+    emoji: '🧭',
+    group: 'department',
+    domains: ['code', 'qa'],
+    description:
+      'Change auditor — captures before/after screenshots, traces UI deltas, and documents rollback steps',
+  },
+  {
     id: 'recon',
     name: 'Recon',
     emoji: '🔭',

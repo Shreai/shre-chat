@@ -20,6 +20,7 @@ Every meaningful change should leave evidence:
 - build output
 - preview or QA URL when available
 - Playwright trace or screenshot for UI work
+- before and after screenshots or traces for visible changes
 
 ## Audit Checks
 
@@ -45,3 +46,4 @@ When AI adds code, we should verify:
 - preview deploy before wider rollout
 - rollback plan for user-facing changes
 - version everything that affects behavior
+- do not ship UI changes without a trace-route review
