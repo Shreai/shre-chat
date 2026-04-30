@@ -36,6 +36,7 @@ import { useModelList } from './hooks/useModelList';
 import { useAppList } from './hooks/useAppList';
 import { useToolList } from './hooks/useToolList';
 import { useEscalationListener } from './hooks/useEscalationListener';
+import { buildConversationRoster } from './workspace-roster';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { MessageQueue } from './components/MessageQueue';
 import { MessageList } from './components/MessageList';
@@ -383,6 +384,19 @@ export function ChatView() {
     actions,
   });
   const activeAppLabel = appOptions.find((app) => app.id === activeAppId)?.label ?? null;
+  const conversationRoster = useMemo(
+    () =>
+      buildConversationRoster({
+        session: activeSession,
+        sessions,
+        agents: AGENTS,
+        currentAgentId: activeAgentId,
+        currentAgentName: currentAgent.name,
+        userName,
+        activeAppLabel,
+      }),
+    [activeSession, sessions, activeAgentId, currentAgent.name, activeAppLabel, userName],
+  );
   const escalationNoteSeed = useMemo(() => {
     if (pendingApproval) {
       const lines = [`Tool: ${pendingApproval.tool}`, `Reason: ${pendingApproval.reason}`];
@@ -963,6 +977,7 @@ export function ChatView() {
               activeAppLabel={activeAppLabel}
               onSetConversationMode={setConversationMode}
               onOpenEscalation={() => setShowEscalationDrawer(true)}
+              conversationRoster={conversationRoster}
             />
           }
           content={
