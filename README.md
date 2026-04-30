@@ -158,6 +158,7 @@ See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for the definition of done and rele
 | [Production Rollout](docs/PRODUCTION-ROLLOUT.md) | Final QA-to-prod promotion flow |
 | [Memory and Retrieval Blueprint](docs/MEMORY-RETRIEVAL-BLUEPRINT.md) | Structured memory, compression, and agent routing |
 | [Project Operating Base](docs/PROJECT-OPERATING-BASE.md) | Default pack every new project inherits |
+| [Growth Operating Base](docs/GROWTH-OPERATING-BASE.md) | Beta, launch, and growth work |
 | [Runtime Contract](docs/runtime-contract.json) | Evidence-first request packet, tool allowlists, verifier rules |
 | [API Reference](docs/API.md) | All endpoints with request/response examples |
 | [Testing Guide](docs/TESTING.md) | Test infrastructure, agents, Android testing |

@@ -20,6 +20,12 @@ Every project should have these docs before launch:
 - [Dependency and License Review](DEPENDENCY-LICENSE-REVIEW.md)
 - [Prompt Injection Safety](PROMPT-INJECTION-SAFETY.md)
 
+## Growth Docs
+
+If the project is moving toward beta, launch, or growth, add:
+
+- [Growth Operating Base](GROWTH-OPERATING-BASE.md)
+
 ## Default Build Rules
 
 - keep backend and frontend separate
@@ -47,6 +53,7 @@ Every project should end up with:
 - a rollback path
 - a retirement path
 - a legal/compliance review when applicable
+- a growth plan when the project is intended for market adoption
 
 ## Rule
 

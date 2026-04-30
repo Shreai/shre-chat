@@ -42,6 +42,12 @@ Need launch docs: yes
 - projects may customize stack and design, but the base docs and review loop stay in place
 - if a project is missing the base docs, treat that as a launch blocker
 
+## Growth Operating Base
+
+- projects headed toward beta or launch should inherit the [Growth Operating Base](GROWTH-OPERATING-BASE.md)
+- add the growth base before beta or release candidate work starts
+- keep the growth pack lean: research, measurement, onboarding, pricing, experiments, launch, and support feedback
+
 ## Guardrails
 
 - Docs do not count as delivery.

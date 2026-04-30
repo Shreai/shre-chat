@@ -21,6 +21,7 @@ It applies to internal work, client work, and white-labeled products unless a st
 - visible changes need before/after trace evidence
 - every product declares its compliance profile before launch
 - every project inherits the shared project operating base
+- products headed to market inherit the growth operating base before beta or launch
 
 ## Transport
 
