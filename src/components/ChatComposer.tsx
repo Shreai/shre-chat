@@ -3,6 +3,7 @@ import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
 import { usePreferences, type TTSProvider } from '../preferences-store';
+import { useViewportTier } from '../hooks/useViewportTier';
 // Lazy-load both emoji data (~300KB) and picker — only fetched when user opens picker
 const EmojiPicker = lazy(() =>
   Promise.all([import('@emoji-mart/data'), import('@emoji-mart/react')]).then(
@@ -118,6 +119,7 @@ interface ChatComposerProps {
   // Suggestions
   suggestions: string[];
   onSelectSuggestion: (s: string) => void;
+  typingLabel?: string | null;
 
   // Voice announcement
   voiceAnnouncement: string;
@@ -218,6 +220,7 @@ export function ChatComposer(props: ChatComposerProps) {
     onCancelEdit,
     suggestions,
     onSelectSuggestion,
+    typingLabel,
     voiceAnnouncement,
     queueCount = 0,
     onInputChange,
@@ -229,26 +232,32 @@ export function ChatComposer(props: ChatComposerProps) {
   } = props;
 
   const features = usePreferences((s) => s.features);
+  const viewportTier = useViewportTier();
+  const compactComposer =
+    viewportTier === 'trifold-phone' ||
+    viewportTier === 'bifold-phone' ||
+    viewportTier === 'phone' ||
+    viewportTier === 'mini-tablet';
 
   // Reset textarea height when input is cleared (e.g. after send)
   useEffect(() => {
     if (!input && inputRef.current) {
-      inputRef.current.style.height = '36px';
+      inputRef.current.style.height = compactComposer ? '34px' : '36px';
     }
-  }, [input, inputRef]);
+  }, [compactComposer, input, inputRef]);
 
   return (
     <>
       {/* Pending files */}
       {pendingFiles.length > 0 && (
         <div
-          className="px-4 py-2 flex gap-2 flex-wrap shrink-0"
+          className={`flex shrink-0 flex-wrap gap-2 ${compactComposer ? 'px-2 py-1.5' : 'px-4 py-2'}`}
           style={{ borderTop: '1px solid var(--c-border-2)' }}
         >
           {pendingFiles.map((f) => (
             <div
               key={f.id}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px]"
+              className={`flex items-center gap-1.5 rounded-lg ${compactComposer ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'}`}
               style={{ background: 'var(--c-bg-card)', color: 'var(--c-text-3)' }}
             >
               {f.type.startsWith('image/') ? (
@@ -295,11 +304,13 @@ export function ChatComposer(props: ChatComposerProps) {
 
       {/* Follow-up suggestion chips */}
       {suggestions.length > 0 && !streaming && (
-        <div className="px-2 sm:px-4 py-2 shrink-0 flex flex-wrap gap-2 justify-center w-full">
+        <div
+          className={`shrink-0 flex flex-wrap gap-2 justify-center w-full ${compactComposer ? 'px-1.5 py-1.5' : 'px-2 sm:px-4 py-2'}`}
+        >
           {suggestions.map((s, i) => (
             <button
               key={i}
-              className="suggestion-chip text-xs px-3 py-1.5 rounded-full transition-all"
+              className={`suggestion-chip rounded-full transition-all ${compactComposer ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'}`}
               style={{
                 background: 'transparent',
                 color: 'var(--c-text-2)',
@@ -330,8 +341,7 @@ export function ChatComposer(props: ChatComposerProps) {
       <div
         className="px-0 py-0.5 shrink-0 mobile-safe-bottom mobile-input-sticky mobile-input-area relative"
         style={{
-          background:
-            'linear-gradient(180deg, rgba(18,18,21,0.96) 0%, rgba(16,16,18,0.98) 100%)',
+          background: 'linear-gradient(180deg, rgba(18,18,21,0.96) 0%, rgba(16,16,18,0.98) 100%)',
           borderTop: '1px solid var(--c-border-2)',
           backdropFilter: 'blur(18px)',
         }}
@@ -342,7 +352,7 @@ export function ChatComposer(props: ChatComposerProps) {
         </div>
 
         <input
-          ref={fileRef}
+          ref={fileRef as React.RefObject<HTMLInputElement>}
           type="file"
           multiple
           className="hidden"
@@ -354,17 +364,17 @@ export function ChatComposer(props: ChatComposerProps) {
         {/* Slash command dropdown */}
         {slashOpen && slashFiltered.length > 0 && (
           <div
-            ref={slashRef}
+            ref={slashRef as React.RefObject<HTMLDivElement>}
             className="w-full mb-1 rounded-lg overflow-hidden shadow-lg"
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
-              maxHeight: '280px',
+              maxHeight: compactComposer ? '220px' : '280px',
               overflowY: 'auto',
             }}
           >
             <div
-              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              className={`font-medium uppercase tracking-wider ${compactComposer ? 'px-2 py-1 text-[9px]' : 'px-3 py-1.5 text-[10px]'}`}
               style={{ color: 'var(--c-text-4)', borderBottom: '1px solid var(--c-border-1)' }}
             >
               Commands
@@ -380,7 +390,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   <React.Fragment key={cmd.name}>
                     {showHeader && catLabel && (
                       <div
-                        className="px-3 py-1 text-[9px] font-semibold uppercase tracking-widest"
+                        className={`font-semibold uppercase tracking-widest ${compactComposer ? 'px-2 py-0.5 text-[8px]' : 'px-3 py-1 text-[9px]'}`}
                         style={{ color: 'var(--c-text-5)', background: 'var(--c-bg-3)' }}
                       >
                         {catLabel}
@@ -388,7 +398,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     )}
                     <button
                       data-slash-active={i === slashIndex ? 'true' : 'false'}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                      className={`w-full flex items-center gap-3 text-left transition-colors ${compactComposer ? 'px-2 py-1.5' : 'px-3 py-2'}`}
                       style={{
                         background: i === slashIndex ? 'var(--c-bg-hover)' : 'transparent',
                         color: 'var(--c-text-1)',
@@ -400,7 +410,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       }}
                     >
                       <span
-                        className="flex items-center justify-center w-6 h-6 rounded text-xs font-mono font-bold"
+                        className={`flex items-center justify-center rounded font-mono font-bold ${compactComposer ? 'h-5 w-5 text-[9px]' : 'h-6 w-6 text-xs'}`}
                         style={{
                           background: 'var(--c-bg-3)',
                           color:
@@ -440,17 +450,17 @@ export function ChatComposer(props: ChatComposerProps) {
         {/* @ Mention dropdown */}
         {mentionOpen && mentionFiltered.length > 0 && (
           <div
-            ref={mentionRef}
+            ref={mentionRef as React.RefObject<HTMLDivElement>}
             className="w-full mb-1 rounded-lg overflow-hidden shadow-lg"
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
-              maxHeight: '240px',
+              maxHeight: compactComposer ? '210px' : '240px',
               overflowY: 'auto',
             }}
           >
             <div
-              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              className={`font-medium uppercase tracking-wider ${compactComposer ? 'px-2 py-1 text-[9px]' : 'px-3 py-1.5 text-[10px]'}`}
               style={{ color: 'var(--c-text-4)', borderBottom: '1px solid var(--c-border-1)' }}
             >
               Mention Agent
@@ -459,7 +469,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <button
                 key={agent.id}
                 data-mention-active={i === mentionIndex ? 'true' : 'false'}
-                className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                className={`w-full flex items-center gap-3 text-left transition-colors ${compactComposer ? 'px-2 py-1.5' : 'px-3 py-2'}`}
                 style={{
                   background: i === mentionIndex ? 'var(--c-bg-hover)' : 'transparent',
                   color: 'var(--c-text-1)',
@@ -470,12 +480,21 @@ export function ChatComposer(props: ChatComposerProps) {
                   onMentionSelect(agent);
                 }}
               >
-                <span className="flex items-center justify-center w-6 h-6 rounded text-sm">
+                <span
+                  className={`flex items-center justify-center rounded ${compactComposer ? 'h-5 w-5 text-[10px]' : 'h-6 w-6 text-sm'}`}
+                >
                   {agent.emoji}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{agent.name}</div>
-                  <div className="text-xs truncate" style={{ color: 'var(--c-text-4)' }}>
+                  <div
+                    className={`font-medium truncate ${compactComposer ? 'text-[12px]' : 'text-sm'}`}
+                  >
+                    {agent.name}
+                  </div>
+                  <div
+                    className={`truncate ${compactComposer ? 'text-[10px]' : 'text-xs'}`}
+                    style={{ color: 'var(--c-text-4)' }}
+                  >
                     {agent.group}
                   </div>
                 </div>
@@ -495,17 +514,17 @@ export function ChatComposer(props: ChatComposerProps) {
         {/* # App dropdown */}
         {appOpen && appFiltered.length > 0 && (
           <div
-            ref={appRef}
+            ref={appRef as React.RefObject<HTMLDivElement>}
             className="w-full mb-1 rounded-lg overflow-hidden shadow-lg"
             style={{
               background: 'var(--c-bg-2)',
               border: '1px solid var(--c-border-2)',
-              maxHeight: '240px',
+              maxHeight: compactComposer ? '210px' : '240px',
               overflowY: 'auto',
             }}
           >
             <div
-              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              className={`font-medium uppercase tracking-wider ${compactComposer ? 'px-2 py-1 text-[9px]' : 'px-3 py-1.5 text-[10px]'}`}
               style={{ color: 'var(--c-text-4)', borderBottom: '1px solid var(--c-border-1)' }}
             >
               Select App
@@ -514,7 +533,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <button
                 key={app.id}
                 data-app-active={i === appIndex ? 'true' : 'false'}
-                className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                className={`w-full flex items-center gap-3 text-left transition-colors ${compactComposer ? 'px-2 py-1.5' : 'px-3 py-2'}`}
                 style={{
                   background: i === appIndex ? 'var(--c-bg-hover)' : 'transparent',
                   color: 'var(--c-text-1)',
@@ -525,12 +544,21 @@ export function ChatComposer(props: ChatComposerProps) {
                   onAppSelect(app);
                 }}
               >
-                <span className="flex items-center justify-center w-6 h-6 rounded text-sm">
+                <span
+                  className={`flex items-center justify-center rounded ${compactComposer ? 'h-5 w-5 text-[10px]' : 'h-6 w-6 text-sm'}`}
+                >
                   {app.icon || '▣'}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{app.label}</div>
-                  <div className="text-xs truncate" style={{ color: 'var(--c-text-4)' }}>
+                  <div
+                    className={`font-medium truncate ${compactComposer ? 'text-[12px]' : 'text-sm'}`}
+                  >
+                    {app.label}
+                  </div>
+                  <div
+                    className={`truncate ${compactComposer ? 'text-[10px]' : 'text-xs'}`}
+                    style={{ color: 'var(--c-text-4)' }}
+                  >
                     {app.subtitle || app.category || 'App scope'}
                   </div>
                 </div>
@@ -551,7 +579,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {/* Reply preview bar */}
           {replyToIndex !== null && replyToContent && (
             <div
-              className="flex items-center gap-2 px-4 py-1.5 text-xs rounded-lg mb-1"
+              className={`flex items-center gap-2 rounded-lg mb-1 ${compactComposer ? 'px-2 py-1 text-[10px]' : 'px-4 py-1.5 text-xs'}`}
               style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-3)' }}
             >
               <svg
@@ -595,7 +623,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {/* Editing indicator */}
           {(editingMsgIndex !== null || editingQueueId !== null) && (
             <div
-              className="flex items-center gap-2 px-2 py-0.5 text-[11px] rounded-lg mb-1"
+              className={`flex items-center gap-2 rounded-lg mb-1 ${compactComposer ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'}`}
               style={{ background: 'var(--c-bg-active)', color: 'var(--c-accent)' }}
             >
               <svg
@@ -638,7 +666,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {/* Mention agent badge */}
           {mentionAgent && (
             <div
-              className="flex items-center gap-1.5 px-3 py-0.5 text-[11px]"
+              className={`flex items-center gap-1.5 ${compactComposer ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-0.5 text-[11px]'}`}
               style={{ color: 'var(--c-accent)' }}
             >
               <span>{mentionAgent.emoji}</span>
@@ -653,7 +681,7 @@ export function ChatComposer(props: ChatComposerProps) {
             voicePhase === 'transcribing' ||
             (!isRecording && !voicePhase.startsWith('trans') && interimTranscript)) && (
             <div
-              className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg"
+              className={`flex items-center gap-2 rounded-t-lg ${compactComposer ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'}`}
               style={{
                 background: 'var(--c-bg-3)',
                 borderBottom: '1px solid var(--c-border-1)',
@@ -742,7 +770,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {/* Textarea */}
           <textarea
             id="shre-chat-textarea"
-            ref={inputRef}
+            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
             value={input}
             onChange={(e) =>
               onInputChange ? onInputChange(e.target.value) : setInput(e.target.value)
@@ -771,8 +799,12 @@ export function ChatComposer(props: ChatComposerProps) {
             autoCorrect="off"
             spellCheck={false}
             aria-label="Message input"
-          className="w-full px-4 pt-2 pb-0.5 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
-            style={{ color: 'var(--c-text-1)', minHeight: '44px', letterSpacing: '-0.015em' }}
+            className={`w-full resize-none focus:outline-none disabled:opacity-50 overflow-y-auto bg-transparent ${compactComposer ? 'px-3 pt-1.5 pb-0 text-[14px] max-h-40' : 'px-4 pt-2 pb-0.5 text-base max-h-60'}`}
+            style={{
+              color: 'var(--c-text-1)',
+              minHeight: compactComposer ? '38px' : '44px',
+              letterSpacing: compactComposer ? '-0.01em' : '-0.015em',
+            }}
             onFocus={() => {
               // On mobile, scroll textarea into view when keyboard opens
               setTimeout(() => {
@@ -781,20 +813,31 @@ export function ChatComposer(props: ChatComposerProps) {
             }}
             onInput={(e) => {
               const el = e.currentTarget;
-              el.style.height = '36px';
-              const maxH = window.innerWidth <= 768 ? 160 : 240;
+              el.style.height = compactComposer ? '34px' : '36px';
+              const maxH = compactComposer ? 144 : window.innerWidth <= 768 ? 160 : 240;
               el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
             }}
           />
 
+          {typingLabel && (
+            <div
+              className={`italic ${compactComposer ? 'px-1.5 pb-0.5 text-[10px]' : 'px-2 pb-1 text-[11px]'}`}
+              style={{ color: 'var(--c-text-4)' }}
+            >
+              {typingLabel}
+            </div>
+          )}
+
           {/* Toolbar row */}
-          <div className="flex items-center justify-between px-2 py-0.5">
-            <div className="flex items-center gap-0.5">
+          <div
+            className={`flex items-center justify-between gap-2 ${compactComposer ? 'flex-wrap px-1.5 py-0.5' : 'px-2 py-0.5'}`}
+          >
+            <div className={`flex items-center gap-0.5 ${compactComposer ? 'flex-wrap' : ''}`}>
               {/* Attach */}
               <button
                 tabIndex={-1}
                 onClick={() => fileRef.current?.click()}
-                className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                className={`rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}
                 style={{
                   color: 'var(--c-text-1)',
                   background: 'rgba(255,255,255,0.04)',
@@ -804,7 +847,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 aria-label="Attach file"
               >
                 <svg
-                  className="h-4 w-4 sm:h-4 sm:w-4"
+                  className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -815,11 +858,11 @@ export function ChatComposer(props: ChatComposerProps) {
               </button>
 
               {/* Emoji */}
-              <div className="relative" ref={emojiRef}>
+              <div className="relative" ref={emojiRef as React.RefObject<HTMLDivElement>}>
                 <button
                   tabIndex={-1}
                   onClick={() => setShowEmoji(!showEmoji)}
-                  className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                  className={`rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}
                   style={{
                     color: showEmoji ? 'var(--c-accent)' : 'var(--c-text-1)',
                     background: showEmoji ? 'rgba(99,141,255,0.10)' : 'rgba(255,255,255,0.04)',
@@ -829,7 +872,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   aria-label="Insert emoji"
                 >
                   <svg
-                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -888,7 +931,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     else onStartRecording();
                   }}
                   onContextMenu={(e) => e.preventDefault()}
-                  className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : ''}`}
+                  className={`relative rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'} ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : ''}`}
                   style={
                     isRecording
                       ? {}
@@ -903,7 +946,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 >
                   {voicePhase === 'transcribing' ? (
                     <svg
-                      className="h-4 w-4 animate-spin"
+                      className={`animate-spin ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -913,12 +956,16 @@ export function ChatComposer(props: ChatComposerProps) {
                       <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
                     </svg>
                   ) : isRecording ? (
-                    <svg className="h-4 w-4 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor">
+                    <svg
+                      className={compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
                       <rect x="6" y="6" width="12" height="12" rx="2" />
                     </svg>
                   ) : (
                     <svg
-                      className="h-4 w-4 sm:h-4 sm:w-4"
+                      className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -956,7 +1003,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       onStopRecording(true);
                     }
                   }}
-                  className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
+                  className={`rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'} ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
                   style={
                     voiceMode
                       ? {}
@@ -970,7 +1017,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   aria-label={voiceMode ? 'Deactivate hands-free' : 'Activate hands-free'}
                 >
                   <svg
-                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -992,7 +1039,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   onClick={() => {
                     if (onOpenClaudeCli) onOpenClaudeCli();
                   }}
-                  className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                  className={`rounded-lg flex items-center gap-1.5 transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 px-1.5 text-[10px]' : 'h-8 sm:h-8 px-2 text-xs'}`}
                   style={{
                     color: 'var(--c-text-1)',
                     background: 'rgba(255,255,255,0.04)',
@@ -1002,7 +1049,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   aria-label="Open Codex code mode in terminal tab"
                 >
                   <svg
-                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1011,7 +1058,11 @@ export function ChatComposer(props: ChatComposerProps) {
                     <polyline points="16 18 22 12 16 6" />
                     <polyline points="8 6 2 12 8 18" />
                   </svg>
-                  <span className="hidden sm:inline text-[10px] font-medium">Code</span>
+                  <span
+                    className={`${compactComposer ? 'hidden' : 'hidden sm:inline'} text-[10px] font-medium`}
+                  >
+                    Code
+                  </span>
                 </button>
               )}
 
@@ -1022,7 +1073,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   onClick={() => {
                     if (onOpenShreCli) onOpenShreCli();
                   }}
-                  className="h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1"
+                  className={`rounded-lg flex items-center gap-1.5 transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 px-1.5 text-[10px]' : 'h-8 sm:h-8 px-2 text-xs'}`}
                   style={{
                     color: 'var(--c-text-1)',
                     background: 'rgba(255,255,255,0.04)',
@@ -1032,7 +1083,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   aria-label="Open Shre CLI in terminal tab"
                 >
                   <svg
-                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1042,7 +1093,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     <line x1="12" y1="19" x2="20" y2="19" />
                   </svg>
                   <span
-                    className="hidden sm:inline text-[10px] font-medium"
+                    className={`${compactComposer ? 'hidden' : 'hidden sm:inline'} text-[10px] font-medium`}
                     style={{ color: '#22c55e' }}
                   >
                     Shre
@@ -1055,7 +1106,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   tabIndex={-1}
                   onClick={onToggleTerminal}
-                  className={`h-8 sm:h-8 rounded-lg flex items-center gap-1.5 px-2 text-xs transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${showTerminal ? 'bg-violet-500/20 text-violet-400' : ''}`}
+                  className={`rounded-lg flex items-center gap-1.5 transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-8 px-1.5 text-[10px]' : 'h-8 sm:h-8 px-2 text-xs'} ${showTerminal ? 'bg-violet-500/20 text-violet-400' : ''}`}
                   style={
                     showTerminal
                       ? {}
@@ -1069,7 +1120,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   aria-label={showTerminal ? 'Close terminal' : 'Open terminal'}
                 >
                   <svg
-                    className="h-4 w-4 sm:h-4 sm:w-4"
+                    className={`sm:h-4 sm:w-4 ${compactComposer ? 'h-3.5 w-3.5' : 'h-4 w-4'}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1086,7 +1137,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   tabIndex={-1}
                   onClick={onToggleTermViewMode}
-                  className="h-7 rounded-lg flex items-center px-1.5 text-[10px] transition-all hover:brightness-125"
+                  className={`rounded-lg flex items-center transition-all hover:brightness-125 ${compactComposer ? 'h-6 px-1 text-[9px]' : 'h-7 px-1.5 text-[10px]'}`}
                   style={{
                     color: termViewMode === 'tabs' ? 'var(--c-terminal-accent)' : 'var(--c-text-2)',
                   }}
@@ -1094,7 +1145,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 >
                   {termViewMode === 'split' ? (
                     <svg
-                      className="h-3.5 w-3.5"
+                      className={compactComposer ? 'h-3 w-3' : 'h-3.5 w-3.5'}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -1107,7 +1158,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     </svg>
                   ) : (
                     <svg
-                      className="h-3.5 w-3.5"
+                      className={compactComposer ? 'h-3 w-3' : 'h-3.5 w-3.5'}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -1125,7 +1176,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
             <div className="flex items-center gap-1">
               {/* Input token count */}
-              {input.trim() && (
+              {input.trim() && !compactComposer && (
                 <span className="text-[10px]" style={{ color: 'var(--c-text-5)' }}>
                   {formatTokenCount(estimateTokens(input))}
                 </span>
@@ -1135,11 +1186,15 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   tabIndex={-1}
                   onClick={onAbort}
-                  className="h-7 w-7 rounded-lg flex items-center justify-center transition-all bg-red-500/20 text-red-400 hover:bg-red-500/30 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                  className={`rounded-lg flex items-center justify-center transition-all bg-red-500/20 text-red-400 hover:bg-red-500/30 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-6 w-6' : 'h-7 w-7'}`}
                   title="Stop"
                   aria-label="Stop generating"
                 >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <svg
+                    className={compactComposer ? 'h-3 w-3' : 'h-3.5 w-3.5'}
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
                     <rect x="6" y="6" width="12" height="12" rx="2" />
                   </svg>
                 </button>
@@ -1157,7 +1212,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       if (input.trim() && !syncing && writeEnabled) onSend();
                     }
                   }}
-                  className="h-7 w-7 rounded-lg flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                  className={`rounded-lg flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${compactComposer ? 'h-6 w-6' : 'h-7 w-7'}`}
                   style={{
                     background:
                       input.trim() && !syncing
@@ -1186,7 +1241,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 >
                   {streaming ? (
                     <svg
-                      className="h-3.5 w-3.5"
+                      className={compactComposer ? 'h-3 w-3' : 'h-3.5 w-3.5'}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -1198,7 +1253,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     </svg>
                   ) : (
                     <svg
-                      className="h-3.5 w-3.5"
+                      className={compactComposer ? 'h-3 w-3' : 'h-3.5 w-3.5'}
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"

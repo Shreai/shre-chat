@@ -12,11 +12,17 @@ import { formatTime } from '../chat-utils';
 import StreamTimeoutIndicator from './StreamTimeoutIndicator';
 import { MessageProgressTrail, messageToStep } from './MessageProgressTrail';
 import type { ProgressStep } from './MessageProgressTrail';
-
+import type { ThreadSummary } from '../workspace-social';
 interface Agent {
   id: string;
   name: string;
   emoji: string;
+}
+
+interface LocalThreadStat {
+  rootIndex: number;
+  replyCount: number;
+  latestReplyPreview: string | null;
 }
 
 /** Convert a tool_exec meta message into a ToolExecStep for the ToolExecutionChip */
@@ -69,6 +75,7 @@ export interface MessageListProps {
   activeAgentId: string;
   userName: string;
   activeSessionId: string | null;
+  sharedThreads?: ThreadSummary[];
   statusLine?: string | null;
 
   // Search
@@ -169,6 +176,7 @@ export function MessageList(props: MessageListProps) {
     activeAgentId,
     userName,
     activeSessionId,
+    sharedThreads,
     chatSearchOpen,
     chatSearch,
     chatSearchResults,
@@ -237,27 +245,39 @@ export function MessageList(props: MessageListProps) {
     [filteredMessages, messages],
   );
 
-  const threadStats = useMemo(() => {
-    const stats = new Map<number, { count: number; latestIndex: number; latestPreview: string }>();
-    messages.forEach((msg, idx) => {
-      if (msg.replyTo == null) return;
-      const rootIndex = msg.replyTo;
-      if (rootIndex < 0 || rootIndex >= messages.length) return;
+  const threadStatsByRootIndex = useMemo(() => {
+    const threadMap = new Map<number, LocalThreadStat>();
+
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index];
+      if (message.replyTo == null) continue;
+      const rootIndex = message.replyTo;
+      if (rootIndex < 0 || rootIndex >= messages.length) continue;
       const root = messages[rootIndex];
-      const existing = stats.get(rootIndex);
-      const nextPreview =
-        msg.content.replace(/\n/g, ' ').slice(0, 120) || root.content.slice(0, 120);
-      stats.set(rootIndex, {
-        count: (existing?.count || 0) + 1,
-        latestIndex:
-          !existing || (msg.timestamp || 0) >= (messages[existing.latestIndex]?.timestamp || 0)
-            ? idx
-            : existing.latestIndex,
-        latestPreview: nextPreview,
+      if (!root) continue;
+
+      const existing = threadMap.get(rootIndex);
+      const replyPreview = message.content.replace(/\s+/g, ' ').trim().slice(0, 80);
+
+      threadMap.set(rootIndex, {
+        rootIndex,
+        replyCount: (existing?.replyCount || 0) + 1,
+        latestReplyPreview: replyPreview || existing?.latestReplyPreview || null,
       });
-    });
-    return stats;
-  }, [messages]);
+    }
+
+    for (const thread of sharedThreads ?? []) {
+      if (thread.sessionId !== activeSessionId) continue;
+      const existing = threadMap.get(thread.rootIndex);
+      threadMap.set(thread.rootIndex, {
+        rootIndex: thread.rootIndex,
+        replyCount: Math.max(existing?.replyCount || 0, thread.replyCount),
+        latestReplyPreview: thread.latestReplyPreview || existing?.latestReplyPreview || null,
+      });
+    }
+
+    return threadMap;
+  }, [activeSessionId, messages, sharedThreads]);
 
   const renderMessageProps = useCallback(
     (msg: ChatMessage, i: number) => ({
@@ -298,15 +318,21 @@ export function MessageList(props: MessageListProps) {
         !streaming && msg.role === 'assistant' && msg.content.startsWith('Error:')
           ? () => onRetry(i)
           : undefined,
-      threadReplyCount: threadStats.get(filteredToOriginalIndices[i] ?? i)?.count ?? 0,
+      threadReplyCount:
+        threadStatsByRootIndex.get(
+          filteredToOriginalIndices[i] >= 0 ? filteredToOriginalIndices[i] : i,
+        )?.replyCount ?? 0,
       threadLatestReplyPreview:
-        threadStats.get(filteredToOriginalIndices[i] ?? i)?.latestPreview ?? null,
-      onOpenThread:
-        threadStats.get(filteredToOriginalIndices[i] ?? i)?.latestIndex != null
-          ? () => {
-              virtualizer.scrollToIndex(i, { align: 'center' });
-            }
-          : undefined,
+        threadStatsByRootIndex.get(
+          filteredToOriginalIndices[i] >= 0 ? filteredToOriginalIndices[i] : i,
+        )?.latestReplyPreview ?? null,
+      onOpenThread: threadStatsByRootIndex.get(
+        filteredToOriginalIndices[i] >= 0 ? filteredToOriginalIndices[i] : i,
+      )
+        ? () => {
+            virtualizer.scrollToIndex(i, { align: 'center' });
+          }
+        : undefined,
       onContentExpand,
     }),
     [
@@ -339,7 +365,7 @@ export function MessageList(props: MessageListProps) {
       getRunForMessage,
       onRetry,
       onContentExpand,
-      threadStats,
+      threadStatsByRootIndex,
       virtualizer,
     ],
   );

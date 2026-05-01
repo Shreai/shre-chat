@@ -4,6 +4,7 @@ import {
   removeBookmark,
   updateBookmarkNote,
   getAgent,
+  refreshBookmarksFromServer,
   type Bookmark,
 } from '../store';
 
@@ -34,7 +35,7 @@ export function BookmarkPanel({ open, onClose, onNavigate }: BookmarkPanelProps)
 
   // Refresh bookmarks when panel opens, reset pagination
   const refresh = useCallback(() => {
-    setBookmarks(getBookmarks());
+    void refreshBookmarksFromServer().then((items) => setBookmarks(items));
     setLimit(PAGE_SIZE);
   }, []);
   useEffect(() => {

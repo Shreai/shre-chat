@@ -51,6 +51,7 @@ interface UseMessageListHandlersOptions {
 
 export function useMessageListHandlers({
   activeSessionId,
+  sessions,
   messages,
   filteredMessages,
   actions,
@@ -66,7 +67,7 @@ export function useMessageListHandlers({
   setLightboxSrc,
   sendFeedbackToRapidRMS,
   handleContentExpand,
-}: any) {
+}: UseMessageListHandlersOptions) {
   const onSelectTemplate = useCallback(
     (prompt: string) => {
       setInput(prompt);

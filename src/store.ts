@@ -506,7 +506,8 @@ const BOOKMARKS_KEY = 'shre-bookmarks';
 
 export function loadBookmarks(): Map<string, Bookmark> {
   try {
-    const raw = localStorage.getItem(BOOKMARKS_KEY);
+    const raw =
+      localStorage.getItem(scopedKey(BOOKMARKS_KEY)) || localStorage.getItem(BOOKMARKS_KEY);
     if (!raw) return new Map();
     const arr: [string, Bookmark][] = JSON.parse(raw);
     return new Map(arr);
@@ -517,9 +518,53 @@ export function loadBookmarks(): Map<string, Bookmark> {
 
 export function saveBookmarks(bookmarks: Map<string, Bookmark>): void {
   try {
-    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(Array.from(bookmarks.entries())));
+    localStorage.setItem(scopedKey(BOOKMARKS_KEY), JSON.stringify(Array.from(bookmarks.entries())));
   } catch {
     /* quota */
+  }
+}
+
+function emitBookmarkChange() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('shre-bookmarks-changed'));
+}
+
+async function syncBookmarkUpsert(bookmark: Bookmark): Promise<void> {
+  try {
+    await fetch(`/api/chat-bookmarks/${encodeURIComponent(bookmark.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(bookmark),
+    });
+  } catch {
+    /* offline */
+  }
+}
+
+async function syncBookmarkDelete(id: string): Promise<void> {
+  try {
+    await fetch(`/api/chat-bookmarks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+  } catch {
+    /* offline */
+  }
+}
+
+export async function refreshBookmarksFromServer(): Promise<Bookmark[]> {
+  try {
+    const res = await fetch('/api/chat-bookmarks', { credentials: 'include' });
+    if (!res.ok) return getBookmarks();
+    const data = (await res.json()) as { bookmarks?: Bookmark[] };
+    const bookmarks = Array.isArray(data.bookmarks) ? data.bookmarks : [];
+    const map = new Map(bookmarks.map((bookmark) => [bookmark.id, bookmark]));
+    saveBookmarks(map);
+    emitBookmarkChange();
+    return bookmarks;
+  } catch {
+    return getBookmarks();
   }
 }
 
@@ -548,6 +593,8 @@ export function addBookmark(
   const bookmarks = loadBookmarks();
   bookmarks.set(id, bookmark);
   saveBookmarks(bookmarks);
+  void syncBookmarkUpsert(bookmark);
+  emitBookmarkChange();
   return bookmark;
 }
 
@@ -555,6 +602,8 @@ export function removeBookmark(id: string): void {
   const bookmarks = loadBookmarks();
   bookmarks.delete(id);
   saveBookmarks(bookmarks);
+  void syncBookmarkDelete(id);
+  emitBookmarkChange();
 }
 
 export function updateBookmarkNote(id: string, note: string): void {
@@ -564,6 +613,8 @@ export function updateBookmarkNote(id: string, note: string): void {
   bm.note = note || undefined;
   bookmarks.set(id, bm);
   saveBookmarks(bookmarks);
+  void syncBookmarkUpsert(bm);
+  emitBookmarkChange();
 }
 
 export function getBookmarks(): Bookmark[] {

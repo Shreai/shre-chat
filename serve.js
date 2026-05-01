@@ -32,6 +32,12 @@ import { registerVoiceRoutes } from "./routes/voice.js";
 import { registerIntentRouter } from "./routes/intent-router.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
+import { registerBookmarkRoutes } from "./routes/bookmarks.js";
+import { registerChannelMembershipRoutes } from "./routes/channel-memberships.js";
+import { registerCustomChannelRoutes } from "./routes/custom-channels.js";
+import { registerThreadRoutes } from "./routes/threads.js";
+import { registerPresenceRoutes } from "./routes/presence.js";
+import { registerTypingRoutes } from "./routes/typing.js";
 import { registerSuggestionsRoutes } from "./routes/suggestions.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
@@ -482,6 +488,55 @@ try { chatDb.exec(`ALTER TABLE voice_actions ADD COLUMN user_id TEXT DEFAULT 'sy
 try { chatDb.exec(`ALTER TABLE voice_actions ADD COLUMN tenant_id TEXT DEFAULT 'default'`); } catch {}
 try { chatDb.exec(`ALTER TABLE chat_actions ADD COLUMN user_id TEXT DEFAULT 'system'`); } catch {}
 try { chatDb.exec(`ALTER TABLE chat_actions ADD COLUMN tenant_id TEXT DEFAULT 'default'`); } catch {}
+try { chatDb.exec(`
+  CREATE TABLE IF NOT EXISTS chat_presence (
+    user_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'away',
+    display_name TEXT,
+    agent_id TEXT,
+    session_id TEXT,
+    client_id TEXT,
+    last_seen_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, tenant_id)
+  );
+`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN client_id TEXT`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN display_name TEXT`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN agent_id TEXT`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN session_id TEXT`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN state TEXT NOT NULL DEFAULT 'away'`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_presence ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0`); } catch {}
+chatDb.exec(`
+  CREATE INDEX IF NOT EXISTS idx_chat_presence_tenant ON chat_presence(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_chat_presence_seen ON chat_presence(last_seen_at);
+`);
+
+try {
+  chatDb.exec(`
+    CREATE TABLE IF NOT EXISTS chat_channel_members (
+      tenant_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      member_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      member_kind TEXT NOT NULL DEFAULT 'agent',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (tenant_id, channel_id, member_id)
+    );
+  `);
+} catch {}
+try { chatDb.exec(`ALTER TABLE chat_channel_members ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_channel_members ADD COLUMN member_kind TEXT NOT NULL DEFAULT 'agent'`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_channel_members ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0`); } catch {}
+try { chatDb.exec(`ALTER TABLE chat_channel_members ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0`); } catch {}
+chatDb.exec(`
+  CREATE INDEX IF NOT EXISTS idx_chat_channel_members_tenant ON chat_channel_members(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_chat_channel_members_channel ON chat_channel_members(channel_id);
+  CREATE INDEX IF NOT EXISTS idx_chat_channel_members_updated ON chat_channel_members(updated_at);
+`);
 
 // ── Chat Audit Log — parity with voice_audit_log for text conversations ──
 chatDb.exec(`
@@ -701,6 +756,11 @@ function upsertSession(s, userId = 'system', tenantId = 'default') {
     s.userId || s.user_id || userId,
     s.tenantId || s.tenant_id || tenantId
   );
+  broadcastWorkspaceThreads?.({
+    tenantId: s.tenantId || s.tenant_id || tenantId,
+    sessionId: s.id,
+    userId: s.userId || s.user_id || userId,
+  });
 }
 
 
@@ -736,6 +796,7 @@ function appendMessageToCanonicalSession(sessionId, message, userId, tenantId) {
   const messages = parseSessionMessages(row.messages);
   messages.push(message);
   stmtUpdateSessionMessages.run(JSON.stringify(messages), Date.now(), sessionId, userId, tenantId);
+  broadcastWorkspaceThreads?.({ tenantId, sessionId, userId });
   return true;
 }
 
@@ -1764,6 +1825,37 @@ const handleVoice = registerVoiceRoutes({
 });
 const handleTasks = registerTaskRoutes({ log });
 const handleSessions = registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stmtDelete, stmtSoftDelete, stmtRestoreDeleted, stmtRemoveFromTrash, stmtListDeleted, stmtPurgeTrash, upsertSession, dbSessionToClient, checkAuth });
+const handleBookmarks = registerBookmarkRoutes({ log, chatDb, checkAuth });
+let broadcastWorkspaceChannelMembership = null;
+const handleChannelMemberships = registerChannelMembershipRoutes({
+  log,
+  chatDb,
+  checkAuth,
+  onMembershipChange: (payload) => broadcastWorkspaceChannelMembership?.(payload),
+});
+let broadcastWorkspaceCustomChannels = null;
+const handleCustomChannels = registerCustomChannelRoutes({
+  log,
+  chatDb,
+  checkAuth,
+  onCustomChannelsChange: (payload) => broadcastWorkspaceCustomChannels?.(payload),
+});
+let broadcastWorkspaceThreads = null;
+const handleThreads = registerThreadRoutes({ log, chatDb, checkAuth });
+let broadcastWorkspacePresence = null;
+const handlePresence = registerPresenceRoutes({
+  log,
+  chatDb,
+  checkAuth,
+  onPresenceChange: (payload) => broadcastWorkspacePresence?.(payload),
+});
+let broadcastWorkspaceTyping = null;
+const handleTyping = registerTypingRoutes({
+  log,
+  chatDb,
+  checkAuth,
+  onTypingChange: (payload) => broadcastWorkspaceTyping?.(payload),
+});
 const handleSuggestions = registerSuggestionsRoutes({ log, loadReminders, getUserContext, getBriefingCache: () => _briefingCache });
 const handleHealth = registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, getActiveCLICount: () => activeCLICount, getActivePty: () => activePty });
 const handleReports = registerReportRoutes({ log, chatDb });
@@ -2176,6 +2268,18 @@ async function requestHandler(req, res) {
   if (handleSuggestions(req, res, url, _routeUtils)) return;
   // Session persistence routes (SQLite)
   if (await handleSessions(req, res, url, _routeUtils)) return;
+  // Bookmark / pinned-item routes
+  if (await handleBookmarks(req, res, url, _routeUtils)) return;
+  // Shared custom channel routes
+  if (await handleCustomChannels(req, res, url, _routeUtils)) return;
+  // Channel membership routes
+  if (await handleChannelMemberships(req, res, url, _routeUtils)) return;
+  // Thread summary routes
+  if (await handleThreads(req, res, url, _routeUtils)) return;
+  // Live presence routes
+  if (await handlePresence(req, res, url, _routeUtils)) return;
+  // Typing indicator routes
+  if (await handleTyping(req, res, url, _routeUtils)) return;
 
   // ── GET /api/chat-sessions/:id/messages — retrieve persisted messages ──
   const msgMatch = url.pathname.match(/^\/api\/chat-sessions\/([^/]+)\/messages$/);
@@ -7985,6 +8089,41 @@ function broadcastNotification(type, data) {
     log.warn("Notification delivery failed", { type, error: String(err) });
   });
 }
+
+broadcastWorkspacePresence = function broadcastWorkspacePresenceUpdate(payload) {
+  const msg = JSON.stringify({ type: "presence.updated", ...payload, ts: Date.now() });
+  for (const ws of notifyClients) {
+    try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
+  }
+};
+
+broadcastWorkspaceChannelMembership = function broadcastWorkspaceChannelMembershipUpdate(payload) {
+  const msg = JSON.stringify({ type: "workspace.channel.membership.updated", ...payload, ts: Date.now() });
+  for (const ws of notifyClients) {
+    try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
+  }
+};
+
+broadcastWorkspaceCustomChannels = function broadcastWorkspaceCustomChannelsUpdate(payload) {
+  const msg = JSON.stringify({ type: "workspace.custom_channels.updated", ...payload, ts: Date.now() });
+  for (const ws of notifyClients) {
+    try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
+  }
+};
+
+broadcastWorkspaceTyping = function broadcastWorkspaceTypingUpdate(payload) {
+  const msg = JSON.stringify({ type: "workspace.typing.updated", ...payload, ts: Date.now() });
+  for (const ws of notifyClients) {
+    try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
+  }
+};
+
+broadcastWorkspaceThreads = function broadcastWorkspaceThreadsUpdate(payload) {
+  const msg = JSON.stringify({ type: "workspace.threads.updated", ...payload, ts: Date.now() });
+  for (const ws of notifyClients) {
+    try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
+  }
+};
 
 // ── Panel push — notify connected clients when task/agent/service events fire ──
 // Debounced: at most one push per type per 5 seconds

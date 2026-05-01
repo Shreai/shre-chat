@@ -3,6 +3,7 @@ import type { GatewayMode } from '../preferences-store';
 import { ModelPicker } from './ModelPicker';
 import type { ConversationModeId } from '../preferences-store';
 import type { ConversationRoster } from '../workspace-roster';
+import { useViewportTier } from '../hooks/useViewportTier';
 
 interface ViewTabsProps {
   activeView: string;
@@ -71,6 +72,13 @@ export function ViewTabs({
   conversationRoster,
 }: ViewTabsProps) {
   const modelPickerRef = useRef<HTMLDivElement>(null);
+  const viewportTier = useViewportTier();
+  const compactHeader =
+    viewportTier === 'trifold-phone' ||
+    viewportTier === 'bifold-phone' ||
+    viewportTier === 'phone' ||
+    viewportTier === 'mini-tablet';
+  const ultraCompact = viewportTier === 'trifold-phone' || viewportTier === 'bifold-phone';
   const modelPickerVisible =
     !!setShowModelPicker &&
     !!onSelectModel &&
@@ -81,23 +89,29 @@ export function ViewTabs({
 
   return (
     <div
-      className="flex items-center justify-between shrink-0 gap-3 border-b border-[var(--c-border-2)] px-4 py-3"
+      className={`flex shrink-0 items-center justify-between gap-3 border-b border-[var(--c-border-2)] ${compactHeader ? 'px-3 py-2' : 'px-4 py-3'} ${compactHeader ? 'flex-col items-stretch' : ''}`}
       style={{
         background:
           'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)',
       }}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex min-w-0 flex-col">
+      <div className={`flex min-w-0 items-center gap-3 ${compactHeader ? 'w-full' : ''}`}>
+        <div className={`flex min-w-0 flex-col ${compactHeader ? 'flex-1' : ''}`}>
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-2xl border border-[var(--c-border-1)] bg-[rgba(255,255,255,0.05)] text-[11px] font-semibold tracking-[0.18em] text-[var(--c-text-1)]">
+            <div
+              className={`flex ${compactHeader ? 'h-7 w-7' : 'h-8 w-8'} items-center justify-center rounded-2xl border border-[var(--c-border-1)] bg-[rgba(255,255,255,0.05)] text-[11px] font-semibold tracking-[0.18em] text-[var(--c-text-1)]`}
+            >
               AI
             </div>
             <div className="min-w-0">
-              <div className="truncate text-[14px] font-semibold tracking-[-0.03em] text-[var(--c-text-1)]">
+              <div
+                className={`truncate font-semibold tracking-[-0.03em] text-[var(--c-text-1)] ${compactHeader ? 'text-[13px]' : 'text-[14px]'}`}
+              >
                 {conversationRoster?.title || agentName || 'Shre AI'}
               </div>
-              <div className="truncate text-[11px] text-[var(--c-text-3)]">
+              <div
+                className={`truncate text-[11px] text-[var(--c-text-3)] ${ultraCompact ? 'hidden' : ''}`}
+              >
                 {conversationRoster?.subtitle ||
                   (conversationMode === 'code'
                     ? 'Code mode · autonomous builds and task execution'
@@ -108,14 +122,18 @@ export function ViewTabs({
             </div>
           </div>
           {conversationRoster && conversationRoster.members.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {conversationRoster.members.slice(0, 6).map((member) => (
+            <div
+              className={`mt-2 flex flex-wrap items-center gap-1.5 ${compactHeader ? 'gap-1' : ''}`}
+            >
+              {conversationRoster.members.slice(0, compactHeader ? 3 : 6).map((member) => (
                 <div
                   key={member.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] px-2 py-1"
+                  className={`inline-flex items-center gap-1 rounded-full border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] ${compactHeader ? 'px-1.5 py-0.5' : 'px-2 py-1'}`}
                 >
                   <span className="text-[11px]">{member.emoji}</span>
-                  <span className="max-w-[100px] truncate text-[10px] font-medium text-[var(--c-text-2)]">
+                  <span
+                    className={`max-w-[100px] truncate font-medium text-[var(--c-text-2)] ${compactHeader ? 'text-[9px]' : 'text-[10px]'}`}
+                  >
                     {member.name}
                   </span>
                   <span
@@ -132,17 +150,21 @@ export function ViewTabs({
                 </div>
               ))}
               {conversationRoster.members.length > 6 && (
-                <span className="text-[10px] text-[var(--c-text-4)]">
+                <span
+                  className={`text-[10px] text-[var(--c-text-4)] ${compactHeader ? 'hidden' : ''}`}
+                >
                   +{conversationRoster.members.length - 6} more
                 </span>
               )}
             </div>
           )}
-          <div className="mt-2 flex items-center gap-1 rounded-full border border-[var(--c-border-1)] bg-[rgba(255,255,255,0.04)] p-1">
+          <div
+            className={`mt-2 flex items-center gap-1 rounded-full border border-[var(--c-border-1)] bg-[rgba(255,255,255,0.04)] p-1 ${compactHeader ? 'w-full justify-between' : ''}`}
+          >
             <button
               type="button"
               onClick={() => onSetConversationMode?.('assistant', null)}
-              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${compactHeader ? 'flex-1 px-2 py-1 text-[10px]' : ''} ${
                 conversationMode === 'assistant'
                   ? 'bg-white text-black'
                   : 'text-[var(--c-text-3)] hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]'
@@ -153,7 +175,7 @@ export function ViewTabs({
             <button
               type="button"
               onClick={() => onSetConversationMode?.('code', null)}
-              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${compactHeader ? 'flex-1 px-2 py-1 text-[10px]' : ''} ${
                 conversationMode === 'code'
                   ? 'bg-[var(--c-accent)] text-white'
                   : 'text-[var(--c-text-3)] hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]'
@@ -164,7 +186,7 @@ export function ViewTabs({
             <button
               type="button"
               onClick={() => onSetConversationMode?.('apps', activeAppId)}
-              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${compactHeader ? 'flex-1 px-2 py-1 text-[10px]' : ''} ${
                 conversationMode === 'apps'
                   ? 'bg-[rgba(74,222,128,0.16)] text-[var(--c-success)]'
                   : 'text-[var(--c-text-3)] hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]'
@@ -257,12 +279,14 @@ export function ViewTabs({
         </nav>
       </div>
 
-      <div className="ml-auto flex items-center gap-1 shrink-0">
+      <div
+        className={`ml-auto flex shrink-0 items-center gap-1 ${compactHeader ? 'w-full justify-between' : ''}`}
+      >
         {onOpenEscalation && (
           <button
             type="button"
             onClick={onOpenEscalation}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-[rgba(251,191,36,0.12)]"
+            className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-[rgba(251,191,36,0.12)] ${compactHeader ? 'px-2 py-1 text-[10px]' : ''}`}
             style={{ color: '#fbbf24' }}
             title="Open escalation drawer"
           >
@@ -303,7 +327,7 @@ export function ViewTabs({
             setTermViewMode?.('split');
             if (activeView === 'preview') setActiveView('chat');
           }}
-          className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] transition-colors hover:bg-[var(--c-bg-hover)]"
+          className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] transition-colors hover:bg-[var(--c-bg-hover)] ${compactHeader ? 'px-2 py-1 text-[9px]' : ''}`}
           style={{ color: 'var(--c-text-4)' }}
           title="Switch to split view"
         >

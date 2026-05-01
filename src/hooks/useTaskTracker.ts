@@ -31,6 +31,7 @@ export interface TrackedTask {
   depends_on?: string[];
   task_memory?: string;
   tools_needed?: string[];
+  dispatch_status?: string;
   message_index?: number;
   created_at: number;
   updated_at?: number;
@@ -79,6 +80,7 @@ interface RawTaskRecord {
   depends_on?: string[];
   task_memory?: string;
   tools_needed?: string[];
+  dispatch_status?: string;
   metadata?: { message_index?: number; trace_id?: string };
   created_at?: number;
   updated_at?: number;
@@ -184,6 +186,7 @@ export function useTaskTracker({ sessionId, pollInterval }: UseTaskTrackerOption
         depends_on: t.depends_on,
         task_memory: t.task_memory,
         tools_needed: t.tools_needed,
+        dispatch_status: t.dispatch_status,
         message_index: t.metadata?.message_index,
         created_at: t.created_at,
         updated_at: t.updated_at,

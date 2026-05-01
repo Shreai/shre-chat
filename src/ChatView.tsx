@@ -37,6 +37,9 @@ import { useAppList } from './hooks/useAppList';
 import { useToolList } from './hooks/useToolList';
 import { useEscalationListener } from './hooks/useEscalationListener';
 import { useWorkspacePresence } from './hooks/useWorkspacePresence';
+import { useWorkspaceChannelMembership } from './hooks/useWorkspaceChannelMembership';
+import { useWorkspaceTyping } from './hooks/useWorkspaceTyping';
+import { useWorkspaceThreads } from './hooks/useWorkspaceThreads';
 import { buildConversationRoster } from './workspace-roster';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { MessageQueue } from './components/MessageQueue';
@@ -312,8 +315,29 @@ export function ChatView() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages ?? [];
   const userName = state.userProfile?.name?.split(' ')[0] || 'You';
-  const userPresence = useWorkspacePresence({
+  const { presence: userPresence, workspacePresenceByUserId } = useWorkspacePresence({
     userId: state.userProfile?.id || state.userProfile?.name || 'anonymous',
+    displayName: userName,
+    agentId: currentAgent.id,
+    sessionId: activeSessionId,
+  });
+  const activeChannelId = useMemo(
+    () =>
+      activeSession?.tags?.find((tag) => tag.startsWith('channel:'))?.slice('channel:'.length) ||
+      null,
+    [activeSession?.tags],
+  );
+  const { workspaceChannelMembersByChannelId } = useWorkspaceChannelMembership({
+    userId: state.userProfile?.id || state.userProfile?.name || 'anonymous',
+    displayName: userName,
+    activeChannelId,
+  });
+  const { threads: sharedThreads } = useWorkspaceThreads({ sessions });
+  const { typingLabel } = useWorkspaceTyping({
+    sessionId: activeSessionId,
+    userId: state.userProfile?.id || state.userProfile?.name || 'anonymous',
+    displayName: userName,
+    draftText: input,
   });
 
   const {
@@ -393,8 +417,11 @@ export function ChatView() {
         agents: AGENTS,
         currentAgentId: activeAgentId,
         currentAgentName: currentAgent.name,
+        currentUserId: state.userProfile?.id || state.userProfile?.name || 'anonymous',
         userName,
         userPresence,
+        workspacePresenceByUserId,
+        workspaceChannelMembersByChannelId,
         activeAppLabel,
       }),
     [
@@ -405,6 +432,8 @@ export function ChatView() {
       activeAppLabel,
       userName,
       userPresence,
+      workspacePresenceByUserId,
+      workspaceChannelMembersByChannelId,
     ],
   );
   const escalationNoteSeed = useMemo(() => {
@@ -852,6 +881,8 @@ export function ChatView() {
     activeSessionId,
     activeAgentId,
     sessions,
+    messages,
+    filteredMessages,
     actions,
     setEditingMsgIndex,
     setEditingMsgText,
@@ -859,6 +890,15 @@ export function ChatView() {
     inputRef,
     setSelectedMsgIndex,
     setLightboxSrc,
+    setBranchToast,
+    setShowTerminal,
+    setPendingApproval,
+    terminalRef,
+    pendingEditSendRef,
+    sendFeedbackToRapidRMS,
+    handleContentExpand: (content: string, type: string, title?: string) => {
+      setPreviewContent({ content, type, title });
+    },
     virtualizer,
   });
 
@@ -1026,6 +1066,7 @@ export function ChatView() {
                 activeAgentId={activeAgentId}
                 userName={userName}
                 activeSessionId={activeSessionId}
+                sharedThreads={sharedThreads}
                 chatSearchOpen={chatSearchOpen}
                 chatSearch={chatSearch}
                 chatSearchResults={chatSearchResults}
@@ -1188,6 +1229,7 @@ export function ChatView() {
                   localStorage.setItem(scopedStorageKey('shre-claude-cli-mode'), String(on));
                   if (on) {
                     setShowTerminal(true);
+                    setTermViewMode('tabs');
                     if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
                   } else if (cliMode) {
                     setCliMode(false);
@@ -1196,6 +1238,7 @@ export function ChatView() {
                 }}
                 onOpenClaudeCli={() => {
                   setShowTerminal(true);
+                  setTermViewMode('tabs');
                   if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
                   setTimeout(
                     () => terminalRef.current?.openTab({ title: 'Codex', cmd: 'codex' }),
@@ -1204,6 +1247,7 @@ export function ChatView() {
                 }}
                 onOpenShreCli={() => {
                   setShowTerminal(true);
+                  setTermViewMode('tabs');
                   if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
                   setTimeout(
                     () => terminalRef.current?.openTab({ title: 'Shre CLI', cmd: 'shre' }),
@@ -1254,6 +1298,7 @@ export function ChatView() {
                 onToggleTerminal={() => {
                   if (!showTerminal) {
                     setShowTerminal(true);
+                    setTermViewMode('tabs');
                     if (isMobileLayout || termViewMode === 'tabs') setActiveView('terminal');
                   } else {
                     setShowTerminal(false);
@@ -1314,6 +1359,7 @@ export function ChatView() {
                   setSuggestions([]);
                   setInput(s);
                 }}
+                typingLabel={typingLabel}
                 voiceAnnouncement={voiceAnnouncement}
               />
             </div>

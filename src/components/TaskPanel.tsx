@@ -37,6 +37,15 @@ const STATUS_LABELS: Record<string, string> = {
   failed: 'Failed',
 };
 
+const DISPATCH_COLORS: Record<string, string> = {
+  pending: '#6b7280',
+  dispatched: '#22c55e',
+  queued: '#f59e0b',
+  skipped: '#9ca3af',
+  failed: '#ef4444',
+  manual: '#38bdf8',
+};
+
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   if (diff < 60_000) return 'just now';
@@ -65,10 +74,12 @@ export function TaskPanel({
   const [subtasks, setSubtasks] = useState<TrackedTask[]>([]);
   const [traceSteps, setTraceSteps] = useState<TraceStep[]>([]);
   const [executionPlan, setExecutionPlan] = useState<TraceExecutionStep[]>([]);
+  const [activity, setActivity] = useState<TaskActivityEntry[]>([]);
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [loadingTrace, setLoadingTrace] = useState(false);
+  const [loadingActivity, setLoadingActivity] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'detail' | 'trace' | 'subtasks'>('detail');
+  const [activeTab, setActiveTab] = useState<'detail' | 'subtasks' | 'trace' | 'history'>('detail');
   const workflowPacket = useMemo(() => parseWorkflowPacket(task.task_memory), [task.task_memory]);
 
   // Load subtasks
@@ -92,6 +103,32 @@ export function TaskPanel({
       });
     }
   }, [task.trace_id, fetchTrace]);
+
+  // Load task history
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingActivity(true);
+    fetch(`/api/tasks/${task.id}/activity?limit=20`, {
+      signal: AbortSignal.timeout(5000),
+    })
+      .then(async (res) => {
+        if (!res.ok) return [];
+        return (await res.json()) as unknown;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setActivity(parseActivityEntries(data));
+      })
+      .catch(() => {
+        if (!cancelled) setActivity([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingActivity(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [task.id]);
 
   const handleUpdate = useCallback(
     async (taskId: string, patch: Record<string, unknown>) => {
@@ -171,6 +208,17 @@ export function TaskPanel({
             {STATUS_LABELS[task.status] || task.status}
           </span>
           {task.agent && <span>Agent: {task.agent}</span>}
+          {task.dispatch_status && (
+            <span
+              className="px-2 py-0.5 rounded-full text-[11px] font-medium"
+              style={{
+                background: `${DISPATCH_COLORS[task.dispatch_status] || '#6b7280'}20`,
+                color: DISPATCH_COLORS[task.dispatch_status] || '#6b7280',
+              }}
+            >
+              Fleet: {task.dispatch_status}
+            </span>
+          )}
           {task.priority && <span style={{ textTransform: 'capitalize' }}>{task.priority}</span>}
           <span>{relativeTime(task.updated_at || task.created_at)}</span>
         </div>
@@ -201,7 +249,7 @@ export function TaskPanel({
 
       {/* Tabs */}
       <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--c-border-2)' }}>
-        {(['detail', 'subtasks', 'trace'] as const).map((tab) => (
+        {(['detail', 'subtasks', 'trace', 'history'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -216,6 +264,7 @@ export function TaskPanel({
             {tab === 'detail' && 'Detail'}
             {tab === 'subtasks' && `Subtasks${subtasks.length > 0 ? ` (${subtasks.length})` : ''}`}
             {tab === 'trace' && 'Trace Route'}
+            {tab === 'history' && `History${activity.length > 0 ? ` (${activity.length})` : ''}`}
           </button>
         ))}
       </div>
@@ -240,6 +289,9 @@ export function TaskPanel({
             loading={loadingTrace}
             traceId={task.trace_id}
           />
+        )}
+        {activeTab === 'history' && (
+          <HistoryTab entries={activity} loading={loadingActivity} currentStatus={task.status} />
         )}
       </div>
 
@@ -325,9 +377,15 @@ function DetailTab({
   updating: string | null;
 }) {
   const workflowPacket = parseWorkflowPacket(task.task_memory);
+  const dispatchState =
+    task.session_id || ['started', 'in_progress'].includes(task.status)
+      ? 'dispatched'
+      : 'published';
   return (
     <div className="space-y-3">
-      {workflowPacket && <WorkflowSummaryCard packet={workflowPacket} />}
+      {workflowPacket && (
+        <WorkflowSummaryCard packet={workflowPacket} dispatchState={dispatchState} />
+      )}
       {task.description && (
         <p className="text-[12px] leading-relaxed" style={{ color: 'var(--c-text-2)' }}>
           {task.description}
@@ -374,6 +432,17 @@ type WorkflowPacket = {
   securityMode?: string;
 };
 
+type TaskActivityEntry = {
+  id?: string;
+  event_type?: string;
+  message?: string;
+  agent?: string | null;
+  source?: string | null;
+  created_at?: number;
+  project_id?: string | null;
+  task_id?: string | null;
+};
+
 function parseWorkflowPacket(raw?: string): WorkflowPacket | null {
   if (!raw) return null;
   try {
@@ -388,6 +457,13 @@ function parseWorkflowPacket(raw?: string): WorkflowPacket | null {
   }
 }
 
+function parseActivityEntries(data: unknown): TaskActivityEntry[] {
+  if (!Array.isArray(data)) return [];
+  return data
+    .filter((entry): entry is TaskActivityEntry => !!entry && typeof entry === 'object')
+    .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+}
+
 function buildCityWorkflowParams(packet: WorkflowPacket): Record<string, string> {
   const params: Record<string, string> = {};
   const focusAppId = packet.sourceAppId ?? packet.inferred?.sourceAppId ?? undefined;
@@ -399,7 +475,13 @@ function buildCityWorkflowParams(packet: WorkflowPacket): Record<string, string>
   return params;
 }
 
-function WorkflowSummaryCard({ packet }: { packet: WorkflowPacket }) {
+function WorkflowSummaryCard({
+  packet,
+  dispatchState,
+}: {
+  packet: WorkflowPacket;
+  dispatchState: 'published' | 'dispatched';
+}) {
   const nodes = packet.nodes?.length ?? 0;
   const pipes = packet.pipes?.length ?? 0;
   const scopes = [
@@ -422,8 +504,14 @@ function WorkflowSummaryCard({ packet }: { packet: WorkflowPacket }) {
             {packet.workflowId || 'Unnamed workflow'}
           </div>
         </div>
-        <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
-          {packet.securityMode ?? 'brokered'}
+        <div className="flex items-center gap-1.5 text-[10px]">
+          <span
+            className="px-1.5 py-0.5 rounded-full"
+            style={{ background: 'rgba(34,197,94,0.14)', color: '#22c55e' }}
+          >
+            {dispatchState === 'dispatched' ? 'Published + dispatched' : 'Published'}
+          </span>
+          <span style={{ color: 'var(--c-text-4)' }}>{packet.securityMode ?? 'brokered'}</span>
         </div>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
@@ -442,6 +530,69 @@ function WorkflowSummaryCard({ packet }: { packet: WorkflowPacket }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function HistoryTab({
+  entries,
+  loading,
+  currentStatus,
+}: {
+  entries: TaskActivityEntry[];
+  loading: boolean;
+  currentStatus: string;
+}) {
+  if (loading) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        Loading history...
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="text-[12px] py-6 text-center" style={{ color: 'var(--c-text-4)' }}>
+        No activity yet. Current status: {currentStatus}.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px]" style={{ color: 'var(--c-text-4)' }}>
+        Lifecycle events
+      </div>
+      {entries.map((entry, index) => (
+        <div
+          key={entry.id || `${entry.event_type || 'event'}-${index}`}
+          className="rounded-lg border px-3 py-2"
+          style={{ borderColor: 'var(--c-border-2)' }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium" style={{ color: 'var(--c-text-1)' }}>
+              {entry.event_type || 'update'}
+            </span>
+            <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+              {entry.created_at ? new Date(entry.created_at).toLocaleString() : 'unknown'}
+            </span>
+          </div>
+          <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--c-text-3)' }}>
+            {entry.message || 'No message'}
+          </div>
+          {(entry.agent || entry.source) && (
+            <div className="mt-1 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+              {[
+                entry.agent ? `agent: ${entry.agent}` : null,
+                entry.source ? `source: ${entry.source}` : null,
+              ]
+                .filter(Boolean)
+                .join(' • ')}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

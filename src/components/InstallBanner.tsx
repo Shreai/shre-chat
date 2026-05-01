@@ -4,15 +4,41 @@
  * Dismissible per session.
  */
 
+import { useEffect, useRef } from 'react';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 export default function InstallBanner() {
   const { canInstall, showIOSGuide, install, dismiss } = useInstallPrompt();
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const visible = canInstall || showIOSGuide;
 
-  if (!canInstall && !showIOSGuide) return null;
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+
+    if (!visible) {
+      root.style.removeProperty('--install-banner-offset');
+      return;
+    }
+
+    const syncOffset = () => {
+      const height = Math.ceil(bannerRef.current?.getBoundingClientRect().height || 0);
+      root.style.setProperty('--install-banner-offset', `${height}px`);
+    };
+
+    syncOffset();
+    window.addEventListener('resize', syncOffset);
+    return () => {
+      window.removeEventListener('resize', syncOffset);
+      root.style.removeProperty('--install-banner-offset');
+    };
+  }, [visible]);
+
+  if (!visible) return null;
 
   return (
     <div
+      ref={bannerRef}
       style={{
         position: 'fixed',
         bottom: 0,

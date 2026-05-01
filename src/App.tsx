@@ -70,6 +70,7 @@ import {
 } from './AppEffects';
 import { isLocalDevHost as isLocalDevHostFlag, isDevSafeMode } from './env';
 import { getAppModeForHost, scopedStorageKey } from './workspace-context';
+import { useViewportTier } from './hooks/useViewportTier';
 
 // Lazy-load non-default views for code splitting
 const ActivityView = lazy(() =>
@@ -781,6 +782,27 @@ function MainApp({
 
   useFoldDetection(actions);
 
+  const viewportTier = useViewportTier();
+  const sidebarAutoClosedRef = useRef(false);
+  useEffect(() => {
+    const compactViewport =
+      viewportTier === 'trifold-phone' ||
+      viewportTier === 'bifold-phone' ||
+      viewportTier === 'phone' ||
+      viewportTier === 'mini-tablet';
+
+    if (compactViewport) {
+      sidebarAutoClosedRef.current = true;
+      setSidebarOpen(false);
+      return;
+    }
+
+    if (sidebarAutoClosedRef.current) {
+      sidebarAutoClosedRef.current = false;
+      setSidebarOpen(true);
+    }
+  }, [viewportTier]);
+
   // ── Memoized context ──
   const state: AppState = useMemo(
     () => ({
@@ -960,7 +982,7 @@ function MainApp({
             onSwitch={onWorkspaceSwitch}
           />
         )}
-        <div className="px-3 pt-2">
+        <div className="px-3 pt-2 flex justify-end">
           <ShreOSDock workspaceName={activeWorkspace?.name} userName={authUser.name} />
         </div>
         {rmsAnomalies.length > 0 && (

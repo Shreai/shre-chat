@@ -98,25 +98,23 @@ export function buildPinnedSummaries(
   opts: { limit?: number } = {},
 ): PinnedSummary[] {
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
-  return bookmarks
-    .map((bookmark) => {
-      const session = sessionById.get(bookmark.sessionId);
-      if (!session) return null;
-      const message = session.messages[bookmark.messageIndex];
-      if (!message) return null;
-      return {
-        id: bookmark.id,
-        sessionId: bookmark.sessionId,
-        sessionTitle: session.title,
-        messageIndex: bookmark.messageIndex,
-        preview: bookmark.note?.trim()
-          ? bookmark.note.trim()
-          : summarizeContent(message.content, bookmark.preview || 'Pinned message'),
-        note: bookmark.note?.trim() || undefined,
-        updatedAt: bookmark.createdAt,
-      } satisfies PinnedSummary;
-    })
-    .filter((item): item is PinnedSummary => Boolean(item))
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, opts.limit ?? 8);
+  const summaries: PinnedSummary[] = [];
+  for (const bookmark of bookmarks) {
+    const session = sessionById.get(bookmark.sessionId);
+    if (!session) continue;
+    const message = session.messages[bookmark.messageIndex];
+    if (!message) continue;
+    summaries.push({
+      id: bookmark.id,
+      sessionId: bookmark.sessionId,
+      sessionTitle: session.title,
+      messageIndex: bookmark.messageIndex,
+      preview: bookmark.note?.trim()
+        ? bookmark.note.trim()
+        : summarizeContent(message.content, bookmark.preview || 'Pinned message'),
+      note: bookmark.note?.trim() || undefined,
+      updatedAt: bookmark.createdAt,
+    });
+  }
+  return summaries.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, opts.limit ?? 8);
 }

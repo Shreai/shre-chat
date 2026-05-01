@@ -282,7 +282,7 @@ export function ShreOSDock({ workspaceName, userName }: ShreOSDockProps) {
       <button
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors sm:w-auto sm:justify-start sm:px-2 sm:py-1.5"
+        className="inline-flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors sm:justify-start sm:px-2 sm:py-1.5"
         style={{
           color: 'var(--c-text-2)',
           borderColor: 'var(--c-border-2)',

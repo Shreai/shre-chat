@@ -630,11 +630,10 @@ h1, h2, h3, h4, h5, h6 {
 @media (max-width: 768px) {
   .mobile-input-sticky {
     position: fixed;
-    bottom: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--install-banner-offset, 0px));
     left: 0;
     right: 0;
     z-index: 20;
-    bottom: env(safe-area-inset-bottom, 0px);
   }
 }
 

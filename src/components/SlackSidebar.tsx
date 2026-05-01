@@ -1,15 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AGENTS, getAgent, getBookmarks, useApp, type Session } from '../store';
+import { AGENTS, useApp, type Session } from '../store';
 import { usePreferences, type ConversationModeId } from '../preferences-store';
 import { useAppList } from '../hooks/useAppList';
+import { loadWorkspacePresenceSnapshot } from '../hooks/useWorkspacePresence';
+import {
+  loadWorkspaceChannelMembershipSnapshot,
+  type WorkspaceChannelMembersByChannelId,
+} from '../hooks/useWorkspaceChannelMembership';
+import { useViewportTier } from '../hooks/useViewportTier';
+import { useWorkspaceCustomChannels } from '../hooks/useWorkspaceCustomChannels';
 import {
   WORKSPACE_CHANNELS,
   getChannelParticipants,
   getWorkspaceChannelTag,
+  type WorkspaceChannel,
 } from '../workspace-channels';
-import { buildPinnedSummaries, buildThreadSummaries } from '../workspace-social';
+import {
+  createCustomWorkspaceChannel,
+  saveCustomWorkspaceChannels,
+  type CustomWorkspaceChannel,
+} from '../workspace-custom-channels';
 
 type SidebarScope = 'channel' | 'dm' | 'app';
+type SidebarChannel = WorkspaceChannel | CustomWorkspaceChannel;
 
 function formatShortTime(ts: number) {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -49,38 +62,70 @@ export function SlackSidebar() {
   const setConversationMode = usePreferences((s) => s.setConversationMode);
 
   const [query, setQuery] = useState('');
-  const [bookmarkTick, setBookmarkTick] = useState(0);
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false,
-  );
-
-  const activeAgent = getAgent(state.activeAgentId);
-
+  const [presenceSnapshot, setPresenceSnapshot] = useState(() => loadWorkspacePresenceSnapshot());
+  const [channelMembersByChannelId, setChannelMembersByChannelId] =
+    useState<WorkspaceChannelMembersByChannelId>(() => loadWorkspaceChannelMembershipSnapshot());
+  const { customChannels, refreshWorkspaceCustomChannels } = useWorkspaceCustomChannels();
+  const viewportTier = useViewportTier();
+  const sidebarCompact =
+    viewportTier === 'trifold-phone' ||
+    viewportTier === 'bifold-phone' ||
+    viewportTier === 'phone' ||
+    viewportTier === 'mini-tablet';
+  const sidebarNarrow = sidebarCompact || viewportTier === 'tablet';
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 768px)');
-    const sync = () => setIsMobile(mq.matches);
-    sync();
-    if (typeof mq.addEventListener === 'function') {
-      mq.addEventListener('change', sync);
-      return () => mq.removeEventListener('change', sync);
-    }
-    mq.addListener(sync);
-    return () => mq.removeListener(sync);
-  }, []);
-
-  useEffect(() => {
-    if (!state.sidebarOpen || !isMobile) return;
+    if (!state.sidebarOpen || !sidebarCompact) return;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isMobile, state.sidebarOpen]);
+  }, [sidebarCompact, state.sidebarOpen]);
 
   useEffect(() => {
-    const handler = () => setBookmarkTick((value) => value + 1);
-    window.addEventListener('shre-bookmarks-changed', handler);
-    return () => window.removeEventListener('shre-bookmarks-changed', handler);
+    const refresh = () => setPresenceSnapshot(loadWorkspacePresenceSnapshot());
+    const handler = (event: StorageEvent) => {
+      if (event.key === 'shre-workspace-presence-snapshot') {
+        refresh();
+      }
+    };
+    const customHandler = () => refresh();
+    window.addEventListener('storage', handler);
+    window.addEventListener('shre-workspace-presence-snapshot-changed', customHandler);
+    refresh();
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener('shre-workspace-presence-snapshot-changed', customHandler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshChannelMembers = async () => {
+      try {
+        const res = await fetch('/api/chat-channel-memberships', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          channels?: WorkspaceChannelMembersByChannelId;
+        };
+        setChannelMembersByChannelId(data.channels || {});
+      } catch {
+        /* offline */
+      }
+    };
+    void refreshChannelMembers();
+    const interval = window.setInterval(() => {
+      void refreshChannelMembers();
+    }, 30_000);
+    const handleMembershipChange = () => {
+      setChannelMembersByChannelId(loadWorkspaceChannelMembershipSnapshot());
+    };
+    window.addEventListener('shre-workspace-channel-membership-changed', handleMembershipChange);
+    return () => {
+      window.removeEventListener(
+        'shre-workspace-channel-membership-changed',
+        handleMembershipChange,
+      );
+      window.clearInterval(interval);
+    };
   }, []);
 
   const sortedAgents = useMemo(
@@ -137,12 +182,77 @@ export function SlackSidebar() {
     }
 
     actions.setView('chat');
-    if (isMobile) actions.setSidebarOpen(false);
+    if (sidebarCompact) actions.setSidebarOpen(false);
   };
 
   const openChannel = (channelId: string, mode: ConversationModeId) => {
-    setConversationMode(mode, null);
+    setConversationMode(mode);
     actions.openWorkspaceChannel(channelId, { focus: true });
+  };
+
+  const createChannel = () => {
+    const raw = window.prompt('New channel name');
+    const draft = raw
+      ? createCustomWorkspaceChannel(
+          raw,
+          [...WORKSPACE_CHANNELS, ...customChannels].map((entry) => entry.id),
+        )
+      : null;
+    if (!draft) return;
+
+    const persistLocalFallback = () => {
+      const updated = [...customChannels, draft];
+      saveCustomWorkspaceChannels(updated);
+      setConversationMode(draft.mode);
+      openScopedSession({
+        scope: 'channel',
+        id: draft.id,
+        title: `#${draft.label}`,
+      });
+    };
+
+    void (async () => {
+      try {
+        const res = await fetch('/api/chat-custom-channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            label: draft.label,
+            description: draft.description,
+            mode: draft.mode,
+            accent: draft.accent,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = (await res.json()) as {
+          channel?: {
+            channelId: string;
+            label: string;
+            description: string;
+            mode: ConversationModeId;
+            accent: string;
+          };
+        };
+        const channel = data.channel;
+        if (!channel?.channelId) throw new Error('Missing created channel');
+        await fetch('/api/chat-channel-memberships/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ channelId: channel.channelId }),
+        });
+        await refreshWorkspaceCustomChannels();
+        setConversationMode(channel.mode || draft.mode);
+        openScopedSession({
+          scope: 'channel',
+          id: channel.channelId,
+          title: `#${channel.label}`,
+        });
+      } catch {
+        persistLocalFallback();
+      }
+    })();
   };
 
   const openDm = (agentId: string, title: string) => {
@@ -163,48 +273,18 @@ export function SlackSidebar() {
     });
   };
 
-  const openThreadMessage = (sessionId: string, messageIndex: number) => {
-    const session = state.sessions.find((entry) => entry.id === sessionId);
-    if (!session) return;
-    actions.switchSession(sessionId);
-    actions.setView('chat');
-    if (isMobile) actions.setSidebarOpen(false);
-    window.dispatchEvent(
-      new CustomEvent('shre-focus-message', {
-        detail: { sessionId, messageIndex },
-      }),
-    );
-  };
-
-  const threads = useMemo(
-    () => buildThreadSummaries(state.sessions, { limit: 6 }),
-    [state.sessions],
-  );
-  const pinned = useMemo(
-    () => buildPinnedSummaries(getBookmarks(), state.sessions, { limit: 6 }),
-    [state.sessions, bookmarkTick],
-  );
-  const visibleThreads = threads.filter((thread) =>
-    matches(`${thread.sessionTitle} ${thread.rootPreview} ${thread.latestReplyPreview}`),
-  );
-  const visiblePinned = pinned.filter((pin) =>
-    matches(`${pin.sessionTitle} ${pin.preview} ${pin.note || ''}`),
-  );
-
-  const visibleChannels = WORKSPACE_CHANNELS.filter((channel) =>
+  const allChannels: SidebarChannel[] = [...WORKSPACE_CHANNELS, ...customChannels];
+  const visibleChannels = allChannels.filter((channel) =>
     matches(`${channel.label} ${channel.description}`),
   );
   const visibleAgents = sortedAgents.filter((agent) =>
     matches(`${agent.name} ${agent.id} ${agent.description || ''}`),
   );
   const visibleApps = recentApps.filter((app) => matches(`${app.label} ${app.subtitle}`));
-  const visibleSessions = recentSessions.filter((session) =>
-    matches(`${session.title} ${session.messages.map((m) => m.content).join(' ')}`),
-  );
 
   return (
     <>
-      {state.sidebarOpen && isMobile && (
+      {state.sidebarOpen && sidebarCompact && (
         <button
           type="button"
           aria-label="Close sidebar overlay"
@@ -214,7 +294,7 @@ export function SlackSidebar() {
       )}
 
       <aside
-        className={`shre-sidebar relative z-40 flex h-full w-[320px] max-w-[86vw] flex-col border-r border-[var(--c-border-2)] ${state.sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        className={`shre-sidebar relative z-40 flex h-dvh min-h-0 ${sidebarCompact ? 'w-[min(84vw,288px)] max-w-[84vw]' : sidebarNarrow ? 'w-[300px] max-w-[84vw]' : 'w-[320px] max-w-[86vw]'} flex-col overflow-hidden border-r border-[var(--c-border-2)] ${state.sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
         style={{
           background: 'linear-gradient(180deg, rgba(24,24,28,0.98) 0%, rgba(16,16,18,0.98) 100%)',
           boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
@@ -222,128 +302,70 @@ export function SlackSidebar() {
         }}
       >
         <div
-          className="shre-no-drag flex items-start justify-between gap-3 border-b border-[var(--c-border-2)] px-4 pb-4 pt-4"
+          className={`shre-no-drag flex items-start justify-between gap-3 border-b border-[var(--c-border-2)] ${sidebarCompact ? 'px-3 pb-3 pt-3' : sidebarNarrow ? 'px-3.5 pb-3.5 pt-3.5' : 'px-4 pb-4 pt-4'}`}
           style={{ background: 'rgba(255,255,255,0.02)' }}
         >
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--c-text-4)]">
-              Shre AI
-            </div>
-            <div className="mt-1 text-[22px] font-semibold tracking-[-0.04em] text-[var(--c-text-1)]">
-              Channels
-            </div>
-            <div className="mt-1 text-[12px] leading-5 text-[var(--c-text-3)]">
-              Slack-style workspace for chats, agents, and apps.
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.05)] text-[12px] font-semibold tracking-[0.16em] text-[var(--c-text-1)]">
+                S
+              </div>
+              <div className="min-w-0">
+                <div
+                  className={`${sidebarCompact ? 'text-[12px]' : 'text-[13px]'} truncate font-semibold tracking-[-0.03em] text-[var(--c-text-1)]`}
+                >
+                  Shre AI
+                </div>
+                <div
+                  className={`truncate text-[11px] text-[var(--c-text-4)] ${sidebarCompact ? 'hidden' : ''}`}
+                >
+                  Channels first
+                </div>
+              </div>
             </div>
           </div>
 
           <button
             type="button"
-            className="rounded-full border border-[var(--c-border-1)] px-3 py-1 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
+            className={`rounded-full border border-[var(--c-border-1)] ${sidebarCompact ? 'px-2 py-0.5 text-[10px]' : sidebarNarrow ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1 text-[11px]'} font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]`}
             onClick={() => actions.setSidebarOpen(false)}
           >
             Close
           </button>
         </div>
 
-        <div className="shre-no-drag border-b border-[var(--c-border-2)] px-4 py-4">
-          <div className="flex items-center gap-2 rounded-2xl border border-[var(--c-border-1)] bg-[rgba(255,255,255,0.04)] p-1.5">
-            <button
-              type="button"
-              onClick={() => setConversationMode('assistant', null)}
-              className={`flex-1 rounded-full px-3 py-2 text-[12px] font-medium transition-colors ${
-                conversationMode === 'assistant'
-                  ? 'bg-white text-black'
-                  : 'text-[var(--c-text-3)] hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]'
-              }`}
-            >
-              General
-            </button>
-            <button
-              type="button"
-              onClick={() => setConversationMode('code', null)}
-              className={`flex-1 rounded-full px-3 py-2 text-[12px] font-medium transition-colors ${
-                conversationMode === 'code'
-                  ? 'bg-[var(--c-accent)] text-white'
-                  : 'text-[var(--c-text-3)] hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]'
-              }`}
-            >
-              Code
-            </button>
-            <button
-              type="button"
-              onClick={() => setConversationMode('apps', activeAppId)}
-              className={`flex-1 rounded-full px-3 py-2 text-[12px] font-medium transition-colors ${
-                conversationMode === 'apps'
-                  ? 'bg-[rgba(74,222,128,0.16)] text-[var(--c-success)]'
-                  : 'text-[var(--c-text-3)] hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]'
-              }`}
-            >
-              Apps
-            </button>
-          </div>
-
-          <div className="mt-3 rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.03)] px-3 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--c-text-4)]">
-                  Active agent
-                </div>
-                <div className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-[var(--c-text-1)]">
-                  {activeAgent.name}
-                </div>
-              </div>
-              <div className="text-[20px]">{activeAgent.emoji}</div>
-            </div>
-            <div className="mt-2 text-[12px] leading-5 text-[var(--c-text-3)]">
-              {conversationMode === 'code'
-                ? 'Code mode is set to stay autonomous until it needs approval or hits a blocker.'
-                : conversationMode === 'apps'
-                  ? 'Apps mode keeps the workspace anchored to a specific product surface.'
-                  : 'General mode keeps the conversation open-ended and operator-led.'}
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              className="rounded-full border border-[var(--c-border-1)] px-3 py-1.5 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
-              onClick={() => {
-                const id = actions.newSession();
-                actions.switchSession(id);
-                actions.setView('chat');
-                if (isMobile) actions.setSidebarOpen(false);
-              }}
-            >
-              New thread
-            </button>
-            <button
-              type="button"
-              className="rounded-full border border-[var(--c-border-1)] px-3 py-1.5 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
-              onClick={() => actions.setView('email')}
-            >
-              Inbox
-            </button>
-          </div>
-
-          <div className="relative mt-3">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search channels, DMs, apps..."
-              className="w-full rounded-2xl border border-[var(--c-border-1)] bg-[var(--c-bg-card)] px-4 py-2.5 text-[13px] text-[var(--c-text-1)] outline-none placeholder:text-[var(--c-text-4)]"
-            />
-          </div>
+        <div className="relative mt-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search channels, DMs, apps..."
+            className={`w-full rounded-2xl border border-[var(--c-border-1)] bg-[var(--c-bg-card)] ${sidebarCompact ? 'px-3 py-2 text-[12px]' : sidebarNarrow ? 'px-3 py-2 text-[12px]' : 'px-4 py-2.5 text-[13px]'} text-[var(--c-text-1)] outline-none placeholder:text-[var(--c-text-4)]`}
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          <Section title="Channels">
+        <div
+          className={`flex-1 min-h-0 overflow-y-auto overscroll-contain ${sidebarCompact ? 'px-2 py-2' : sidebarNarrow ? 'px-2.5 py-2.5' : 'px-3 py-3'}`}
+        >
+          <Section
+            title="Channels"
+            action={
+              <button
+                type="button"
+                className="rounded-full border border-[var(--c-border-2)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--c-text-3)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
+                onClick={createChannel}
+              >
+                + Add
+              </button>
+            }
+          >
             {visibleChannels.map((channel) => {
               const active =
                 conversationMode === channel.mode &&
                 latestSessionForTag(state.sessions, getWorkspaceChannelTag(channel.id))?.id ===
                   state.activeSessionId;
-              const memberCount = getChannelParticipants(channel.id, state.activeAgentId).length;
+              const memberCount =
+                channelMembersByChannelId[channel.id]?.length ||
+                getChannelParticipants(channel.id).length;
               return (
                 <NavRow
                   key={channel.id}
@@ -356,6 +378,23 @@ export function SlackSidebar() {
                 />
               );
             })}
+            <button
+              type="button"
+              className="group flex w-full items-center gap-3 rounded-2xl border border-dashed border-[var(--c-border-2)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--c-bg-hover)]"
+              onClick={createChannel}
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.03)] text-[14px] font-semibold text-[var(--c-text-3)]">
+                +
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
+                  Add channel
+                </div>
+                <div className="mt-0.5 truncate text-[12px] text-[var(--c-text-3)]">
+                  Create a custom workspace channel
+                </div>
+              </div>
+            </button>
           </Section>
 
           <Section title="Direct Messages">
@@ -371,8 +410,17 @@ export function SlackSidebar() {
                     youActive ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
                   }`}
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[12px] font-semibold text-[var(--c-text-1)]">
+                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[12px] font-semibold text-[var(--c-text-1)]">
                     You
+                    <span
+                      className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-[var(--c-bg-2)]"
+                      style={{
+                        background:
+                          (presenceSnapshot.self?.presence || 'active') === 'active'
+                            ? '#4ade80'
+                            : '#f59e0b',
+                      }}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
@@ -441,83 +489,6 @@ export function SlackSidebar() {
             })}
           </Section>
 
-          <Section title="Threads">
-            {visibleThreads.length > 0 ? (
-              visibleThreads.map((thread) => {
-                const active = state.activeSessionId === thread.sessionId && state.view === 'chat';
-                return (
-                  <button
-                    key={thread.id}
-                    type="button"
-                    onClick={() => openThreadMessage(thread.sessionId, thread.rootIndex)}
-                    className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-                      active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
-                    }`}
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[11px] font-semibold text-[var(--c-text-1)]">
-                      #{thread.replyCount}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
-                          {thread.sessionTitle}
-                        </div>
-                        <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--c-text-4)]">
-                          {formatShortTime(thread.updatedAt)}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[12px] text-[var(--c-text-3)]">
-                        {thread.rootPreview}
-                      </div>
-                      <div className="mt-1 truncate text-[11px] text-[var(--c-text-4)]">
-                        Latest: {thread.latestReplyPreview}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <EmptyState label="No active threads yet" />
-            )}
-          </Section>
-
-          <Section title="Pinned">
-            {visiblePinned.length > 0 ? (
-              visiblePinned.map((pin) => {
-                const active = state.activeSessionId === pin.sessionId && state.view === 'chat';
-                return (
-                  <button
-                    key={pin.id}
-                    type="button"
-                    onClick={() => openThreadMessage(pin.sessionId, pin.messageIndex)}
-                    className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-                      active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
-                    }`}
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.04)] text-[13px] font-semibold text-[var(--c-accent)]">
-                      •
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
-                          {pin.sessionTitle}
-                        </div>
-                        <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--c-text-4)]">
-                          {formatShortTime(pin.updatedAt)}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[12px] text-[var(--c-text-3)]">
-                        {pin.preview}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <EmptyState label="Pin a message to see it here" />
-            )}
-          </Section>
-
           <Section title="Apps">
             {visibleApps.map((app) => {
               const active = conversationMode === 'apps' && activeAppId === app.id;
@@ -548,71 +519,24 @@ export function SlackSidebar() {
               );
             })}
           </Section>
-
-          <Section title="History">
-            {visibleSessions.slice(0, 8).map((session) => {
-              const agent = getAgent(session.agentId || 'main');
-              const preview =
-                session.messages[session.messages.length - 1]?.content
-                  .replace(/\s+/g, ' ')
-                  .slice(0, 52) || 'No messages yet';
-              const active = state.activeSessionId === session.id && state.view === 'chat';
-              return (
-                <button
-                  key={session.id}
-                  type="button"
-                  onClick={() => {
-                    actions.switchSession(session.id);
-                    actions.setView('chat');
-                    if (isMobile) actions.setSidebarOpen(false);
-                  }}
-                  className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-                    active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
-                  }`}
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--c-border-2)] bg-[rgba(255,255,255,0.03)] text-[17px]">
-                    {agent.emoji}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">
-                        {session.title}
-                      </div>
-                      <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--c-text-4)]">
-                        {formatShortTime(session.updatedAt)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 truncate text-[12px] text-[var(--c-text-3)]">
-                      {preview}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </Section>
         </div>
 
-        <div className="shre-no-drag border-t border-[var(--c-border-2)] px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--c-text-4)]">
-                Workspace
-              </div>
-              <div className="mt-1 text-[13px] font-medium text-[var(--c-text-2)]">
-                {state.writeEnabled ? 'Write enabled' : 'Read-only'}
-              </div>
+        <div className="shre-no-drag border-t border-[var(--c-border-2)] px-3 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 text-[11px] uppercase tracking-[0.22em] text-[var(--c-text-4)]">
+              Settings
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded-full border border-[var(--c-border-1)] px-3 py-1.5 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
+                className="rounded-full border border-[var(--c-border-1)] px-2.5 py-1 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
                 onClick={() => actions.toggleTheme()}
               >
                 Theme
               </button>
               <button
                 type="button"
-                className="rounded-full border border-[var(--c-border-1)] px-3 py-1.5 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
+                className="rounded-full border border-[var(--c-border-1)] px-2.5 py-1 text-[11px] font-medium text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-bg-hover)] hover:text-[var(--c-text-1)]"
                 onClick={() => actions.toggleWriteEnabled()}
               >
                 {state.writeEnabled ? 'Lock' : 'Unlock'}
@@ -634,11 +558,22 @@ export function SlackSidebar() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mb-5">
-      <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.26em] text-[var(--c-text-4)]">
-        {title}
+    <section className="mb-4">
+      <div className="flex items-center justify-between gap-2 px-2 pb-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[var(--c-text-4)]">
+          {title}
+        </div>
+        {action}
       </div>
       <div className="space-y-1.5">{children}</div>
     </section>
@@ -672,8 +607,10 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-        active ? 'bg-[var(--c-bg-active)]' : 'hover:bg-[var(--c-bg-hover)]'
+      className={`group flex w-full items-start gap-3 rounded-2xl border px-3 py-2.5 text-left transition-colors ${
+        active
+          ? 'border-[color:color-mix(in_srgb,var(--c-accent)_45%,var(--c-border-2))] bg-[rgba(255,255,255,0.05)]'
+          : 'border-[var(--c-border-2)] bg-[rgba(255,255,255,0.03)] hover:bg-[var(--c-bg-hover)]'
       }`}
     >
       <div
@@ -683,7 +620,16 @@ function NavRow({
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium text-[var(--c-text-1)]">{label}</div>
+        <div className="flex items-center gap-2">
+          <div className="truncate text-[13px] font-medium tracking-[-0.02em] text-[var(--c-text-1)]">
+            {label}
+          </div>
+          {active && (
+            <span className="rounded-full border border-[var(--c-border-1)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--c-text-4)]">
+              Active
+            </span>
+          )}
+        </div>
         <div className="mt-0.5 text-[12px] leading-5 text-[var(--c-text-3)]">{description}</div>
       </div>
     </button>
