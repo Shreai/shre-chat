@@ -11,6 +11,7 @@ interface Task {
   agent_id?: string;
   project_id?: string;
   parent_id?: string;
+  dispatch_status?: string;
   quality_score?: number;
   completion_ratio?: number;
   created_at: string;
@@ -46,6 +47,15 @@ const STATUS_COLORS: Record<string, string> = {
   blocked: '#ef4444',
   done: '#22c55e',
   cancelled: '#9ca3af',
+};
+
+const DISPATCH_COLORS: Record<string, string> = {
+  pending: '#6b7280',
+  dispatched: '#22c55e',
+  queued: '#f59e0b',
+  skipped: '#9ca3af',
+  failed: '#ef4444',
+  manual: '#38bdf8',
 };
 
 function getToken() {
@@ -132,6 +142,23 @@ export function TasksView() {
     medium: filtered.filter((t) => t.priority === 'medium'),
     low: filtered.filter((t) => t.priority === 'low' || !t.priority),
   };
+  const dispatchCounts = tasks.reduce<Record<string, number>>((acc, task) => {
+    const key = task.status === 'pending_review' ? 'review' : task.status;
+    acc[key] = (acc[key] || 0) + 1;
+    if (task.dispatch_status) {
+      const dispatchKey = String(task.dispatch_status);
+      acc[`dispatch:${dispatchKey}`] = (acc[`dispatch:${dispatchKey}`] || 0) + 1;
+    }
+    return acc;
+  }, {});
+  const projectTimeline = [...tasks]
+    .filter((task) => task.project_id || task.updated_at || task.completed_at)
+    .sort((a, b) => {
+      const aTime = new Date(a.updated_at || a.completed_at || a.created_at).getTime();
+      const bTime = new Date(b.updated_at || b.completed_at || b.created_at).getTime();
+      return bTime - aTime;
+    })
+    .slice(0, 8);
 
   return (
     <div
@@ -237,8 +264,85 @@ export function TasksView() {
         </div>
       </div>
 
+      {/* Dispatch legend */}
+      <div
+        className="px-4 py-2 shrink-0 flex items-center gap-2 flex-wrap"
+        style={{ borderBottom: '1px solid var(--c-border-2)' }}
+      >
+        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--c-text-4)' }}>
+          Dispatch
+        </span>
+        {(['pending', 'dispatched', 'queued', 'failed', 'manual', 'skipped'] as const).map(
+          (status) => (
+            <span
+              key={status}
+              className="text-[10px] px-2 py-0.5 rounded-full"
+              style={{
+                background: `${DISPATCH_COLORS[status]}20`,
+                color: DISPATCH_COLORS[status],
+              }}
+            >
+              {status}: {dispatchCounts[`dispatch:${status}`] || 0}
+            </span>
+          ),
+        )}
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div
+          className="mb-4 rounded-lg border px-3 py-2"
+          style={{ borderColor: 'var(--c-border-2)' }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div
+                className="text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: 'var(--c-text-4)' }}
+              >
+                Project activity
+              </div>
+              <div className="text-[12px] font-medium" style={{ color: 'var(--c-text-1)' }}>
+                Latest task updates across projects
+              </div>
+            </div>
+            <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+              {projectTimeline.length} shown
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {projectTimeline.length === 0 ? (
+              <div className="text-[12px]" style={{ color: 'var(--c-text-4)' }}>
+                No project activity yet.
+              </div>
+            ) : (
+              projectTimeline.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}
+                >
+                  <span
+                    className="shrink-0 h-2 w-2 rounded-full"
+                    style={{ background: STATUS_COLORS[task.status] || '#6b7280' }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] truncate" style={{ color: 'var(--c-text-1)' }}>
+                      {task.title}
+                    </div>
+                    <div className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                      {task.project_id ? `Project ${task.project_id.slice(0, 10)}` : 'No project'} •{' '}
+                      {task.status.replace(/_/g, ' ')}
+                    </div>
+                  </div>
+                  <span className="text-[10px] shrink-0" style={{ color: 'var(--c-text-4)' }}>
+                    {relativeTime(task.updated_at || task.completed_at || task.created_at)}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
         {loading && tasks.length === 0 && (
           <div
             className="flex items-center justify-center py-12"
