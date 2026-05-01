@@ -6,7 +6,7 @@ import { onStreamChange, type ActiveStream } from './gateway-ws';
 import { PoweredByNirlab } from '@shre/ui-kit';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { SharedSkillResumeCard } from './components/SharedSkillResumeCard';
-import { getBookmarks } from './store';
+import { getBookmarks, refreshBookmarksFromServer } from './store';
 import { usePreferences } from './preferences-store';
 
 const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -58,7 +58,8 @@ export function Sidebar() {
   const [tagInput, setTagInput] = useState('');
   const touchStartRef = useRef(0);
   const [bookmarkPanelOpen, setBookmarkPanelOpen] = useState(false);
-  const bookmarkCount = useMemo(() => getBookmarks().length, [sessions]);
+  const [bookmarkTick, setBookmarkTick] = useState(0);
+  const bookmarkCount = useMemo(() => getBookmarks().length, [sessions, bookmarkTick]);
   const features = usePreferences((s) => s.features);
 
   const [streamingAgents, setStreamingAgents] = useState<Map<string, string>>(new Map());
@@ -70,6 +71,13 @@ export function Sidebar() {
       setStreamingAgents(map);
     };
     return onStreamChange(update);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setBookmarkTick((value) => value + 1);
+    window.addEventListener('shre-bookmarks-changed', handler);
+    void refreshBookmarksFromServer();
+    return () => window.removeEventListener('shre-bookmarks-changed', handler);
   }, []);
 
   useEffect(() => {
