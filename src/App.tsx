@@ -40,6 +40,7 @@ import { loadUserProfile, saveUserProfile, createDefaultProfile, type UserProfil
 import { OnboardingView } from './OnboardingView';
 import { useAnomalyStream } from './hooks/useAnomalyStream';
 import InstallBanner from './components/InstallBanner';
+import { CINotificationToast } from './components/CINotificationToast';
 
 // ── Extracted modules ──
 import {
@@ -274,6 +275,7 @@ function AuthenticatedApp({
     'loading',
   );
   const [landingTarget, setLandingTarget] = useState<'chat' | 'home'>('chat');
+  const [dashboardTargets, setDashboardTargets] = useState<Array<{ id: string; label: string; url: string }>>([]);
   const checkedRef = useRef(false);
 
   useEffect(() => {
@@ -411,6 +413,7 @@ function AuthenticatedApp({
             .then((r) => (r.ok ? r.json() : null))
             .then((data) => {
               if (data?.target === 'home') setLandingTarget('home');
+              if (Array.isArray(data?.dashboardTargets)) setDashboardTargets(data.dashboardTargets);
             })
             .catch(() => {});
           setOnboardingPhase('welcome');
@@ -437,7 +440,11 @@ function AuthenticatedApp({
   }
 
   if (onboardingPhase === 'welcome') {
-    const mib007Url = 'https://mib007.nirtek.net';
+    const defaultDashboards = [
+      { id: 'mib', label: 'MIB Dashboard', url: 'https://mib.shre.ai' },
+      { id: 'chat', label: 'Chat Dashboard', url: 'https://chat.shre.ai' },
+    ];
+    const dashboards = dashboardTargets.length > 0 ? dashboardTargets : defaultDashboards;
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
@@ -458,9 +465,10 @@ function AuthenticatedApp({
             >
               Start Chatting
             </button>
-            {landingTarget === 'home' && (
+            {landingTarget === 'home' && dashboards.map((dash) => (
               <a
-                href={mib007Url}
+                key={dash.id}
+                href={dash.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors text-center"
@@ -470,9 +478,9 @@ function AuthenticatedApp({
                   background: 'var(--c-bg-card)',
                 }}
               >
-                Go to Dashboard
+                {dash.label}
               </a>
-            )}
+            ))}
           </div>
         </div>
       </div>
@@ -1073,6 +1081,7 @@ function MainApp({
           </div>
         </div>
       </AppContext.Provider>
+      <CINotificationToast />
     </ErrorBoundary>
   );
 }
