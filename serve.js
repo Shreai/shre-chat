@@ -45,6 +45,8 @@ if (existsSync(_mkcertCA) && !process.env.NODE_EXTRA_CA_CERTS) {
 
 const PORT = Number(process.env.PORT) || 5510;
 const ALLOW_DIRECT_MODE = process.env.SHRE_CHAT_ALLOW_DIRECT_MODE === "true";
+const STRICT_AUTH = process.env.SHRE_CHAT_STRICT_AUTH !== "false";
+const FAIL_FAST_ON_CRITICAL_DEPS = process.env.SHRE_CHAT_FAIL_FAST_DEPS !== "false";
 const _serverStartedAt = new Date().toISOString();
 let _investorCache = null;
 let _investorCacheAt = 0;
@@ -65,19 +67,42 @@ const GATEWAY_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
-// ── Production safety: block empty passwords ──
-if (process.env.NODE_ENV === "production" && !process.env.CORTEX_PG_PASSWORD) {
-  log.error("CORTEX_PG_PASSWORD is required in production. Exiting.");
-  process.exit(1);
+function parseDatabaseUrl(rawUrl) {
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    return {
+      host: parsed.hostname,
+      port: Number(parsed.port || "5432"),
+      user: decodeURIComponent(parsed.username || ""),
+      password: decodeURIComponent(parsed.password || ""),
+      database: (parsed.pathname || "").replace(/^\//, ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const dbUrl = parseDatabaseUrl(process.env.CORTEX_PG_URL || process.env.DATABASE_URL);
+const cortexPgConfig = {
+  host: process.env.CORTEX_PG_HOST || dbUrl?.host || "127.0.0.1",
+  port: Number(process.env.CORTEX_PG_PORT || dbUrl?.port || 5433),
+  user: process.env.CORTEX_PG_USER || dbUrl?.user || "cortex",
+  password: process.env.CORTEX_PG_PASSWORD || dbUrl?.password || "",
+  database: process.env.CORTEX_PG_DATABASE || dbUrl?.database || "cortexdb",
+};
+
+if (process.env.NODE_ENV === "production" && !cortexPgConfig.password) {
+  log.warn("[startup] CORTEX_PG_PASSWORD not set — CortexDB analytics routes will fail");
 }
 
 // ── CortexDB PostgreSQL pool (replaces execSync docker exec psql) ──
 const cortexPool = new pg.Pool({
-  host: "127.0.0.1",
-  port: 5433,
-  user: "cortex",
-  password: process.env.CORTEX_PG_PASSWORD || "",
-  database: "cortexdb",
+  host: cortexPgConfig.host,
+  port: cortexPgConfig.port,
+  user: cortexPgConfig.user,
+  password: cortexPgConfig.password,
+  database: cortexPgConfig.database,
   max: 5,
   idleTimeoutMillis: 120_000,
   connectionTimeoutMillis: 5_000,
@@ -970,16 +995,16 @@ function isOriginAllowed(req) {
   const allowed = [
     `http://localhost:${PORT}`, `https://localhost:${PORT}`,
     `http://127.0.0.1:${PORT}`, `https://127.0.0.1:${PORT}`,
-    "https://chat.nirtek.net", "http://chat.nirtek.net",
-    "https://app.nirtek.net", "http://app.nirtek.net",
-    "https://shre.nirtek.net", "http://shre.nirtek.net",
+    "https://chat.shre.ai", "http://chat.shre.ai",
+    "https://app.shre.ai", "http://app.shre.ai",
+    "https://mib.shre.ai", "http://mib.shre.ai",
   ];
   if (origin && allowed.some((a) => origin.startsWith(a))) return true;
   if (referer && allowed.some((a) => referer.startsWith(a))) return true;
   // .replit.dev CORS removed — not used in production
-  // Cloudflare tunnel: trust requests where X-Forwarded-Host matches *.nirtek.net
+  // Cloudflare tunnel: trust requests where X-Forwarded-Host matches *.shre.ai or *.aros.live
   const fwdHost = req.headers["x-forwarded-host"] || "";
-  if (fwdHost.endsWith(".nirtek.net") || fwdHost === "nirtek.net") return true;
+  if (fwdHost.endsWith(".shre.ai") || fwdHost === "shre.ai" || fwdHost.endsWith(".aros.live") || fwdHost === "aros.live") return true;
   return false;
 }
 
@@ -1298,16 +1323,18 @@ setInterval(() => {
   }
 }, 60_000).unref(); // every 60s
 
-// ── Shared cookie config — dynamic domain (nirtek.net for tunnel, omit for localhost) ──
+// ── Shared cookie config — dynamic domain (shre.ai/aros.live for tunnel, omit for localhost) ──
 function authCookie(name, value, maxAge, req) {
   // Cloudflare tunnel forwards the original host in X-Forwarded-Host / CF headers
   const host = (req?.headers?.["x-forwarded-host"] || req?.headers?.host || "").split(":")[0];
-  const isNirtek = host.endsWith(".nirtek.net") || host === "nirtek.net";
-  const domainPart = isNirtek ? "; Domain=.nirtek.net" : "";
-  const secure = tlsOpts || isNirtek ? "; Secure" : "";
+  const isShreDomain = host.endsWith(".shre.ai") || host === "shre.ai" || host.endsWith(".aros.live") || host === "aros.live";
+  let domainPart = "";
+  if (host.endsWith(".shre.ai")) domainPart = "; Domain=.shre.ai";
+  else if (host.endsWith(".aros.live")) domainPart = "; Domain=.aros.live";
+  const secure = tlsOpts || isShreDomain ? "; Secure" : "";
   // SameSite=None required for cross-origin cookie delivery via Cloudflare tunnel on mobile Safari
   // Strict for same-origin (local dev / direct access) — tightest XSS protection
-  const sameSite = isNirtek ? "None" : "Strict";
+  const sameSite = isShreDomain ? "None" : "Strict";
   return `${name}=${value}; Path=/; HttpOnly; SameSite=${sameSite}${domainPart}; Max-Age=${maxAge}${secure}`;
 }
 
@@ -1607,7 +1634,7 @@ function loadCliHistory(agentId, maxMessages = 20) {
 }
 
 // ── Route module initialization ──────────────────────────────────────
-const handleAuth = registerAuthRoutes({ log });
+const handleAuth = registerAuthRoutes({ log, strictAuth: STRICT_AUTH });
 const intentRouter = registerIntentRouter({ log, chatDb });
 const conversationEvaluator = createConversationEvaluator({ log, chatDb });
 const handleVoice = registerVoiceRoutes({
@@ -1618,7 +1645,15 @@ const handleVoice = registerVoiceRoutes({
 const handleTasks = registerTaskRoutes({ log });
 const handleSessions = registerSessionRoutes({ log, chatDb, stmtGetAll, stmtGetOne, stmtDelete, stmtSoftDelete, stmtRestoreDeleted, stmtRemoveFromTrash, stmtListDeleted, stmtPurgeTrash, upsertSession, dbSessionToClient, checkAuth });
 const handleSuggestions = registerSuggestionsRoutes({ log, loadReminders, getUserContext, getBriefingCache: () => _briefingCache });
-const handleHealth = registerHealthRoutes({ log, PORT, tlsOpts, GATEWAY_TOKEN, getActiveCLICount: () => activeCLICount, getActivePty: () => activePty });
+const handleHealth = registerHealthRoutes({
+  log,
+  PORT,
+  tlsOpts,
+  GATEWAY_TOKEN,
+  getActiveCLICount: () => activeCLICount,
+  getActivePty: () => activePty,
+  strictAuth: STRICT_AUTH,
+});
 const handleReports = registerReportRoutes({ log, chatDb });
 const handleHandoff = registerHandoffRoutes({ log, chatDb });
 const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb });
@@ -1636,7 +1671,7 @@ const server = httpsServer || httpServer;
 
 // ── Content Security Policy ──────────────────────────────────────
 const IS_DEV = process.env.NODE_ENV !== "production";
-const CSP_CONNECT_SRC = `connect-src 'self' https://localhost:* https://127.0.0.1:* http://localhost:* http://127.0.0.1:* wss://chat.nirtek.net wss://shre.nirtek.net ws://localhost:* wss://localhost:*`;
+const CSP_CONNECT_SRC = `connect-src 'self' https://localhost:* https://127.0.0.1:* http://localhost:* http://127.0.0.1:* wss://chat.shre.ai wss://mib.shre.ai wss://*.aros.live ws://localhost:* wss://localhost:*`;
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -2383,12 +2418,16 @@ async function requestHandler(req, res) {
     try {
       const routerUrl = serviceUrl("shre-router");
       const upstream = await fetch(`${routerUrl}/v1/agents/capabilities`, { signal: AbortSignal.timeout(8000) });
+      if (!upstream.ok) {
+        log.warn("Agent capabilities upstream returned non-OK", { status: upstream.status });
+        return json(res, { agents: [] }, 200);
+      }
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Agent capabilities proxy failed:", err.message);
-      json(res, { error: "shre-router unreachable" }, 502);
+      json(res, { agents: [] }, 200);
     }
     return;
   }
@@ -3913,7 +3952,7 @@ async function requestHandler(req, res) {
 
       // Fallback chain: local faster-whisper → shre-voice → shre-router (OpenAI) → browser SpeechRecognition
       const sttEndpoints = [
-        `http://127.0.0.1:5525/v1/audio/transcriptions`,  // local faster-whisper (no API key)
+        `http://127.0.0.1:5464/v1/audio/transcriptions`,  // local faster-whisper (no API key)
         `http://127.0.0.1:5456/v1/audio/transcriptions`,  // shre-voice (ElevenLabs/OpenAI)
         `${serviceUrl("shre-router")}/v1/audio/transcriptions`, // shre-router (OpenAI)
       ];
@@ -5846,6 +5885,27 @@ async function requestHandler(req, res) {
           routerUrl,
           { method: req.method, headers: routerHeaders, rejectUnauthorized: false, timeout: proxyTimeoutMs },
           (routerRes) => {
+            const isModelConfigPath =
+              req.method === "GET" &&
+              (url.pathname === "/api/router/v1/models" || url.pathname === "/api/router/v1/config/models");
+            if (isModelConfigPath && (routerRes.statusCode || 500) >= 500) {
+              routerRes.resume();
+              const fallback = url.pathname === "/api/router/v1/models"
+                ? { models: [] }
+                : {
+                    models: [],
+                    defaults: {
+                      assistant: "auto",
+                      code: "auto",
+                      apps: "auto",
+                      ops: "auto",
+                      strategy: "auto",
+                      business: "auto",
+                    },
+                  };
+              return json(res, fallback, 200);
+            }
+
             // ── Budget/billing blocks: convert to SSE so frontend doesn't hang ──
             if (routerRes.statusCode === 402 || routerRes.statusCode === 429) {
               let errorBody = "";
@@ -5969,6 +6029,25 @@ async function requestHandler(req, res) {
 
         routerReq.on("error", (err) => {
           log.error("[router-proxy] shre-router error:", err.message);
+          const isModelConfigPath =
+            req.method === "GET" &&
+            (url.pathname === "/api/router/v1/models" || url.pathname === "/api/router/v1/config/models");
+          if (isModelConfigPath && !res.headersSent) {
+            const fallback = url.pathname === "/api/router/v1/models"
+              ? { models: [] }
+              : {
+                  models: [],
+                  defaults: {
+                    assistant: "auto",
+                    code: "auto",
+                    apps: "auto",
+                    ops: "auto",
+                    strategy: "auto",
+                    business: "auto",
+                  },
+                };
+            return json(res, fallback, 200);
+          }
           if (!res.headersSent) {
             res.writeHead(502);
             res.end(JSON.stringify({ error: "shre-router unreachable" }));
@@ -6233,30 +6312,6 @@ async function requestHandler(req, res) {
       json(res, { error: "Failed to append message", detail: err.message }, 500);
     }
     return;
-  }
-
-  // ── Owner Briefing passthrough → shre-tasks (must precede the shre-router /v1/* catch-all)
-  if (
-    (url.pathname === "/v1/briefing/owner" ||
-      url.pathname === "/v1/briefing/owner/history" ||
-      url.pathname === "/v1/briefing/run") &&
-    (req.method === "GET" || req.method === "POST")
-  ) {
-    try {
-      const upstream = `${serviceUrl("shre-tasks")}${url.pathname}${url.search ?? ""}`;
-      const init = { method: req.method, headers: { "content-type": "application/json" } };
-      if (req.method === "POST") {
-        init.body = await collectBody(req).catch(() => "{}");
-      }
-      const upstreamRes = await fetch(upstream, init);
-      const text = await upstreamRes.text();
-      res.statusCode = upstreamRes.status;
-      res.setHeader("content-type", upstreamRes.headers.get("content-type") || "application/json");
-      res.end(text);
-      return;
-    } catch (err) {
-      return json(res, { error: `briefing proxy failed: ${err.message}` }, 502);
-    }
   }
 
   // ── Proxy /v1/* through shre-router (enforces trust gate, budgets, cost tracking) ──
@@ -7140,17 +7195,78 @@ Examples:
 
 const notifyWss = new WebSocketServer({ noServer: true });
 const notifyClients = new Set();
+const MAX_NOTIFY_SUBSCRIPTIONS = 1000; // Prevent unbounded growth
 
 notifyWss.on("connection", (ws) => {
+  // Enforce max subscription limit to prevent memory leak
+  if (notifyClients.size >= MAX_NOTIFY_SUBSCRIPTIONS) {
+    log.warn("[notify] Max subscriptions reached, rejecting new client");
+    ws.close(1008, "Server at capacity");
+    return;
+  }
   notifyClients.add(ws);
   ws.on("close", () => notifyClients.delete(ws));
-  ws.on("error", () => notifyClients.delete(ws));
+  ws.on("error", (err) => {
+    log.debug("[notify] WebSocket error", { error: err.message });
+    notifyClients.delete(ws);
+  });
+  ws.on("message", (msg) => {
+    try {
+      const payload = JSON.parse(msg.toString());
+      if (payload.type === "project.kill_switch" && payload.projectId) {
+        // Call shre-router kill endpoint
+        fetch(`http://localhost:5497/v1/projects/${payload.projectId}/kill`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+          .then(r => r.json())
+          .then(result => {
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({
+                type: "project.killed",
+                projectId: payload.projectId,
+                rolledBack: true,
+                ts: Date.now(),
+              }));
+            }
+            log.info("[notify] Project killed via WS", { projectId: payload.projectId });
+          })
+          .catch(err => {
+            log.error("[notify] Kill project failed", { projectId: payload.projectId, error: err.message });
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({
+                type: "project.kill_error",
+                projectId: payload.projectId,
+                error: err.message,
+                ts: Date.now(),
+              }));
+            }
+          });
+      }
+    } catch (err) {
+      log.debug("[notify] Message parse error", { error: err.message });
+    }
+  });
 });
 
 function broadcastNotification(type, data) {
   const msg = JSON.stringify({ type, ...data, ts: Date.now() });
+  const deadClients = [];
   for (const ws of notifyClients) {
-    try { if (ws.readyState === 1) ws.send(msg); } catch { /* ignore */ }
+    try {
+      if (ws.readyState === 1) {
+        ws.send(msg);
+      } else if (ws.readyState === 3) { // CLOSED
+        deadClients.push(ws);
+      }
+    } catch (e) {
+      log.debug("[notify] Send error", { error: e.message });
+      deadClients.push(ws);
+    }
+  }
+  // Clean up dead connections
+  for (const ws of deadClients) {
+    notifyClients.delete(ws);
   }
   // Also send via Web Push for background/mobile delivery
   if (type === "reminders_due") {
@@ -7492,15 +7608,30 @@ termWss.on("connection", (ws, req) => {
     session.clients.delete(ws);
     log.info("[terminal] Client disconnected", { sessionId, remaining: session.clients.size });
 
-    // If no clients left, start idle kill timer (don't kill PTY immediately)
+    // If no clients left, start idle kill timer with proper cleanup
     if (session.clients.size === 0) {
+      if (session.idleTimer) clearTimeout(session.idleTimer);
       session.idleTimer = setTimeout(() => {
         log.info("[terminal] PTY idle timeout — killing", { sessionId });
-        session.proc.kill();
+        if (session.proc && !session.proc.killed) {
+          try {
+            process.kill(session.proc.pid, 'SIGTERM');
+            setTimeout(() => {
+              if (session.proc && !session.proc.killed) process.kill(session.proc.pid, 'SIGKILL');
+            }, 2000);
+          } catch (e) { log.debug("[terminal] Failed to kill process:", e.message); }
+        }
         ptySessions.delete(sessionId);
         if (activePty === session.shellHandle) activePty = null;
-      }, PTY_IDLE_TIMEOUT_MS);
+        try { require("node:fs").unlinkSync(session.resizeFile); } catch {}
+      }, 10 * 60 * 1000); // 10 min idle timeout
     }
+  });
+
+  ws.on("error", (err) => {
+    log.warn("[terminal] WebSocket error", { sessionId, error: err.message });
+    session.clients.delete(ws);
+    if (session.clients.size === 0 && session.idleTimer) clearTimeout(session.idleTimer);
   });
 });
 
@@ -7644,27 +7775,6 @@ eventBus.subscribe("approval.denied", async (event) => {
 
 // ─── Subscribe to project progress events (fleet task lifecycle) ─────────────
 const PROGRESS_EVENT_TYPES = ["task.assigned", "task.completed", "task.failed", "project.created", "project.decomposed", "project.completed", "project.quality_gate_failed", "project.pending_approval", "fleet.merge.pr_created", "budget.threshold"];
-
-// Reactive Automation Gateway — shre-cron dispatches `conversation.reopen`
-// actions; shre-router handles them at /v1/sessions/:id/reopen and publishes
-// `conversation.reopened` on the bus. Forward unconditionally to WS clients
-// so the target thread can append the follow-up message even if the user is
-// on a different thread when the event fires.
-eventBus.subscribe("conversation.reopened", async (event) => {
-  const data = event?.data || {};
-  if (!data.sessionId) return;
-  broadcastNotification("conversation.reopened", {
-    sessionId: data.sessionId,
-    agentId: data.agentId || "",
-    reason: data.reason || "",
-    ruleId: data.ruleId || "",
-    mode: data.mode || "",
-    message: data.message || "",
-    priorContextFound: !!data.priorContextFound,
-    reopenedAt: data.reopenedAt || Date.now(),
-    source: data.source || "shre-cron:reactive",
-  });
-});
 
 // Live file diff events from claude_exec sessions
 eventBus.subscribe("diff.file_changed", async (event) => {
@@ -7898,7 +8008,14 @@ function checkStartupDeps() {
     const critDown = results.filter(r => !r.ok && r.critical).map(r => r.name);
     const optDown = results.filter(r => !r.ok && !r.critical).map(r => r.name);
     if (up.length > 0) log.info(`[startup] UP: ${up.join(", ")}`);
-    if (critDown.length > 0) log.warn(`[startup] CRITICAL DOWN: ${critDown.join(", ")} — chat will not work until started`);
+    if (critDown.length > 0) {
+      const msg = `[startup] CRITICAL DOWN: ${critDown.join(", ")}`;
+      log.warn(`${msg} — chat will not work until started`);
+      if (FAIL_FAST_ON_CRITICAL_DEPS) {
+        log.error(`${msg} — exiting due to SHRE_CHAT_FAIL_FAST_DEPS=true`);
+        process.exit(1);
+      }
+    }
     if (optDown.length > 0) log.info(`[startup] Optional DOWN: ${optDown.join(", ")} — degraded features`);
     if (critDown.length === 0 && optDown.length === 0) log.info("[startup] All dependencies healthy");
     if (process.env.DEV_BYPASS_AUTH === "true") log.warn("[startup] DEV_BYPASS_AUTH=true — auth bypassed, do not use in production");
@@ -7907,16 +8024,44 @@ function checkStartupDeps() {
 }
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
-function shutdown(signal) {
+async function shutdown(signal) {
   log.info(`${signal} received — shutting down gracefully`);
   lifecycle.stopping(signal);
+
   // Close WebSocket servers
   notifyWss.close();
   termWss.close();
-  // Close the listening server
-  feedbackPipeline.stop().catch(() => {});
-  eventBus.shutdown().catch(() => {});
-  cortexPool.end().catch(() => {});
+
+  // Kill all active PTY sessions
+  for (const [sessionId, session] of ptySessions.entries()) {
+    try {
+      if (session.proc && !session.proc.killed) {
+        process.kill(session.proc.pid, 'SIGTERM');
+        await new Promise(r => setTimeout(r, 100));
+        if (!session.proc.killed) process.kill(session.proc.pid, 'SIGKILL');
+      }
+    } catch (e) { log.debug("[terminal] Failed to kill process on shutdown:", e.message); }
+  }
+  ptySessions.clear();
+
+  // Drain connection pools and shutdown services
+  // SQLite WAL checkpoint — flush changes before closing
+  if (chatDb) {
+    try {
+      chatDb.pragma('wal_checkpoint(RESTART)');
+      log.info('[chat-db] WAL checkpoint completed on shutdown');
+    } catch (err) {
+      log.warn('[chat-db] WAL checkpoint failed on shutdown', { error: err.message });
+    }
+  }
+
+  await Promise.all([
+    feedbackPipeline.stop().catch(() => {}),
+    eventBus.shutdown().catch(() => {}),
+    cortexPool.end().catch(() => {}),
+    chatDb?.close ? Promise.resolve(chatDb.close()) : Promise.resolve(),
+  ]);
+
   (_listenServer || server).close(() => {
     log.info("Server closed");
     process.exit(0);
