@@ -4,7 +4,7 @@ COPY shre-sdk/ /shre-sdk/
 RUN cd /shre-sdk && npm install && npm run build
 COPY shre-chat/package.json ./
 COPY shre-chat/stubs/ ./stubs/
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ py3-setuptools
 RUN npm install --legacy-peer-deps
 COPY shre-chat/vite.config.ts shre-chat/tsconfig.json shre-chat/index.html ./
 COPY shre-chat/src/ ./src/
