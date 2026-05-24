@@ -9,7 +9,7 @@
 
 import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
 
-const RESPONSES_URL = '/v1/responses';
+const _RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
 const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
 
@@ -771,8 +771,9 @@ async function streamViaFallback(
     { role: 'user', content: message },
   ];
 
-  // Direct mode bypasses shre-router — sends to local Ollama via serve.js proxy
-  const chatUrl = directMode ? '/api/direct/v1/chat' : `${SHRE_ROUTER_URL}/v1/chat`;
+  // Force all chat traffic through shre-router for trust/cost/training controls.
+  // `directMode` is intentionally ignored to prevent bypassing the gateway.
+  const chatUrl = `${SHRE_ROUTER_URL}/v1/chat`;
   const res = await fetchWithRetry(chatUrl, {
     method: 'POST',
     headers: {
@@ -1097,7 +1098,7 @@ async function streamViaFallback(
 
 // ── SSE Stream Reader (Responses API format) ─────────────────────────
 
-async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise<void> {
+async function _readSSEStream(res: Response, callbacks: StreamCallbacks): Promise<void> {
   const reader = res.body?.getReader();
   if (!reader) throw new Error('No stream');
 
@@ -1204,7 +1205,7 @@ async function readSSEStream(res: Response, callbacks: StreamCallbacks): Promise
 export async function checkGateway(): Promise<boolean> {
   try {
     // Use proxy path (same origin) — avoids CORS issues
-    const res = await fetch('/v1/responses', {
+    const _res = await fetch('/v1/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'ping', input: 'health', stream: false }),
