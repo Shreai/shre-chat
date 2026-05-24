@@ -1,11 +1,13 @@
 /**
  * useRealtimeVoice — Full-duplex voice conversation via WebRTC
  *
- * Connects to shre-router /v1/voice/session which returns:
+ * Connects to shre-router /v1/voice/session and stays on SHRE-managed
+ * voice paths only:
  * - PersonaPlex WebSocket URL (if Shadow PC available, 70ms latency)
- * - OpenAI Realtime ephemeral token (fallback, ~300ms latency)
+ * - Platform turn-based voice (STT -> shre-router -> TTS, ~1-2s)
  *
- * This replaces the turn-based record→transcribe→send→TTS flow
+ * This replaces the legacy direct-provider flow with SHRE-routed voice.
+ * It also supports turn-based record→transcribe→send→TTS flow
  * with a single continuous audio stream (like talking to a human).
  */
 
@@ -207,79 +209,6 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
     [cleanup, playNextInQueue],
   );
 
-  /** Connect to OpenAI Realtime via WebRTC (fallback, ~300ms) */
-  const connectOpenAIRealtime = useCallback(async (ephemeralKey: string) => {
-    const pc = new RTCPeerConnection();
-    pcRef.current = pc;
-
-    // AI audio output
-    const audio = new Audio();
-    audio.autoplay = true;
-    audioRef.current = audio;
-
-    pc.ontrack = (event) => {
-      audio.srcObject = event.streams[0];
-    };
-
-    // Microphone input
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-    // Data channel for transcripts
-    const dc = pc.createDataChannel('oai-events');
-    dcRef.current = dc;
-
-    dc.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'conversation.item.input_audio_transcription.completed') {
-          setTranscript(msg.transcript || '');
-        }
-        if (msg.type === 'response.audio_transcript.done') {
-          setAiTranscript(msg.transcript || '');
-        }
-        if (msg.type === 'input_audio_buffer.speech_started') {
-          setState('listening');
-        }
-        if (msg.type === 'response.audio.delta') {
-          setState('speaking');
-        }
-        // Response complete — back to listening for next turn
-        if (msg.type === 'response.done' || msg.type === 'response.audio.done') {
-          setState('listening');
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    dc.onopen = () => setState('listening');
-
-    // WebRTC offer/answer via OpenAI
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const sdpRes = await fetch(
-      'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
-          'Content-Type': 'application/sdp',
-        },
-        body: offer.sdp,
-      },
-    );
-
-    if (!sdpRes.ok) throw new Error('WebRTC negotiation failed');
-
-    await pc.setRemoteDescription({
-      type: 'answer',
-      sdp: await sdpRes.text(),
-    });
-  }, []);
-
   /** Platform-routed fallback: record → STT → /v1/chat (tools) → TTS → play */
   const platformRecordingRef = useRef(false);
   const platformMediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -471,14 +400,13 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
         if (session.provider === 'personaplex' && session.websocketUrl) {
           // PersonaPlex: direct WebSocket full-duplex (Shadow PC)
           await connectPersonaPlex(session.websocketUrl);
-        } else if (session.client_secret?.value) {
-          // OpenAI Realtime: WebRTC with ephemeral token
-          await connectOpenAIRealtime(session.client_secret.value);
         } else if (session.provider === 'platform') {
           // Platform-routed fallback: STT → shre-router /v1/chat → TTS
           await connectPlatformFallback(persona);
         } else {
-          throw new Error('No valid voice session returned');
+          throw new Error(
+            `Unsupported voice provider "${session.provider}". Expected "personaplex" or "platform".`,
+          );
         }
       } catch (error: unknown) {
         console.error('[RealtimeVoice] Start failed:', error);
@@ -488,7 +416,7 @@ export function useRealtimeVoice(): UseRealtimeVoiceReturn {
         setTimeout(() => setState('idle'), 3000);
       }
     },
-    [connectPersonaPlex, connectOpenAIRealtime, connectPlatformFallback],
+    [connectPersonaPlex, connectPlatformFallback],
   );
 
   return {
