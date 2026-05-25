@@ -2160,31 +2160,44 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Trial status proxy (shre-stripe) ──
+  // ── Trial status proxy → shre-auth ──
   if (url.pathname === "/api/trial-status" && req.method === "GET") {
     const workspaceId = url.searchParams.get("workspaceId") || "";
     if (!workspaceId) return json(res, { error: "Missing workspaceId" }, 400);
+    const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+    const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
+    const userToken = tokenCookie ? decodeURIComponent(tokenCookie.split("=").slice(1).join("=")) : "";
+    const bearerHeader = req.headers["authorization"] || (userToken ? `Bearer ${userToken}` : "");
+    if (!bearerHeader) return json(res, { error: "Unauthorized" }, 401);
     try {
-      const stripeUrl = serviceUrl("shre-stripe");
-      const upstream = await fetch(`${stripeUrl}/v1/trials/${encodeURIComponent(workspaceId)}`, { signal: AbortSignal.timeout(8000) });
+      const authUrl = serviceUrl("shre-auth");
+      const upstream = await fetch(
+        `${authUrl}/v1/auth/billing/trial-status?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { headers: { Authorization: bearerHeader }, signal: AbortSignal.timeout(8000) },
+      );
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Trial status proxy failed:", err.message);
-      json(res, { error: "shre-stripe unreachable" }, 502);
+      json(res, { error: "Billing service unreachable" }, 502);
     }
     return;
   }
 
-  // ── Checkout proxy (shre-stripe) ──
+  // ── Checkout proxy → shre-auth ──
   if (url.pathname === "/api/checkout" && req.method === "POST") {
+    const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+    const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
+    const userToken = tokenCookie ? decodeURIComponent(tokenCookie.split("=").slice(1).join("=")) : "";
+    const bearerHeader = req.headers["authorization"] || (userToken ? `Bearer ${userToken}` : "");
+    if (!bearerHeader) return json(res, { error: "Unauthorized" }, 401);
     try {
       const body = await collectBody(req);
-      const stripeUrl = serviceUrl("shre-stripe");
-      const upstream = await fetch(`${stripeUrl}/v1/checkout`, {
+      const authUrl = serviceUrl("shre-auth");
+      const upstream = await fetch(`${authUrl}/v1/auth/billing/checkout`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: bearerHeader },
         body,
         signal: AbortSignal.timeout(15000),
       });
@@ -2193,19 +2206,24 @@ async function requestHandler(req, res) {
       res.end(data);
     } catch (err) {
       log.warn("Checkout proxy failed:", err.message);
-      json(res, { error: "shre-stripe unreachable" }, 502);
+      json(res, { error: "Billing service unreachable" }, 502);
     }
     return;
   }
 
-  // ── Billing portal proxy (shre-stripe) ──
+  // ── Billing portal proxy → shre-auth ──
   if (url.pathname === "/api/billing-portal" && req.method === "POST") {
+    const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+    const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
+    const userToken = tokenCookie ? decodeURIComponent(tokenCookie.split("=").slice(1).join("=")) : "";
+    const bearerHeader = req.headers["authorization"] || (userToken ? `Bearer ${userToken}` : "");
+    if (!bearerHeader) return json(res, { error: "Unauthorized" }, 401);
     try {
       const body = await collectBody(req);
-      const stripeUrl = serviceUrl("shre-stripe");
-      const upstream = await fetch(`${stripeUrl}/v1/portal`, {
+      const authUrl = serviceUrl("shre-auth");
+      const upstream = await fetch(`${authUrl}/v1/auth/billing/portal`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: bearerHeader },
         body,
         signal: AbortSignal.timeout(15000),
       });
@@ -2214,7 +2232,7 @@ async function requestHandler(req, res) {
       res.end(data);
     } catch (err) {
       log.warn("Billing portal proxy failed:", err.message);
-      json(res, { error: "shre-stripe unreachable" }, 502);
+      json(res, { error: "Billing service unreachable" }, 502);
     }
     return;
   }
