@@ -42,6 +42,9 @@ export function LoginView({ onLogin }: LoginProps) {
   const [otpCode, setOtpCode] = useState('');
   const [otpUsername, setOtpUsername] = useState('');
   const [trustDevice, setTrustDevice] = useState(true);
+  // Platform 2FA (shre-auth challengeToken flow)
+  const [challengeToken, setChallengeToken] = useState('');
+  const [challengeJwt, setChallengeJwt] = useState('');
 
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,10 +91,12 @@ export function LoginView({ onLogin }: LoginProps) {
         setLoading(false);
         return;
       }
-      if (data.requires2FA) {
+      if (data.requires2FA || data.requiresTwoFactor) {
         setNeeds2FA(true);
-        setMaskedEmail(data.maskedEmail || '');
+        setMaskedEmail(data.maskedEmail || data.destination || '');
         setOtpUsername(username.trim());
+        if (data.challengeToken) setChallengeToken(data.challengeToken);
+        if (data.challengeJwt) setChallengeJwt(data.challengeJwt);
         setLoading(false);
         return;
       }
@@ -114,7 +119,11 @@ export function LoginView({ onLogin }: LoginProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username: otpUsername, code: otpCode.trim(), trustDevice }),
+        body: JSON.stringify(
+          challengeToken
+            ? { challengeToken, challengeJwt, code: otpCode.trim() }
+            : { username: otpUsername, code: otpCode.trim(), trustDevice },
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -136,6 +145,8 @@ export function LoginView({ onLogin }: LoginProps) {
     setOtpCode('');
     setError('');
     setLoading(false);
+    setChallengeToken('');
+    setChallengeJwt('');
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -164,6 +175,15 @@ export function LoginView({ onLogin }: LoginProps) {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Signup failed');
+        setLoading(false);
+        return;
+      }
+      // shre-auth returns challengeToken when 2FA is required before account activation
+      if (data.challengeToken) {
+        setNeeds2FA(true);
+        setMaskedEmail(data.destination || '');
+        setChallengeToken(data.challengeToken);
+        setChallengeJwt(data.challengeJwt || '');
         setLoading(false);
         return;
       }

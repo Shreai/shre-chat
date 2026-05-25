@@ -612,9 +612,30 @@ export function registerAuthRoutes({ log }) {
       const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
       let body = "";
       req.on("data", (chunk) => { body += chunk; });
-      req.on("end", () => {
+      req.on("end", async () => {
         try {
-          const { username, code, trustDevice: shouldTrust } = JSON.parse(body);
+          const parsed = JSON.parse(body);
+          // Platform 2FA flow — proxy challengeToken + challengeJwt to shre-auth
+          if (parsed.challengeToken && parsed.challengeJwt) {
+            if (!parsed.code) return json(res, { error: "code is required" }, 400);
+            const { serviceUrl } = await import("shre-sdk/discovery");
+            const authUrl = serviceUrl("shre-auth");
+            const authRes = await fetch(`${authUrl}/v1/auth/verify-2fa`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-forwarded-for": clientIp },
+              body: JSON.stringify({ challengeToken: parsed.challengeToken, challengeJwt: parsed.challengeJwt, code: parsed.code }),
+              signal: AbortSignal.timeout(10000),
+            });
+            const data = await authRes.json();
+            if (!authRes.ok) return json(res, data, authRes.status);
+            if (data.token) {
+              res.setHeader("Set-Cookie", authCookie("shre_token", data.token, AUTH_TOKEN_TTL, req));
+            }
+            auditLog("login_success_2fa_platform", { ip: clientIp });
+            return json(res, data);
+          }
+          // Legacy local OTP flow
+          const { username, code, trustDevice: shouldTrust } = parsed;
           if (!username || !code) return json(res, { error: "Username and code required" }, 400);
           const otp = otpStore.get(username);
           if (!otp) return json(res, { error: "No pending verification. Please log in again." }, 400);
