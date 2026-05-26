@@ -61,7 +61,7 @@ export function useWakeWord(
 
     function startWake() {
       if (!active) return;
-      const w = new SR();
+      const w = new (SR as SpeechRecognitionConstructor)();
       w.continuous = false;
       w.interimResults = true;
       w.lang = getSpeechLocale();

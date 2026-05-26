@@ -590,7 +590,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     <span className="text-yellow-400 animate-pulse">Stopping soon...</span>
                   )}
                   <button
-                    onClick={onStopRecording}
+                    onClick={() => onStopRecording()}
                     className="ml-auto text-[10px] px-2 py-0.5 rounded transition-colors"
                     style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
                   >

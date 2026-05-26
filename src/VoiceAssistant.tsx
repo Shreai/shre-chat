@@ -118,7 +118,7 @@ export default function VoiceAssistant(props: Props) {
         {turns.map((turn, i) => (
           <div key={i} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className="max-w-[80%] p-3 rounded-xl bg-white/10 text-white">
-              <VoiceTurnContent turn={turn} />
+              <VoiceTurnContent text={turn.text} role={turn.role} />
             </div>
           </div>
         ))}

@@ -1,5 +1,5 @@
 import { sendChatWS } from '../../gateway-ws';
-import { generateAITitle, type ChatMessage } from '../../router-client';
+import { generateAITitle } from '../../router-client';
 import { generateTitle, type Session, type AppActions } from '../../store';
 import { playNotifSound } from '../../chat-utils';
 
@@ -81,7 +81,6 @@ export async function handleWSMessage(
     streamFlushRaf,
     generateSuggestions,
     recentWSSendRef,
-    routerMode,
   } = props;
 
   let fullResponse = '';
@@ -244,11 +243,7 @@ export async function handleWSMessage(
           } else if (status === 'connecting') setStreamPhase('connecting');
         },
       },
-      undefined,
-      undefined,
       selectedModel || undefined,
-      undefined,
-      routerMode,
     );
   });
 }

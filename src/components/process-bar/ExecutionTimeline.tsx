@@ -66,6 +66,18 @@ const STAGES: Record<ProcessStepKind, StageConfig> = {
     color: 'var(--c-amber, #f59e0b)',
     glow: 'rgba(245,158,11,0.3)',
   },
+  model_call: {
+    icon: '🤖',
+    label: 'Model',
+    color: 'var(--c-blue, #3b82f6)',
+    glow: 'rgba(59,130,246,0.3)',
+  },
+  handoff: {
+    icon: '🔀',
+    label: 'Handoff',
+    color: 'var(--c-violet, #8b5cf6)',
+    glow: 'rgba(139,92,246,0.3)',
+  },
   error: {
     icon: '❌',
     label: 'Error',

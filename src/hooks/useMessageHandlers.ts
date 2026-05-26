@@ -9,7 +9,7 @@ import { fetchSuggestions, verifyIdentityCode, sendFeedbackToServer } from './me
 
 // ── Extracted modules ──
 import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handlers/handler-utils';
-import { anchorContextIfNeeded, fetchContextSources } from './message-handlers/context-builder';
+import { anchorContextIfNeeded } from './message-handlers/context-builder';
 import { useTaskIntents } from './message-handlers/task-intents';
 import { useMemoryIntents } from './message-handlers/memory-intents';
 import { handleWSMessage } from './message-handlers/ws-handler';
@@ -176,7 +176,6 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     streamFlushRaf,
     bufferToken,
     voiceFinalTranscriptRef,
-    wsConnected,
     recentWSSendRef,
     virtualizer,
     userNearBottomRef,
@@ -276,7 +275,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           await sendMessage(
             sendText,
             [],
-            undefined,
+            '',
             {
               onToken: (t) => {
                 fullResp += t;
@@ -299,7 +298,6 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
               },
               onStatus: () => {},
             },
-            undefined,
             undefined,
             undefined,
             modelId,
@@ -450,13 +448,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const abortController = new AbortController();
     abortRef.current = abortController;
     const history = messages.slice(-20);
-    const contextSources = await fetchContextSources(text, messages, activeSessionId);
-    const systemPrompt = buildDefaultSystemPrompt(
-      currentAgent,
-      contextSources,
-      activeAppId,
-      conversationMode,
-    );
+    const systemPrompt = buildDefaultSystemPrompt(currentAgent.name, currentAgent.id);
 
     try {
       await sendMessage(
@@ -511,12 +503,11 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         },
         abortController.signal,
         sessionId,
-        undefined,
         selectedModel || undefined,
         undefined,
         routerMode,
       );
-    } catch (err) {
+    } catch {
       actions.setStreaming(false);
       actions.setStatusLine('Failed to send message');
     }

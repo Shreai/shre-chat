@@ -846,8 +846,11 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               .then(async (r) => {
                 if (!r.ok)
                   throw new Error(
-                    (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
-                      `HTTP ${r.status}`,
+                    (
+                      await (r.json() as Promise<{ error?: string }>).catch(
+                        (): { error?: string } => ({}),
+                      )
+                    ).error || `HTTP ${r.status}`,
                   );
                 return r.json() as Promise<Project>;
               })
@@ -891,8 +894,11 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             .then(async (r) => {
               if (!r.ok)
                 throw new Error(
-                  (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
-                    `HTTP ${r.status}`,
+                  (
+                    await (r.json() as Promise<{ error?: string }>).catch(
+                      (): { error?: string } => ({}),
+                    )
+                  ).error || `HTTP ${r.status}`,
                 );
               return r.json() as Promise<{ id?: string; number?: string }>;
             })
@@ -961,8 +967,11 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
               .then(async (r) => {
                 if (!r.ok)
                   throw new Error(
-                    (await (r.json() as Promise<{ error?: string }>).catch(() => ({}))).error ||
-                      `HTTP ${r.status}`,
+                    (
+                      await (r.json() as Promise<{ error?: string }>).catch(
+                        (): { error?: string } => ({}),
+                      )
+                    ).error || `HTTP ${r.status}`,
                   );
                 return r.json() as Promise<Goal>;
               })

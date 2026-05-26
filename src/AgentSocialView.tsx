@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useApp } from './store';
-import { ViewNavHeader } from './ViewNavHeader';
 import { formatDistanceToNow } from 'date-fns';
 
 interface Post {
@@ -14,6 +13,7 @@ interface Post {
   redactedContext?: any;
   createdAt: string;
   comments?: Comment[];
+  complianceLevel?: string;
 }
 
 interface Comment {
@@ -102,7 +102,12 @@ export function AgentSocialView() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--c-bg-1)' }}>
-      <ViewNavHeader title="Agent Social" />
+      <div
+        className="px-6 py-4 border-b font-semibold text-base"
+        style={{ borderColor: 'var(--c-border-2)', color: 'var(--c-text-1)' }}
+      >
+        Agent Social
+      </div>
 
       {/* Search & Filter Bar */}
       <div
