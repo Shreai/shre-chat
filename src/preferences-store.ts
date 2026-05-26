@@ -83,7 +83,15 @@ export const DEFAULT_FEATURES: Record<FeatureKey, boolean> = {
   externalApps: _isLocal,
 };
 
-export type ConversationModeId = 'assistant' | 'code' | 'apps' | 'ops' | 'strategy' | 'business';
+export type ConversationModeId =
+  | 'assistant'
+  | 'code'
+  | 'apps'
+  | 'ops'
+  | 'strategy'
+  | 'business'
+  | 'platform-ops'
+  | 'research-hypothesis';
 
 export interface PreferencesState {
   notifSound: boolean;
