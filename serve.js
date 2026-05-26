@@ -4524,6 +4524,9 @@ async function requestHandler(req, res) {
     }
   }
 
+  // /api/sessions/search is an alias used by GlobalSearchModal
+  if (url.pathname === "/api/sessions/search") url.pathname = "/api/search";
+
   // GET /api/search?q=<query> — cross-session full-text search
   if (url.pathname === "/api/search" && req.method === "GET") {
     const query = (url.searchParams.get("q") || "").trim().toLowerCase();
