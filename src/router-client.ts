@@ -87,9 +87,13 @@ export function setAgent(agentId: string) {
 }
 
 // Fetch on module load (fire-and-forget)
-refreshAgentModelCache().then(() => {
-  currentAgentModel = resolveAgentModel(currentAgentId);
-});
+refreshAgentModelCache()
+  .then(() => {
+    currentAgentModel = resolveAgentModel(currentAgentId);
+  })
+  .catch(() => {
+    /* shre-router offline at load time — keep default model */
+  });
 
 // ── Cost Reporting — record actual token usage to shre-router ────────
 
