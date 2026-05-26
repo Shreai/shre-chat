@@ -133,6 +133,16 @@ interface ChatPanelsProps {
   showSummary: boolean;
   setShowSummary: (v: boolean) => void;
   summaryText: string;
+  // Layout slots
+  showTerminal: boolean;
+  termViewMode: 'split' | 'tabs';
+  activeView: string;
+  isTabMode: boolean;
+  sidebar: boolean;
+  header: React.ReactNode;
+  content: React.ReactNode;
+  terminal: React.ReactNode;
+  preview: React.ReactNode;
 }
 
 export function ChatPanels(props: ChatPanelsProps) {
@@ -223,6 +233,14 @@ export function ChatPanels(props: ChatPanelsProps) {
     showSummary,
     setShowSummary,
     summaryText,
+    showTerminal,
+    termViewMode,
+    activeView,
+    isTabMode,
+    header,
+    content,
+    terminal,
+    preview,
   } = props;
 
   const [modePickerOpen, setModePickerOpen] = useState(false);
@@ -259,7 +277,7 @@ export function ChatPanels(props: ChatPanelsProps) {
   }, [voicePickerOpen, langPickerOpen]);
 
   return (
-    <>
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Compact toolbar -- model picker + options */}
       <header
         className="flex items-center justify-between px-3 py-1.5 shrink-0"
@@ -745,6 +763,9 @@ export function ChatPanels(props: ChatPanelsProps) {
         </div>
       </header>
 
+      {/* View tabs nav */}
+      {header}
+
       {shareUrl && (
         <ShareBar
           shareUrl={shareUrl}
@@ -797,6 +818,40 @@ export function ChatPanels(props: ChatPanelsProps) {
         />
       )}
 
+      {/* Main content */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div
+          className={`flex flex-col min-h-0 overflow-hidden ${
+            isTabMode && activeView !== 'chat'
+              ? 'hidden'
+              : !isTabMode && showTerminal && termViewMode === 'split'
+                ? 'flex-1 min-w-0'
+                : 'flex-1'
+          }`}
+        >
+          {content}
+        </div>
+        {showTerminal && (
+          <div
+            className={`flex flex-col min-h-0 overflow-hidden ${
+              isTabMode
+                ? activeView === 'terminal'
+                  ? 'flex-1'
+                  : 'hidden'
+                : termViewMode === 'split'
+                  ? 'w-[40%] min-w-0 border-l'
+                  : 'hidden'
+            }`}
+            style={{ borderColor: 'var(--c-border-1)' }}
+          >
+            {terminal}
+          </div>
+        )}
+        {activeView === 'preview' && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">{preview}</div>
+        )}
+      </div>
+
       {/* Apps drawer */}
       {showApps && <AppsDrawer onClose={() => setShowApps(false)} />}
 
@@ -829,6 +884,6 @@ export function ChatPanels(props: ChatPanelsProps) {
         onClose={() => setShowAnalytics(false)}
         messages={messages}
       />
-    </>
+    </div>
   );
 }

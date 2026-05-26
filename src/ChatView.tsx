@@ -28,7 +28,7 @@ import { useTaskTracker } from './hooks/useTaskTracker';
 import { TaskPanel, TaskIndicatorButton } from './components/TaskPanel';
 import { useFileHandling } from './hooks/useFileHandling';
 import { useHeaderActions } from './hooks/useHeaderActions';
-import type { ConversationModeId } from './preferences-store';
+import type { ConversationModeId, TTSProvider } from './preferences-store';
 import { useMessageListHandlers } from './hooks/useMessageListHandlers';
 import { useFilteredMessages } from './hooks/useFilteredMessages';
 import { useModelList } from './hooks/useModelList';
@@ -520,7 +520,6 @@ export function ChatView() {
   } = useMessageHandlers({
     input,
     setInput,
-    streaming,
     syncing,
     writeEnabled: state.writeEnabled,
     activeSessionId,
@@ -539,13 +538,11 @@ export function ChatView() {
     setCompareWinner,
     cliMode,
     routerMode,
-    directMode: gatewayMode === 'direct',
+    gatewayMode,
     claudeCliMode,
     identityVerified,
     setIdentityVerified,
-    pendingMessage,
     setPendingMessage,
-    verifying,
     setVerifying,
     ensureSession,
     executeSlashCommand,
@@ -554,7 +551,6 @@ export function ChatView() {
     setStreamPhase,
     setActiveToolName,
     setCompacting,
-    setPendingApproval,
     setFirstTokenReceived,
     streamStartRef,
     sendTimeRef,
@@ -570,11 +566,8 @@ export function ChatView() {
     streamBufferRef,
     streamFlushRaf,
     bufferToken,
-    flushStreamBuffer,
     voiceFinalTranscriptRef,
-    pendingEditSendRef,
     wsConnected,
-    wsReconnecting,
     recentWSSendRef,
     virtualizer,
     userNearBottomRef,
@@ -606,7 +599,7 @@ export function ChatView() {
     levelThrottleRef,
     silenceStartRef,
     lastSpokenMsgRef,
-    isHandsFreeRef,
+    SILENCE_THRESHOLD,
     SILENCE_TIMEOUT_MS,
     clearInterimAfter,
     cleanupAudioLevel,
@@ -725,15 +718,24 @@ export function ChatView() {
 
   const messageListHandlers = useMessageListHandlers({
     activeSessionId,
-    activeAgentId,
+    messages,
+    filteredMessages,
     actions,
+    setInput,
     setEditingMsgIndex,
     setEditingMsgText,
-    setInput,
+    setBranchToast,
+    setShowTerminal,
+    setPendingApproval,
+    pendingEditSendRef,
     inputRef,
-    setSelectedMsgIndex,
+    terminalRef,
     setLightboxSrc,
-    virtualizer,
+    sendFeedbackToRapidRMS,
+    handleContentExpand: (content: string, type: string, title?: string) => {
+      setPreviewContent({ content, type, title });
+      setActiveView('preview');
+    },
   });
 
   if (!activeAgentId) return null;
@@ -746,9 +748,9 @@ export function ChatView() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <DragOverlay isDragging={isDragging} />
+      <DragOverlay />
       <TrialBanner />
-      <ViewErrorBoundary>
+      <ViewErrorBoundary viewName="chat">
         <ChatPanels
           showTerminal={showTerminal}
           termViewMode={termViewMode}
@@ -759,46 +761,27 @@ export function ChatView() {
             <ViewTabs
               activeView={activeView}
               setActiveView={setActiveView}
-              showTerminal={showTerminal}
-              termViewMode={termViewMode}
-              isMobile={isMobileLayout}
-              isTabMode={isTabMode}
-              currentAgent={currentAgent}
-              agents={AGENTS}
-              onSwitchAgent={(id) => {
-                actions.switchAgent(id);
-                actions.newSession();
-              }}
-              routerMode={routerMode}
-              onToggleRouterMode={handleToggleRouterMode}
-              gatewayMode={gatewayMode}
-              onSetGatewayMode={handleSetGatewayMode}
-              compareMode={compareMode}
-              onToggleCompare={handleToggleCompare}
-              selectedModel={selectedModel}
-              onShowModelPicker={() => setShowModelPicker(true)}
-              onShowSystemPrompt={handleOpenSystemPrompt}
-              onSummarize={handleSummarize}
-              onShare={handleShare}
-              onToggleNotifSound={handleToggleNotifSound}
-              notifSound={notifSound}
-              onDownloadMd={handleDownloadMd}
-              onDownloadJson={handleDownloadJson}
-              onCopyMarkdown={handleCopyMarkdown}
-              onNewChat={() => {
-                const id = actions.newSession();
-                actions.switchSession(id);
-                setInput('');
-              }}
+              setTermViewMode={setTermViewMode}
+              previewContent={previewContent}
             />
           }
           content={
             <div className="flex flex-col h-full relative">
               <MessageList
-                messages={filteredMessages}
+                filteredMessages={filteredMessages}
+                messages={messages}
                 streaming={streaming}
                 streamText={streamText}
-                statusLine={statusLine}
+                syncing={syncing}
+                compact={state.compact}
+                currentAgent={currentAgent}
+                activeAgentId={activeAgentId}
+                userName={userName}
+                activeSessionId={activeSessionId}
+                chatSearchOpen={chatSearchOpen}
+                chatSearch={chatSearch}
+                chatSearchResults={chatSearchResults}
+                chatSearchIndex={chatSearchIndex}
                 selectedMsgIndex={selectedMsgIndex}
                 editingMsgIndex={editingMsgIndex}
                 editingMsgText={editingMsgText}
@@ -1076,6 +1059,9 @@ export function ChatView() {
                   setInput(s);
                 }}
                 voiceAnnouncement={voiceAnnouncement}
+                queueCount={queue.length}
+                onInputChange={(v) => setInput(v)}
+                filteredMessages={filteredMessages}
               />
             </div>
           }
@@ -1090,8 +1076,11 @@ export function ChatView() {
               >
                 <TerminalView
                   ref={terminalRef}
-                  active={activeView === 'terminal'}
-                  onExecute={handleSend}
+                  visible={activeView === 'terminal'}
+                  onClose={() => {
+                    setShowTerminal(false);
+                    setActiveView('chat');
+                  }}
                 />
               </Suspense>
             )
@@ -1099,14 +1088,96 @@ export function ChatView() {
           preview={
             activeView === 'preview' &&
             previewContent && (
-              <PreviewPanel
-                content={previewContent.content}
-                type={previewContent.type}
-                title={previewContent.title}
-                onClose={() => setActiveView('chat')}
-              />
+              <PreviewPanel content={previewContent} onClose={() => setActiveView('chat')} />
             )
           }
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          activeSession={activeSession}
+          activeAgentId={activeAgentId}
+          editingTabId={editingTabId}
+          editingTabText={editingTabText}
+          setEditingTabId={setEditingTabId}
+          setEditingTabText={setEditingTabText}
+          cliMode={cliMode}
+          actions={actions}
+          conversationMode={conversationMode}
+          activeAppId={activeAppId}
+          setConversationMode={setConversationMode}
+          appOptions={appOptions}
+          toolOptions={toolOptions}
+          toolSystemCount={toolSystemCount}
+          toolAppCount={toolAppCount}
+          showModelPicker={showModelPicker}
+          setShowModelPicker={setShowModelPicker}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          AVAILABLE_MODELS={AVAILABLE_MODELS}
+          MODEL_CONTEXT_LIMITS={MODEL_CONTEXT_LIMITS}
+          dynamicModelsCount={dynamicModels.length}
+          currentAgent={currentAgent}
+          modelPickerRef={modelPickerRef}
+          ensureSession={ensureSession}
+          ttsProvider={ttsProvider}
+          setTtsProvider={setTtsProvider}
+          onOpenVoiceChat={() => setVoiceAssistantOpen(true)}
+          onOpenRealtimeVoice={() => setRealtimeVoiceOpen(true)}
+          showHeaderMore={showHeaderMore}
+          setShowHeaderMore={setShowHeaderMore}
+          headerMoreRef={headerMoreRef}
+          routerMode={routerMode}
+          handleToggleRouterMode={handleToggleRouterMode}
+          gatewayMode={gatewayMode}
+          handleSetGatewayMode={handleSetGatewayMode}
+          compareMode={compareMode}
+          compareModels={compareModels}
+          handleToggleCompare={handleToggleCompare}
+          setCompareStreams={setCompareStreams}
+          setCompareWinner={setCompareWinner}
+          comparePickerRef={comparePickerRef}
+          handleOpenSystemPrompt={handleOpenSystemPrompt}
+          compact={state.compact}
+          notifSound={notifSound}
+          handleToggleNotifSound={handleToggleNotifSound}
+          messages={messages}
+          userName={userName}
+          summarizing={summarizing}
+          handleSummarize={handleSummarize}
+          showAnalytics={showAnalytics}
+          setShowAnalytics={setShowAnalytics}
+          handleShare={handleShare}
+          handleCopyMarkdown={handleCopyMarkdown}
+          handleDownloadMd={handleDownloadMd}
+          handleDownloadJson={handleDownloadJson}
+          showApps={showApps}
+          setShowApps={setShowApps}
+          view={state.view}
+          importInputRef={importInputRef}
+          wsFailed={wsFailed}
+          setWsFailed={setWsFailed}
+          setWsConnected={setWsConnected}
+          shareUrl={shareUrl}
+          shareCopied={shareCopied}
+          setShareCopied={setShareCopied}
+          setShareUrl={setShareUrl}
+          offlineQueue={offlineQueue}
+          selectedModelForContext={selectedModel}
+          chatSearchOpen={chatSearchOpen}
+          chatSearchRef={chatSearchRef}
+          chatSearch={chatSearch}
+          setChatSearch={setChatSearch}
+          closeChatSearch={closeChatSearch}
+          chatSearchNavigate={chatSearchNavigate}
+          chatSearchResults={chatSearchResults}
+          chatSearchIndex={chatSearchIndex}
+          showSystemPrompt={showSystemPrompt}
+          setShowSystemPrompt={setShowSystemPrompt}
+          systemPromptDraft={systemPromptDraft}
+          setSystemPromptDraft={setSystemPromptDraft}
+          handleSaveSystemPrompt={handleSaveSystemPrompt}
+          showSummary={showSummary}
+          setShowSummary={setShowSummary}
+          summaryText={summaryText}
         />
       </ViewErrorBoundary>
       {branchToast && (
@@ -1138,31 +1209,34 @@ export function ChatView() {
       )}
 
       <GlobalSearchModal
-        open={globalSearchOpen}
+        isOpen={globalSearchOpen}
         onClose={() => setGlobalSearchOpen(false)}
         query={globalSearchQuery}
         onQueryChange={setGlobalSearchQuery}
         results={globalSearchResults}
         searching={globalSearching}
-        onSelect={(s, m) => {
-          actions.switchSession(s);
-          setTimeout(() => setSelectedMsgIndex(m), 100);
+        onSearch={() => {
+          if (!globalSearchQuery.trim()) return;
+          setGlobalSearching(true);
+          fetch(`/api/sessions/search?q=${encodeURIComponent(globalSearchQuery)}`, {
+            credentials: 'include',
+          })
+            .then((r) => (r.ok ? r.json() : { results: [] }))
+            .then((data) => {
+              setGlobalSearchResults(Array.isArray(data) ? data : (data.results ?? []));
+              setGlobalSearching(false);
+            })
+            .catch(() => setGlobalSearching(false));
+        }}
+        onResultClick={(r) => {
+          actions.switchSession(r.sessionId);
           setGlobalSearchOpen(false);
         }}
+        inputRef={globalSearchRef}
       />
       {sharedSnapshot && (
-        <ShareSnapshotView
-          snapshot={sharedSnapshot}
-          loading={sharedLoading}
-          error={sharedError}
-          onClose={() => setSharedSnapshot(null)}
-        />
+        <ShareSnapshotView snapshot={sharedSnapshot} loading={sharedLoading} error={sharedError} />
       )}
-      <AppsDrawer
-        open={showApps}
-        onClose={() => setShowApps(false)}
-        activeAgentId={activeAgentId}
-      />
       <Suspense fallback={null}>
         <VoiceAssistant
           open={voiceAssistantOpen}
@@ -1175,7 +1249,7 @@ export function ChatView() {
           ttsProvider={ttsProvider}
           agents={AGENTS}
           onSwitchAgent={(id) => {
-            actions.switchAgent(id);
+            actions.setActiveAgent(id);
             actions.newSession();
           }}
           onVoiceTurn={(t) => {
@@ -1189,21 +1263,11 @@ export function ChatView() {
             setSelectedModel(id);
             setModelOverride(activeAgentId, id);
           }}
-          onSetTtsProvider={setTtsProvider}
+          onSetTtsProvider={(v) => setTtsProvider(v as TTSProvider)}
         />
       </Suspense>
-      <RealtimeVoiceOverlay
-        open={realtimeVoiceOpen}
-        onClose={() => setRealtimeVoiceOpen(false)}
-        agentName={currentAgent.name}
-        agentEmoji={currentAgent.emoji}
-      />
-      <ArtifactCanvas
-        artifact={activeArtifact}
-        artifacts={extractArtifacts(messages)}
-        onClose={() => setActiveArtifact(null)}
-        onArtifactClick={setActiveArtifact}
-      />
+      {realtimeVoiceOpen && <RealtimeVoiceOverlay onClose={() => setRealtimeVoiceOpen(false)} />}
+      <ArtifactCanvas artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
     </div>
   );
 }
