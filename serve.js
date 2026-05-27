@@ -4782,6 +4782,8 @@ async function requestHandler(req, res) {
     const routerBase = serviceUrl("shre-router");
     const fleetBase = serviceUrl("shre-fleet");
     const to = (ms) => AbortSignal.timeout(ms);
+    const authz = req.headers.authorization || req.headers.Authorization || "";
+    const routerHeaders = authz ? { Authorization: authz } : undefined;
 
     // GET /api/agent-trace/status — fleet active assignments
     if (url.pathname === "/api/agent-trace/status") {
@@ -4798,7 +4800,11 @@ async function requestHandler(req, res) {
     // GET /api/agent-trace/traces — recent traces from shre-router
     if (url.pathname === "/api/agent-trace/traces") {
       try {
-        const resp = await fetch(`${routerBase}/v1/traces?limit=50`, { signal: to(5000) });
+        const resp = await fetch(`${routerBase}/v1/traces?limit=50`, {
+          signal: to(5000),
+          headers: routerHeaders,
+        });
+        if (resp.status === 401) return json(res, { traces: [] });
         if (!resp.ok) return json(res, { error: `router returned ${resp.status}` }, resp.status);
         return json(res, await resp.json());
       } catch (err) {
@@ -4810,7 +4816,11 @@ async function requestHandler(req, res) {
     // GET /api/agent-trace/routing — recent routing decisions
     if (url.pathname === "/api/agent-trace/routing") {
       try {
-        const resp = await fetch(`${routerBase}/v1/routing-history`, { signal: to(5000) });
+        const resp = await fetch(`${routerBase}/v1/routing-history`, {
+          signal: to(5000),
+          headers: routerHeaders,
+        });
+        if (resp.status === 401) return json(res, { decisions: [] });
         if (!resp.ok) return json(res, { error: `router returned ${resp.status}` }, resp.status);
         return json(res, await resp.json());
       } catch (err) {
@@ -4822,7 +4832,11 @@ async function requestHandler(req, res) {
     // GET /api/agent-trace/metrics — per-agent metrics from shre-router
     if (url.pathname === "/api/agent-trace/metrics") {
       try {
-        const resp = await fetch(`${routerBase}/v1/metrics/agents`, { signal: to(5000) });
+        const resp = await fetch(`${routerBase}/v1/metrics/agents`, {
+          signal: to(5000),
+          headers: routerHeaders,
+        });
+        if (resp.status === 401) return json(res, { agents: {} });
         if (!resp.ok) return json(res, { error: `router returned ${resp.status}` }, resp.status);
         return json(res, await resp.json());
       } catch (err) {
@@ -4836,7 +4850,10 @@ async function requestHandler(req, res) {
       try {
         const upstream = await fetch(`${routerBase}/v1/pulse`, {
           signal: to(300_000), // 5min — long-lived SSE
-          headers: { Accept: "text/event-stream" },
+          headers: {
+            Accept: "text/event-stream",
+            ...(routerHeaders || {}),
+          },
         });
         if (!upstream.ok) {
           return json(res, { error: `pulse returned ${upstream.status}` }, upstream.status);
