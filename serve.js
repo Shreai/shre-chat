@@ -6221,7 +6221,19 @@ async function requestHandler(req, res) {
       });
     } catch (err) {
       log.warn("[employee-activity] Query failed", { error: err.message });
-      json(res, { error: "Employee activity query failed", detail: err.message }, 500);
+      json(res, {
+        period: url.searchParams?.get("period") || "today",
+        summary: {
+          totalSales: 0,
+          totalTransactions: 0,
+          totalVoids: 0,
+          totalNoSales: 0,
+          totalRefunds: 0,
+          totalVoidAmount: 0,
+        },
+        employees: [],
+        warning: "Employee activity data unavailable",
+      });
     }
     return;
   }
@@ -6256,7 +6268,7 @@ async function requestHandler(req, res) {
       json(res, alerts);
     } catch (err) {
       log.warn("[employee-activity] Alerts query failed", { error: err.message });
-      json(res, { error: "Employee activity alerts query failed", detail: err.message }, 500);
+      json(res, []);
     }
     return;
   }
