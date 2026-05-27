@@ -5474,6 +5474,149 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // ── Admin Integration + Model Settings (agent bindings, fallback model, API links) ──
+  if (url.pathname === "/api/admin/integration-settings" && req.method === "GET") {
+    try {
+      const configPath = join(GATEWAY_HOME, "openclaw.json");
+      const config = JSON.parse(readFileSync(configPath, "utf8"));
+      const claims = authClaims || null;
+      const actor = claims?.username || claims?.sub || "system";
+
+      const apiLinks = [
+        {
+          id: "openai",
+          provider: "openai",
+          keyEnv: "OPENAI_API_KEY",
+          configured: Boolean(process.env.OPENAI_API_KEY),
+          active: true,
+        },
+        {
+          id: "anthropic",
+          provider: "anthropic",
+          keyEnv: "ANTHROPIC_API_KEY",
+          configured: Boolean(process.env.ANTHROPIC_API_KEY),
+          active: true,
+        },
+        {
+          id: "google",
+          provider: "google",
+          keyEnv: "GOOGLE_API_KEY",
+          configured: Boolean(process.env.GOOGLE_API_KEY),
+          active: true,
+        },
+        {
+          id: "ollama",
+          provider: "ollama",
+          keyEnv: "OLLAMA_BASE_URL",
+          configured: true,
+          active: true,
+        },
+      ];
+
+      const persisted = config?.adminIntegrationSettings || {};
+      const persistedLinks = Array.isArray(persisted?.apiLinks) ? persisted.apiLinks : [];
+      const linksById = new Map(persistedLinks.map((l) => [l.id, l]));
+      const mergedLinks = apiLinks.map((l) => ({
+        ...l,
+        active: linksById.has(l.id) ? Boolean(linksById.get(l.id)?.active) : l.active,
+      }));
+
+      const list = Array.isArray(config?.agents?.list) ? config.agents.list : [];
+      const byAgent = persisted?.byAgent && typeof persisted.byAgent === "object" ? persisted.byAgent : {};
+      const agents = list.map((a) => {
+        const p = byAgent[a.id] || {};
+        const primary = p?.primaryModel || a?.model?.primary || a?.model || config?.agents?.defaults?.model?.primary || "ollama/qwen3:8b";
+        const fallback = p?.fallbackModel || a?.model?.fallback || "ollama/qwen3:8b";
+        const bindings = Array.isArray(p?.bindings) ? p.bindings : [];
+        const apiLinkId = p?.apiLinkId || (String(primary).startsWith("openai/") ? "openai"
+          : String(primary).startsWith("anthropic/") ? "anthropic"
+            : String(primary).startsWith("google/") ? "google"
+              : "ollama");
+        return {
+          agentId: a.id,
+          name: a.name || a.id,
+          primaryModel: primary,
+          fallbackModel: fallback,
+          apiLinkId,
+          active: p?.active !== false,
+          bindings,
+        };
+      });
+
+      return json(res, {
+        ok: true,
+        actor,
+        updatedAt: persisted?.updatedAt || null,
+        apiLinks: mergedLinks,
+        agents,
+      });
+    } catch (err) {
+      return json(res, { ok: false, error: String(err) }, 500);
+    }
+  }
+
+  if (url.pathname === "/api/admin/integration-settings" && req.method === "PUT") {
+    const role = String(authClaims?.role || "").toLowerCase();
+    const allowed = role.includes("admin") || role.includes("owner") || role.includes("super");
+    if (!allowed) return json(res, { ok: false, error: "Forbidden" }, 403);
+
+    let body;
+    try {
+      body = JSON.parse(await collectBody(req));
+    } catch {
+      return json(res, { ok: false, error: "Invalid JSON" }, 400);
+    }
+    const incomingAgents = Array.isArray(body?.agents) ? body.agents : [];
+    const incomingLinks = Array.isArray(body?.apiLinks) ? body.apiLinks : [];
+
+    try {
+      const configPath = join(GATEWAY_HOME, "openclaw.json");
+      const config = JSON.parse(readFileSync(configPath, "utf8"));
+      const list = Array.isArray(config?.agents?.list) ? config.agents.list : [];
+      const listIds = new Set(list.map((a) => a.id));
+
+      const byAgent = {};
+      for (const a of incomingAgents) {
+        if (!a?.agentId || !listIds.has(a.agentId)) continue;
+        byAgent[a.agentId] = {
+          primaryModel: String(a.primaryModel || "").trim() || "ollama/qwen3:8b",
+          fallbackModel: String(a.fallbackModel || "").trim() || "ollama/qwen3:8b",
+          apiLinkId: String(a.apiLinkId || "").trim() || "ollama",
+          active: a.active !== false,
+          bindings: Array.isArray(a.bindings)
+            ? a.bindings
+              .filter((b) => b && typeof b.id === "string" && typeof b.type === "string")
+              .slice(0, 50)
+              .map((b) => ({ id: b.id, type: b.type, active: b.active !== false }))
+            : [],
+        };
+      }
+
+      // Sync primary/fallback model back into openclaw agent list for live use
+      for (const agent of list) {
+        const p = byAgent[agent.id];
+        if (!p) continue;
+        if (!agent.model || typeof agent.model !== "object") agent.model = {};
+        agent.model.primary = p.primaryModel;
+        agent.model.fallback = p.fallbackModel;
+      }
+
+      config.adminIntegrationSettings = {
+        version: 1,
+        updatedAt: Date.now(),
+        updatedBy: authClaims?.username || authClaims?.sub || "unknown",
+        apiLinks: incomingLinks
+          .filter((l) => l && typeof l.id === "string")
+          .map((l) => ({ id: l.id, active: l.active !== false })),
+        byAgent,
+      };
+      writeFileSync(configPath, JSON.stringify(config, null, 2));
+      return json(res, { ok: true, updatedAt: config.adminIntegrationSettings.updatedAt });
+    } catch (err) {
+      return json(res, { ok: false, error: String(err) }, 500);
+    }
+  }
+
   // ── i18n API — proxy to shre-i18n service + locale management ──────────
   const I18N_PORT = 5407;
 
