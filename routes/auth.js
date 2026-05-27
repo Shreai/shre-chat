@@ -70,6 +70,9 @@ const TRUSTED_DEVICES_PATH = join(homedir(), ".shre", "vault", "trusted-devices.
 const LOGIN_LOG_PATH = join(homedir(), ".shre", "logs", "logins.jsonl");
 const AUDIT_LOG = join(homedir(), ".shre", "logs", "auth-audit.jsonl");
 const VAULT_KEY_PATH = join(homedir(), ".shre", ".vault-key");
+const DEV_OTP_BYPASS_CODE = process.env.DEV_OTP_BYPASS_CODE || "123456";
+const DEV_OTP_BYPASS_ENABLED =
+  process.env.DEV_BYPASS_AUTH === "true" && process.env.NODE_ENV !== "production";
 
 // ── Vault encryption ──
 /** @type {string|null} */
@@ -272,6 +275,7 @@ function logLogin(username, req, event = "login") {
 // ── OTP ──
 /** @returns {string} 6-digit zero-padded OTP code */
 function generateOTP() {
+  if (DEV_OTP_BYPASS_ENABLED) return DEV_OTP_BYPASS_CODE;
   const bytes = new Uint8Array(4);
   globalThis.crypto.getRandomValues(bytes);
   return String(((bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3]) >>> 0) % 1000000).padStart(6, "0");
@@ -618,6 +622,13 @@ export function registerAuthRoutes({ log }) {
           // Platform 2FA flow — proxy challengeToken + challengeJwt to shre-auth
           if (parsed.challengeToken && parsed.challengeJwt) {
             if (!parsed.code) return json(res, { error: "code is required" }, 400);
+            if (DEV_OTP_BYPASS_ENABLED && String(parsed.code).trim() === DEV_OTP_BYPASS_CODE) {
+              const token = issueAuthToken("dev-2fa", "admin");
+              if (!token) return json(res, { error: "Auth system unavailable" }, 500);
+              res.setHeader("Set-Cookie", authCookie("shre_token", token, AUTH_TOKEN_TTL, req));
+              auditLog("login_success_2fa_dev_bypass", { ip: clientIp });
+              return json(res, { token, user: { username: "dev-2fa", name: "Dev User", role: "admin" } });
+            }
             const { serviceUrl } = await import("shre-sdk/discovery");
             const authUrl = serviceUrl("shre-auth");
             const authRes = await fetch(`${authUrl}/v1/auth/verify-2fa`, {

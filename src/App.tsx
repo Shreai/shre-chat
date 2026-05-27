@@ -275,18 +275,26 @@ function AuthenticatedApp({
     'loading',
   );
   const [landingTarget, setLandingTarget] = useState<'chat' | 'home'>('chat');
-  const [dashboardTargets, setDashboardTargets] = useState<Array<{ id: string; label: string; url: string }>>([]);
-  const checkedRef = useRef(false);
+  const [dashboardTargets, setDashboardTargets] = useState<
+    Array<{ id: string; label: string; url: string }>
+  >([]);
 
   useEffect(() => {
-    if (checkedRef.current) return;
-    checkedRef.current = true;
     const ac = new AbortController();
+    let settled = false;
+    const loadingGuard = window.setTimeout(() => {
+      if (settled || ac.signal.aborted) return;
+      if (userProfile?.onboardedAt && userProfile.onboardedAt > 0) setOnboardingPhase('done');
+      else setOnboardingPhase('needed');
+      ac.abort();
+    }, 10000);
 
     fetch('/api/onboarding/status', { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (ac.signal.aborted) return;
+        settled = true;
+        window.clearTimeout(loadingGuard);
         if (data?.phase === 'complete') {
           // Server says onboarding is done — sync identity to local profile if needed
           if (!userProfile || userProfile.onboardedAt === 0) {
@@ -357,6 +365,8 @@ function AuthenticatedApp({
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
+        settled = true;
+        window.clearTimeout(loadingGuard);
         // MIB007 unreachable — fall back to localStorage
         if (userProfile?.onboardedAt && userProfile.onboardedAt > 0) {
           setOnboardingPhase('done');
@@ -364,7 +374,10 @@ function AuthenticatedApp({
           setOnboardingPhase('needed');
         }
       });
-    return () => ac.abort();
+    return () => {
+      window.clearTimeout(loadingGuard);
+      ac.abort();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (onboardingPhase === 'loading') {
@@ -465,22 +478,23 @@ function AuthenticatedApp({
             >
               Start Chatting
             </button>
-            {landingTarget === 'home' && dashboards.map((dash) => (
-              <a
-                key={dash.id}
-                href={dash.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors text-center"
-                style={{
-                  border: '1px solid var(--c-border-2)',
-                  color: 'var(--c-text-2)',
-                  background: 'var(--c-bg-card)',
-                }}
-              >
-                {dash.label}
-              </a>
-            ))}
+            {landingTarget === 'home' &&
+              dashboards.map((dash) => (
+                <a
+                  key={dash.id}
+                  href={dash.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full px-5 py-3 rounded-xl font-medium text-sm transition-colors text-center"
+                  style={{
+                    border: '1px solid var(--c-border-2)',
+                    color: 'var(--c-text-2)',
+                    background: 'var(--c-bg-card)',
+                  }}
+                >
+                  {dash.label}
+                </a>
+              ))}
           </div>
         </div>
       </div>
