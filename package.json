@@ -32,7 +32,13 @@
     "test:android:smoke": "node scripts/test-android.mjs --agent smoke",
     "test:android:manual": "node scripts/test-android.mjs --manual",
     "qa:stages": "node scripts/qa/stage-orchestrator.mjs",
-    "qa:wiring": "node scripts/qa/wiring-audit.mjs"
+    "qa:wiring": "node scripts/qa/wiring-audit.mjs",
+    "qa:contract": "npx playwright test --no-deps --project=contract-critical --project=contract-schema",
+    "qa:rbac": "npx playwright test --no-deps --project=rbac-matrix --project=stage-governance",
+    "qa:policy": "npx playwright test --no-deps --project=contract-critical --project=contract-schema --project=stage-governance --project=rbac-matrix",
+    "qa:cycle": "node scripts/qa/cycle.mjs",
+    "qa:cycle:full": "QA_CYCLE_INCLUDE_STAGES=true node scripts/qa/cycle.mjs",
+    "qa:cycle:strict": "QA_CYCLE_STRICT_NO_SKIPS=true E2E_RBAC_REQUIRE_ALL=true node scripts/qa/cycle.mjs --with-stages --strict-no-skips"
   },
   "build": {
     "appId": "ai.shre.chat",

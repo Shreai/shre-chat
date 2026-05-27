@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const STAGE = process.env.SHRE_STAGE || 'dev';
 const BASE = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5000';
+const REQUIRE_ALL = String(process.env.E2E_RBAC_REQUIRE_ALL || '').toLowerCase() === 'true';
 
 const matrix = JSON.parse(readFileSync(join(process.cwd(), 'e2e/meta/rbac-matrix.json'), 'utf8')) as {
   roleExpectations: Record<string, { adminAudit: 'allow' | 'deny'; adminCreateItem: 'allow' | 'deny' }>;
@@ -30,10 +31,22 @@ test.describe('Agent 16: RBAC Matrix — stage role permissions', () => {
     test(`${role.id}: admin endpoints follow policy`, async ({ request }) => {
       const username = process.env[role.userEnv];
       const password = process.env[role.passEnv];
-      test.skip(!username || !password, `Missing creds: ${role.userEnv}/${role.passEnv}`);
+      if (!username || !password) {
+        if (REQUIRE_ALL) {
+          throw new Error(
+            `RBAC strict mode: missing credentials for role=${role.id} env=${role.userEnv}/${role.passEnv}`,
+          );
+        }
+        test.skip(true, `Missing creds: ${role.userEnv}/${role.passEnv}`);
+      }
 
       const token = await loginToken(username!, password!);
-      test.skip(!token, `Unable to login for role ${role.id}`);
+      if (!token) {
+        if (REQUIRE_ALL) {
+          throw new Error(`RBAC strict mode: unable to login for role=${role.id}`);
+        }
+        test.skip(true, `Unable to login for role ${role.id}`);
+      }
 
       const headers = { Authorization: `Bearer ${token}` };
       const expectPolicy = matrix.roleExpectations[role.id];
@@ -60,4 +73,3 @@ test.describe('Agent 16: RBAC Matrix — stage role permissions', () => {
     });
   }
 });
-

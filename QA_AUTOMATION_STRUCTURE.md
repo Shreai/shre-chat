@@ -35,6 +35,11 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5000 \
 npx playwright test --no-deps --project=contract-schema --project=rbac-matrix
 ```
 
+- CI policy gate bundle:
+```bash
+npm run qa:policy
+```
+
 ## Superadmin Coverage Model
 Add dedicated specs for these controls and enforce per stage:
 1. Stage selector visibility and stage lock rules.
@@ -49,6 +54,9 @@ RBAC credentials are env-driven for secure CI/local execution:
 - `E2E_READONLY_USER`, `E2E_READONLY_PASS`
 
 If a role pair is missing, that role test is skipped (not failed).
+
+To hard-enforce all roles in CI, set:
+- `E2E_RBAC_REQUIRE_ALL=true`
 
 ## Traceability Requirements
 Every test run should emit and persist:
@@ -70,3 +78,24 @@ Every test run should emit and persist:
 ## Important Notes
 - Do not commit generated `graphify-out/*` artifacts in `shre-chat`.
 - For prod/beta runs, use real auth flow and 2FA-compliant service users.
+
+## Fully Automated Cycle
+Use one command to run the full cycle and emit a single pass/fail artifact:
+
+```bash
+npm run qa:cycle
+```
+
+Variants:
+- Include stage matrix:
+```bash
+npm run qa:cycle:full
+```
+- Hard gate for CI (no skips, all RBAC creds required):
+```bash
+npm run qa:cycle:strict
+```
+
+Output artifact:
+- `e2e/results/cycle/cycle-<timestamp>.json`
+- Contains per-step status, duration, and final pass/fail.

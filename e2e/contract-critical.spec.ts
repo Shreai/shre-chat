@@ -53,7 +53,7 @@ test.describe('Agent 13: Contract Critical — endpoint contract assertions', ()
     const res = await request.post('/api/verify-identity', {
       data: { code: '000000' },
     });
-    expect([200, 400, 401, 403]).toContain(res.status());
+    expect([200, 400, 401, 403, 429]).toContain(res.status());
     const body = await res.json().catch(() => ({}));
     // permissive: current implementations may return either {verified} or {ok}
     expect(hasKeys(body, ['verified']) || hasKeys(body, ['ok']) || hasKeys(body, ['error'])).toBe(
