@@ -181,6 +181,20 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
+    {
+      name: 'contract-schema',
+      testMatch: /contract-schema\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    {
+      name: 'rbac-matrix',
+      testMatch: /rbac-matrix\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
     // ── Visual regression (baseline screenshots, update with --update-snapshots) ──
     {
       name: 'visual-regression',

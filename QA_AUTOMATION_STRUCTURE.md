@@ -29,12 +29,26 @@ npm run qa:wiring
 PLAYWRIGHT_BASE_URL=https://<stage-url> npm run qa:wiring
 ```
 
+- Contract schema + RBAC matrix agents only:
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:5000 \
+npx playwright test --no-deps --project=contract-schema --project=rbac-matrix
+```
+
 ## Superadmin Coverage Model
 Add dedicated specs for these controls and enforce per stage:
 1. Stage selector visibility and stage lock rules.
 2. Feature activation/deactivation control (`on/off`) with RBAC checks.
 3. Workspace scoping (`rapidnir`, `nir`) and policy boundaries.
 4. Audit trail verification (event emitted, actor, stage, correlation id).
+
+RBAC credentials are env-driven for secure CI/local execution:
+- `E2E_SUPERADMIN_USER`, `E2E_SUPERADMIN_PASS`
+- `E2E_ADMIN_USER`, `E2E_ADMIN_PASS`
+- `E2E_OPERATOR_USER`, `E2E_OPERATOR_PASS`
+- `E2E_READONLY_USER`, `E2E_READONLY_PASS`
+
+If a role pair is missing, that role test is skipped (not failed).
 
 ## Traceability Requirements
 Every test run should emit and persist:

@@ -93,6 +93,18 @@ const AGENTS = [
     owner: 'Agent 14',
     file: 'stage-governance.spec.ts',
   },
+  {
+    name: 'contract-schema',
+    domain: 'Contract Schema',
+    owner: 'Agent 15',
+    file: 'contract-schema.spec.ts',
+  },
+  {
+    name: 'rbac-matrix',
+    domain: 'RBAC Matrix',
+    owner: 'Agent 16',
+    file: 'rbac-matrix.spec.ts',
+  },
 ];
 
 // ── Step 0: Ensure test fixtures exist ──

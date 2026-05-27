@@ -1,0 +1,16 @@
+{
+  "stagePolicies": {
+    "dev": { "allowBypass": true },
+    "qa": { "allowBypass": false },
+    "beta": { "allowBypass": false },
+    "prod": { "allowBypass": false },
+    "external0-dev": { "allowBypass": true }
+  },
+  "roleExpectations": {
+    "superadmin": { "adminAudit": "allow", "adminCreateItem": "allow" },
+    "admin": { "adminAudit": "allow", "adminCreateItem": "allow" },
+    "operator": { "adminAudit": "deny", "adminCreateItem": "deny" },
+    "read-only": { "adminAudit": "deny", "adminCreateItem": "deny" }
+  }
+}
+
