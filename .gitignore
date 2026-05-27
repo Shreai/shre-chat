@@ -18,6 +18,8 @@ e2e/results/test-results.json
 e2e/results/failed-tests.json
 e2e/results/qa-report.md
 e2e/results/latest-*.json
+e2e/results/stages/*.json
+graphify-out/
 playwright-report/
 test-results/
 playwright/.cache/

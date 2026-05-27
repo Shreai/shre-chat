@@ -30,7 +30,9 @@
     "qa:dry": "node scripts/qa-orchestrator.mjs --dry-run",
     "test:android": "node scripts/test-android.mjs",
     "test:android:smoke": "node scripts/test-android.mjs --agent smoke",
-    "test:android:manual": "node scripts/test-android.mjs --manual"
+    "test:android:manual": "node scripts/test-android.mjs --manual",
+    "qa:stages": "node scripts/qa/stage-orchestrator.mjs",
+    "qa:wiring": "node scripts/qa/wiring-audit.mjs"
   },
   "build": {
     "appId": "ai.shre.chat",
