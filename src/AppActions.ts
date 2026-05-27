@@ -19,8 +19,6 @@ import {
   createVoiceSession,
   saveTabs,
   saveActiveSession,
-  debouncedSaveSessions,
-  markSessionDirty,
   syncDeleteToServer,
   saveActivity,
   saveFeed,
@@ -29,11 +27,8 @@ import {
   saveDrafts,
   saveThemeCustom,
   saveSessionImmediate,
-  fetchFullSessionMessages,
-  loadSessions,
-  saveSessions,
 } from './store';
-import type { ActivityStatus, ChatMessage } from './router-client';
+import type { ChatMessage } from './router-client';
 
 const AGENT_KEY = 'shre-active-agent';
 const COMPACT_KEY = 'shre-compact';
@@ -45,8 +40,6 @@ export interface ActionDeps {
   queueRef: MutableRefObject<QueuedMessage[]>;
   draftsRef: MutableRefObject<Record<string, string>>;
   draftSaveTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  crossTabRef: MutableRefObject<boolean>;
-
   activeSessionId: string | null;
 
   setActiveSessionId: Dispatch<SetStateAction<string | null>>;
@@ -83,7 +76,6 @@ export function buildActions(deps: ActionDeps): AppActions {
     queueRef,
     draftsRef,
     draftSaveTimer,
-    crossTabRef,
     activeSessionId,
     setActiveSessionId,
     setOpenTabs,

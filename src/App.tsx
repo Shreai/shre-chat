@@ -641,7 +641,6 @@ function MainApp({
     queueRef,
     draftsRef,
     draftSaveTimer,
-    crossTabRef,
     activeSessionId,
     setActiveSessionId,
     setOpenTabs,

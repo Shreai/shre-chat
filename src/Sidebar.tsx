@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useApp, AGENTS, getAgent, DOMAIN_META, type Session } from './store';
 import { fetchAllAgentMessages } from './router-client';
