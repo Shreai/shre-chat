@@ -52,9 +52,18 @@ export function BriefingView() {
     try {
       const token =
         sessionStorage.getItem('shre-auth-token') || localStorage.getItem('shre-auth-token');
-      const res = await fetch('/api/briefing', {
-        headers: { Authorization: `Bearer ${token}` },
+      let headers: Record<string, string> = {};
+      if (token && token !== 'null' && token !== 'undefined') {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      let res = await fetch('/api/briefing', {
+        headers,
       });
+      if (!res.ok && headers.Authorization) {
+        // Stored token can be stale; retry once without forcing auth header.
+        headers = {};
+        res = await fetch('/api/briefing', { headers });
+      }
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
       setBriefing(data);

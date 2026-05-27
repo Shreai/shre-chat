@@ -1345,7 +1345,7 @@ function authCookie(name, value, maxAge, req) {
 }
 
 // Routes that don't require auth
-const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/signup", "/api/auth/check", "/api/auth/gate-sso", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo", "/api/files/view", "/api/files/preview", "/api/files/recent"]);
+const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/signup", "/api/auth/check", "/api/auth/gate-sso", "/api/auth/verify-2fa", "/api/auth/passport-login", "/api/auth/select-workspace", "/health", "/readyz", "/api/health", "/api/readyz", "/api/verify-identity", "/api/branding/public", "/api/version", "/api/employee-activity", "/api/employee-activity/alerts", "/api/briefing", "/api/notifications", "/api/messages/append", "/api/voice-quality", "/api/sitemap", "/demo", "/api/files/view", "/api/files/preview", "/api/files/recent"]);
 
 // ── CSRF token generation + validation ─────────────────────────────
 // Token = HMAC-SHA256(sessionSeed, authSigningKey || fallback). Validated on POST/PUT/DELETE.
@@ -6437,6 +6437,7 @@ async function requestHandler(req, res) {
 
   // ── Briefing — personal assistant daily briefing ──────────────────
   if (url.pathname === "/api/briefing" && req.method === "GET") {
+    try {
     // Server-side cache (5 minutes)
     if (_briefingCache && Date.now() - _briefingCacheTs < 60_000) {
       return json(res, _briefingCache);
@@ -6657,6 +6658,21 @@ async function requestHandler(req, res) {
     _briefingCache = briefingData;
     _briefingCacheTs = Date.now();
     return json(res, briefingData);
+    } catch (err) {
+      log.warn("[briefing] Fallback due to error", { error: err?.message || String(err) });
+      return json(res, {
+        greeting: "Good day",
+        timestamp: new Date().toISOString(),
+        sections: {
+          tasks: { total: 0, overdue: 0, due_today: 0, items: [] },
+          agents: { active: 0, total: 0, recent: [] },
+          conversations: { today: 0, unread: 0, recent: [] },
+          reminders: { upcoming: 0, items: [] },
+          tip: 'Say "Hey Shre" to use voice commands hands-free.',
+        },
+        warnings: ["Briefing services are temporarily unavailable"],
+      });
+    }
   }
 
   // ── Status bar — lightweight endpoint for persistent status bar ──
