@@ -10,19 +10,23 @@ export interface UseChatSearchReturn {
   setGlobalSearchQuery: React.Dispatch<React.SetStateAction<string>>;
   globalSearchResults: Array<{
     agentId: string;
-    sessionKey: string;
-    sessionId: string;
+    sessionKey?: string;
+    sessionId?: string;
     matches: number;
     preview: string;
+    type?: string;
+    createdAt?: number | string;
   }>;
   setGlobalSearchResults: React.Dispatch<
     React.SetStateAction<
       Array<{
         agentId: string;
-        sessionKey: string;
-        sessionId: string;
+        sessionKey?: string;
+        sessionId?: string;
         matches: number;
         preview: string;
+        type?: string;
+        createdAt?: number | string;
       }>
     >
   >;
@@ -53,10 +57,12 @@ export function useChatSearch(
   const [globalSearchResults, setGlobalSearchResults] = useState<
     Array<{
       agentId: string;
-      sessionKey: string;
-      sessionId: string;
+      sessionKey?: string;
+      sessionId?: string;
       matches: number;
       preview: string;
+      type?: string;
+      createdAt?: number | string;
     }>
   >([]);
   const [globalSearching, setGlobalSearching] = useState(false);

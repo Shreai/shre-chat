@@ -49,6 +49,9 @@ export interface UseMessageHandlersParams {
   selectedModel: string | null;
   compareMode: boolean;
   compareModels: string[];
+  selectedTools: string[];
+  ragProfile: 'fast' | 'balanced' | 'deep';
+  ragDepth: number;
   setCompareStreams: (
     v: (
       prev: Record<string, { text: string; done: boolean; error?: string }>,
@@ -143,6 +146,9 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     selectedModel,
     compareMode,
     compareModels,
+    selectedTools,
+    ragProfile,
+    ragDepth,
     setCompareStreams,
     setCompareWinner,
     cliMode,
@@ -402,6 +408,18 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       });
     }
 
+    if (selectedTools.length > 0) {
+      actions.addMessage(sessionId, {
+        role: 'assistant',
+        content: `[system] Active tools for this request: ${selectedTools.join(', ')}`,
+        timestamp: Date.now(),
+        meta: { system: 'true' },
+      });
+      actions.addFeed(sessionId, 'gateway', `Tools: ${selectedTools.join(', ')}`, {
+        tools: String(selectedTools.length),
+      });
+    }
+
     if (cliMode) {
       try {
         await sendViaCLI(messageText, sessionId);
@@ -506,6 +524,16 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         selectedModel || undefined,
         undefined,
         routerMode,
+        undefined,
+        undefined,
+        claudeCliMode,
+        false,
+        voiceMode,
+        false,
+        conversationMode,
+        activeAppId,
+        selectedTools,
+        { profile: ragProfile, depth: ragDepth },
       );
     } catch {
       actions.setStreaming(false);
@@ -527,6 +555,9 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     selectedModel,
     compareMode,
     compareModels,
+    selectedTools,
+    ragProfile,
+    ragDepth,
     cliMode,
     routerMode,
     gatewayMode,

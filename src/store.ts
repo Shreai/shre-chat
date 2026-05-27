@@ -27,7 +27,6 @@ import {
   idbSaveTabs,
   idbSaveActiveSession,
   idbSaveScrollPositions,
-  idbLoadScrollPositions,
 } from './idb';
 
 // ── Agent Registry ───────────────────────────────────────────────────
@@ -992,7 +991,10 @@ export function importSessions(
 // ── Share via link ───────────────────────────────────────────────────
 
 /** Create a shareable snapshot of a session and return the share URL */
-export async function shareSession(sessionId: string): Promise<string> {
+export async function shareSession(
+  sessionId: string,
+  expiresInMinutes: number = 1440,
+): Promise<{ url: string; id: string; expiresAt?: string }> {
   const sessions = loadSessions();
   const session = sessions.find((s) => s.id === sessionId);
   if (!session) throw new Error('Session not found');
@@ -1005,12 +1007,13 @@ export async function shareSession(sessionId: string): Promise<string> {
       title: `${agent.name} — ${session.title}`,
       messages: session.messages,
       model: agent.model,
+      expiresInMinutes,
     }),
   });
 
   if (!res.ok) throw new Error('Failed to create share link');
   const data = await res.json();
-  return data.url as string;
+  return { url: data.url as string, id: data.id as string, expiresAt: data.expiresAt as string };
 }
 
 // ── Context (provided by App) ────────────────────────────────────────

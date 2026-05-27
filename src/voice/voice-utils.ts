@@ -23,6 +23,12 @@ export interface VoiceShortcut {
 
 /** Strip markdown for TTS — converts tables to spoken form, removes formatting */
 export function stripMd(t: string): string {
+  const tableDividerChars = '[-:' + '\\s|]+';
+  const TABLE_BLOCK_RE = new RegExp(
+    '(?:^\\|.+\\|\\s*\\n\\|' + tableDividerChars + '\\|\\s*\\n)((?:^\\|.+\\|\\s*\\n?)+)',
+    'gm',
+  );
+  const TABLE_DIVIDER_ROW_RE = new RegExp('^[' + '\\s|:-]+$');
   let s = t
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<think>[\s\S]*$/gi, '')
@@ -32,11 +38,11 @@ export function stripMd(t: string): string {
     .replace(/<thinking_mode>[\s\S]*?<\/thinking_mode>/gi, '')
     .replace(/<reasoning_effort>[\s\S]*?<\/reasoning_effort>/gi, '');
   // Convert markdown tables to spoken-friendly form
-  s = s.replace(/(?:^\|.+\|\s*\n\|[-:\s|]+\|\s*\n)((?:^\|.+\|\s*\n?)+)/gm, (block) => {
+  s = s.replace(TABLE_BLOCK_RE, (block) => {
     const rows = block
       .trim()
       .split('\n')
-      .filter((r) => r.includes('|') && !/^[\s|:-]+$/.test(r));
+      .filter((r) => r.includes('|') && !TABLE_DIVIDER_ROW_RE.test(r));
     if (rows.length === 0) return block;
     const headerCells = rows[0]
       .split('|')

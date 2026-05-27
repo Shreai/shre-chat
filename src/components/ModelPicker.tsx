@@ -150,7 +150,7 @@ export function ModelPicker({
           background: open ? 'var(--c-bg-active)' : 'transparent',
           border: selectedModel ? '1px solid var(--c-accent-soft)' : '1px solid transparent',
         }}
-        title="Switch AI model"
+        title="Switch AI model (locks for this conversation)"
         aria-label="Switch AI model"
       >
         <svg
@@ -234,6 +234,9 @@ export function ModelPicker({
                 <span className="text-[10px]" style={{ color: 'var(--c-text-4)' }}>
                   for {agentName}
                 </span>
+              </div>
+              <div className="mt-1 text-[10px]" style={{ color: 'var(--c-text-4)' }}>
+                Selection is saved per conversation.
               </div>
             </div>
 

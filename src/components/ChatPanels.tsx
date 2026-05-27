@@ -46,6 +46,12 @@ interface ChatPanelsProps {
   toolOptions?: ToolOption[];
   toolSystemCount?: number;
   toolAppCount?: number;
+  selectedTools: string[];
+  onToggleTool: (toolName: string) => void;
+  ragProfile: 'fast' | 'balanced' | 'deep';
+  ragDepth: number;
+  onSetRagProfile: (profile: 'fast' | 'balanced' | 'deep') => void;
+  onSetRagDepth: (depth: number) => void;
   // Model picker
   showModelPicker: boolean;
   setShowModelPicker: (v: boolean) => void;
@@ -107,6 +113,8 @@ interface ChatPanelsProps {
   setWsConnected: (v: boolean) => void;
   // Share
   shareUrl: string | null;
+  shareId?: string | null;
+  shareExpiresAt?: string | null;
   shareCopied: boolean;
   setShareCopied: (v: boolean) => void;
   setShareUrl: (v: string | null) => void;
@@ -164,6 +172,12 @@ export function ChatPanels(props: ChatPanelsProps) {
     toolOptions,
     toolSystemCount,
     toolAppCount,
+    selectedTools,
+    onToggleTool,
+    ragProfile,
+    ragDepth,
+    onSetRagProfile,
+    onSetRagDepth,
     showModelPicker,
     setShowModelPicker,
     selectedModel,
@@ -213,6 +227,8 @@ export function ChatPanels(props: ChatPanelsProps) {
     setWsFailed,
     setWsConnected,
     shareUrl,
+    shareId,
+    shareExpiresAt,
     shareCopied,
     setShareCopied,
     setShareUrl,
@@ -280,7 +296,7 @@ export function ChatPanels(props: ChatPanelsProps) {
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Compact toolbar -- model picker + options */}
       <header
-        className="flex items-center justify-between px-3 py-1.5 shrink-0"
+        className="flex items-center justify-between px-3 py-1.5 shrink-0 mobile-chat-toolbar"
         style={{
           background: 'var(--c-bg-2)',
           borderBottom: '1px solid var(--c-border-2)',
@@ -337,9 +353,31 @@ export function ChatPanels(props: ChatPanelsProps) {
               CLI
             </span>
           )}
+          <span
+            className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium max-w-[140px] truncate"
+            style={{
+              background: 'var(--c-accent-soft)',
+              color: 'var(--c-accent)',
+              border: '1px solid var(--c-border-2)',
+            }}
+            title={`Conversation model: ${selectedModel || 'Auto'}`}
+          >
+            Model: {selectedModel || 'Auto'}
+          </span>
+          <span
+            className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium"
+            style={{
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-2)',
+              border: '1px solid var(--c-border-2)',
+            }}
+            title={`Retrieval profile ${ragProfile}, depth ${ragDepth}`}
+          >
+            RAG: {ragProfile}/{ragDepth}
+          </span>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 mobile-chat-toolbar-actions">
           <ModePicker
             open={modePickerOpen}
             onToggle={() => setModePickerOpen((v) => !v)}
@@ -394,9 +432,35 @@ export function ChatPanels(props: ChatPanelsProps) {
               tools={toolOptions}
               systemCount={toolSystemCount ?? 0}
               appCount={toolAppCount ?? 0}
+              selectedTools={selectedTools}
+              onToggleTool={onToggleTool}
               pickerRef={toolPickerRef}
             />
           )}
+          <select
+            value={ragProfile}
+            onChange={(e) => onSetRagProfile(e.target.value as 'fast' | 'balanced' | 'deep')}
+            className="h-7 rounded-lg px-1 text-[10px]"
+            style={{
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-2)',
+              border: '1px solid var(--c-border-2)',
+            }}
+            aria-label="RAG profile"
+          >
+            <option value="fast">RAG fast</option>
+            <option value="balanced">RAG balanced</option>
+            <option value="deep">RAG deep</option>
+          </select>
+          <input
+            type="range"
+            min={1}
+            max={5}
+            value={ragDepth}
+            onChange={(e) => onSetRagDepth(Number(e.target.value))}
+            aria-label="RAG depth"
+            title={`RAG depth: ${ragDepth}`}
+          />
 
           {/* Voice engine selector — icon + dropdown */}
           <div className="relative" ref={voicePickerRef}>
@@ -768,13 +832,21 @@ export function ChatPanels(props: ChatPanelsProps) {
 
       {shareUrl && (
         <ShareBar
+          shareId={shareId}
           shareUrl={shareUrl}
+          shareExpiresAt={shareExpiresAt}
           shareCopied={shareCopied}
           onCopy={() => {
             navigator.clipboard.writeText(shareUrl).then(() => {
               setShareCopied(true);
               setTimeout(() => setShareCopied(false), 2000);
             });
+          }}
+          onRevoke={() => {
+            if (!shareId) return;
+            fetch(`/api/share/${shareId}`, { method: 'DELETE' })
+              .then(() => setShareUrl(null))
+              .catch(() => {});
           }}
           onClose={() => setShareUrl(null)}
         />

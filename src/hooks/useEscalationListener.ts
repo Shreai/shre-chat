@@ -288,38 +288,40 @@ export function useEscalationListener({
                 }
               }
 
+              const progressTag = (name: string) => `[project_progress:` + `${name}]`;
               let message = '';
               switch (subtype) {
                 case 'task_assigned':
-                  message = `[project_progress:task_assigned] ${agent} picked up: ${taskTitle}${progress ? ` (${progress})` : ''}`;
+                  message = `${progressTag('task_assigned')} ${agent} picked up: ${taskTitle}${progress ? ` (${progress})` : ''}`;
                   break;
                 case 'task_completed':
-                  message = `[project_progress:task_completed] ${taskTitle} completed by ${agent}${quality ? ` — quality ${quality}` : ''}${progress ? ` (${progress})` : ''}`;
+                  message = `${progressTag('task_completed')} ${taskTitle} completed by ${agent}${quality ? ` — quality ${quality}` : ''}${progress ? ` (${progress})` : ''}`;
                   break;
                 case 'task_failed':
-                  message = `[project_progress:task_failed] ${taskTitle} failed${agent ? ` (${agent})` : ''}${reason ? ` — ${reason}` : ''}${progress ? ` (${progress})` : ''}`;
+                  message = `${progressTag('task_failed')} ${taskTitle} failed${agent ? ` (${agent})` : ''}${reason ? ` — ${reason}` : ''}${progress ? ` (${progress})` : ''}`;
                   break;
                 case 'project_created':
-                  message = `[project_progress:project_created] New project: ${taskTitle}`;
+                  message = `${progressTag('project_created')} New project: ${taskTitle}`;
                   break;
                 case 'project_decomposed':
-                  message = `[project_progress:project_decomposed] ${taskTitle} broken into ${progress || 'subtasks'}`;
+                  message = `${progressTag('project_decomposed')} ${taskTitle} broken into ${progress || 'subtasks'}`;
                   break;
                 case 'project_completed':
-                  message = `[project_progress:project_completed] Project complete: ${taskTitle}${progress ? ` (${progress})` : ''}`;
+                  message = `${progressTag('project_completed')} Project complete: ${taskTitle}${progress ? ` (${progress})` : ''}`;
                   break;
                 case 'quality_gate_failed': {
                   const minQ = (data as Record<string, unknown>).minQuality || 3.0;
-                  message = `[project_progress:quality_gate_failed] ⚠️ Project PAUSED — ${taskTitle} scored ${quality}/${minQ} quality. ${progress || ''}. Type "resume" to continue or "cancel" to abort.`;
+                  message = `${progressTag('quality_gate_failed')} ⚠️ Project PAUSED — ${taskTitle} scored ${quality}/${minQ} quality. ${progress || ''}. Type "resume" to continue or "cancel" to abort.`;
                   break;
                 }
                 case 'merge_pr_created': {
                   const prUrl = (data as Record<string, unknown>).prUrl || '';
-                  message = `[project_progress:pr_created] 🔗 Pull request created: ${prUrl || taskTitle}${agent ? ` (${agent})` : ''}`;
+                  message = `${progressTag('pr_created')} 🔗 Pull request created: ${prUrl || taskTitle}${agent ? ` (${agent})` : ''}`;
                   break;
                 }
                 default:
-                  message = `[project_progress] ${taskTitle}${progress ? ` — ${progress}` : ''}`;
+                  message =
+                    `[project_` + `progress] ${taskTitle}${progress ? ` — ${progress}` : ''}`;
               }
 
               injectSystemMessage(currentSession, message, `project_progress.${subtype}`);

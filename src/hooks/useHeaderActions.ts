@@ -45,6 +45,8 @@ export function useHeaderActions({
   const [summaryText, setSummaryText] = useState('');
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareId, setShareId] = useState<string | null>(null);
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -148,8 +150,10 @@ export function useHeaderActions({
     setShareLoading(true);
     setShareCopied(false);
     try {
-      const url = await shareSession(activeSessionId);
-      setShareUrl(url);
+      const share = await shareSession(activeSessionId);
+      setShareUrl(share.url);
+      setShareId(share.id);
+      setShareExpiresAt(share.expiresAt ?? null);
     } catch (err) {
       console.warn('share session', err);
       actions.setStatusLine('Failed to create share link');
@@ -241,6 +245,8 @@ export function useHeaderActions({
     showAnalytics,
     setShowAnalytics,
     shareUrl,
+    shareId,
+    shareExpiresAt,
     setShareUrl,
     shareLoading,
     shareCopied,

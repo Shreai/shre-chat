@@ -530,6 +530,31 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ── Mobile responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
+  .mobile-chat-toolbar {
+    position: sticky !important;
+    top: 0;
+    z-index: 35;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .mobile-chat-toolbar-actions {
+    overflow-x: auto;
+    max-width: 58vw;
+    scrollbar-width: none;
+  }
+
+  .mobile-chat-toolbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-message-scroll {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    padding-top: 12px !important;
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
   .sidebar-mobile-slide {
     position: fixed;
     top: 0;
@@ -553,6 +578,11 @@ h1, h2, h3, h4, h5, h6 {
   .mobile-input-area textarea {
     min-height: 44px;
     font-size: 16px;
+  }
+  input[placeholder*="Message" i],
+  textarea[placeholder*="Message" i],
+  textarea[aria-label*="Message" i] {
+    font-size: 16px !important;
   }
   .mobile-input-area button {
     min-height: 44px;
@@ -604,8 +634,10 @@ h1, h2, h3, h4, h5, h6 {
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 20;
+    z-index: 30;
     bottom: env(safe-area-inset-bottom, 0px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 }
 

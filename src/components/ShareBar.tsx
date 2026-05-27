@@ -1,18 +1,34 @@
 import React from 'react';
 
 export interface ShareBarProps {
+  shareId?: string | null;
   shareUrl: string;
+  shareExpiresAt?: string | null;
   shareCopied: boolean;
   onCopy: () => void;
+  onRevoke?: () => void;
   onClose: () => void;
 }
 
-export function ShareBar({ shareUrl, shareCopied, onCopy, onClose }: ShareBarProps) {
+export function ShareBar({
+  shareId,
+  shareUrl,
+  shareExpiresAt,
+  shareCopied,
+  onCopy,
+  onRevoke,
+  onClose,
+}: ShareBarProps) {
   return (
     <div
       className="shrink-0 flex items-center gap-2 px-4 py-2"
       style={{ background: 'var(--c-bg-2)', borderBottom: '1px solid var(--c-border-2)' }}
     >
+      {shareExpiresAt && (
+        <span className="text-[10px] shrink-0" style={{ color: 'var(--c-text-4)' }}>
+          Expires {new Date(shareExpiresAt).toLocaleString()}
+        </span>
+      )}
       <input
         type="text"
         readOnly
@@ -31,6 +47,15 @@ export function ShareBar({ shareUrl, shareCopied, onCopy, onClose }: ShareBarPro
       >
         {shareCopied ? 'Copied' : 'Copy'}
       </button>
+      {shareId && onRevoke && (
+        <button
+          onClick={onRevoke}
+          className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all shrink-0"
+          style={{ background: 'var(--c-danger-bg)', color: 'var(--c-danger)' }}
+        >
+          Revoke
+        </button>
+      )}
       <button
         onClick={onClose}
         className="p-1 rounded-lg transition-colors hover:bg-white/5"

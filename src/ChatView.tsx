@@ -188,9 +188,42 @@ export function ChatView() {
 
   useEscalationListener({ activeSessionId, addMessage: actions.addMessage });
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [selectedModelBySession, setSelectedModelBySession] = useState<
+    Record<string, string | null>
+  >(() => {
+    try {
+      const raw = localStorage.getItem('shre-selected-model-by-session');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
   const [selectedModel, setSelectedModel] = useState<string | null>(() =>
     getModelOverride(activeAgentId),
   );
+  useEffect(() => {
+    if (
+      activeSessionId &&
+      Object.prototype.hasOwnProperty.call(selectedModelBySession, activeSessionId)
+    ) {
+      setSelectedModel(selectedModelBySession[activeSessionId] ?? null);
+      return;
+    }
+    setSelectedModel(getModelOverride(activeAgentId));
+  }, [activeSessionId, activeAgentId, selectedModelBySession]);
+
+  const setSessionModel = useCallback((sessionId: string, modelId: string | null) => {
+    setSelectedModelBySession((prev) => {
+      const next = { ...prev, [sessionId]: modelId };
+      localStorage.setItem('shre-selected-model-by-session', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (!activeSessionId) return;
+    setSessionModel(activeSessionId, selectedModel);
+  }, [activeSessionId, selectedModel, setSessionModel]);
 
   const {
     dynamicModels,
@@ -203,6 +236,37 @@ export function ChatView() {
 
   const { appOptions } = useAppList();
   const { toolOptions, systemCount: toolSystemCount, appCount: toolAppCount } = useToolList();
+  const [selectedToolsBySession, setSelectedToolsBySession] = useState<Record<string, string[]>>(
+    () => {
+      try {
+        const raw = localStorage.getItem('shre-selected-tools-by-session');
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    },
+  );
+  const selectedTools =
+    activeSessionId && selectedToolsBySession[activeSessionId]
+      ? selectedToolsBySession[activeSessionId]
+      : [];
+  const toggleSelectedTool = useCallback(
+    (toolName: string) => {
+      if (!activeSessionId) return;
+      const sid = activeSessionId;
+      setSelectedToolsBySession((prev) => {
+        const curr = prev[sid] || [];
+        const nextTools = curr.includes(toolName)
+          ? curr.filter((t) => t !== toolName)
+          : [...curr, toolName];
+        const next = { ...prev, [sid]: nextTools };
+        localStorage.setItem('shre-selected-tools-by-session', JSON.stringify(next));
+        return next;
+      });
+    },
+    [activeSessionId],
+  );
 
   const [cliMode, setCliMode] = useState(
     () => localStorage.getItem('shre-cli-mode-default') === 'true',
@@ -226,6 +290,12 @@ export function ChatView() {
   }, []);
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [ragProfile, setRagProfile] = useState<'fast' | 'balanced' | 'deep'>(
+    () => (localStorage.getItem('shre-rag-profile') as 'fast' | 'balanced' | 'deep') || 'balanced',
+  );
+  const [ragDepth, setRagDepth] = useState<number>(() =>
+    Number(localStorage.getItem('shre-rag-depth') || '3'),
+  );
   const [termViewMode, setTermViewMode] = useState<'split' | 'tabs'>('split');
   const [activeView, setActiveView] = useState<string>('chat');
   const [previewContent, setPreviewContent] = useState<{
@@ -242,6 +312,8 @@ export function ChatView() {
   } | null>(null);
   const [sharedLoading, setSharedLoading] = useState(false);
   const [sharedError, setSharedError] = useState<string | null>(null);
+  const [globalAgentFilter, setGlobalAgentFilter] = useState('');
+  const [globalTypeFilter, setGlobalTypeFilter] = useState('');
   const [compareModels, setCompareModels] = useState<string[]>([]);
   const [compareStreams, setCompareStreams] = useState<
     Record<string, { text: string; done: boolean; error?: string }>
@@ -326,6 +398,8 @@ export function ChatView() {
     showAnalytics,
     setShowAnalytics,
     shareUrl,
+    shareId,
+    shareExpiresAt,
     setShareUrl,
     shareLoading,
     shareCopied,
@@ -534,6 +608,9 @@ export function ChatView() {
     selectedModel,
     compareMode,
     compareModels,
+    selectedTools,
+    ragProfile,
+    ragDepth,
     setCompareStreams,
     setCompareWinner,
     cliMode,
@@ -1108,6 +1185,18 @@ export function ChatView() {
           toolOptions={toolOptions}
           toolSystemCount={toolSystemCount}
           toolAppCount={toolAppCount}
+          selectedTools={selectedTools}
+          onToggleTool={toggleSelectedTool}
+          ragProfile={ragProfile}
+          ragDepth={ragDepth}
+          onSetRagProfile={(profile) => {
+            setRagProfile(profile);
+            localStorage.setItem('shre-rag-profile', profile);
+          }}
+          onSetRagDepth={(depth) => {
+            setRagDepth(depth);
+            localStorage.setItem('shre-rag-depth', String(depth));
+          }}
           showModelPicker={showModelPicker}
           setShowModelPicker={setShowModelPicker}
           selectedModel={selectedModel}
@@ -1157,6 +1246,8 @@ export function ChatView() {
           setWsFailed={setWsFailed}
           setWsConnected={setWsConnected}
           shareUrl={shareUrl}
+          shareId={shareId}
+          shareExpiresAt={shareExpiresAt}
           shareCopied={shareCopied}
           setShareCopied={setShareCopied}
           setShareUrl={setShareUrl}
@@ -1218,21 +1309,33 @@ export function ChatView() {
         onSearch={() => {
           if (!globalSearchQuery.trim()) return;
           setGlobalSearching(true);
-          fetch(`/api/sessions/search?q=${encodeURIComponent(globalSearchQuery)}`, {
+          fetch(`/api/chat-sessions/search?q=${encodeURIComponent(globalSearchQuery)}&limit=50`, {
             credentials: 'include',
           })
             .then((r) => (r.ok ? r.json() : { results: [] }))
             .then((data) => {
-              setGlobalSearchResults(Array.isArray(data) ? data : (data.results ?? []));
+              const list = (Array.isArray(data) ? data : (data.results ?? [])).map((r: any) => ({
+                agentId: r.agent_id || r.agentId,
+                sessionId: r.session_id || r.sessionId || r.id,
+                matches: 1,
+                preview: r.preview || r.response_preview || r.title || '',
+                type: r.type || 'session',
+                createdAt: r.created_at || r.updated_at || Date.now(),
+              }));
+              setGlobalSearchResults(list);
               setGlobalSearching(false);
             })
             .catch(() => setGlobalSearching(false));
         }}
         onResultClick={(r) => {
-          actions.switchSession(r.sessionId);
+          if (r.sessionId) actions.switchSession(r.sessionId);
           setGlobalSearchOpen(false);
         }}
         inputRef={globalSearchRef}
+        agentFilter={globalAgentFilter}
+        setAgentFilter={setGlobalAgentFilter}
+        typeFilter={globalTypeFilter}
+        setTypeFilter={setGlobalTypeFilter}
       />
       {sharedSnapshot && (
         <ShareSnapshotView snapshot={sharedSnapshot} loading={sharedLoading} error={sharedError} />

@@ -656,6 +656,8 @@ export async function sendMessage(
   traceEnabled?: boolean,
   conversationMode?: string,
   activeAppId?: string | null,
+  selectedTools?: string[],
+  ragOptions?: { profile: 'fast' | 'balanced' | 'deep'; depth: number },
 ): Promise<void> {
   // Use provided sessionId or fall back to global activeSessionKey
   activeSessionKey = sessionId ?? activeSessionKey ?? 'main';
@@ -693,6 +695,8 @@ export async function sendMessage(
       traceEnabled,
       conversationMode,
       activeAppId,
+      selectedTools,
+      ragOptions,
     );
   } catch (err) {
     if (done) return;
@@ -754,6 +758,8 @@ async function streamViaFallback(
   traceEnabled?: boolean,
   conversationMode?: string,
   activeAppId?: string | null,
+  selectedTools?: string[],
+  ragOptions?: { profile: 'fast' | 'balanced' | 'deep'; depth: number },
   _emptyRetry?: boolean,
 ): Promise<void> {
   callbacks.onStatus?.('connecting');
@@ -806,6 +812,13 @@ async function streamViaFallback(
       ...(traceEnabled ? { trace: true } : {}),
       ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
       ...(activeAppId ? { appId: activeAppId } : {}),
+      ...(selectedTools?.length ? { selectedTools } : {}),
+      ...(ragOptions
+        ? {
+            retrievalProfile: ragOptions.profile,
+            retrievalDepth: ragOptions.depth,
+          }
+        : {}),
     }),
     signal,
   });

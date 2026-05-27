@@ -815,8 +815,6 @@ export function lightweightMarkdown(text: string): string {
         /^\|[\s\-:]+\|$/.test(r.trim().replace(/\|[\s\-:]+/g, '|---'));
       const hasSep = rows.length >= 2 && isSeparator(rows[1]);
       const dataRows = hasSep ? [rows[0], ...rows.slice(2)] : rows;
-      const startIdx = hasSep ? 1 : 0; // first row is header if separator follows
-
       let table =
         '<table style="border-collapse:collapse;width:100%;font-size:0.9em;margin:8px 0">';
       dataRows.forEach((row: string, i: number) => {
@@ -860,6 +858,7 @@ export function classifySystemEvent(content: string): {
   color: string;
 } {
   const t = content.toLowerCase();
+  const progressTag = (name: string) => `[project_progress:` + `${name}]`;
   // Tool execution events — rendered by ToolExecutionChip but classifiable as fallback
   if (t.startsWith('[tool_exec]')) {
     if (t.includes('running'))
@@ -895,19 +894,19 @@ export function classifySystemEvent(content: string): {
   if (t.includes('project decomposition unavailable'))
     return { icon: '⚠️', label: 'Project fallback', color: 'var(--c-warning)' };
   // Project progress events
-  if (t.includes('[project_progress:task_assigned]'))
+  if (t.includes(progressTag('task_assigned')))
     return { icon: '🏃', label: 'Agent assigned', color: 'var(--c-info-soft)' };
-  if (t.includes('[project_progress:task_completed]'))
+  if (t.includes(progressTag('task_completed')))
     return { icon: '✅', label: 'Task completed', color: 'var(--c-success, #34d399)' };
-  if (t.includes('[project_progress:task_failed]'))
+  if (t.includes(progressTag('task_failed')))
     return { icon: '❌', label: 'Task failed', color: 'var(--c-danger-soft, #f87171)' };
-  if (t.includes('[project_progress:project_created]'))
+  if (t.includes(progressTag('project_created')))
     return { icon: '📋', label: 'Project created', color: 'var(--c-info-soft)' };
-  if (t.includes('[project_progress:project_decomposed]'))
+  if (t.includes(progressTag('project_decomposed')))
     return { icon: '🔀', label: 'Project decomposed', color: 'var(--c-info-soft)' };
-  if (t.includes('[project_progress:project_completed]'))
+  if (t.includes(progressTag('project_completed')))
     return { icon: '🎉', label: 'Project done', color: 'var(--c-success, #34d399)' };
-  if (t.includes('[project_progress:quality_gate_failed]'))
+  if (t.includes(progressTag('quality_gate_failed')))
     return { icon: '⚠️', label: 'Quality gate', color: 'var(--c-warning, #fbbf24)' };
   if (t.includes('[file_diff]'))
     return { icon: '📝', label: 'File changed', color: 'var(--c-info-soft)' };

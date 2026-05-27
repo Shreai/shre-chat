@@ -307,15 +307,11 @@ export function MessageList(props: MessageListProps) {
         onTouchStart={onPullStart}
         onTouchMove={onPullMove}
         onTouchEnd={onPullEnd}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text relative scroll-anchor-container"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text relative scroll-anchor-container mobile-message-scroll"
         role="log"
         aria-label="Message history"
         aria-relevant="additions"
-        style={{
-          paddingLeft: '24px',
-          paddingRight: '24px',
-          paddingBottom: window.innerWidth <= 768 ? '120px' : '24px',
-        }}
+        style={{ paddingLeft: '24px', paddingRight: '24px' }}
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || pullRefreshing) && (

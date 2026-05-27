@@ -15,6 +15,8 @@ interface ToolPickerProps {
   tools: ToolOption[];
   systemCount: number;
   appCount: number;
+  selectedTools: string[];
+  onToggleTool: (toolName: string) => void;
   pickerRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -27,6 +29,8 @@ export function ToolPicker({
   tools,
   systemCount,
   appCount,
+  selectedTools,
+  onToggleTool,
   pickerRef,
 }: ToolPickerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -209,6 +213,12 @@ export function ToolPicker({
                       {tool.description}
                     </div>
                   </div>
+                  <input
+                    type="checkbox"
+                    checked={selectedTools.includes(tool.name)}
+                    onChange={() => onToggleTool(tool.name)}
+                    aria-label={`Enable ${tool.name}`}
+                  />
                 </div>
               ))}
             </div>

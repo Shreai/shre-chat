@@ -569,13 +569,15 @@ export function StatusBar() {
         className="shrink-0 p-2 md:p-1 rounded-lg transition-colors hover:bg-white/5"
         style={{
           color: 'var(--c-text-3)',
-          minWidth: 36,
-          minHeight: 36,
+          minWidth: 44,
+          minHeight: 44,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
         aria-label={state.sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        aria-expanded={state.sidebarOpen}
+        data-testid="sidebar-toggle"
       >
         <svg
           className="h-[18px] w-[18px] md:h-[16px] md:w-[16px]"

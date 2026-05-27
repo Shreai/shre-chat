@@ -4310,7 +4310,7 @@ async function requestHandler(req, res) {
     let body;
     try { body = await collectBody(req); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
-      const { title, messages, model } = JSON.parse(body);
+      const { title, messages, model, expiresInMinutes } = JSON.parse(body);
       if (!messages || !Array.isArray(messages)) {
         return json(res, { error: "messages array required" }, 400);
       }
@@ -4320,9 +4320,19 @@ async function requestHandler(req, res) {
         shareStore.delete(oldestKey);
       }
       const id = shareId();
-      shareStore.set(id, { title: title || "Shared chat", messages, model: model || null, createdAt: new Date().toISOString() });
+      const ttlMinutes = Math.max(5, Math.min(Number(expiresInMinutes) || 1440, 60 * 24 * 30));
+      const createdAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + ttlMinutes * 60_000).toISOString();
+      shareStore.set(id, {
+        title: title || "Shared chat",
+        messages,
+        model: model || null,
+        createdAt,
+        expiresAt,
+        revoked: false,
+      });
       const shareUrl = `${SCHEME}://localhost:${PORT}/shared/${id}`;
-      return json(res, { id, url: shareUrl });
+      return json(res, { id, url: shareUrl, expiresAt, ttlMinutes });
     } catch {
       return json(res, { error: "Invalid JSON" }, 400);
     }
@@ -4335,10 +4345,24 @@ async function requestHandler(req, res) {
     const id = shareMatch[1];
     const snapshot = shareStore.get(id);
     if (!snapshot) return json(res, { error: "Share not found" }, 404);
+    if (snapshot.revoked) return json(res, { error: "Share revoked" }, 410);
+    if (snapshot.expiresAt && new Date(snapshot.expiresAt).getTime() < Date.now()) {
+      return json(res, { error: "Share expired" }, 410);
+    }
     // Move to end for LRU freshness
     shareStore.delete(id);
     shareStore.set(id, snapshot);
     return json(res, snapshot);
+  }
+
+  // DELETE /api/share/:id — revoke a snapshot
+  if (shareMatch && req.method === "DELETE") {
+    const id = shareMatch[1];
+    const snapshot = shareStore.get(id);
+    if (!snapshot) return json(res, { error: "Share not found" }, 404);
+    snapshot.revoked = true;
+    shareStore.set(id, snapshot);
+    return json(res, { ok: true, id, revoked: true });
   }
 
   // GET /demo — serve SPA with demo mode enabled (no auth required)

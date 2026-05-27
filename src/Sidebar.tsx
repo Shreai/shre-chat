@@ -281,9 +281,11 @@ export function Sidebar() {
         className={`sidebar-backdrop md:hidden ${sidebarOpen ? 'sidebar-backdrop-visible' : ''}`}
         onClick={() => actions.setSidebarOpen(false)}
         aria-hidden="true"
+        data-testid="sidebar-backdrop"
       />
       <div
         className={`${sidebarOpen ? 'w-64' : 'w-0'} shrink-0 transition-[width] duration-150 overflow-hidden flex flex-col h-full fixed md:relative z-[55] md:z-auto sidebar-mobile-slide ${!sidebarOpen ? 'sidebar-hidden' : ''}`}
+        data-testid="sidebar-panel"
         style={{
           background: 'var(--c-bg-sidebar, var(--c-bg-2))',
           borderRight: '1px solid var(--c-border-2)',
@@ -662,7 +664,7 @@ export function Sidebar() {
                 if (window.innerWidth < 768) actions.setSidebarOpen(false);
               }}
               disabled={!state.writeEnabled}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
               style={{
                 border: '1px solid var(--c-border-1)',
                 color: 'var(--c-text-1)',
@@ -748,7 +750,7 @@ export function Sidebar() {
               {sidebarSearch && (
                 <button
                   onClick={() => setSidebarSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] leading-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center text-[11px] leading-none rounded-md focus-visible:ring-2 focus-visible:ring-blue-400"
                   style={{ color: 'var(--c-text-4)' }}
                   aria-label="Clear search"
                 >

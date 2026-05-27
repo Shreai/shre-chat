@@ -686,7 +686,7 @@ export function ChatComposer(props: ChatComposerProps) {
             autoCorrect="off"
             spellCheck={false}
             aria-label="Message input"
-            className="w-full px-4 pt-3 pb-1 text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
+            className="w-full px-4 pt-3 pb-1 text-[16px] md:text-base resize-none focus:outline-none disabled:opacity-50 max-h-60 overflow-y-auto bg-transparent"
             style={{ color: 'var(--c-text-1)', minHeight: '44px' }}
             onFocus={() => {
               // On mobile, scroll textarea into view when keyboard opens
@@ -709,7 +709,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <button
                 tabIndex={-1}
                 onClick={() => fileRef.current?.click()}
-                className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                className="h-11 w-11 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
                 style={{ color: 'var(--c-text-2)' }}
                 title="Attach file"
                 aria-label="Attach file"
@@ -730,7 +730,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <button
                   tabIndex={-1}
                   onClick={() => setShowEmoji(!showEmoji)}
-                  className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
                   style={{ color: showEmoji ? 'var(--c-accent)' : 'var(--c-text-2)' }}
                   title="Emoji"
                   aria-label="Insert emoji"
@@ -795,7 +795,7 @@ export function ChatComposer(props: ChatComposerProps) {
                     else onStartRecording();
                   }}
                   onContextMenu={(e) => e.preventDefault()}
-                  className={`relative h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : ''}`}
+                  className={`relative h-11 w-11 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${isRecording && voicePhase === 'recording' ? 'bg-red-500/20 text-red-400' : voicePhase === 'transcribing' ? 'bg-blue-500/20 text-blue-400' : ''}`}
                   style={isRecording ? {} : { color: 'var(--c-text-2)' }}
                   title={isRecording ? 'Tap to stop' : 'Tap for voice input'}
                   aria-label={isRecording ? 'Stop recording' : 'Voice input'}
@@ -855,7 +855,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       onStopRecording(true);
                     }
                   }}
-                  className={`h-10 w-10 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
+                  className={`h-11 w-11 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-all hover:brightness-125 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${voiceMode ? 'bg-indigo-500/20 text-indigo-400' : ''}`}
                   style={voiceMode ? {} : { color: 'var(--c-text-2)' }}
                   title={voiceMode ? 'Deactivate hands-free mode' : 'Activate hands-free mode'}
                   aria-label={voiceMode ? 'Deactivate hands-free' : 'Activate hands-free'}

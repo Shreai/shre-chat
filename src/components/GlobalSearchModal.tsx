@@ -3,10 +3,12 @@ import { getAgent } from '../store';
 import { SDialog, SDialogContent, SInput, SBadge } from '@shre/ui-kit';
 
 interface SearchResult {
-  agentId: string;
-  sessionId: string;
+  agentId?: string;
+  sessionId?: string;
   matches: number;
   preview: string;
+  type?: string;
+  createdAt?: number | string;
 }
 
 interface GlobalSearchModalProps {
@@ -19,6 +21,10 @@ interface GlobalSearchModalProps {
   onSearch: () => void;
   onResultClick: (result: SearchResult) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  agentFilter: string;
+  setAgentFilter: (v: string) => void;
+  typeFilter: string;
+  setTypeFilter: (v: string) => void;
 }
 
 export function GlobalSearchModal({
@@ -31,7 +37,16 @@ export function GlobalSearchModal({
   onSearch,
   onResultClick,
   inputRef,
+  agentFilter,
+  setAgentFilter,
+  typeFilter,
+  setTypeFilter,
 }: GlobalSearchModalProps) {
+  const filtered = results.filter((r) => {
+    if (agentFilter && (r.agentId || '').toLowerCase() !== agentFilter.toLowerCase()) return false;
+    if (typeFilter && (r.type || '').toLowerCase() !== typeFilter.toLowerCase()) return false;
+    return true;
+  });
   return (
     <SDialog
       open={isOpen}
@@ -80,8 +95,36 @@ export function GlobalSearchModal({
             </span>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Filter agent"
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            className="flex-1 bg-transparent text-xs outline-none rounded px-2 py-1"
+            style={{
+              color: 'var(--color-text-secondary, var(--c-text-2))',
+              border: '1px solid var(--c-border-2)',
+            }}
+          />
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="text-xs rounded px-2 py-1"
+            style={{
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-2)',
+              border: '1px solid var(--c-border-2)',
+            }}
+          >
+            <option value="">All types</option>
+            <option value="session">Session</option>
+            <option value="chat_exchange">Chat</option>
+            <option value="voice_turn">Voice</option>
+          </select>
+        </div>
         <div className="overflow-y-auto flex-1 max-h-[45vh] space-y-1">
-          {results.length === 0 && !searching && query.trim().length >= 2 && (
+          {filtered.length === 0 && !searching && query.trim().length >= 2 && (
             <div
               className="text-xs text-center py-4"
               style={{ color: 'var(--color-text-muted, var(--c-text-5))' }}
@@ -89,9 +132,9 @@ export function GlobalSearchModal({
               No results found
             </div>
           )}
-          {results.map((r, i) => (
+          {filtered.map((r, i) => (
             <button
-              key={`${r.agentId}-${r.sessionId}-${i}`}
+              key={`${r.agentId || 'unknown'}-${r.sessionId || 'unknown'}-${i}`}
               className="w-full text-left rounded-lg px-3 py-2 text-xs transition-colors hover:brightness-110"
               style={{
                 background: 'var(--color-surface-raised, var(--c-bg-3))',
@@ -104,11 +147,16 @@ export function GlobalSearchModal({
                   className="font-medium"
                   style={{ color: 'var(--color-primary, var(--c-accent))' }}
                 >
-                  {r.agentId}
+                  {r.agentId || 'unknown'}
                 </span>
                 <SBadge variant="outline" className="text-[9px] py-0 h-4">
                   {r.matches} match{r.matches !== 1 ? 'es' : ''}
                 </SBadge>
+                {r.type && (
+                  <SBadge variant="outline" className="text-[9px] py-0 h-4">
+                    {r.type}
+                  </SBadge>
+                )}
               </div>
               <div
                 className="truncate"
