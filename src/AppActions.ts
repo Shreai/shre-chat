@@ -368,6 +368,15 @@ export function buildActions(deps: ActionDeps): AppActions {
       );
     },
 
+    setSessionFolder: (sessionId: string, folder: string | null) => {
+      const normalized = (folder || '').trim();
+      updateSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId ? { ...s, folder: normalized ? normalized : undefined } : s,
+        ),
+      );
+    },
+
     addSessionTag: (sessionId: string, tag: string) => {
       const normalized = tag.trim().toLowerCase();
       if (!normalized) return;

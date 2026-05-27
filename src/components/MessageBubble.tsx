@@ -78,6 +78,7 @@ const MessageBubble = memo(function MessageBubble({
   onContentExpand,
   isBookmarked,
   onToggleBookmark,
+  versionInfo,
 }: {
   message: ChatMessage;
   streaming?: boolean;
@@ -109,6 +110,7 @@ const MessageBubble = memo(function MessageBubble({
   onContentExpand?: (content: string, type: string, title?: string) => void;
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
+  versionInfo?: { index: number; total: number } | null;
 }) {
   const isUser = message.role === 'user';
   const name = isUser ? userName || 'You' : agentName;
@@ -274,6 +276,19 @@ const MessageBubble = memo(function MessageBubble({
               }}
             >
               {shortModel}
+            </span>
+          )}
+          {!isUser && versionInfo && (
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+              style={{
+                background: 'rgba(96,165,250,0.12)',
+                color: 'var(--c-info-soft)',
+                border: '1px solid var(--c-border-2)',
+              }}
+              title={`Response version ${versionInfo.index} of ${versionInfo.total}`}
+            >
+              v{versionInfo.index}/{versionInfo.total}
             </span>
           )}
           {time && (

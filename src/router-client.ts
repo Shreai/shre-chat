@@ -627,6 +627,12 @@ export interface StreamCallbacks {
   onTrace?: (traceId: string) => void;
   /** Fired when full trace record is received (when trace mode is on) */
   onTraceComplete?: (traceRecord: Record<string, unknown>) => void;
+  /** Fired when route/model/provider metadata is observed in the stream */
+  onRouteMeta?: (meta: {
+    model?: string;
+    provider?: string;
+    toolsAcknowledged?: string[];
+  }) => void;
 }
 
 /**
@@ -900,6 +906,12 @@ async function streamViaFallback(
 
           if (evt.type === 'route') {
             routedModel = evt.model || '';
+            callbacks.onRouteMeta?.({
+              model: evt.model,
+              provider: evt.provider,
+              toolsAcknowledged:
+                evt.selectedToolsEnforced || evt.selected_tools || evt.selectedTools || undefined,
+            });
             // Detect Claude CLI auto-routing
             if (evt.mode === 'claude-cli-auto' || evt.route === 'claude-cli') {
               callbacks.onClaudeCliRoute?.(evt.mode || evt.route);
@@ -933,6 +945,12 @@ async function streamViaFallback(
           } else if (evt.type === 'claude_system') {
             callbacks.onClaudeSystem?.(evt.message || evt.text || '');
           } else if (evt.type === 'status') {
+            callbacks.onRouteMeta?.({
+              model: evt.model || routedModel,
+              provider: evt.provider,
+              toolsAcknowledged:
+                evt.selectedToolsEnforced || evt.selected_tools || evt.selectedTools || undefined,
+            });
             callbacks.onStatus?.(
               'thinking',
               `${evt.model || routedModel} via ${evt.provider || '...'}`,

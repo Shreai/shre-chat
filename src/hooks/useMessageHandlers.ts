@@ -463,6 +463,9 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     }
 
     let fullResponse = '';
+    let routedModel = '';
+    let routedProvider = '';
+    let toolsAck: string[] = [];
     const abortController = new AbortController();
     abortRef.current = abortController;
     const history = messages.slice(-20);
@@ -496,11 +499,23 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           },
           onDone: (full) => {
             const final = full || fullResponse;
+            if (toolsAck.length > 0) {
+              actions.addMessage(sessionId, {
+                role: 'assistant',
+                content: `[system] Tool subset acknowledged by router: ${toolsAck.join(', ')}`,
+                timestamp: Date.now(),
+                meta: { system: 'true' },
+              });
+            }
             actions.addMessage(sessionId, {
               role: 'assistant',
               content: final,
               timestamp: Date.now(),
-              meta: { route: 'http', model: selectedModel || currentAgent.name },
+              meta: {
+                route: 'http',
+                model: routedModel || selectedModel || currentAgent.name,
+                provider: routedProvider || '',
+              },
             });
             actions.setStreaming(false);
             actions.setStreamText('');
@@ -517,6 +532,13 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
           onStatus: (status: string) => {
             if (status === 'thinking') setStreamPhase('thinking');
             else if (status === 'writing') setStreamPhase('writing');
+          },
+          onRouteMeta: (meta) => {
+            if (meta.model) routedModel = meta.model;
+            if (meta.provider) routedProvider = meta.provider;
+            if (Array.isArray(meta.toolsAcknowledged) && meta.toolsAcknowledged.length > 0) {
+              toolsAck = meta.toolsAcknowledged.filter(Boolean);
+            }
           },
         },
         abortController.signal,

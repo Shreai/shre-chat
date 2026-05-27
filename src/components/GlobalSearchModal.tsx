@@ -25,6 +25,10 @@ interface GlobalSearchModalProps {
   setAgentFilter: (v: string) => void;
   typeFilter: string;
   setTypeFilter: (v: string) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
 }
 
 export function GlobalSearchModal({
@@ -41,10 +45,28 @@ export function GlobalSearchModal({
   setAgentFilter,
   typeFilter,
   setTypeFilter,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
 }: GlobalSearchModalProps) {
   const filtered = results.filter((r) => {
     if (agentFilter && (r.agentId || '').toLowerCase() !== agentFilter.toLowerCase()) return false;
     if (typeFilter && (r.type || '').toLowerCase() !== typeFilter.toLowerCase()) return false;
+    const ts =
+      typeof r.createdAt === 'string'
+        ? Date.parse(r.createdAt)
+        : typeof r.createdAt === 'number'
+          ? r.createdAt
+          : 0;
+    if (dateFrom) {
+      const fromTs = Date.parse(`${dateFrom}T00:00:00`);
+      if (Number.isFinite(fromTs) && ts && ts < fromTs) return false;
+    }
+    if (dateTo) {
+      const toTs = Date.parse(`${dateTo}T23:59:59`);
+      if (Number.isFinite(toTs) && ts && ts > toTs) return false;
+    }
     return true;
   });
   return (
@@ -122,6 +144,30 @@ export function GlobalSearchModal({
             <option value="chat_exchange">Chat</option>
             <option value="voice_turn">Voice</option>
           </select>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-xs rounded px-2 py-1"
+            style={{
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-2)',
+              border: '1px solid var(--c-border-2)',
+            }}
+            aria-label="From date"
+          />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-xs rounded px-2 py-1"
+            style={{
+              background: 'var(--c-bg-3)',
+              color: 'var(--c-text-2)',
+              border: '1px solid var(--c-border-2)',
+            }}
+            aria-label="To date"
+          />
         </div>
         <div className="overflow-y-auto flex-1 max-h-[45vh] space-y-1">
           {filtered.length === 0 && !searching && query.trim().length >= 2 && (

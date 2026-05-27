@@ -27,6 +27,7 @@ const DEFAULT_TAG_COLOR = {
   text: 'var(--c-text-3)',
   border: 'rgba(161,161,170,0.25)',
 };
+const SESSION_FOLDERS = ['inbox', 'work', 'research', 'archive'];
 
 function getTagColor(tag: string) {
   return TAG_COLORS[tag] || DEFAULT_TAG_COLOR;
@@ -47,6 +48,7 @@ export function Sidebar() {
   const [editText, setEditText] = useState('');
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [activeFolderFilter, setActiveFolderFilter] = useState<string | null>(null);
   const [tagEditorSessionId, setTagEditorSessionId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
   const touchStartRef = useRef(0);
@@ -89,6 +91,13 @@ export function Sidebar() {
     const tagSet = new Set<string>();
     sessions.forEach((s) => s.tags?.forEach((t) => tagSet.add(t)));
     return Array.from(tagSet).sort();
+  }, [sessions]);
+  const allFolders = useMemo(() => {
+    const folderSet = new Set<string>(SESSION_FOLDERS);
+    sessions.forEach((s) => {
+      if (s.folder) folderSet.add(s.folder);
+    });
+    return Array.from(folderSet).sort();
   }, [sessions]);
 
   // Background preload: when agent picker opens, preload core agents' histories
@@ -221,11 +230,45 @@ export function Sidebar() {
                       })}
                     </div>
                   )}
+                  {s.folder && (
+                    <div
+                      className="inline-flex items-center mt-1 text-[10px] px-1.5 py-0.5 rounded-sm"
+                      style={{
+                        background: 'rgba(99,102,241,0.15)',
+                        color: '#818cf8',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                      }}
+                    >
+                      📁 {s.folder}
+                    </div>
+                  )}
                 </>
               )}
             </div>
             {editingId !== s.id && (
               <div className="flex items-center shrink-0 ml-1 gap-0.5">
+                <select
+                  value={s.folder || ''}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    actions.setSessionFolder(s.id, e.target.value || null);
+                  }}
+                  className="text-[10px] rounded px-1 py-0.5"
+                  style={{
+                    background: 'var(--c-bg-3)',
+                    color: 'var(--c-text-3)',
+                    border: '1px solid var(--c-border-2)',
+                  }}
+                  title="Set folder"
+                >
+                  <option value="">Folder</option>
+                  {allFolders.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
                 {s.pinned && (
                   <span
                     className="text-[10px] group-hover:hidden"
@@ -733,6 +776,38 @@ export function Sidebar() {
                 )}
               </div>
             )}
+            {allFolders.length > 0 && (
+              <div className="flex flex-wrap gap-1 px-1 mb-1.5">
+                {allFolders.map((folder) => {
+                  const isActive = activeFolderFilter === folder;
+                  return (
+                    <button
+                      key={folder}
+                      onClick={() => setActiveFolderFilter(isActive ? null : folder)}
+                      className="text-[11px] px-2 py-1 rounded-full transition-all"
+                      style={{
+                        background: isActive ? 'rgba(99,102,241,0.15)' : 'transparent',
+                        color: isActive ? '#818cf8' : 'var(--c-text-4)',
+                        border: `1px solid ${isActive ? 'rgba(99,102,241,0.3)' : 'var(--c-border-1)'}`,
+                        fontWeight: isActive ? 600 : 400,
+                      }}
+                    >
+                      📁 {folder}
+                    </button>
+                  );
+                })}
+                {activeFolderFilter && (
+                  <button
+                    onClick={() => setActiveFolderFilter(null)}
+                    className="text-[11px] px-1.5 py-1 rounded-full"
+                    style={{ color: 'var(--c-text-5)' }}
+                    title="Clear folder filter"
+                  >
+                    clear
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="relative px-1 mb-1.5">
               <input
@@ -764,6 +839,9 @@ export function Sidebar() {
               if (activeTagFilter) {
                 filtered = filtered.filter((s) => s.tags?.includes(activeTagFilter));
               }
+              if (activeFolderFilter) {
+                filtered = filtered.filter((s) => (s.folder || '') === activeFolderFilter);
+              }
               // Apply search filter
               if (sidebarSearch) {
                 const term = sidebarSearch.toLowerCase();
@@ -791,16 +869,21 @@ export function Sidebar() {
               // Also render ungrouped for empty states
               return null;
             })()}
-            {activeSessions.length === 0 && !sidebarSearch && !activeTagFilter && (
+            {activeSessions.length === 0 &&
+              !sidebarSearch &&
+              !activeTagFilter &&
+              !activeFolderFilter && (
               <p className="text-[11px] text-center mt-8" style={{ color: 'var(--c-text-3)' }}>
                 No conversations yet
               </p>
             )}
-            {(sidebarSearch || activeTagFilter) &&
+            {(sidebarSearch || activeTagFilter || activeFolderFilter) &&
               (() => {
                 let filtered = activeSessions;
                 if (activeTagFilter)
                   filtered = filtered.filter((s) => s.tags?.includes(activeTagFilter));
+                if (activeFolderFilter)
+                  filtered = filtered.filter((s) => (s.folder || '') === activeFolderFilter);
                 if (sidebarSearch) {
                   const term = sidebarSearch.toLowerCase();
                   filtered = filtered.filter(

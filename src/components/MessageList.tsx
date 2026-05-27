@@ -18,6 +18,18 @@ interface Agent {
   emoji: string;
 }
 
+function getAssistantVersionInfo(messages: ChatMessage[], assistantIndex: number) {
+  if (assistantIndex < 0 || assistantIndex >= messages.length) return null;
+  if (messages[assistantIndex].role !== 'assistant') return null;
+  let blockStart = assistantIndex;
+  while (blockStart > 0 && messages[blockStart - 1].role === 'assistant') blockStart--;
+  let blockEnd = assistantIndex;
+  while (blockEnd + 1 < messages.length && messages[blockEnd + 1].role === 'assistant') blockEnd++;
+  const total = blockEnd - blockStart + 1;
+  if (total <= 1) return null;
+  return { index: assistantIndex - blockStart + 1, total };
+}
+
 /** Convert a tool_exec meta message into a ToolExecStep for the ToolExecutionChip */
 function toToolExecStep(msg: ChatMessage): ToolExecStep {
   const m = msg.meta || {};
@@ -246,6 +258,7 @@ export function MessageList(props: MessageListProps) {
           ? () => onRetry(i)
           : undefined,
       onContentExpand,
+      versionInfo: msg.role === 'assistant' ? getAssistantVersionInfo(filteredMessages, i) : null,
     }),
     [
       compact,

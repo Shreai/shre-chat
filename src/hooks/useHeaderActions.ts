@@ -9,6 +9,16 @@ import {
   type ConversationModeId,
 } from '../preferences-store';
 
+const SHARE_HISTORY_KEY = 'shre-share-history';
+
+export interface ShareHistoryEntry {
+  id: string;
+  url: string;
+  expiresAt?: string | null;
+  createdAt: string;
+  revoked?: boolean;
+}
+
 interface UseHeaderActionsOptions {
   activeSessionId: string | null;
   activeSession: { title?: string; systemPrompt?: string } | undefined;
@@ -49,6 +59,15 @@ export function useHeaderActions({
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareHistory, setShareHistory] = useState<ShareHistoryEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem(SHARE_HISTORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   const notifSound = usePreferences((s) => s.notifSound);
   const setNotifSound = usePreferences((s) => s.setNotifSound);
@@ -154,6 +173,24 @@ export function useHeaderActions({
       setShareUrl(share.url);
       setShareId(share.id);
       setShareExpiresAt(share.expiresAt ?? null);
+      setShareHistory((prev) => {
+        const next = [
+          {
+            id: share.id,
+            url: share.url,
+            expiresAt: share.expiresAt ?? null,
+            createdAt: new Date().toISOString(),
+            revoked: false,
+          },
+          ...prev.filter((p) => p.id !== share.id),
+        ].slice(0, 20);
+        try {
+          localStorage.setItem(SHARE_HISTORY_KEY, JSON.stringify(next));
+        } catch {
+          // ignore localStorage errors
+        }
+        return next;
+      });
     } catch (err) {
       console.warn('share session', err);
       actions.setStatusLine('Failed to create share link');
@@ -161,6 +198,34 @@ export function useHeaderActions({
     }
     setShareLoading(false);
   }, [activeSessionId, actions]);
+
+  const handleRevokeShare = useCallback(
+    async (id?: string) => {
+      const targetId = id || shareId;
+      if (!targetId) return;
+      try {
+        await fetch(`/api/share/${targetId}`, { method: 'DELETE' });
+        if (targetId === shareId) {
+          setShareUrl(null);
+          setShareId(null);
+          setShareExpiresAt(null);
+        }
+        setShareHistory((prev) => {
+          const next = prev.map((p) => (p.id === targetId ? { ...p, revoked: true } : p));
+          try {
+            localStorage.setItem(SHARE_HISTORY_KEY, JSON.stringify(next));
+          } catch {
+            // ignore localStorage errors
+          }
+          return next;
+        });
+      } catch {
+        actions.setStatusLine('Failed to revoke share link');
+        setTimeout(() => actions.setStatusLine(null), 2500);
+      }
+    },
+    [shareId, actions],
+  );
 
   const handleCopyMarkdown = useCallback(() => {
     const md = messages
@@ -251,6 +316,7 @@ export function useHeaderActions({
     shareLoading,
     shareCopied,
     setShareCopied,
+    shareHistory,
     notifSound,
     setNotifSound,
     handleToggleRouterMode,
@@ -259,6 +325,7 @@ export function useHeaderActions({
     handleToggleNotifSound,
     handleSummarize,
     handleShare,
+    handleRevokeShare,
     handleCopyMarkdown,
     handleDownloadMd,
     handleDownloadJson,

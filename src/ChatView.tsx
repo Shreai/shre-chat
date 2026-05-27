@@ -314,6 +314,8 @@ export function ChatView() {
   const [sharedError, setSharedError] = useState<string | null>(null);
   const [globalAgentFilter, setGlobalAgentFilter] = useState('');
   const [globalTypeFilter, setGlobalTypeFilter] = useState('');
+  const [globalDateFrom, setGlobalDateFrom] = useState('');
+  const [globalDateTo, setGlobalDateTo] = useState('');
   const [compareModels, setCompareModels] = useState<string[]>([]);
   const [compareStreams, setCompareStreams] = useState<
     Record<string, { text: string; done: boolean; error?: string }>
@@ -404,6 +406,7 @@ export function ChatView() {
     shareLoading,
     shareCopied,
     setShareCopied,
+    shareHistory,
     notifSound,
     setNotifSound,
     handleToggleRouterMode,
@@ -412,6 +415,7 @@ export function ChatView() {
     handleToggleNotifSound,
     handleSummarize,
     handleShare,
+    handleRevokeShare,
     handleCopyMarkdown,
     handleDownloadMd,
     handleDownloadJson,
@@ -431,6 +435,16 @@ export function ChatView() {
 
   const { filteredMessages, lastAssistantMessage, getRunForMessage, useVirtual, virtualizer } =
     useFilteredMessages({ messages, latestTask, runs, scrollRef });
+  const lastRouteMeta = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== 'assistant' || !m.meta) continue;
+      const model = m.meta.model || '';
+      const provider = m.meta.provider || '';
+      if (model || provider) return { model, provider };
+    }
+    return { model: '', provider: '' };
+  }, [messages]);
 
   const {
     globalSearchOpen,
@@ -1248,11 +1262,15 @@ export function ChatView() {
           shareUrl={shareUrl}
           shareId={shareId}
           shareExpiresAt={shareExpiresAt}
+          shareHistory={shareHistory}
           shareCopied={shareCopied}
           setShareCopied={setShareCopied}
           setShareUrl={setShareUrl}
+          onRevokeShare={handleRevokeShare}
           offlineQueue={offlineQueue}
           selectedModelForContext={selectedModel}
+          lastRouteModel={lastRouteMeta.model || null}
+          lastRouteProvider={lastRouteMeta.provider || null}
           chatSearchOpen={chatSearchOpen}
           chatSearchRef={chatSearchRef}
           chatSearch={chatSearch}
@@ -1309,7 +1327,13 @@ export function ChatView() {
         onSearch={() => {
           if (!globalSearchQuery.trim()) return;
           setGlobalSearching(true);
-          fetch(`/api/chat-sessions/search?q=${encodeURIComponent(globalSearchQuery)}&limit=50`, {
+          const qs = new URLSearchParams({
+            q: globalSearchQuery,
+            limit: '50',
+          });
+          if (globalDateFrom) qs.set('from', globalDateFrom);
+          if (globalDateTo) qs.set('to', globalDateTo);
+          fetch(`/api/chat-sessions/search?${qs.toString()}`, {
             credentials: 'include',
           })
             .then((r) => (r.ok ? r.json() : { results: [] }))
@@ -1336,6 +1360,10 @@ export function ChatView() {
         setAgentFilter={setGlobalAgentFilter}
         typeFilter={globalTypeFilter}
         setTypeFilter={setGlobalTypeFilter}
+        dateFrom={globalDateFrom}
+        setDateFrom={setGlobalDateFrom}
+        dateTo={globalDateTo}
+        setDateTo={setGlobalDateTo}
       />
       {sharedSnapshot && (
         <ShareSnapshotView snapshot={sharedSnapshot} loading={sharedLoading} error={sharedError} />

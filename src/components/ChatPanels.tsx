@@ -24,6 +24,7 @@ import { AppsDrawer } from './AppsDrawer';
 import { SystemPromptEditor } from './SystemPromptEditor';
 import { SummaryModal } from './SummaryModal';
 import { SessionAnalyticsModal } from './SessionAnalyticsModal';
+import type { ShareHistoryEntry } from '../hooks/useHeaderActions';
 
 interface ChatPanelsProps {
   // Session
@@ -115,13 +116,17 @@ interface ChatPanelsProps {
   shareUrl: string | null;
   shareId?: string | null;
   shareExpiresAt?: string | null;
+  shareHistory?: ShareHistoryEntry[];
   shareCopied: boolean;
   setShareCopied: (v: boolean) => void;
   setShareUrl: (v: string | null) => void;
+  onRevokeShare?: (id?: string) => void;
   // Offline queue
   offlineQueue: any[];
   // Context bar
   selectedModelForContext: string | null;
+  lastRouteModel?: string | null;
+  lastRouteProvider?: string | null;
   // Search
   chatSearchOpen: boolean;
   chatSearchRef: React.RefObject<HTMLInputElement | null>;
@@ -229,10 +234,14 @@ export function ChatPanels(props: ChatPanelsProps) {
     shareUrl,
     shareId,
     shareExpiresAt,
+    shareHistory,
     shareCopied,
     setShareCopied,
     setShareUrl,
+    onRevokeShare,
     offlineQueue,
+    lastRouteModel,
+    lastRouteProvider,
     chatSearchOpen,
     chatSearchRef,
     chatSearch,
@@ -375,6 +384,20 @@ export function ChatPanels(props: ChatPanelsProps) {
           >
             RAG: {ragProfile}/{ragDepth}
           </span>
+          {lastRouteModel && (
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-medium max-w-[220px] truncate"
+              style={{
+                background: 'rgba(56,189,248,0.12)',
+                color: 'var(--c-info-soft)',
+                border: '1px solid var(--c-border-2)',
+              }}
+              title={`Last route: ${lastRouteModel}${lastRouteProvider ? ` via ${lastRouteProvider}` : ''}`}
+            >
+              Route: {lastRouteProvider ? `${lastRouteProvider} · ` : ''}
+              {lastRouteModel}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0 mobile-chat-toolbar-actions">
@@ -835,6 +858,7 @@ export function ChatPanels(props: ChatPanelsProps) {
           shareId={shareId}
           shareUrl={shareUrl}
           shareExpiresAt={shareExpiresAt}
+          shareHistory={shareHistory}
           shareCopied={shareCopied}
           onCopy={() => {
             navigator.clipboard.writeText(shareUrl).then(() => {
@@ -842,12 +866,8 @@ export function ChatPanels(props: ChatPanelsProps) {
               setTimeout(() => setShareCopied(false), 2000);
             });
           }}
-          onRevoke={() => {
-            if (!shareId) return;
-            fetch(`/api/share/${shareId}`, { method: 'DELETE' })
-              .then(() => setShareUrl(null))
-              .catch(() => {});
-          }}
+          onRevoke={() => onRevokeShare?.(shareId || undefined)}
+          onRevokeEntry={(id) => onRevokeShare?.(id)}
           onClose={() => setShareUrl(null)}
         />
       )}

@@ -296,6 +296,7 @@ export interface Session {
   createdAt: number;
   updatedAt: number;
   pinned?: boolean;
+  folder?: string;
   tags?: string[];
   systemPrompt?: string;
   parentId?: string;
@@ -1055,6 +1056,7 @@ export interface AppActions {
   setAnnotation: (sessionId: string, messageIndex: number, text: string) => void;
   toggleReaction: (sessionId: string, messageIndex: number, emoji: string) => void;
   togglePin: (sessionId: string) => void;
+  setSessionFolder: (sessionId: string, folder: string | null) => void;
   addSessionTag: (sessionId: string, tag: string) => void;
   removeSessionTag: (sessionId: string, tag: string) => void;
   toggleCompact: () => void;

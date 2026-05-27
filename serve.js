@@ -176,6 +176,7 @@ chatDb.exec(`
     agent_id     TEXT NOT NULL DEFAULT 'main',
     messages     TEXT NOT NULL DEFAULT '[]',
     pinned       INTEGER NOT NULL DEFAULT 0,
+    folder       TEXT,
     tags         TEXT,
     system_prompt TEXT,
     parent_id    TEXT,
@@ -192,6 +193,7 @@ chatDb.exec(`
     agent_id     TEXT,
     messages     TEXT,
     pinned       INTEGER,
+    folder       TEXT,
     tags         TEXT,
     system_prompt TEXT,
     parent_id    TEXT,
@@ -227,8 +229,10 @@ chatDb.exec(`
 try { chatDb.exec(`ALTER TABLE chat_sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT 'system'`); } catch {}
 try { chatDb.exec(`ALTER TABLE chat_sessions ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'`); } catch {}
 try { chatDb.exec(`ALTER TABLE chat_sessions ADD COLUMN summary TEXT`); } catch {} // Auto-generated session summary
+try { chatDb.exec(`ALTER TABLE chat_sessions ADD COLUMN folder TEXT`); } catch {}
 try { chatDb.exec(`ALTER TABLE deleted_sessions ADD COLUMN user_id TEXT`); } catch {}
 try { chatDb.exec(`ALTER TABLE deleted_sessions ADD COLUMN tenant_id TEXT`); } catch {}
+try { chatDb.exec(`ALTER TABLE deleted_sessions ADD COLUMN folder TEXT`); } catch {}
 chatDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON chat_sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON chat_sessions(tenant_id);
@@ -437,10 +441,10 @@ try {
 } catch (ftsErr) { log.warn("FTS5 setup skipped (may already exist)", {}); }
 
 const stmtUpsert = chatDb.prepare(`
-  INSERT OR REPLACE INTO chat_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT OR REPLACE INTO chat_sessions (id, title, agent_id, messages, pinned, folder, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
-const stmtGetAll = chatDb.prepare(`SELECT id, title, agent_id, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id FROM chat_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY updated_at DESC LIMIT 100`);
+const stmtGetAll = chatDb.prepare(`SELECT id, title, agent_id, pinned, folder, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id FROM chat_sessions WHERE user_id = ? AND tenant_id = ? ORDER BY updated_at DESC LIMIT 100`);
 const stmtGetOne = chatDb.prepare(`SELECT * FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
 const stmtGetSessionById = chatDb.prepare(`SELECT * FROM chat_sessions WHERE id = ?`);
 const stmtUpdateSessionMessages = chatDb.prepare(`
@@ -450,13 +454,13 @@ const stmtUpdateSessionMessages = chatDb.prepare(`
 `);
 const stmtDelete = chatDb.prepare(`DELETE FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
 const stmtSoftDelete = chatDb.prepare(`
-  INSERT OR REPLACE INTO deleted_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, deleted_at, deleted_by, user_id, tenant_id)
-  SELECT id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, unixepoch() * 1000, ?, user_id, tenant_id
+  INSERT OR REPLACE INTO deleted_sessions (id, title, agent_id, messages, pinned, folder, tags, system_prompt, parent_id, created_at, updated_at, deleted_at, deleted_by, user_id, tenant_id)
+  SELECT id, title, agent_id, messages, pinned, folder, tags, system_prompt, parent_id, created_at, updated_at, unixepoch() * 1000, ?, user_id, tenant_id
   FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?
 `);
 const stmtRestoreDeleted = chatDb.prepare(`
-  INSERT OR REPLACE INTO chat_sessions (id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id)
-  SELECT id, title, agent_id, messages, pinned, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id
+  INSERT OR REPLACE INTO chat_sessions (id, title, agent_id, messages, pinned, folder, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id)
+  SELECT id, title, agent_id, messages, pinned, folder, tags, system_prompt, parent_id, created_at, updated_at, user_id, tenant_id
   FROM deleted_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?
 `);
 const stmtRemoveFromTrash = chatDb.prepare(`DELETE FROM deleted_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?`);
@@ -586,6 +590,7 @@ function upsertSession(s, userId = 'system', tenantId = 'default') {
     s.agentId || s.agent_id || 'main',
     typeof s.messages === 'string' ? s.messages : JSON.stringify(s.messages || []),
     s.pinned ? 1 : 0,
+    s.folder || null,
     JSON.stringify(s.tags || []),
     s.systemPrompt || s.system_prompt || null,
     s.parentId || s.parent_id || null,
@@ -604,6 +609,7 @@ function dbSessionToClient(row) {
     agentId: row.agent_id,
     messages: JSON.parse(row.messages || '[]'),
     pinned: !!row.pinned,
+    folder: row.folder || undefined,
     tags: JSON.parse(row.tags || '[]'),
     systemPrompt: row.system_prompt,
     parentId: row.parent_id,
