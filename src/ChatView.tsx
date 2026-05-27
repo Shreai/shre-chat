@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { ProcessBar, ProcessDetail, useProcessRun } from './components/process-bar';
 import type { ChatMessage } from './router-client';
 import { useApp, generateTitle, getAgent, AGENTS, type Session, type View } from './store';
@@ -839,7 +839,7 @@ export function ChatView() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <DragOverlay />
+      {isDragging && <DragOverlay />}
       <TrialBanner />
       <ViewErrorBoundary viewName="chat">
         <ChatPanels
