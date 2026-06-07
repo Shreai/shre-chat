@@ -1118,6 +1118,8 @@ async function streamViaFallback(
         traceEnabled,
         conversationMode,
         activeAppId,
+        selectedTools,
+        ragOptions,
         true,
       );
     }
