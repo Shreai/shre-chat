@@ -52,6 +52,13 @@ import {
 } from './AppAuth';
 import { ViewNavHeader } from './ViewNavHeader';
 import { buildActions, type ActionDeps } from './AppActions';
+import { ActivityView } from './ActivityView';
+import { AgentSocialView } from './AgentSocialView';
+import { BriefingView } from './BriefingView';
+import { MarketplaceView } from './MarketplaceView';
+import { EmployeeActivityView } from './EmployeeActivityView';
+import { BillingView } from './BillingView';
+import { AgentTraceView } from './AgentTraceView';
 import {
   useThemeEffect,
   useThemeCustomEffect,
@@ -68,31 +75,19 @@ import {
 } from './AppEffects';
 
 // Lazy-load non-default views for code splitting
-const ActivityView = lazy(() =>
-  import('./ActivityView').then((m) => ({ default: m.ActivityView })),
-);
 const FilesView = lazy(() => import('./FilesView').then((m) => ({ default: m.FilesView })));
 const CronView = lazy(() => import('./CronView').then((m) => ({ default: m.CronView })));
 const FeedView = lazy(() => import('./FeedView').then((m) => ({ default: m.FeedView })));
 const AgentFeedView = lazy(() =>
   import('./AgentFeedView').then((m) => ({ default: m.AgentFeedView })),
 );
-const AgentSocialView = lazy(() =>
-  import('./AgentSocialView').then((m) => ({ default: m.AgentSocialView })),
-);
 const PreviewView = lazy(() => import('./PreviewView').then((m) => ({ default: m.PreviewView })));
 const SpendView = lazy(() => import('./SpendView').then((m) => ({ default: m.SpendView })));
-const BriefingView = lazy(() =>
-  import('./BriefingView').then((m) => ({ default: m.BriefingView })),
-);
 const RemindersView = lazy(() =>
   import('./RemindersView').then((m) => ({ default: m.RemindersView })),
 );
 const CostDashboardView = lazy(() =>
   import('./CostDashboardView').then((m) => ({ default: m.CostDashboardView })),
-);
-const MarketplaceView = lazy(() =>
-  import('./MarketplaceView').then((m) => ({ default: m.MarketplaceView })),
 );
 const AdminView = lazy(() => import('./AdminView').then((m) => ({ default: m.AdminView })));
 const FeedAnalyticsView = lazy(() =>
@@ -105,21 +100,14 @@ const FinetuneView = lazy(() =>
   import('./FinetuneView').then((m) => ({ default: m.FinetuneView })),
 );
 const ReportsView = lazy(() => import('./ReportsView').then((m) => ({ default: m.ReportsView })));
-const EmployeeActivityView = lazy(() =>
-  import('./EmployeeActivityView').then((m) => ({ default: m.EmployeeActivityView })),
-);
 const TasksView = lazy(() => import('./TasksView').then((m) => ({ default: m.TasksView })));
 const ProjectsView = lazy(() =>
   import('./ProjectsView').then((m) => ({ default: m.ProjectsView })),
 );
 const EmailView = lazy(() => import('./EmailView').then((m) => ({ default: m.EmailView })));
-const BillingView = lazy(() => import('./BillingView').then((m) => ({ default: m.BillingView })));
 const DemoView = lazy(() => import('./DemoView').then((m) => ({ default: m.DemoView })));
 const InvestorView = lazy(() =>
   import('./InvestorView').then((m) => ({ default: m.InvestorView })),
-);
-const AgentTraceView = lazy(() =>
-  import('./AgentTraceView').then((m) => ({ default: m.AgentTraceView })),
 );
 
 const LazyFallback = () => (

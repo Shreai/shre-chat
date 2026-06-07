@@ -81,6 +81,30 @@ const AGENTS = [
     file: 'data-integration.spec.ts',
   },
   { name: 'edi-import', domain: 'EDI Import', owner: 'Agent 12', file: 'edi-import.spec.ts' },
+  {
+    name: 'contract-critical',
+    domain: 'Contract Critical',
+    owner: 'Agent 13',
+    file: 'contract-critical.spec.ts',
+  },
+  {
+    name: 'stage-governance',
+    domain: 'Stage Governance',
+    owner: 'Agent 14',
+    file: 'stage-governance.spec.ts',
+  },
+  {
+    name: 'contract-schema',
+    domain: 'Contract Schema',
+    owner: 'Agent 15',
+    file: 'contract-schema.spec.ts',
+  },
+  {
+    name: 'rbac-matrix',
+    domain: 'RBAC Matrix',
+    owner: 'Agent 16',
+    file: 'rbac-matrix.spec.ts',
+  },
 ];
 
 // ── Step 0: Ensure test fixtures exist ──

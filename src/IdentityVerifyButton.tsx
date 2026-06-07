@@ -36,6 +36,12 @@ export function IdentityVerifyButton() {
       });
 
       if (!res.ok) {
+        // In dev/bypass flows, identity service may reject unauthenticated checks.
+        // Keep the control neutral instead of presenting a hard error state.
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          setState('idle');
+          return;
+        }
         setState('error');
         resetAfterDelay(4000);
         return;

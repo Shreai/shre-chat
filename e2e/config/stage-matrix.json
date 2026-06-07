@@ -1,0 +1,39 @@
+{
+  "stages": [
+    {
+      "id": "dev",
+      "baseUrl": "http://127.0.0.1:5000",
+      "workspace": "rapidnir",
+      "mode": "internal",
+      "allowBypass": true
+    },
+    {
+      "id": "qa",
+      "baseUrl": "http://127.0.0.1:5000",
+      "workspace": "rapidnir",
+      "mode": "internal",
+      "allowBypass": false
+    },
+    {
+      "id": "beta",
+      "baseUrl": "http://127.0.0.1:5000",
+      "workspace": "rapidnir",
+      "mode": "internal",
+      "allowBypass": false
+    },
+    {
+      "id": "prod",
+      "baseUrl": "http://127.0.0.1:5000",
+      "workspace": "rapidnir",
+      "mode": "internal",
+      "allowBypass": false
+    },
+    {
+      "id": "external0-dev",
+      "baseUrl": "http://127.0.0.1:5000",
+      "workspace": "nir",
+      "mode": "external",
+      "allowBypass": true
+    }
+  ]
+}

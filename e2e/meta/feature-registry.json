@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "auth.login",
+      "owner": "platform-auth",
+      "criticality": "critical",
+      "ui": ["Sign In", "Create Account"],
+      "apis": ["/api/auth/login", "/api/auth/check"],
+      "specs": ["auth.setup.ts", "api-health.spec.ts"]
+    },
+    {
+      "id": "chat.core",
+      "owner": "chat",
+      "criticality": "critical",
+      "ui": ["Chat", "Message input"],
+      "apis": ["/api/chat", "/api/router/health"],
+      "specs": ["chat-core.spec.ts", "smoke.spec.ts"]
+    },
+    {
+      "id": "briefing",
+      "owner": "productivity",
+      "criticality": "high",
+      "ui": ["Briefing", "Daily Briefing"],
+      "apis": ["/api/briefing"],
+      "specs": ["navigation.spec.ts"]
+    },
+    {
+      "id": "employee.activity",
+      "owner": "ops",
+      "criticality": "high",
+      "ui": ["Employee Activity"],
+      "apis": ["/api/employee-activity", "/api/employee-activity/alerts"],
+      "specs": ["navigation.spec.ts"]
+    },
+    {
+      "id": "agent.trace",
+      "owner": "agents",
+      "criticality": "high",
+      "ui": ["Agent Trace"],
+      "apis": ["/api/agent-trace"],
+      "specs": ["navigation.spec.ts", "router-connect.spec.ts"]
+    },
+    {
+      "id": "marketplace",
+      "owner": "platform-apps",
+      "criticality": "medium",
+      "ui": ["Marketplace"],
+      "apis": ["/api/marketplace/catalog"],
+      "specs": ["ecosystem.spec.ts"]
+    },
+    {
+      "id": "billing",
+      "owner": "finance",
+      "criticality": "high",
+      "ui": ["Billing"],
+      "apis": ["/api/billing/overview"],
+      "specs": ["ecosystem.spec.ts"]
+    },
+    {
+      "id": "activation-control",
+      "owner": "superadmin",
+      "criticality": "critical",
+      "ui": ["Write mode", "Activate", "Deactivate"],
+      "apis": ["/api/features", "/api/features/toggle"],
+      "specs": ["write-operations.spec.ts"]
+    }
+  ]
+}

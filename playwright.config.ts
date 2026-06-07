@@ -165,6 +165,36 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
+    // ── Agent 13: Contract Critical ──
+    {
+      name: 'contract-critical',
+      testMatch: /contract-critical\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    // ── Agent 14: Stage Governance ──
+    {
+      name: 'stage-governance',
+      testMatch: /stage-governance\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    {
+      name: 'contract-schema',
+      testMatch: /contract-schema\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
+    {
+      name: 'rbac-matrix',
+      testMatch: /rbac-matrix\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
     // ── Visual regression (baseline screenshots, update with --update-snapshots) ──
     {
       name: 'visual-regression',

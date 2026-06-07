@@ -186,9 +186,12 @@ export function installAuthFetch() {
 
     const newToken = await attemptRefresh();
     if (!newToken) {
-      // Refresh failed → hard expire. Caller still gets the 401 so its own
-      // error path can run, but the app-level handler flips to LoginView.
-      _onAuthExpired?.();
+      // Refresh failed. Do not force logout for arbitrary feature-level 401s
+      // unless the current JWT is actually expired.
+      const tok = currentToken();
+      const exp = tok ? parseJwtExp(tok) : null;
+      const isExpired = exp != null && exp <= Math.floor(Date.now() / 1000);
+      if (isExpired) _onAuthExpired?.();
       return firstRes;
     }
     // Retry the original request with the new token.
