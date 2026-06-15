@@ -53,6 +53,14 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
+    // ── Multi-agent composer UX (@@ mention, #tool, /skills, fan-out) ──
+    {
+      name: 'multi-agent-ux',
+      testMatch: /multi-agent-ux\.spec\.ts/,
+      use: { browserName: 'chromium', storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
+
     // ── Agent 2: Navigation ──
     {
       name: 'navigation',
