@@ -16,6 +16,13 @@ export interface UseChatKeydownParams {
   setMentionIndex: (v: number | ((prev: number) => number)) => void;
   setMentionOpen: (v: boolean) => void;
   onMentionSelect: (agent: any) => void;
+  // Tool arming (#)
+  toolOpen: boolean;
+  toolFiltered: { name: string; [key: string]: any }[];
+  toolIndex: number;
+  setToolIndex: (v: number | ((prev: number) => number)) => void;
+  setToolOpen: (v: boolean) => void;
+  onToolSelect: (tool: any) => void;
   // Editing
   editingQueueId: string | null;
   setEditingQueueId: (v: string | null) => void;
@@ -56,6 +63,12 @@ export function useChatKeydown(params: UseChatKeydownParams) {
     setMentionIndex,
     setMentionOpen,
     onMentionSelect,
+    toolOpen,
+    toolFiltered,
+    toolIndex,
+    setToolIndex,
+    setToolOpen,
+    onToolSelect,
     editingQueueId,
     setEditingQueueId,
     setEditingQueueText,
@@ -139,6 +152,31 @@ export function useChatKeydown(params: UseChatKeydownParams) {
         if (e.key === 'Escape') {
           e.preventDefault();
           setMentionOpen(false);
+          return;
+        }
+      }
+
+      // # Tool dropdown navigation
+      if (toolOpen && toolFiltered.length > 0) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setToolIndex((prev) => (prev - 1 + toolFiltered.length) % toolFiltered.length);
+          return;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setToolIndex((prev) => (prev + 1) % toolFiltered.length);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          const selected = toolFiltered[toolIndex];
+          if (selected) onToolSelect(selected);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setToolOpen(false);
           return;
         }
       }
@@ -246,6 +284,12 @@ export function useChatKeydown(params: UseChatKeydownParams) {
       setMentionIndex,
       setMentionOpen,
       onMentionSelect,
+      toolOpen,
+      toolFiltered,
+      toolIndex,
+      setToolIndex,
+      setToolOpen,
+      onToolSelect,
       editingQueueId,
       setEditingQueueId,
       setEditingQueueText,

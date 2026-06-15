@@ -8,6 +8,10 @@
  */
 
 import { SYSTEM_PROMPT_VERSION } from './hooks/useMessageHandlers';
+// Canonical messaging-gateway request builder — single source of truth for the
+// /v1/chat body shared across all gateways. Resolves via the parent workspace
+// node_modules symlink (@shreai/client → libs/shreai-client).
+import { buildChatRequest } from '@shreai/client/chat';
 
 const _RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
@@ -798,34 +802,37 @@ async function streamViaFallback(
       'X-App-Version': APP_VERSION,
       'x-channel': 'shre-chat',
     },
-    body: JSON.stringify({
-      messages,
-      systemPrompt,
-      model: modelOverride || 'auto',
-      stream: true,
-      agentId: currentAgentId,
-      sessionId: activeSessionKey,
-      tenantId: getTenantId(),
-      companyId: getTenantId(),
-      promptVersion: SYSTEM_PROMPT_VERSION,
-      ...(attachments?.length ? { attachments } : {}),
-      ...(routerMode ? { routerMode: true } : {}),
-      ...(claudeCliMode ? { claudeCliMode: true } : {}),
-      ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
-      ...(voiceMode ? { voiceMode: true } : {}),
-      ...(threadContext ? { threadContext } : {}),
-      ...(contextHealth ? { contextHealth } : {}),
-      ...(traceEnabled ? { trace: true } : {}),
-      ...(conversationMode && conversationMode !== 'assistant' ? { mode: conversationMode } : {}),
-      ...(activeAppId ? { appId: activeAppId } : {}),
-      ...(selectedTools?.length ? { selectedTools } : {}),
-      ...(ragOptions
-        ? {
-            retrievalProfile: ragOptions.profile,
-            retrievalDepth: ragOptions.depth,
-          }
-        : {}),
-    }),
+    // Canonical request shape comes from the shared gateway client so this UI
+    // can never drift from the contract (see docs/architecture/CHAT-FLOW.md).
+    // shre-chat-specific fields ride along via passthrough.
+    body: JSON.stringify(
+      buildChatRequest({
+        messages,
+        systemPrompt,
+        model: modelOverride || 'auto',
+        agentId: currentAgentId,
+        sessionId: activeSessionKey,
+        tenantId: getTenantId(),
+        attachments: attachments?.length ? attachments : undefined,
+        selectedTools: selectedTools?.length ? selectedTools : undefined,
+        appId: activeAppId || undefined,
+        // Passthrough extras (router accepts these via .passthrough()):
+        promptVersion: SYSTEM_PROMPT_VERSION,
+        ...(routerMode ? { routerMode: true } : {}),
+        ...(claudeCliMode ? { claudeCliMode: true } : {}),
+        ...(getUserLanguage() ? { userLanguage: getUserLanguage() } : {}),
+        ...(voiceMode ? { voiceMode: true } : {}),
+        ...(threadContext ? { threadContext } : {}),
+        ...(contextHealth ? { contextHealth } : {}),
+        ...(traceEnabled ? { trace: true } : {}),
+        ...(conversationMode && conversationMode !== 'assistant'
+          ? { mode: conversationMode }
+          : {}),
+        ...(ragOptions
+          ? { retrievalProfile: ragOptions.profile, retrievalDepth: ragOptions.depth }
+          : {}),
+      }),
+    ),
     signal,
   });
 

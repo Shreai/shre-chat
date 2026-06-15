@@ -2,6 +2,9 @@ import React, { lazy, Suspense, useEffect } from 'react';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { estimateTokens, formatTokenCount, MAX_RECORDING_SECONDS } from '../chat-utils';
 import type { UploadedFile } from '../store';
+import { DOMAIN_META } from '../store';
+import type { MentionItem } from '../hooks/useMentions';
+import type { ToolMentionItem } from '../hooks/useToolMentions';
 import { usePreferences, type TTSProvider } from '../preferences-store';
 // Lazy-load both emoji data (~300KB) and picker — only fetched when user opens picker
 const EmojiPicker = lazy(() =>
@@ -81,12 +84,22 @@ interface ChatComposerProps {
 
   // Mentions (@@)
   mentionOpen: boolean;
-  mentionFiltered: { id: string; name: string; emoji: string; group: string }[];
+  mentionFiltered: MentionItem[];
   mentionIndex: number;
   mentionRef: React.RefObject<HTMLDivElement | null>;
   setMentionIndex: (val: number) => void;
-  onMentionSelect: (agent: { id: string; name: string; emoji: string; group: string }) => void;
-  mentionAgent: { id: string; name: string; emoji: string } | null;
+  onMentionSelect: (agent: MentionItem) => void;
+  mentionAgent: MentionItem | null;
+  // Tool arming (#)
+  toolOpen: boolean;
+  toolFiltered: ToolMentionItem[];
+  toolIndex: number;
+  toolRef: React.RefObject<HTMLDivElement | null>;
+  setToolIndex: (val: number) => void;
+  onToolSelect: (tool: ToolMentionItem) => void;
+  // Multi-task fan-out suggestion
+  fanoutSummary: string | null;
+  onRunAsTasks: () => void;
 
   // Reply
   replyToIndex: number | null;
@@ -182,6 +195,14 @@ export function ChatComposer(props: ChatComposerProps) {
     onSlashSelect,
     mentionOpen,
     mentionFiltered,
+    toolOpen,
+    toolFiltered,
+    toolIndex,
+    toolRef,
+    setToolIndex,
+    onToolSelect,
+    fanoutSummary,
+    onRunAsTasks,
     mentionIndex,
     mentionRef,
     setMentionIndex,
@@ -448,8 +469,27 @@ export function ChatComposer(props: ChatComposerProps) {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{agent.name}</div>
                   <div className="text-xs truncate" style={{ color: 'var(--c-text-4)' }}>
-                    {agent.group}
+                    {agent.description || agent.group}
                   </div>
+                  {(agent.domains || []).filter((d) => d !== 'all').length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {(agent.domains || [])
+                        .filter((d) => d !== 'all')
+                        .slice(0, 3)
+                        .map((d) => {
+                          const dm = DOMAIN_META[d] || { label: d, color: '#94a3b8' };
+                          return (
+                            <span
+                              key={d}
+                              className="text-[9px] px-1 py-0.5 rounded"
+                              style={{ background: `${dm.color}22`, color: dm.color }}
+                            >
+                              {dm.label}
+                            </span>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
                 {i === mentionIndex && (
                   <span
@@ -461,6 +501,83 @@ export function ChatComposer(props: ChatComposerProps) {
                 )}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Tool arming dropdown (#) */}
+        {toolOpen && toolFiltered.length > 0 && (
+          <div
+            ref={toolRef}
+            className="max-w-3xl mx-auto mb-1 rounded-lg overflow-hidden shadow-lg"
+            style={{
+              background: 'var(--c-bg-2)',
+              border: '1px solid var(--c-border-2)',
+              maxHeight: '240px',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              style={{ color: 'var(--c-text-4)', borderBottom: '1px solid var(--c-border-1)' }}
+            >
+              Arm Tool
+            </div>
+            {toolFiltered.map((tool, i) => (
+              <button
+                key={tool.name}
+                data-tool-active={i === toolIndex ? 'true' : 'false'}
+                className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                style={{
+                  background: i === toolIndex ? 'var(--c-bg-hover)' : 'transparent',
+                  color: 'var(--c-text-1)',
+                }}
+                onMouseEnter={() => setToolIndex(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onToolSelect(tool);
+                }}
+              >
+                <span className="flex items-center justify-center w-6 h-6 rounded text-sm">
+                  {tool.category === 'app' ? '🧩' : '🔧'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{tool.name}</div>
+                  <div className="text-xs truncate" style={{ color: 'var(--c-text-4)' }}>
+                    {tool.description || tool.category}
+                  </div>
+                </div>
+                {i === toolIndex && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded"
+                    style={{ background: 'var(--c-bg-3)', color: 'var(--c-text-4)' }}
+                  >
+                    Enter
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Multi-task fan-out suggestion */}
+        {fanoutSummary && !slashOpen && !mentionOpen && !toolOpen && (
+          <div className="max-w-3xl mx-auto mb-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px]"
+            style={{ background: 'var(--c-accent-soft, var(--c-bg-3))', color: 'var(--c-text-3)' }}
+          >
+            <span>🧩</span>
+            <span className="flex-1">
+              Looks like <strong>{fanoutSummary}</strong> — run them in parallel via the orchestrator?
+            </span>
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onRunAsTasks();
+              }}
+              className="px-2.5 py-1 rounded-full font-medium transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--c-accent)', color: 'var(--c-on-accent, #fff)' }}
+            >
+              Run as tasks
+            </button>
           </div>
         )}
 
@@ -562,6 +679,11 @@ export function ChatComposer(props: ChatComposerProps) {
               <span>
                 Directing to <strong>{mentionAgent.name}</strong>
               </span>
+              {mentionAgent.description && (
+                <span className="truncate opacity-70" style={{ color: 'var(--c-text-4)' }}>
+                  — {mentionAgent.description}
+                </span>
+              )}
             </div>
           )}
 

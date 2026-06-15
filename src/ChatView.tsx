@@ -12,6 +12,7 @@ const RealtimeVoiceOverlay = lazy(() =>
 );
 import { getModelOverride, setModelOverride } from './chat-utils';
 import { Lightbox } from './components/MessageBubble';
+import { buildSwitchNotice, modelLabel } from './lib/switch-notice';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { useVoiceRecording } from './hooks/useVoiceRecording';
 import { useWakeWord } from './hooks/useWakeWord';
@@ -20,6 +21,8 @@ import { useChatSearch } from './hooks/useChatSearch';
 import { useGatewayConnection } from './hooks/useGatewayConnection';
 import { useSlashCommands } from './hooks/useSlashCommands';
 import { useMentions } from './hooks/useMentions';
+import { useToolMentions } from './hooks/useToolMentions';
+import { planFanout } from './intentSplitter';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useVoiceHandlers } from './hooks/useVoiceHandlers';
 import { useChatEffects } from './hooks/useChatEffects';
@@ -361,6 +364,43 @@ export function ChatView() {
   const messages = activeSession?.messages ?? [];
   const userName = state.userProfile?.name?.split(' ')[0] || 'You';
 
+  // ── Switch transparency ──
+  // Drop an inline chip into the transcript when the user changes the active
+  // agent or model *within the same, non-empty session*. Switching to a
+  // different session (which can carry a different agent/model) updates the
+  // baseline silently — that is a navigation, not a switch.
+  const switchBaselineRef = useRef<{ sid: string | null; agent: string; model: string | null }>({
+    sid: activeSessionId,
+    agent: activeAgentId,
+    model: selectedModel,
+  });
+  useEffect(() => {
+    const prev = switchBaselineRef.current;
+    const sameSession = prev.sid === activeSessionId && activeSessionId != null;
+    if (sameSession) {
+      const hasMessages = (sessions.find((s) => s.id === activeSessionId)?.messages.length ?? 0) > 0;
+      if (hasMessages && prev.agent !== activeAgentId) {
+        const a = getAgent(activeAgentId);
+        actions.addMessage(
+          activeSessionId,
+          buildSwitchNotice({
+            kind: 'agent',
+            label: a.name,
+            emoji: a.emoji,
+            description: a.description,
+          }),
+        );
+      }
+      if (hasMessages && prev.model !== selectedModel) {
+        actions.addMessage(
+          activeSessionId,
+          buildSwitchNotice({ kind: 'model', label: modelLabel(selectedModel, AVAILABLE_MODELS) }),
+        );
+      }
+    }
+    switchBaselineRef.current = { sid: activeSessionId, agent: activeAgentId, model: selectedModel };
+  }, [activeAgentId, selectedModel, activeSessionId, sessions, actions, AVAILABLE_MODELS]);
+
   const {
     pendingFiles,
     setPendingFiles,
@@ -590,9 +630,43 @@ export function ChatView() {
   } = useMentions({
     input,
     setInput,
-    agents: AGENTS.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, group: a.group })),
+    agents: AGENTS.map((a) => ({
+      id: a.id,
+      name: a.name,
+      emoji: a.emoji,
+      group: a.group,
+      description: a.description,
+      domains: a.domains,
+    })),
     inputRef,
   });
+
+  const armTool = useCallback(
+    (name: string) => {
+      if (!selectedTools.includes(name)) toggleSelectedTool(name);
+    },
+    [selectedTools, toggleSelectedTool],
+  );
+  const {
+    toolOpen,
+    setToolOpen,
+    toolIndex,
+    setToolIndex,
+    toolRef,
+    toolFiltered,
+    onToolSelect,
+  } = useToolMentions({ input, setInput, tools: toolOptions, inputRef, armTool });
+
+  // ── Multi-task fan-out suggestion ──
+  // When the composer holds a compound message (e.g. an action + a query, or
+  // several actions), offer to run it through the orchestrator (/v1/execute),
+  // which decomposes it into parallel subtasks instead of one chat turn.
+  const fanoutPlan = useMemo(() => planFanout(input), [input]);
+  const runAsTasks = useCallback(() => {
+    const text = input.trim();
+    if (!text) return;
+    executeSlashCommand(`execute ${text}`);
+  }, [input, executeSlashCommand]);
 
   const {
     handleSend,
@@ -761,6 +835,12 @@ export function ChatView() {
     setMentionIndex,
     setMentionOpen,
     onMentionSelect,
+    toolOpen,
+    toolFiltered,
+    toolIndex,
+    setToolIndex,
+    setToolOpen,
+    onToolSelect,
     editingQueueId,
     setEditingQueueId,
     setEditingQueueText,
@@ -1124,6 +1204,14 @@ export function ChatView() {
                 setMentionIndex={setMentionIndex}
                 onMentionSelect={onMentionSelect}
                 mentionAgent={mentionAgent}
+                toolOpen={toolOpen}
+                toolFiltered={toolFiltered}
+                toolIndex={toolIndex}
+                toolRef={toolRef}
+                setToolIndex={setToolIndex}
+                onToolSelect={onToolSelect}
+                fanoutSummary={fanoutPlan.shouldOrchestrate ? fanoutPlan.summary : null}
+                onRunAsTasks={runAsTasks}
                 replyToIndex={state.replyToIndex}
                 replyToContent={
                   state.replyToIndex !== null

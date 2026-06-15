@@ -789,7 +789,11 @@ export function lightweightMarkdown(text: string): string {
       ) {
         return linkText; // Strip dangerous links, keep text
       }
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--c-accent);text-decoration:underline">${linkText}</a>`;
+      // SECURITY (pentest 2026-06-11 #16): <,>,& are escaped upstream, but a `"` or
+      // `'` inside the URL would close the href attribute and inject event handlers
+      // (e.g. [x](http://a" onmouseover="...)). HTML-attribute-escape the quotes.
+      const safeUrl = url.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--c-accent);text-decoration:underline">${linkText}</a>`;
     })
     // Headings: # at start of line
     .replace(/^### (.+)$/gm, '<strong style="font-size:1.05em">$1</strong>')

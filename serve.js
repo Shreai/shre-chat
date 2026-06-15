@@ -32,9 +32,10 @@ import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
 import { registerHandoffRoutes } from "./routes/handoff.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerPushRoutes } from "./routes/push.js";
+import { registerAgentWorkspaceRoutes } from "./routes/agent-workspace.js";
 import { initVoiceQualityMonitor, recordVoiceFailure, getVoiceQualityStats } from "./routes/voice-quality-monitor.js";
 import { createConversationEvaluator } from "./routes/conversation-evaluator.js";
-import { registerCliLedgerRoutes, getOrCreateActiveSession, appendUserMessage, appendCliResponse, appendToolEvent, buildSessionContext } from "./routes/cli-ledger.js";
+import { registerCliLedgerRoutes, createSession, getOrCreateActiveSession, appendUserMessage, appendCliResponse, appendToolEvent, buildSessionContext } from "./routes/cli-ledger.js";
 import { registerCliHandoffRoutes, extractStructuredPlan } from "./routes/cli-handoff.js";
 
 // ── Trust mkcert CA so Node verifies local TLS certs properly ──
@@ -706,6 +707,23 @@ function localHttpsPost(port, path, body, headers = {}) {
   });
 }
 
+// HTTPS GET to localhost services with self-signed certs
+function localHttpsGet(port, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest({ hostname: "127.0.0.1", port, path, method: "GET", headers }, (res) => {
+      let buf = "";
+      res.on("data", (c) => buf += c);
+      res.on("end", () => {
+        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, json: JSON.parse(buf) }); }
+        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, json: null }); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.end();
+  });
+}
+
 async function extractAndLogSkills(agentId, conversationText) {
   if (!SKILLS_KEY || !conversationText || conversationText.length < 50) return;
 
@@ -1337,7 +1355,8 @@ function authCookie(name, value, maxAge, req) {
   let domainPart = "";
   if (host.endsWith(".shre.ai")) domainPart = "; Domain=.shre.ai";
   else if (host.endsWith(".aros.live")) domainPart = "; Domain=.aros.live";
-  const secure = tlsOpts || isShreDomain ? "; Secure" : "";
+  const isHttpsRequest = !!req?.socket?.encrypted || String(req?.headers?.["x-forwarded-proto"] || "").includes("https");
+  const secure = isHttpsRequest || isShreDomain ? "; Secure" : "";
   // SameSite=None required for cross-origin cookie delivery via Cloudflare tunnel on mobile Safari
   // Strict for same-origin (local dev / direct access) — tightest XSS protection
   const sameSite = isShreDomain ? "None" : "Strict";
@@ -1497,6 +1516,15 @@ function json(res, data, status = 200) {
 // ── Session reading from JSONL files ──────────────────────────────────
 
 function getSessionsDir(agentId) {
+  // SECURITY (pentest 2026-06-11 #15): agentId comes from the URL via
+  // decodeURIComponent, and `%2F` survives the `[^/]+` route regex, so an
+  // unvalidated value like `..%2F..%2Ftmp` would traverse out of the agents
+  // dir into arbitrary `sessions.json` reads/writes. Allowlist the same charset
+  // the sibling /api/search handler already enforces. Single chokepoint guards
+  // every caller (readSessionIndex + the session read/compact handlers).
+  if (typeof agentId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(agentId)) {
+    throw new Error("invalid agentId");
+  }
   return join(GATEWAY_HOME, "agents", agentId, "sessions");
 }
 
@@ -1564,6 +1592,31 @@ function parseJsonlMessages(content, sinceTs = 0) {
 
 // CLI session file per agent (separate from native agent sessions)
 const CLI_SESSION_KEY = "cli-chat";
+
+function buildCliLocalFallbackMessages(message, agent) {
+  const facts = [];
+  if (/\bshre[-_]?sdk\b/i.test(message)) {
+    facts.push("Repository fact: shre-sdk is implemented in TypeScript; the package builds TypeScript sources to JavaScript dist files.");
+  }
+  if (/\b(gpu|cuda|vram|memory|out[-\s]?of[-\s]?memory|oom)\b/i.test(message)) {
+    facts.push("ML systems fact: for GPU out-of-memory errors, reduce batch or micro-batch size first, free cached GPU memory, use gradient or activation checkpointing, and resume or roll back from a known-good checkpoint when needed.");
+  }
+
+  if (!facts.length) return [{ role: "user", content: message }];
+
+  return [
+    {
+      role: "system",
+      content: [
+        "You are the local shrecli fallback. Tools are disabled, so answer from the provided repository facts and the user's prompt.",
+        "Keep answers concise. If the user asks for one word, answer with one word.",
+        `Agent: ${agent}`,
+        ...facts,
+      ].join("\n"),
+    },
+    { role: "user", content: message },
+  ];
+}
 
 function getOrCreateCliSession(agentId) {
   const sessDir = getSessionsDir(agentId);
@@ -1880,6 +1933,7 @@ async function requestHandler(req, res) {
 
   // Health routes (after auth for readyz, but health is in PUBLIC_PATHS)
   if (await handleHealth(req, res, url, _routeUtils)) return;
+  if (await handleAgentWorkspace(req, res, url, _routeUtils)) return;
 
   // Trace endpoints
   if (url.pathname === "/v1/traces" && req.method === "GET") {
@@ -2170,6 +2224,34 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Usage summary proxy failed:", err.message);
       json(res, { error: "shre-meter unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Skills discovery proxy → shre-skills core-skills catalog ──
+  // Returns a flat {key, level, description} skill list; the client filters by
+  // query. (shre-skills /v1/report is markdown and /v1/match needs a
+  // "skills=docker:4" param, so neither fits a free-text search — core-skills
+  // is the JSON catalog.)
+  if (url.pathname === "/api/skills" && req.method === "GET") {
+    if (!SKILLS_KEY) return json(res, { error: "Skills service not configured", skills: [] }, 200);
+    try {
+      const r = await localHttpsGet(SKILLS_PORT, "/v1/core-skills", { Authorization: `Bearer ${SKILLS_KEY}` });
+      const data = r.json || {};
+      const skills = [];
+      for (const v of Object.values(data)) {
+        if (Array.isArray(v)) {
+          for (const s of v) {
+            if (s && typeof s === "object" && s.key) {
+              skills.push({ key: s.key, level: s.level, description: s.description });
+            }
+          }
+        }
+      }
+      json(res, { skills, version: data.version }, r.status || 200);
+    } catch (err) {
+      log.warn("Skills proxy failed:", err.message);
+      json(res, { error: "Skills service unreachable", skills: [] }, 502);
     }
     return;
   }
@@ -2511,12 +2593,18 @@ async function requestHandler(req, res) {
     try {
       const hrUrl = serviceUrl("shre-hr");
       const upstream = await fetch(`${hrUrl}/v1/agents`, { signal: AbortSignal.timeout(8000) });
+      if (!upstream.ok) {
+        const detail = await upstream.text().catch(() => "");
+        log.warn("Marketplace agents unavailable", { status: upstream.status, error: detail.slice(0, 200) });
+        json(res, { agents: [], degraded: true, message: "Marketplace agents are temporarily unavailable." });
+        return;
+      }
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Marketplace proxy failed:", err.message);
-      json(res, { error: "shre-hr unreachable" }, 502);
+      json(res, { agents: [], degraded: true, message: "Marketplace agents are temporarily unavailable." });
     }
     return;
   }
@@ -2526,12 +2614,36 @@ async function requestHandler(req, res) {
     try {
       const marketplaceUrl = serviceUrl("shre-marketplace");
       const upstream = await fetch(`${marketplaceUrl}/v1/marketplace/catalog${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+      if (!upstream.ok) {
+        const detail = await upstream.text().catch(() => "");
+        log.warn("Marketplace catalog unavailable", { status: upstream.status, error: detail.slice(0, 200) });
+        json(res, {
+          apps: [],
+          agents: [],
+          bundles: [],
+          nodes: [],
+          services: [],
+          total: { apps: 0, agents: 0, bundles: 0, nodes: 0, services: 0 },
+          degraded: true,
+          message: "Marketplace catalog is temporarily unavailable.",
+        });
+        return;
+      }
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Marketplace catalog proxy failed:", err.message);
-      json(res, { error: "shre-marketplace unreachable" }, 502);
+      json(res, {
+        apps: [],
+        agents: [],
+        bundles: [],
+        nodes: [],
+        services: [],
+        total: { apps: 0, agents: 0, bundles: 0, nodes: 0, services: 0 },
+        degraded: true,
+        message: "Marketplace catalog is temporarily unavailable.",
+      });
     }
     return;
   }
@@ -2542,12 +2654,18 @@ async function requestHandler(req, res) {
       const itemId = url.pathname.split("/api/marketplace/catalog/detail/")[1];
       const marketplaceUrl = serviceUrl("shre-marketplace");
       const upstream = await fetch(`${marketplaceUrl}/v1/marketplace/catalog/detail/${encodeURIComponent(itemId)}`, { signal: AbortSignal.timeout(8000) });
+      if (!upstream.ok) {
+        const detail = await upstream.text().catch(() => "");
+        log.warn("Marketplace detail unavailable", { status: upstream.status, error: detail.slice(0, 200) });
+        json(res, { item: null, detail: null, related: [], degraded: true, message: "Details are temporarily unavailable." });
+        return;
+      }
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Marketplace detail proxy failed:", err.message);
-      json(res, { error: "shre-marketplace unreachable" }, 502);
+      json(res, { item: null, detail: null, related: [], degraded: true, message: "Details are temporarily unavailable." });
     }
     return;
   }
@@ -4426,6 +4544,8 @@ async function requestHandler(req, res) {
   const sessionsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
   if (sessionsMatch && req.method === "GET") {
     const agentId = decodeURIComponent(sessionsMatch[1]);
+    // SECURITY (pentest 2026-06-11 #15): reject path-traversal in agentId.
+    if (!/^[a-zA-Z0-9_-]+$/.test(agentId)) return json(res, { error: "invalid agentId" }, 400);
     const index = readSessionIndex(agentId);
     const sessions = Object.entries(index).map(([key, val]) => ({
       key,
@@ -5012,7 +5132,7 @@ async function requestHandler(req, res) {
     let body;
     try { body = await collectBody(req, 5 * 1024 * 1024); } catch { return json(res, { error: "Body too large" }, 413); }
     try {
-      const { message, continueConversation, agentId, autoMode, sessionType, sessionTitle, taskId, projectId, source } = JSON.parse(body);
+      const { message, continueConversation, agentId, autoMode, sessionType, sessionTitle, taskId, projectId, source, forceNewSession } = JSON.parse(body);
       if (!message) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "message required" }));
@@ -5035,12 +5155,10 @@ async function requestHandler(req, res) {
         const agent = agentId || "main";
 
         // ── Session Ledger: get or create active session ──
-        const ledgerSession = getOrCreateActiveSession(agent, {
-          type: sessionType || "chat",
-          title: sessionTitle,
-          taskId,
-          projectId,
-        });
+        const sessionOpts = { type: sessionType || "chat", title: sessionTitle, taskId, projectId };
+        const ledgerSession = forceNewSession
+          ? { ...createSession({ agentId: agent, ...sessionOpts }), resumed: false }
+          : getOrCreateActiveSession(agent, sessionOpts);
         const ledgerSessionId = ledgerSession.sessionId;
         if (!ledgerSession.resumed) {
           log.info(`[cli-ledger] New session created: ${ledgerSessionId} (type=${sessionType || "chat"})`);
@@ -5241,11 +5359,13 @@ async function requestHandler(req, res) {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "x-channel": "cli" },
                 body: JSON.stringify({
-                  messages: [{ role: "user", content: message }],
-                  model: "ollama/qwen3:8b",
+                  messages: buildCliLocalFallbackMessages(message, agent),
+                  model: "ollama/llama3.2:3b",
                   agentId: agent,
                   stream: true,
                   fallbackToLocal: true,
+                  fallbackModels: [],
+                  tools: false,
                 }),
                 signal: AbortSignal.timeout(60_000),
               });
@@ -6093,6 +6213,17 @@ async function requestHandler(req, res) {
         if (authClaims?.storeId) routerHeaders["x-store-id"] = authClaims.storeId;
         if (authClaims?.resellerId) routerHeaders["x-reseller-id"] = authClaims.resellerId;
         routerHeaders["x-channel"] = "shre-chat";
+
+        // RBAC: promote the validated session cookie to a Bearer so the router receives
+        // verifiable JWT claims for its tenant-binding guard. Without this the cookie-session
+        // browser path reaches the router with no decodable token → the guard fails open.
+        // Only when the request doesn't already carry an Authorization header (don't override
+        // genuine Bearer callers), and only for an already-validated session (authClaims set).
+        if (!routerHeaders["authorization"] && authClaims) {
+          const _cookies = (req.headers["cookie"] || "").split(";").map((c) => c.trim());
+          const _tok = _cookies.find((c) => c.startsWith("shre_token="));
+          if (_tok) routerHeaders["authorization"] = "Bearer " + _tok.slice("shre_token=".length);
+        }
 
         // streaming detection now works because reqBody is populated
         const isStreaming = (routerHeaders["accept"] || "").includes("text/event-stream") || 
