@@ -299,6 +299,10 @@ export function MessageList(props: MessageListProps) {
 
     for (let i = 0; i < filteredMessages.length; i++) {
       const msg = filteredMessages[i];
+      // Switch-notice chips are standalone status messages — they must NOT be
+      // folded into the preceding message's progress trail (that would hide the
+      // SwitchNoticeChip), nor become a trail anchor themselves.
+      if (msg.meta?.kind === 'switch') continue;
       if (isStatusMessage(msg) && !isBrowserApproval(msg)) {
         if (anchorIdx >= 0) {
           if (!trailMap.has(anchorIdx)) trailMap.set(anchorIdx, []);

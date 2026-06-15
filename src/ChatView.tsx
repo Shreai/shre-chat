@@ -12,7 +12,7 @@ const RealtimeVoiceOverlay = lazy(() =>
 );
 import { getModelOverride, setModelOverride } from './chat-utils';
 import { Lightbox } from './components/MessageBubble';
-import { buildSwitchNotice, modelLabel } from './lib/switch-notice';
+import { buildSwitchNotice, modelLabel, shouldEmitSwitchNotice } from './lib/switch-notice';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { useVoiceRecording } from './hooks/useVoiceRecording';
 import { useWakeWord } from './hooks/useWakeWord';
@@ -376,29 +376,29 @@ export function ChatView() {
   });
   useEffect(() => {
     const prev = switchBaselineRef.current;
-    const sameSession = prev.sid === activeSessionId && activeSessionId != null;
-    if (sameSession) {
-      const hasMessages = (sessions.find((s) => s.id === activeSessionId)?.messages.length ?? 0) > 0;
-      if (hasMessages && prev.agent !== activeAgentId) {
-        const a = getAgent(activeAgentId);
-        actions.addMessage(
-          activeSessionId,
-          buildSwitchNotice({
-            kind: 'agent',
-            label: a.name,
-            emoji: a.emoji,
-            description: a.description,
-          }),
-        );
-      }
-      if (hasMessages && prev.model !== selectedModel) {
-        actions.addMessage(
-          activeSessionId,
-          buildSwitchNotice({ kind: 'model', label: modelLabel(selectedModel, AVAILABLE_MODELS) }),
-        );
-      }
+    const curr = { sid: activeSessionId, agent: activeAgentId, model: selectedModel };
+    const hasMessages =
+      (sessions.find((s) => s.id === activeSessionId)?.messages.length ?? 0) > 0;
+    const emit = shouldEmitSwitchNotice(prev, curr, hasMessages);
+    if (emit.agent && activeSessionId) {
+      const a = getAgent(activeAgentId);
+      actions.addMessage(
+        activeSessionId,
+        buildSwitchNotice({
+          kind: 'agent',
+          label: a.name,
+          emoji: a.emoji,
+          description: a.description,
+        }),
+      );
     }
-    switchBaselineRef.current = { sid: activeSessionId, agent: activeAgentId, model: selectedModel };
+    if (emit.model && activeSessionId) {
+      actions.addMessage(
+        activeSessionId,
+        buildSwitchNotice({ kind: 'model', label: modelLabel(selectedModel, AVAILABLE_MODELS) }),
+      );
+    }
+    switchBaselineRef.current = curr;
   }, [activeAgentId, selectedModel, activeSessionId, sessions, actions, AVAILABLE_MODELS]);
 
   const {

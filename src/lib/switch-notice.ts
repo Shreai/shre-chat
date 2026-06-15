@@ -68,3 +68,37 @@ export function modelLabel(
   const m = models.find((x) => x.id === selectedModel);
   return m?.name || selectedModel.split('/').pop() || selectedModel;
 }
+
+/** Active agent/model the chat is bound to, plus its session id. */
+export interface SwitchBaseline {
+  sid: string | null;
+  agent: string;
+  model: string | null;
+}
+
+/** Which switch chips to emit for a baseline → current transition. */
+export interface SwitchEmit {
+  agent: boolean;
+  model: boolean;
+}
+
+/**
+ * Decide whether an agent/model change should drop a switch chip into the
+ * transcript. A chip is emitted only for a real *in-session* change of a
+ * non-empty session — switching to a different session (which can carry a
+ * different agent/model) is navigation, not a switch, and stays silent.
+ *
+ * Pure so the gating is unit-testable; the effect in ChatView only wires it up.
+ */
+export function shouldEmitSwitchNotice(
+  prev: SwitchBaseline,
+  curr: SwitchBaseline,
+  hasMessages: boolean,
+): SwitchEmit {
+  const sameSession = curr.sid != null && prev.sid === curr.sid;
+  const gate = sameSession && hasMessages;
+  return {
+    agent: gate && prev.agent !== curr.agent,
+    model: gate && prev.model !== curr.model,
+  };
+}
