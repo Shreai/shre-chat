@@ -156,6 +156,7 @@ interface ChatPanelsProps {
   content: React.ReactNode;
   terminal: React.ReactNode;
   preview: React.ReactNode;
+  workspace: React.ReactNode;
 }
 
 export function ChatPanels(props: ChatPanelsProps) {
@@ -266,6 +267,7 @@ export function ChatPanels(props: ChatPanelsProps) {
     content,
     terminal,
     preview,
+    workspace,
   } = props;
 
   const [modePickerOpen, setModePickerOpen] = useState(false);
@@ -914,7 +916,7 @@ export function ChatPanels(props: ChatPanelsProps) {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <div
           className={`flex flex-col min-h-0 overflow-hidden ${
-            isTabMode && activeView !== 'chat'
+            activeView === 'workspace' || (isTabMode && activeView !== 'chat')
               ? 'hidden'
               : !isTabMode && showTerminal && termViewMode === 'split'
                 ? 'flex-1 min-w-0'
@@ -923,7 +925,7 @@ export function ChatPanels(props: ChatPanelsProps) {
         >
           {content}
         </div>
-        {showTerminal && (
+        {showTerminal && activeView !== 'workspace' && (
           <div
             className={`flex flex-col min-h-0 overflow-hidden ${
               isTabMode
@@ -941,6 +943,9 @@ export function ChatPanels(props: ChatPanelsProps) {
         )}
         {activeView === 'preview' && (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">{preview}</div>
+        )}
+        {activeView === 'workspace' && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">{workspace}</div>
         )}
       </div>
 
