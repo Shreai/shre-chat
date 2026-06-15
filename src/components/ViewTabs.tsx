@@ -70,6 +70,33 @@ export function ViewTabs({
           </svg>
           Terminal
         </button>
+        <button
+          onClick={() => setActiveView('workspace')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] transition-colors"
+          style={{
+            color: activeView === 'workspace' ? 'var(--c-text-1)' : 'var(--c-text-4)',
+            borderBottom:
+              activeView === 'workspace' ? '2px solid var(--c-purple)' : '2px solid transparent',
+          }}
+          aria-label="Agent workspace view"
+          aria-selected={activeView === 'workspace'}
+          role="tab"
+        >
+          <svg
+            className="h-3 w-3"
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" />
+            <path d="M12 12l7-4" />
+            <path d="M12 12v9" />
+            <path d="M12 12L5 8" />
+          </svg>
+          Workspace
+        </button>
         {previewContent && (
           <button
             onClick={() => setActiveView('preview')}
@@ -105,7 +132,7 @@ export function ViewTabs({
       <button
         onClick={() => {
           setTermViewMode('split');
-          if (activeView === 'preview') setActiveView('chat');
+          if (activeView === 'preview' || activeView === 'workspace') setActiveView('chat');
         }}
         className="ml-auto flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors hover:brightness-125"
         style={{ color: 'var(--c-text-4)' }}

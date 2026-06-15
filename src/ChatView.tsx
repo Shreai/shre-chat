@@ -51,6 +51,7 @@ import { DragOverlay } from './components/DragOverlay';
 import { ChatPanels } from './components/ChatPanels';
 import { TrialBanner } from './components/TrialBanner';
 import { useChatKeydown } from './hooks/useChatKeydown';
+import { AgentWorkspacePanel } from './components/AgentWorkspacePanel';
 
 export function ChatView() {
   const { state, actions } = useApp();
@@ -1182,6 +1183,7 @@ export function ChatView() {
               <PreviewPanel content={previewContent} onClose={() => setActiveView('chat')} />
             )
           }
+          workspace={<AgentWorkspacePanel />}
           sessions={sessions}
           activeSessionId={activeSessionId}
           activeSession={activeSession}

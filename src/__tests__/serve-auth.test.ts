@@ -15,14 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import {
-  createMockReq,
-  createMockRes,
-  createJsonHelper,
-  createRateLimitHelper,
-  createAuthCookieHelper,
-  getJsonResponse,
-} from './route-test-helpers';
+import { createMockReq } from './route-test-helpers';
 
 // ── JWT test utilities (matching the algorithm in routes/auth.js) ────
 
@@ -100,6 +93,18 @@ function isPublicPath(pathname: string): boolean {
     pathname.startsWith('/api/i18n/translations/') ||
     pathname === '/api/i18n/available' ||
     pathname.startsWith('/api/router/')
+  );
+}
+
+function isLoopbackTerminalBridge(
+  pathname: string,
+  headers: Record<string, string>,
+  remoteAddress: string,
+): boolean {
+  return (
+    /^\/api\/agent-workspace\/orchestration-runs\/[^/]+\/executor-events$/.test(pathname) &&
+    headers['x-channel'] === 'shre-terminal' &&
+    ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remoteAddress)
   );
 }
 
@@ -275,5 +280,64 @@ describe('PUBLIC_PATHS — sync check with real serve.js', () => {
 
   it('REAL_PUBLIC_PATHS has exactly 7 entries (update if serve.js changes)', () => {
     expect(REAL_PUBLIC_PATHS.size).toBe(7);
+  });
+});
+
+describe('Agent Workspace terminal bridge bypass — sync check with real serve.js', () => {
+  it('allows only the executor-events route from shre-terminal on loopback', () => {
+    const headers = { 'x-channel': 'shre-terminal' };
+
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/executor-events',
+        headers,
+        '127.0.0.1',
+      ),
+    ).toBe(true);
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/executor-events',
+        headers,
+        '::1',
+      ),
+    ).toBe(true);
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/executor-events',
+        headers,
+        '::ffff:127.0.0.1',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects missing channel, non-loopback remotes, and adjacent paths', () => {
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/executor-events',
+        {},
+        '127.0.0.1',
+      ),
+    ).toBe(false);
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/executor-events',
+        { 'x-channel': 'cli' },
+        '127.0.0.1',
+      ),
+    ).toBe(false);
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/executor-events',
+        { 'x-channel': 'shre-terminal' },
+        '10.0.0.5',
+      ),
+    ).toBe(false);
+    expect(
+      isLoopbackTerminalBridge(
+        '/api/agent-workspace/orchestration-runs/run-123/events',
+        { 'x-channel': 'shre-terminal' },
+        '127.0.0.1',
+      ),
+    ).toBe(false);
   });
 });

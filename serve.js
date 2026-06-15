@@ -1666,6 +1666,7 @@ const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb }
 const { handlePushRoute, sendPushToAll } = registerPushRoutes({ log, chatDb });
 const handleCliLedger = registerCliLedgerRoutes({ log });
 const handleCliHandoff = registerCliHandoffRoutes({ log });
+const handleAgentWorkspace = registerAgentWorkspaceRoutes({ log, pgPool: cortexPool });
 
 // ── Request handler ──────────────────────────────────────────────────
 
@@ -1784,6 +1785,11 @@ async function requestHandler(req, res) {
     return json(res, { error: "Origin not allowed" }, 403);
   }
 
+  const isLoopbackTerminalBridge =
+    /^\/api\/agent-workspace\/orchestration-runs\/[^/]+\/executor-events$/.test(url.pathname)
+    && req.headers["x-channel"] === "shre-terminal"
+    && ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket?.remoteAddress || "");
+
   // ── GET /api/csrf-token — issue a CSRF token for the current session ──
   if (url.pathname === "/api/csrf-token" && req.method === "GET") {
     const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
@@ -1806,7 +1812,8 @@ async function requestHandler(req, res) {
       || url.pathname.startsWith("/v1/")
       || isEmbedPath  // Embedded apps (storepulse, city, marketplace, etc.) enforce their own CSRF
       || req.headers["authorization"]?.startsWith("Bearer ")
-      || req.headers["x-channel"] === "cli";
+      || req.headers["x-channel"] === "cli"
+      || isLoopbackTerminalBridge;
     if (!csrfExempt) {
       const csrfToken = req.headers["x-csrf-token"] || "";
       if (!validateCsrfToken(req, csrfToken)) {
@@ -1852,7 +1859,8 @@ async function requestHandler(req, res) {
   }
   const isRouterProxy = url.pathname.startsWith("/api/router/");
   const isCliLocal = url.pathname.startsWith("/api/cli/") && req.headers["x-channel"] === "cli";
-  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isCliLocal) {
+  const isTerminalBridge = isLoopbackTerminalBridge;
+  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isCliLocal && !isTerminalBridge) {
     if (!authClaims) {
       // Emit structured auth failure event for security dashboard
       try {

@@ -74,6 +74,126 @@
       "auth": true,
       "description": "List available agents"
     },
+    "GET /api/agent-workspace": {
+      "returns": "AgentWorkspaceSummary",
+      "auth": true,
+      "description": "Read-only Hermes/OpenClaw/CLI workspace summary for the conversation cockpit"
+    },
+    "GET /api/agent-workspace/cli-sessions/:id/resume": {
+      "returns": "AgentWorkspaceResumePayload",
+      "auth": true,
+      "description": "Build a safe UI continuation payload from an existing CLI ledger"
+    },
+    "GET /api/agent-workspace/orchestration-runs": {
+      "returns": "{ runs: AgentWorkspaceOrchestrationRun[] }",
+      "auth": true,
+      "description": "List persisted multi-model orchestration runs and plan DAG status"
+    },
+    "POST /api/agent-workspace/orchestration-runs": {
+      "accepts": {
+        "title": "string",
+        "objective": "string",
+        "nodes": "PlanNode[]"
+      },
+      "returns": "{ ok: boolean, run: AgentWorkspaceOrchestrationRun }",
+      "auth": true,
+      "description": "Persist a gated plan DAG for deterministic multi-executor orchestration"
+    },
+    "GET /api/agent-workspace/orchestration-runs/:id": {
+      "returns": "{ run: AgentWorkspaceOrchestrationRun }",
+      "auth": true,
+      "description": "Fetch one orchestration run with recent canonical events"
+    },
+    "POST /api/agent-workspace/orchestration-runs/:id/events": {
+      "accepts": "CanonicalEvent",
+      "returns": "{ ok: boolean, event: CanonicalEvent }",
+      "auth": true,
+      "description": "Append a normalized Claude, Codex, OpenClaw, local, or training event to a run"
+    },
+    "POST /api/agent-workspace/orchestration-runs/:id/executor-events": {
+      "accepts": "{ executor?: string, nodeId?: string, event?: object, events?: object[] }",
+      "returns": "{ ok: boolean, events: CanonicalEvent[] }",
+      "auth": true,
+      "description": "Bridge shre-terminal/OpenClaw normalized events into the canonical orchestration event schema"
+    },
+    "POST /api/agent-workspace/orchestration-runs/:id/training-jobs": {
+      "accepts": {
+        "nodeId": "string",
+        "datasetRef": "string",
+        "targetMetric": "number",
+        "metricName": "string"
+      },
+      "returns": "{ ok: boolean, job: AgentWorkspaceTrainingJob }",
+      "auth": true,
+      "description": "Queue a batch training job under a run without blocking the conversation loop"
+    },
+    "POST /api/agent-workspace/orchestration-runs/:id/training-jobs/:jobId/transition": {
+      "accepts": {
+        "status": "queued | running | checkpoint | evaluating | succeeded | failed",
+        "step": "number",
+        "metric": "number"
+      },
+      "returns": "{ ok: boolean, job: AgentWorkspaceTrainingJob }",
+      "auth": true,
+      "description": "Advance a training job lifecycle and append canonical training progress events"
+    },
+    "GET /api/agent-workspace/training-candidates": {
+      "returns": "{ candidates: AgentWorkspaceCandidate[] }",
+      "auth": true,
+      "description": "List staged trace-to-skill training candidates"
+    },
+    "POST /api/agent-workspace/training-candidates": {
+      "accepts": {
+        "sessionId": "string",
+        "proposedSkillPath": "string",
+        "notes": "string"
+      },
+      "returns": "{ ok: boolean, candidate: AgentWorkspaceCandidate }",
+      "auth": true,
+      "description": "Stage a CLI/session trace as a skill candidate; does not promote or fine-tune"
+    },
+    "GET /api/agent-workspace/approval-policy": {
+      "returns": "ApprovalPolicySummary",
+      "auth": true,
+      "description": "Read the workspace approval-gate invariant for public, financial, irreversible, and external-write actions"
+    },
+    "GET /api/agent-workspace/approval-cards": {
+      "returns": "{ cards: AgentWorkspaceApprovalCard[] }",
+      "auth": true,
+      "description": "List pending and recently decided approval cards for gated workspace actions"
+    },
+    "POST /api/agent-workspace/approval-cards": {
+      "accepts": {
+        "title": "string",
+        "actionType": "public | financial | irreversible | pos_write | listing_publish | customer_message",
+        "summary": "string",
+        "requestedBy": "string",
+        "sessionId": "string",
+        "risk": "low | medium | high | critical",
+        "payload": "object"
+      },
+      "returns": "{ ok: boolean, card: AgentWorkspaceApprovalCard }",
+      "auth": true,
+      "description": "Create an approval card; execution remains blocked until an approved card is consumed by a trusted executor"
+    },
+    "POST /api/agent-workspace/approval-cards/:id/approve": {
+      "accepts": {
+        "decidedBy": "string",
+        "note": "string"
+      },
+      "returns": "{ ok: boolean, card: AgentWorkspaceApprovalCard }",
+      "auth": true,
+      "description": "Approve a pending approval card without executing the underlying side effect"
+    },
+    "POST /api/agent-workspace/approval-cards/:id/reject": {
+      "accepts": {
+        "decidedBy": "string",
+        "note": "string"
+      },
+      "returns": "{ ok: boolean, card: AgentWorkspaceApprovalCard }",
+      "auth": true,
+      "description": "Reject a pending approval card"
+    },
     "POST /api/model": {
       "accepts": {
         "model": "string"
