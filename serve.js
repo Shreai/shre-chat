@@ -32,6 +32,7 @@ import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
 import { registerHandoffRoutes } from "./routes/handoff.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerPushRoutes } from "./routes/push.js";
+import { registerAgentWorkspaceRoutes } from "./routes/agent-workspace.js";
 import { initVoiceQualityMonitor, recordVoiceFailure, getVoiceQualityStats } from "./routes/voice-quality-monitor.js";
 import { createConversationEvaluator } from "./routes/conversation-evaluator.js";
 import { registerCliLedgerRoutes, createSession, getOrCreateActiveSession, appendUserMessage, appendCliResponse, appendToolEvent, buildSessionContext } from "./routes/cli-ledger.js";
@@ -703,6 +704,23 @@ function localHttpsPost(port, path, body, headers = {}) {
     req.on("error", reject);
     req.setTimeout(5000, () => { req.destroy(); reject(new Error("timeout")); });
     req.end(data);
+  });
+}
+
+// HTTPS GET to localhost services with self-signed certs
+function localHttpsGet(port, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest({ hostname: "127.0.0.1", port, path, method: "GET", headers }, (res) => {
+      let buf = "";
+      res.on("data", (c) => buf += c);
+      res.on("end", () => {
+        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, json: JSON.parse(buf) }); }
+        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, json: null }); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.end();
   });
 }
 
@@ -1701,6 +1719,7 @@ const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb }
 const { handlePushRoute, sendPushToAll } = registerPushRoutes({ log, chatDb });
 const handleCliLedger = registerCliLedgerRoutes({ log });
 const handleCliHandoff = registerCliHandoffRoutes({ log });
+const handleAgentWorkspace = registerAgentWorkspaceRoutes({ log });
 
 // ── Request handler ──────────────────────────────────────────────────
 
@@ -1907,6 +1926,7 @@ async function requestHandler(req, res) {
 
   // Health routes (after auth for readyz, but health is in PUBLIC_PATHS)
   if (await handleHealth(req, res, url, _routeUtils)) return;
+  if (await handleAgentWorkspace(req, res, url, _routeUtils)) return;
 
   // Trace endpoints
   if (url.pathname === "/v1/traces" && req.method === "GET") {
@@ -2197,6 +2217,34 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Usage summary proxy failed:", err.message);
       json(res, { error: "shre-meter unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Skills discovery proxy → shre-skills core-skills catalog ──
+  // Returns a flat {key, level, description} skill list; the client filters by
+  // query. (shre-skills /v1/report is markdown and /v1/match needs a
+  // "skills=docker:4" param, so neither fits a free-text search — core-skills
+  // is the JSON catalog.)
+  if (url.pathname === "/api/skills" && req.method === "GET") {
+    if (!SKILLS_KEY) return json(res, { error: "Skills service not configured", skills: [] }, 200);
+    try {
+      const r = await localHttpsGet(SKILLS_PORT, "/v1/core-skills", { Authorization: `Bearer ${SKILLS_KEY}` });
+      const data = r.json || {};
+      const skills = [];
+      for (const v of Object.values(data)) {
+        if (Array.isArray(v)) {
+          for (const s of v) {
+            if (s && typeof s === "object" && s.key) {
+              skills.push({ key: s.key, level: s.level, description: s.description });
+            }
+          }
+        }
+      }
+      json(res, { skills, version: data.version }, r.status || 200);
+    } catch (err) {
+      log.warn("Skills proxy failed:", err.message);
+      json(res, { error: "Skills service unreachable", skills: [] }, 502);
     }
     return;
   }

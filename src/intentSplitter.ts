@@ -200,3 +200,54 @@ export function buildAgentMessage(
 
   return `[Multi-intent request — some actions were already handled automatically]\n\nActions completed:\n${actionSummary}\n\nRemaining request: ${queryText}`;
 }
+
+// ── Fan-out planning ────────────────────────────────────────────────
+//
+// When a message clearly contains several independent pieces of work, the best
+// path is the server-side orchestrator (`POST /v1/execute`), which decomposes a
+// prompt into subtasks and runs local executors in parallel. These helpers
+// decide *whether* to offer that path and summarise it for the user — the
+// router still does the real decomposition.
+
+export interface FanoutPlan {
+  /** Whether this message is worth routing through the orchestrator */
+  shouldOrchestrate: boolean;
+  /** Distinct work items detected (best-effort, the router may split further) */
+  tasks: SplitIntent[];
+  /** Short human summary, e.g. "2 actions + 1 query" */
+  summary: string;
+}
+
+/**
+ * Decide whether a compound message should be offered to the orchestrator.
+ *
+ * Heuristic: only offer when the splitter found a genuine multi-intent message
+ * (≥2 signalled segments) AND at least two *distinct* work items exist — i.e.
+ * either more than one action, or an action combined with a query. A bare
+ * "fetch X and fetch Y" stays a single chat turn.
+ */
+export function planFanout(message: string): FanoutPlan {
+  const split = splitIntents(message);
+  if (!split.wasSplit) {
+    return { shouldOrchestrate: false, tasks: split.intents, summary: 'single request' };
+  }
+
+  const actions = split.intents.filter(
+    (i) => i.type === 'task' || i.type === 'reminder' || i.type === 'issue',
+  );
+  const queries = split.intents.filter((i) => i.type === 'query');
+
+  const distinctWorkItems = actions.length + (queries.length > 0 ? 1 : 0);
+  const shouldOrchestrate =
+    split.intents.length >= 2 && (actions.length >= 2 || (actions.length >= 1 && queries.length >= 1) || queries.length >= 2);
+
+  const parts: string[] = [];
+  if (actions.length) parts.push(`${actions.length} action${actions.length === 1 ? '' : 's'}`);
+  if (queries.length) parts.push(`${queries.length} quer${queries.length === 1 ? 'y' : 'ies'}`);
+
+  return {
+    shouldOrchestrate,
+    tasks: split.intents,
+    summary: parts.join(' + ') || `${distinctWorkItems} tasks`,
+  };
+}

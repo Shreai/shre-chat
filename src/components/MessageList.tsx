@@ -3,7 +3,7 @@ import type { Virtualizer } from '@tanstack/react-virtual';
 import type { ChatMessage } from '../router-client';
 import type { UserProfile } from '../store';
 import type { ProcessRun } from './process-bar/types';
-import MessageBubble, { SystemEventChip, ToolExecutionChip } from './MessageBubble';
+import MessageBubble, { SystemEventChip, SwitchNoticeChip, ToolExecutionChip } from './MessageBubble';
 import { BrowserApprovalCard } from './message-parts/BrowserApprovalCard';
 import type { ToolExecStep } from './MessageBubble';
 import { WelcomeScreen } from './WelcomeScreen';
@@ -447,6 +447,8 @@ export function MessageList(props: MessageListProps) {
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
+                  ) : isStatusMessage(msg) && msg.meta?.kind === 'switch' ? (
+                    <SwitchNoticeChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) ? (
                     <SystemEventChip
                       message={msg}
@@ -494,6 +496,8 @@ export function MessageList(props: MessageListProps) {
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
+                  ) : isStatusMessage(msg) && msg.meta?.kind === 'switch' ? (
+                    <SwitchNoticeChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) ? (
                     <SystemEventChip
                       message={msg}
