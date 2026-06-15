@@ -90,4 +90,57 @@ test.describe('Multi-agent composer UX', () => {
       .first();
     await expect(result).toBeVisible({ timeout: 15_000 });
   });
+
+  // The switch-chip TRIGGER (the gating effect) is unit-tested via
+  // shouldEmitSwitchNotice; here we verify the RENDER path deterministically by
+  // seeding a session whose transcript already holds a switch-notice message,
+  // then asserting the SwitchNoticeChip renders. No backend round-trip.
+  test('switch-notice chip renders in the transcript', async ({ page }) => {
+    // Keep the seeded local session authoritative: the startup server-sync
+    // round-trips messages and drops their `meta` (so the chip would render as
+    // plain text). Returning an empty server set makes syncWithServer keep the
+    // local copy (meta intact).
+    await page.route('**/api/chat-sessions/sync', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessions: [] }),
+      }),
+    );
+    await page.addInitScript(() => {
+      const sid = 'qa-switch-chip';
+      const now = 1_700_000_000_000;
+      const session = {
+        id: sid,
+        title: 'QA switch chip',
+        agentId: 'main',
+        createdAt: now,
+        updatedAt: now + 3,
+        messages: [
+          { role: 'user', content: 'hi', timestamp: now },
+          { role: 'assistant', content: 'hello', timestamp: now + 1 },
+          {
+            role: 'assistant',
+            content: '📊 **Agent switched to Analytics** — Sales & inventory insights',
+            timestamp: now + 2,
+            meta: {
+              system: 'true',
+              kind: 'switch',
+              switchKind: 'agent',
+              switchLabel: 'Analytics',
+              switchEmoji: '📊',
+              switchDescription: 'Sales & inventory insights',
+            },
+          },
+        ],
+      };
+      localStorage.setItem('shre-sessions', JSON.stringify([session]));
+      localStorage.setItem('shre-active-session', sid);
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#shre-chat-textarea:not([disabled])', { timeout: 30_000 });
+    // The chip renders "Agent → Analytics — …" (distinct from a plain message).
+    await expect(page.locator('text=/Agent →/').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('text=Analytics').first()).toBeVisible();
+  });
 });

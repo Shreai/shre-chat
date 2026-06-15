@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { buildSwitchNotice, isSwitchNotice, modelLabel } from '../lib/switch-notice';
+import {
+  buildSwitchNotice,
+  isSwitchNotice,
+  modelLabel,
+  shouldEmitSwitchNotice,
+} from '../lib/switch-notice';
 
 describe('buildSwitchNotice', () => {
   it('builds an agent switch chip with emoji + description', () => {
@@ -47,5 +52,59 @@ describe('buildSwitchNotice', () => {
     expect(isSwitchNotice(m)).toBe(true);
     expect(isSwitchNotice({ meta: { model: 'foo' } })).toBe(false);
     expect(isSwitchNotice({ meta: undefined })).toBe(false);
+  });
+});
+
+describe('shouldEmitSwitchNotice', () => {
+  const base = { sid: 's1', agent: 'shre', model: 'auto' };
+
+  it('emits an agent chip on an in-session agent change (non-empty)', () => {
+    expect(shouldEmitSwitchNotice(base, { ...base, agent: 'analytics' }, true)).toEqual({
+      agent: true,
+      model: false,
+    });
+  });
+
+  it('emits a model chip on an in-session model change (non-empty)', () => {
+    expect(shouldEmitSwitchNotice(base, { ...base, model: 'claude' }, true)).toEqual({
+      agent: false,
+      model: true,
+    });
+  });
+
+  it('emits both when agent and model both change in-session', () => {
+    expect(
+      shouldEmitSwitchNotice(base, { ...base, agent: 'analytics', model: 'claude' }, true),
+    ).toEqual({ agent: true, model: true });
+  });
+
+  it('stays silent on a session change (navigation, not a switch)', () => {
+    expect(
+      shouldEmitSwitchNotice(base, { sid: 's2', agent: 'analytics', model: 'claude' }, true),
+    ).toEqual({ agent: false, model: false });
+  });
+
+  it('stays silent in an empty session even if agent/model changed', () => {
+    expect(shouldEmitSwitchNotice(base, { ...base, agent: 'analytics' }, false)).toEqual({
+      agent: false,
+      model: false,
+    });
+  });
+
+  it('stays silent when nothing changed', () => {
+    expect(shouldEmitSwitchNotice(base, { ...base }, true)).toEqual({
+      agent: false,
+      model: false,
+    });
+  });
+
+  it('stays silent when there is no active session (sid null)', () => {
+    expect(
+      shouldEmitSwitchNotice(
+        { sid: null, agent: 'shre', model: 'auto' },
+        { sid: null, agent: 'analytics', model: 'auto' },
+        true,
+      ),
+    ).toEqual({ agent: false, model: false });
   });
 });
