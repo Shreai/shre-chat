@@ -65,6 +65,7 @@ const DIST = join(import.meta.dirname, "dist");
 const ROUTER_PORT = Number(new URL(serviceUrl("shre-router")).port);
 const GATEWAY_HOME = join(homedir(), ".openclaw");
 const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
+const AROS_PLATFORM_URL = process.env.AROS_PLATFORM_URL || process.env.AROS_URL || "http://127.0.0.1:5457";
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
 function parseDatabaseUrl(rawUrl) {
@@ -1452,6 +1453,53 @@ const mib007Headers = () => MIB007_SERVICE_TOKEN
 async function mib007Fetch(path, opts = {}) {
   const headers = { ...mib007Headers(), ...opts.headers };
   return fetch(`http://127.0.0.1:${MIB007_PORT}${path}`, { ...opts, headers });
+}
+
+function bearerTokenFromRequest(req) {
+  const authHeader = req.headers["authorization"];
+  if (authHeader?.startsWith("Bearer ")) return authHeader.slice(7);
+
+  const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
+  const tokenCookie = cookies.find(c => c.startsWith("shre_token="));
+  return tokenCookie ? decodeURIComponent(tokenCookie.split("=").slice(1).join("=")) : "";
+}
+
+function arosContextHeaders(req) {
+  const headers = {
+    "X-Aros-App-Key": "shre-chat",
+  };
+  const ctx = getUserContext(req);
+  if (ctx.tenantId && ctx.tenantId !== "default") {
+    headers["X-Aros-Tenant-Id"] = ctx.tenantId;
+  }
+  const bearerToken = bearerTokenFromRequest(req);
+  if (bearerToken) {
+    headers["Authorization"] = `Bearer ${bearerToken}`;
+  }
+  return headers;
+}
+
+async function arosEntitlementAppIds(req) {
+  if (!bearerTokenFromRequest(req)) return null;
+
+  const upstream = await fetch(`${AROS_PLATFORM_URL}/api/marketplace/entitlements`, {
+    headers: arosContextHeaders(req),
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (upstream.status === 401 || upstream.status === 403 || upstream.status === 404) {
+    return null;
+  }
+  if (!upstream.ok) {
+    throw new Error(`Aros entitlements returned ${upstream.status}`);
+  }
+
+  const data = await upstream.json().catch(() => ({}));
+  const entitlements = Array.isArray(data?.entitlements) ? data.entitlements : [];
+  return entitlements
+    .filter((entry) => String(entry?.status || "").toLowerCase() === "active")
+    .map((entry) => String(entry?.app_key || entry?.appKey || "").trim())
+    .filter(Boolean);
 }
 
 /**
@@ -3643,9 +3691,14 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // ── Marketplace activated apps proxy (MIB007 app_enablements) ──
+  // ── Marketplace activated apps proxy (Aros entitlements, MIB007 fallback) ──
   if (url.pathname === "/api/marketplace/activated-apps" && req.method === "GET") {
     try {
+      const arosAppIds = await arosEntitlementAppIds(req);
+      if (arosAppIds) {
+        return json(res, { appIds: arosAppIds, source: "aros" });
+      }
+
       const companyId = await mib007CompanyId(req);
       if (!companyId) return json(res, { appIds: [] });
       const upstream = await mib007Fetch(
@@ -3653,9 +3706,8 @@ async function requestHandler(req, res) {
         { signal: AbortSignal.timeout(8000) }
       );
       const data = await upstream.json().catch(() => []);
-      // MIB007 returns string[] of enabled appIds — wrap for frontend
       const appIds = Array.isArray(data) ? data : [];
-      json(res, { appIds });
+      json(res, { appIds, source: "mib007" });
     } catch (err) {
       log.warn("Marketplace activated-apps proxy failed:", err.message);
       json(res, { appIds: [] }, 502);
