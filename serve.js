@@ -14,6 +14,7 @@ import pg from "pg";
 import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { createLogger, extractCorrelationId, createEventBus, createLifecycleEmitter, serviceUrl, infraUrl, createFeedbackPipeline, createServiceClient } from "shre-sdk";
+import { generateServiceHMAC } from "shre-sdk/auth";
 
 /** Universal service client — retry + circuit breaker for inter-service calls */
 const svc = createServiceClient("shre-chat");
@@ -64,7 +65,10 @@ heartbeat.registerDependency("shre-router", `${serviceUrl("shre-router")}/health
 const DIST = join(import.meta.dirname, "dist");
 const ROUTER_PORT = Number(new URL(serviceUrl("shre-router")).port);
 const GATEWAY_HOME = join(homedir(), ".openclaw");
-const MIB007_PORT = Number(new URL(serviceUrl("mib007")).port);
+const MIB007_BASE_URL = process.env.MIB007_URL || serviceUrl("mib007");
+const MIB007_URL = new URL(MIB007_BASE_URL);
+const MIB007_HOST = MIB007_URL.hostname;
+const MIB007_PORT = Number(MIB007_URL.port || (MIB007_URL.protocol === "https:" ? 443 : 80));
 const CORTEXDB_URL = process.env.CORTEXDB_URL || infraUrl("cortexservice-api");
 
 function parseDatabaseUrl(rawUrl) {
@@ -83,7 +87,15 @@ function parseDatabaseUrl(rawUrl) {
   }
 }
 
-const dbUrl = parseDatabaseUrl(process.env.CORTEX_PG_URL || process.env.DATABASE_URL);
+const hasExplicitCortexPgConfig = Boolean(
+  process.env.CORTEX_PG_URL
+  || process.env.CORTEX_PG_HOST
+  || process.env.CORTEX_PG_PORT
+  || process.env.CORTEX_PG_USER
+  || process.env.CORTEX_PG_PASSWORD
+  || process.env.CORTEX_PG_DATABASE
+);
+const dbUrl = parseDatabaseUrl(process.env.CORTEX_PG_URL);
 const cortexPgConfig = {
   host: process.env.CORTEX_PG_HOST || dbUrl?.host || "127.0.0.1",
   port: Number(process.env.CORTEX_PG_PORT || dbUrl?.port || 5433),
@@ -92,23 +104,27 @@ const cortexPgConfig = {
   database: process.env.CORTEX_PG_DATABASE || dbUrl?.database || "cortexdb",
 };
 
-if (process.env.NODE_ENV === "production" && !cortexPgConfig.password) {
+if (!hasExplicitCortexPgConfig) {
+  log.info("[startup] CortexDB PostgreSQL not configured — analytics, StorePulse polling, and JTI revocation checks run degraded");
+} else if (process.env.NODE_ENV === "production" && !cortexPgConfig.password) {
   log.warn("[startup] CORTEX_PG_PASSWORD not set — CortexDB analytics routes will fail");
 }
 
 // ── CortexDB PostgreSQL pool (replaces execSync docker exec psql) ──
-const cortexPool = new pg.Pool({
-  host: cortexPgConfig.host,
-  port: cortexPgConfig.port,
-  user: cortexPgConfig.user,
-  password: cortexPgConfig.password,
-  database: cortexPgConfig.database,
-  max: 5,
-  idleTimeoutMillis: 120_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 30_000,
-});
-cortexPool.on("error", (err) => log.warn("[cortexPool] Idle client error", { error: err.message }));
+const cortexPool = hasExplicitCortexPgConfig
+  ? new pg.Pool({
+      host: cortexPgConfig.host,
+      port: cortexPgConfig.port,
+      user: cortexPgConfig.user,
+      password: cortexPgConfig.password,
+      database: cortexPgConfig.database,
+      max: 5,
+      idleTimeoutMillis: 120_000,
+      connectionTimeoutMillis: 5_000,
+      statement_timeout: 30_000,
+    })
+  : null;
+cortexPool?.on("error", (err) => log.warn("[cortexPool] Idle client error", { error: err.message }));
 
 // ── Gateway token — read from config server-side (never expose in bundle) ──
 let GATEWAY_TOKEN = "";
@@ -126,11 +142,14 @@ try {
 } catch { /* no service token — MIB007 proxy will fail auth */ }
 
 // ── Service tokens for inter-service auth ──
-let CONTACTS_TOKEN = "";
+let CONTACTS_TOKEN = process.env.SHRE_CONTACTS_TOKEN || "";
 try {
-  const vaultOut = execSync("bash scripts/vault-read.sh tokens.env", { cwd: join(import.meta.dirname, ".."), timeout: 5000 }).toString("utf-8");
-  const match = vaultOut.match(/SHRE_CONTACTS_TOKEN=([^\s\n]+)/);
-  if (match) CONTACTS_TOKEN = match[1].trim();
+  const vaultScript = join(import.meta.dirname, "..", "scripts", "vault-read.sh");
+  if (!CONTACTS_TOKEN && existsSync(vaultScript)) {
+    const vaultOut = execSync("bash scripts/vault-read.sh tokens.env", { cwd: join(import.meta.dirname, ".."), timeout: 5000 }).toString("utf-8");
+    const match = vaultOut.match(/SHRE_CONTACTS_TOKEN=([^\s\n]+)/);
+    if (match) CONTACTS_TOKEN = match[1].trim();
+  }
   if (CONTACTS_TOKEN) log.info("Contacts token loaded");
 } catch (err) { log.warn("Failed to load contacts token:", err.message); }
 
@@ -1054,6 +1073,7 @@ const REVOKED_JTI_TTL_MS = 60_000;
 
 async function isJtiRevoked(jti) {
   if (!jti || typeof jti !== "string") return false;
+  if (!cortexPool) return false;
   const now = Date.now();
   const cached = _revokedJtiCache.get(jti);
   if (cached && now - cached.fetchedAt < REVOKED_JTI_TTL_MS) {
@@ -1157,6 +1177,41 @@ function userContextHeadersNoAuth(req) {
   if (ctx.userId !== "system") headers["X-User-Id"] = ctx.userId;
   if (ctx.tenantId !== "default") headers["X-Workspace-Id"] = ctx.tenantId;
   if (ctx.companyId) headers["X-Company-Id"] = ctx.companyId;
+  return headers;
+}
+
+function taskServiceUrl() {
+  return process.env.SHRE_TASKS_URL || serviceUrl("shre-tasks");
+}
+
+function voiceServiceUrl() {
+  return process.env.SHRE_VOICE_URL || serviceUrl("shre-voice");
+}
+
+function configuredLocalVoiceUrl() {
+  return process.env.SHRE_LOCAL_VOICE_URL || process.env.LOCAL_VOICE_URL || "";
+}
+
+function serviceIdentityHeaders() {
+  const serviceName = process.env.SHRE_SERVICE_NAME || "shre-chat";
+  const timestamp = String(Date.now());
+  const signature = generateServiceHMAC(serviceName, `${serviceName}:${timestamp}`);
+  return signature
+    ? {
+        "X-Shre-Service": serviceName,
+        "X-Shre-Timestamp": timestamp,
+        "X-Shre-Signature": signature,
+      }
+    : {};
+}
+
+function taskProxyHeaders(req, includeContentType = false) {
+  const headers = {
+    ...(includeContentType ? { "Content-Type": "application/json" } : {}),
+    ...serviceIdentityHeaders(),
+    ...userContextHeadersNoAuth(req),
+  };
+  if (req.headers["authorization"]) headers["X-User-Authorization"] = req.headers["authorization"];
   return headers;
 }
 
@@ -1451,7 +1506,7 @@ const mib007Headers = () => MIB007_SERVICE_TOKEN
 
 async function mib007Fetch(path, opts = {}) {
   const headers = { ...mib007Headers(), ...opts.headers };
-  return fetch(`http://127.0.0.1:${MIB007_PORT}${path}`, { ...opts, headers });
+  return fetch(`${MIB007_BASE_URL}${path}`, { ...opts, headers });
 }
 
 /**
@@ -1712,12 +1767,13 @@ const server = httpsServer || httpServer;
 
 // ── Content Security Policy ──────────────────────────────────────
 const IS_DEV = process.env.NODE_ENV !== "production";
-const CSP_CONNECT_SRC = `connect-src 'self' https://localhost:* https://127.0.0.1:* http://localhost:* http://127.0.0.1:* wss://chat.shre.ai wss://mib.shre.ai wss://*.aros.live ws://localhost:* wss://localhost:*`;
+const CSP_CONNECT_SRC = `connect-src 'self' https://localhost:* https://127.0.0.1:* http://localhost:* http://127.0.0.1:* https://cloudflareinsights.com https://*.cloudflareinsights.com wss://chat.shre.ai wss://mib.shre.ai wss://*.aros.live ws://localhost:* wss://localhost:*`;
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
   CSP_CONNECT_SRC,
   "font-src 'self'",
   "object-src 'none'",
@@ -1964,9 +2020,9 @@ async function requestHandler(req, res) {
       const [heartbeatRes, fleetRes, tasksInProgress, tasksCompleted, tasksFailed, trainingRes] = await Promise.allSettled([
         fetch(`${serviceUrl("shre-health")}/v1/heartbeat`, { signal: to(2000) }).then(r => r.json()),
         fetch(`${serviceUrl("shre-fleet")}/v1/fleet/status`, { signal: to(2000) }).then(r => r.json()),
-        fetch(`${serviceUrl("shre-tasks")}/v1/tasks?status=in_progress&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
-        fetch(`${serviceUrl("shre-tasks")}/v1/tasks?status=completed&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
-        fetch(`${serviceUrl("shre-tasks")}/v1/tasks?status=failed&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
+        fetch(`${taskServiceUrl()}/v1/tasks?status=in_progress&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
+        fetch(`${taskServiceUrl()}/v1/tasks?status=completed&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
+        fetch(`${taskServiceUrl()}/v1/tasks?status=failed&limit=1`, { signal: to(2000), headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {} }).then(r => r.json()),
         fetch(`${serviceUrl("shre-scorer")}/v1/training/stats`, { signal: to(2000) }).then(r => r.json()),
       ]);
 
@@ -2346,6 +2402,11 @@ async function requestHandler(req, res) {
         { signal: AbortSignal.timeout(5000), headers: userContextHeadersNoAuth(req) }
       );
       const data = await upstream.text();
+      if (!upstream.ok) {
+        log.warn("Onboarding status upstream rejected", { status: upstream.status });
+        json(res, { started: true, phase: "complete", progress: 100, degraded: true }, 200);
+        return;
+      }
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
@@ -2369,11 +2430,16 @@ async function requestHandler(req, res) {
         body: JSON.stringify(parsed),
       });
       const data = await upstream.text();
+      if (!upstream.ok) {
+        log.warn("Onboarding state upstream rejected", { status: upstream.status });
+        json(res, { ok: true, degraded: true, saved: false }, 200);
+        return;
+      }
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
       res.end(data);
     } catch (err) {
       log.warn("Onboarding state proxy failed:", err.message);
-      json(res, { error: "mib007 unreachable" }, 502);
+      json(res, { ok: false, degraded: true, saved: false, error: "mib007 unreachable" }, 200);
     }
     return;
   }
@@ -2500,7 +2566,7 @@ async function requestHandler(req, res) {
       res.end(data);
     } catch (err) {
       log.warn("Registry agents proxy failed:", err.message);
-      json(res, { error: "mib007 unreachable" }, 502);
+      json(res, { agents: [], degraded: true, error: "mib007 unreachable" }, 200);
     }
     return;
   }
@@ -2633,7 +2699,7 @@ async function requestHandler(req, res) {
   // ── Task timeline proxy (shre-tasks) ──
   if (url.pathname === "/api/task-timeline" && req.method === "GET") {
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
+      const tasksUrl = taskServiceUrl();
       const upstream = await fetch(`${tasksUrl}/v1/tasks${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
       const data = await upstream.text();
       res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -2706,8 +2772,8 @@ async function requestHandler(req, res) {
   // ── Tasks CRUD proxy (shre-tasks) — forwards user context headers ──
   if (url.pathname === "/api/tasks" && (req.method === "GET" || req.method === "POST")) {
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
-      const ctxHeaders = userContextHeaders(req);
+      const tasksUrl = taskServiceUrl();
+      const ctxHeaders = taskProxyHeaders(req);
       if (req.method === "GET") {
         const upstream = await fetch(`${tasksUrl}/v1/tasks${url.search || "?limit=100"}`, { headers: ctxHeaders, signal: AbortSignal.timeout(8000) });
         const data = await upstream.text();
@@ -2717,7 +2783,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/tasks`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...ctxHeaders },
+          headers: taskProxyHeaders(req, true),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -2736,8 +2802,8 @@ async function requestHandler(req, res) {
   const taskIdMatch = url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9_-]+)$/);
   if (taskIdMatch && (req.method === "PATCH" || req.method === "GET")) {
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
-      const ctxHeaders = userContextHeaders(req);
+      const tasksUrl = taskServiceUrl();
+      const ctxHeaders = taskProxyHeaders(req);
       const taskId = taskIdMatch[1];
       if (req.method === "GET") {
         const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, { headers: ctxHeaders, signal: AbortSignal.timeout(5000) });
@@ -2748,7 +2814,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ctxHeaders },
+          headers: taskProxyHeaders(req, true),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(8000),
         });
@@ -2767,13 +2833,13 @@ async function requestHandler(req, res) {
   const assignMatch = url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9_-]+)\/assignment$/);
   if (assignMatch && req.method === "PATCH") {
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
-      const ctxHeaders = userContextHeaders(req);
+      const tasksUrl = taskServiceUrl();
+      const ctxHeaders = taskProxyHeaders(req);
       const taskId = assignMatch[1];
       const body = await collectBody(req);
       const upstream = await fetch(`${tasksUrl}/v1/tasks/${taskId}/assignment`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...ctxHeaders },
+        headers: taskProxyHeaders(req, true),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(8000),
       });
@@ -2792,11 +2858,11 @@ async function requestHandler(req, res) {
   if (retryMatch && req.method === "POST") {
     const taskId = retryMatch[1];
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
+      const tasksUrl = taskServiceUrl();
       // Reset status to todo
       const resetRes = await fetch(`${tasksUrl}/v1/tasks/${taskId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: taskProxyHeaders(req, true),
         body: JSON.stringify({ status: "todo", result_summary: null }),
         signal: AbortSignal.timeout(8000),
       });
@@ -2849,8 +2915,8 @@ async function requestHandler(req, res) {
   // ── Projects proxy (shre-tasks) ──
   if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
-      const ctxHeaders = userContextHeaders(req);
+      const tasksUrl = taskServiceUrl();
+      const ctxHeaders = taskProxyHeaders(req);
       if (req.method === "GET") {
         const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { headers: ctxHeaders, signal: AbortSignal.timeout(8000) });
         const data = await upstream.text();
@@ -2860,7 +2926,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/projects`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...ctxHeaders },
+          headers: taskProxyHeaders(req, true),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -2951,9 +3017,10 @@ async function requestHandler(req, res) {
   // ── Projects proxy (shre-tasks) ──
   if (url.pathname === "/api/projects" && (req.method === "GET" || req.method === "POST")) {
     try {
-      const tasksUrl = serviceUrl("shre-tasks");
+      const tasksUrl = taskServiceUrl();
+      const ctxHeaders = taskProxyHeaders(req);
       if (req.method === "GET") {
-        const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { signal: AbortSignal.timeout(8000) });
+        const upstream = await fetch(`${tasksUrl}/v1/projects${url.search || ""}`, { headers: ctxHeaders, signal: AbortSignal.timeout(8000) });
         const data = await upstream.text();
         res.writeHead(upstream.status, { "Content-Type": "application/json" });
         res.end(data);
@@ -2961,7 +3028,7 @@ async function requestHandler(req, res) {
         const body = await collectBody(req);
         const upstream = await fetch(`${tasksUrl}/v1/projects`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: taskProxyHeaders(req, true),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
@@ -3610,7 +3677,42 @@ async function requestHandler(req, res) {
       json(res, data);
     } catch (err) {
       log.warn("Apps proxy failed:", err.message);
-      json(res, { apps: [] }, 502);
+      json(res, { apps: [], degraded: true, error: "shre-skills unreachable" }, 200);
+    }
+    return;
+  }
+
+  // ── App activate proxy (shre-skills POST /v1/apps/:id/activate) ──
+  const activateMatch = url.pathname.match(/^\/api\/apps\/([^/]+)\/activate$/);
+  if (activateMatch && req.method === "POST") {
+    const appId = decodeURIComponent(activateMatch[1]);
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const r = httpsRequest({
+          hostname: "127.0.0.1", port: SKILLS_PORT,
+          path: `/v1/apps/${encodeURIComponent(appId)}/activate`, method: "POST",
+          headers: { Authorization: `Bearer ${SKILLS_KEY}`, "Content-Type": "application/json" },
+          rejectUnauthorized: false,
+        }, (upstream) => {
+          let buf = "";
+          upstream.on("data", (c) => buf += c);
+          upstream.on("end", () => {
+            let body = {};
+            try { body = JSON.parse(buf || "{}"); } catch { /* non-json */ }
+            resolve({ status: upstream.statusCode || 200, body });
+          });
+        });
+        r.on("error", reject);
+        r.setTimeout(8000, () => { r.destroy(); reject(new Error("timeout")); });
+        r.end(JSON.stringify({}));
+      });
+      // Best-effort: tell the router to drop its skill cache so the newly
+      // symlinked skills are picked up without a restart (non-fatal).
+      fetch(`http://127.0.0.1:${ROUTER_PORT}/v1/skills/reload`, { method: "POST" }).catch(() => {});
+      json(res, result.body, result.status >= 400 ? result.status : 200);
+    } catch (err) {
+      log.warn("App activate proxy failed:", err.message);
+      json(res, { ok: false, error: "shre-skills unreachable" }, 502);
     }
     return;
   }
@@ -4046,9 +4148,10 @@ async function requestHandler(req, res) {
       const sttStart = Date.now();
 
       // Fallback chain: local faster-whisper → shre-voice → shre-router (OpenAI) → browser SpeechRecognition
+      const localVoiceUrl = configuredLocalVoiceUrl();
       const sttEndpoints = [
-        `http://127.0.0.1:5464/v1/audio/transcriptions`,  // local faster-whisper (no API key)
-        `http://127.0.0.1:5456/v1/audio/transcriptions`,  // shre-voice (ElevenLabs/OpenAI)
+        ...(localVoiceUrl ? [`${localVoiceUrl}/v1/audio/transcriptions`] : []),
+        `${voiceServiceUrl()}/v1/audio/transcriptions`,  // shre-voice (ElevenLabs/OpenAI)
         `${serviceUrl("shre-router")}/v1/audio/transcriptions`, // shre-router (OpenAI)
       ];
 
@@ -4123,9 +4226,10 @@ async function requestHandler(req, res) {
         });
 
         // Fallback chain: local → shre-voice → shre-router
+        const localVoiceUrl = configuredLocalVoiceUrl();
         const ttsEndpoints = [
-          "http://127.0.0.1:5464/v1/audio/speech",           // local piper-tts
-          "http://127.0.0.1:5456/v1/audio/speech",           // shre-voice
+          ...(localVoiceUrl ? [`${localVoiceUrl}/v1/audio/speech`] : []),
+          `${voiceServiceUrl()}/v1/audio/speech`,             // shre-voice
           `${serviceUrl("shre-router")}/v1/audio/speech`,    // shre-router (OpenAI)
         ];
 
@@ -4731,7 +4835,7 @@ async function requestHandler(req, res) {
     try {
       if (!global.__mib007CompanyId) {
         const companiesResp = await new Promise((resolve, reject) => {
-          const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: "/api/companies", method: "GET" }, (resp) => {
+          const r = httpRequest({ hostname: MIB007_HOST, port: MIB007_PORT, path: "/api/companies", method: "GET" }, (resp) => {
             let d = "";
             resp.on("data", (c) => (d += c));
             resp.on("end", () => resolve({ status: resp.statusCode, body: d }));
@@ -4748,7 +4852,7 @@ async function requestHandler(req, res) {
       if (global.__mib007CompanyId) {
         const channelsResp = await new Promise((resolve, reject) => {
           const cid = global.__mib007CompanyId;
-          const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: `/api/workspaces/${cid}/comms/channels`, method: "GET" }, (resp) => {
+          const r = httpRequest({ hostname: MIB007_HOST, port: MIB007_PORT, path: `/api/workspaces/${cid}/comms/channels`, method: "GET" }, (resp) => {
             let d = "";
             resp.on("data", (c) => (d += c));
             resp.on("end", () => resolve({ status: resp.statusCode, body: d }));
@@ -4765,7 +4869,7 @@ async function requestHandler(req, res) {
             const msgsResp = await new Promise((resolve, reject) => {
               const cid = global.__mib007CompanyId;
               const qs = since > 0 ? `?after=${since}&limit=50` : "?limit=20";
-              const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: `/api/workspaces/${cid}/comms/channels/${ch.id}/messages${qs}`, method: "GET" }, (resp) => {
+              const r = httpRequest({ hostname: MIB007_HOST, port: MIB007_PORT, path: `/api/workspaces/${cid}/comms/channels/${ch.id}/messages${qs}`, method: "GET" }, (resp) => {
                 let d = "";
                 resp.on("data", (c) => (d += c));
                 resp.on("end", () => resolve({ status: resp.statusCode, body: d }));
@@ -5892,7 +5996,7 @@ async function requestHandler(req, res) {
     if (!global.__mib007CompanyId) {
       try {
         const companiesResp = await new Promise((resolve, reject) => {
-          const r = httpRequest({ hostname: "127.0.0.1", port: MIB007_PORT, path: "/api/companies", method: "GET" }, (resp) => {
+          const r = httpRequest({ hostname: MIB007_HOST, port: MIB007_PORT, path: "/api/companies", method: "GET" }, (resp) => {
             let d = "";
             resp.on("data", (c) => (d += c));
             resp.on("end", () => resolve({ status: resp.statusCode, body: d }));
@@ -5927,11 +6031,11 @@ async function requestHandler(req, res) {
     }
     const mibPath = `/api/workspaces/${global.__mib007CompanyId}/comms/${commsPath}${url.search || ""}`;
 
-    const fwdHeaders = { ...req.headers, host: `127.0.0.1:${MIB007_PORT}` };
+    const fwdHeaders = { ...req.headers, host: `${MIB007_HOST}:${MIB007_PORT}` };
     delete fwdHeaders["accept-encoding"];
 
     const proxyReq = httpRequest(
-      { hostname: "127.0.0.1", port: MIB007_PORT, path: mibPath, method: req.method, headers: fwdHeaders },
+      { hostname: MIB007_HOST, port: MIB007_PORT, path: mibPath, method: req.method, headers: fwdHeaders },
       (proxyRes) => {
         const headers = { ...proxyRes.headers };
         headers["cache-control"] = "no-cache";
@@ -6679,7 +6783,7 @@ async function requestHandler(req, res) {
     const [taskResult, pipelineResult, agentResult, calendarResult] = await Promise.allSettled([
       // 1. Aggregate tasks from shre-tasks
       (async () => {
-        const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks?limit=20&status=pending`, {
+        const taskRes = await fetch(`${taskServiceUrl()}/v1/tasks?limit=20&status=pending`, {
           headers: { "Content-Type": "application/json" },
           signal: AbortSignal.timeout(3000),
         });
@@ -6700,7 +6804,7 @@ async function requestHandler(req, res) {
       })(),
       // 1b. Pipeline briefing from shre-tasks (approvals, objectives, stats)
       (async () => {
-        const briefRes = await fetch(`${serviceUrl("shre-tasks")}/v1/briefing`, {
+        const briefRes = await fetch(`${taskServiceUrl()}/v1/briefing`, {
           signal: AbortSignal.timeout(3000),
         });
         if (!briefRes.ok) return null;
@@ -6910,14 +7014,21 @@ async function requestHandler(req, res) {
   }
 
   if (url.pathname === "/api/status-bar" && req.method === "GET") {
-    const { userId: sbUserId, tenantId: sbTenantId } = getUserContext(req);
-    const reminders = loadReminders(sbUserId, sbTenantId);
-    const now = new Date();
-    const active = reminders.filter(r => !r.completed);
-    const overdue = active.filter(r => new Date(r.snoozed || r.due) < now);
-    const nextReminder = active
-      .filter(r => new Date(r.snoozed || r.due) > now)
-      .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0];
+    let active = [];
+    let overdue = [];
+    let nextReminder = null;
+    try {
+      const { userId: sbUserId, tenantId: sbTenantId } = getUserContext(req);
+      const reminders = loadReminders(sbUserId, sbTenantId);
+      const now = new Date();
+      active = reminders.filter(r => !r.completed);
+      overdue = active.filter(r => new Date(r.snoozed || r.due) < now);
+      nextReminder = active
+        .filter(r => new Date(r.snoozed || r.due) > now)
+        .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || null;
+    } catch (err) {
+      log.warn("Status bar reminders unavailable", { error: err.message });
+    }
 
     // Get next calendar event from briefing cache if available
     let nextEvent = null;
@@ -6944,9 +7055,9 @@ async function requestHandler(req, res) {
     // Fetch pending tasks count from shre-tasks (with timeout + fallback)
     let pendingTasks = 0;
     try {
-      const tasksRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks?limit=100&status=in_progress`, {
+      const tasksRes = await fetch(`${taskServiceUrl()}/v1/tasks?limit=100&status=in_progress`, {
         signal: AbortSignal.timeout(2000),
-        headers: req.headers["authorization"] ? { Authorization: req.headers["authorization"] } : {},
+        headers: taskProxyHeaders(req),
       });
       if (tasksRes.ok) {
         const tasksData = await tasksRes.json();
@@ -7164,7 +7275,7 @@ Examples:
     const [taskResult, pipelineBriefResult, healthResult, budgetResult] = await Promise.allSettled([
       // 1. Pending tasks from shre-tasks
       (async () => {
-        const taskRes = await fetch(`${serviceUrl("shre-tasks")}/v1/tasks?limit=20&status=pending`, {
+        const taskRes = await fetch(`${taskServiceUrl()}/v1/tasks?limit=20&status=pending`, {
           headers: { "Content-Type": "application/json" },
           signal: AbortSignal.timeout(3000),
         });
@@ -7185,7 +7296,7 @@ Examples:
       })(),
       // 1b. Pipeline briefing (pending approvals, objectives, stats)
       (async () => {
-        const briefRes = await fetch(`${serviceUrl("shre-tasks")}/v1/briefing`, {
+        const briefRes = await fetch(`${taskServiceUrl()}/v1/briefing`, {
           signal: AbortSignal.timeout(3000),
         });
         if (!briefRes.ok) return null;
@@ -8150,8 +8261,15 @@ for (const eventType of PROGRESS_EVENT_TYPES) {
 
 // ── StorePulse: discover active store schemas + resolve display names ────────
 async function getStoreSchemas() {
+  if (!cortexPool) return [];
   const { rows } = await cortexPool.query(
-    "SELECT schemaname FROM pg_catalog.pg_tables WHERE tablename = 'invoices' GROUP BY schemaname"
+    `SELECT table_schema AS schemaname
+     FROM information_schema.columns
+     WHERE table_name = 'invoices'
+       AND table_schema NOT IN ('pg_catalog', 'information_schema', 'public')
+       AND column_name IN ('invoice_date', 'bill_amount', 'is_void')
+     GROUP BY table_schema
+     HAVING COUNT(DISTINCT column_name) = 3`
   );
   return rows.map((r) => r.schemaname);
 }
@@ -8200,8 +8318,14 @@ function pgIdent(name) { return '"' + name.replace(/"/g, '""') + '"'; }
 // Track last txn count per schema — skip notification if nothing changed
 const _lastPerfTxns = new Map();
 
-// ── StorePulse 30-min performance reporter (per-store, async via cortexPool) ─
-setInterval(async () => {
+function startStorePulseWatchers() {
+  if (!cortexPool) {
+    log.info("[storepulse] Watchers disabled — CortexDB PostgreSQL not configured");
+    return;
+  }
+
+  // ── StorePulse 30-min performance reporter (per-store, async via cortexPool) ─
+  setInterval(async () => {
   try {
     const schemas = await getStoreSchemas();
     if (!schemas.length) return;
@@ -8265,11 +8389,11 @@ setInterval(async () => {
   } catch (err) {
     log.warn("[storepulse] Performance report failed", { error: err.message });
   }
-}, 1800000); // 30 minutes
+  }, 1800000); // 30 minutes
 
-// ── StorePulse instant alert watcher (per-store, async via cortexPool) ───────
-let lastAlertCheck = Date.now();
-setInterval(async () => {
+  // ── StorePulse instant alert watcher (per-store, async via cortexPool) ───────
+  let lastAlertCheck = Date.now();
+  setInterval(async () => {
   try {
     const schemas = await getStoreSchemas();
     if (!schemas.length) { lastAlertCheck = Date.now(); return; }
@@ -8307,15 +8431,18 @@ setInterval(async () => {
   } catch (err) {
     log.warn("[storepulse] Alert watcher failed", { error: err.message });
   }
-}, 60000); // check every 60 seconds
+  }, 60000); // check every 60 seconds
+}
+startStorePulseWatchers();
 
 // ─── Startup dependency health check (non-blocking) ─────────────────────────
 function checkStartupDeps() {
   setTimeout(async () => {
+    const requireShreAuth = process.env.SHRE_CHAT_REQUIRE_SHRE_AUTH === "true";
     const deps = [
       { name: "shre-router", url: `${serviceUrl("shre-router")}/health`, critical: true },
-      { name: "shre-auth", url: `${serviceUrl("shre-auth")}/health`, critical: true },
-      { name: "shre-tasks", url: `${serviceUrl("shre-tasks")}/health`, critical: false },
+      { name: "shre-auth", url: `${serviceUrl("shre-auth")}/health`, critical: requireShreAuth },
+      { name: "shre-tasks", url: `${taskServiceUrl()}/health`, critical: false },
       { name: "shre-fleet", url: `${serviceUrl("shre-fleet")}/health`, critical: false },
     ];
     const results = [];
@@ -8381,7 +8508,7 @@ async function shutdown(signal) {
   await Promise.all([
     feedbackPipeline.stop().catch(() => {}),
     eventBus.shutdown().catch(() => {}),
-    cortexPool.end().catch(() => {}),
+    cortexPool?.end().catch(() => {}),
     chatDb?.close ? Promise.resolve(chatDb.close()) : Promise.resolve(),
   ]);
 
