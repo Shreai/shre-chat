@@ -697,6 +697,9 @@ function insertProjectedMessage({
 
 // ── Skill Learning Pipeline — extract skills from conversations and propagate ──
 const SKILLS_PORT = 5490;
+// Resolve shre-skills by Docker DNS in prod (SHRE_SKILLS_URL), else serviceUrl.
+// 127.0.0.1 is THIS container, not shre-skills.
+const SKILLS_BASE = process.env.SHRE_SKILLS_URL || serviceUrl("shre-skills");
 const SKILLS_KEY = (() => {
   try {
     return readFileSync(join(homedir(), ".shre/vault/shre-skills.key"), "utf-8").trim();
@@ -725,12 +728,27 @@ function localHttpsPost(port, path, body, headers = {}) {
   });
 }
 
+// POST to shre-skills via the resolved base (Docker DNS in prod, not 127.0.0.1).
+async function skillsPost(path, body, headers = {}) {
+  try {
+    const r = await fetch(`${SKILLS_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+    let json = null;
+    try { json = await r.json(); } catch { /* non-json */ }
+    return { ok: r.status < 400, status: r.status, json };
+  } catch { return { ok: false, status: 0, json: null }; }
+}
+
 async function extractAndLogSkills(agentId, conversationText) {
   if (!SKILLS_KEY || !conversationText || conversationText.length < 50) return;
 
   try {
     // 1. Extract skills from conversation text via shre-skills
-    const extractRes = await localHttpsPost(SKILLS_PORT, "/v1/extract",
+    const extractRes = await skillsPost("/v1/extract",
       { text: conversationText, agentId },
       { Authorization: `Bearer ${SKILLS_KEY}` }
     );
@@ -744,7 +762,7 @@ async function extractAndLogSkills(agentId, conversationText) {
     const topSkill = extracted.reduce((a, b) => b.confidence > a.confidence ? b : a);
     if (topSkill.confidence >= 0.6) {
       const inferredLevel = topSkill.confidence >= 0.9 ? 4 : 3;
-      localHttpsPost(SKILLS_PORT, "/v1/propagate",
+      skillsPost("/v1/propagate",
         { sourceAgent: agentId, skill: topSkill.skill, level: inferredLevel },
         { Authorization: `Bearer ${SKILLS_KEY}` }
       ).then((r) => {
@@ -3658,22 +3676,12 @@ async function requestHandler(req, res) {
   // ── Apps proxy (shre-skills /v1/apps) ──
   if (url.pathname === "/api/apps" && req.method === "GET") {
     try {
-      const data = await new Promise((resolve, reject) => {
-        const r = httpsRequest({
-          hostname: "127.0.0.1", port: SKILLS_PORT, path: "/v1/apps", method: "GET",
-          headers: { Authorization: `Bearer ${SKILLS_KEY}` },
-          rejectUnauthorized: false,
-        }, (upstream) => {
-          let buf = "";
-          upstream.on("data", (c) => buf += c);
-          upstream.on("end", () => {
-            try { resolve(JSON.parse(buf)); } catch { resolve({ apps: [] }); }
-          });
-        });
-        r.on("error", reject);
-        r.setTimeout(4000, () => { r.destroy(); reject(new Error("timeout")); });
-        r.end();
+      const upstream = await fetch(`${SKILLS_BASE}/v1/apps`, {
+        headers: SKILLS_KEY ? { Authorization: `Bearer ${SKILLS_KEY}` } : {},
+        signal: AbortSignal.timeout(4000),
       });
+      let data = { apps: [] };
+      try { data = await upstream.json(); } catch { /* non-json */ }
       json(res, data);
     } catch (err) {
       log.warn("Apps proxy failed:", err.message);
@@ -3687,29 +3695,24 @@ async function requestHandler(req, res) {
   if (activateMatch && req.method === "POST") {
     const appId = decodeURIComponent(activateMatch[1]);
     try {
-      const result = await new Promise((resolve, reject) => {
-        const r = httpsRequest({
-          hostname: "127.0.0.1", port: SKILLS_PORT,
-          path: `/v1/apps/${encodeURIComponent(appId)}/activate`, method: "POST",
-          headers: { Authorization: `Bearer ${SKILLS_KEY}`, "Content-Type": "application/json" },
-          rejectUnauthorized: false,
-        }, (upstream) => {
-          let buf = "";
-          upstream.on("data", (c) => buf += c);
-          upstream.on("end", () => {
-            let body = {};
-            try { body = JSON.parse(buf || "{}"); } catch { /* non-json */ }
-            resolve({ status: upstream.statusCode || 200, body });
-          });
-        });
-        r.on("error", reject);
-        r.setTimeout(8000, () => { r.destroy(); reject(new Error("timeout")); });
-        r.end(JSON.stringify({}));
+      // SKILLS_BASE resolves to shre-skills via Docker DNS in prod (not 127.0.0.1,
+      // which is this container). fetch handles both http (prod) and https (dev).
+      const upstream = await fetch(`${SKILLS_BASE}/v1/apps/${encodeURIComponent(appId)}/activate`, {
+        method: "POST",
+        headers: {
+          ...(SKILLS_KEY ? { Authorization: `Bearer ${SKILLS_KEY}` } : {}),
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(8000),
       });
+      let body = {};
+      try { body = await upstream.json(); } catch { /* non-json */ }
       // Best-effort: tell the router to drop its skill cache so the newly
-      // symlinked skills are picked up without a restart (non-fatal).
-      fetch(`http://127.0.0.1:${ROUTER_PORT}/v1/skills/reload`, { method: "POST" }).catch(() => {});
-      json(res, result.body, result.status >= 400 ? result.status : 200);
+      // copied skills are picked up without a restart (non-fatal). Across
+      // replicas the others converge within the per-agent cache TTL.
+      fetch(`${serviceUrl("shre-router")}/v1/skills/reload`, { method: "POST" }).catch(() => {});
+      json(res, body, upstream.status >= 400 ? upstream.status : 200);
     } catch (err) {
       log.warn("App activate proxy failed:", err.message);
       json(res, { ok: false, error: "shre-skills unreachable" }, 502);
