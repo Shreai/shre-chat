@@ -5,6 +5,10 @@ export interface MentionItem {
   name: string;
   emoji: string;
   group: string;
+  /** One-line "who is this agent" description, surfaced in the picker/badge */
+  description?: string;
+  /** Capability domains, shown as small badges */
+  domains?: string[];
 }
 
 export interface UseMentionsParams {

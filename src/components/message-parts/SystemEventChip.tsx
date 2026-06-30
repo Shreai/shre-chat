@@ -80,6 +80,58 @@ export const StableMarkdownBlock = memo(function StableMarkdownBlock({ text }: {
   );
 });
 
+// ── SwitchNoticeChip ──
+// Renders an agent/model switch as a centered pill in the transcript so it is
+// unambiguous which agent/model produced the replies that follow. Driven by
+// messages built via lib/switch-notice.ts (meta.kind === 'switch').
+export function SwitchNoticeChip({
+  message,
+  timestamp,
+}: {
+  message: ChatMessage;
+  timestamp?: string;
+}) {
+  const meta = message.meta || {};
+  const isAgent = meta.switchKind === 'agent';
+  const icon = meta.switchEmoji || (isAgent ? '🤝' : '🧠');
+  const noun = isAgent ? 'Agent' : 'Model';
+  const label = meta.switchLabel || '';
+  const description = meta.switchDescription;
+  const accent = isAgent ? 'var(--c-accent)' : 'var(--c-info, #38bdf8)';
+  return (
+    <div className="max-w-3xl mx-auto tool-chip-stable">
+      <div className="flex items-center gap-1.5 py-1 px-2">
+        <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
+        <span
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-medium"
+          style={{
+            background: 'var(--c-accent-soft, var(--c-bg-3))',
+            color: accent,
+            border: `1px solid ${accent}`,
+          }}
+          title={description ? `${noun}: ${label} — ${description}` : `${noun}: ${label}`}
+        >
+          <span style={{ fontSize: '12px' }}>{icon}</span>
+          <span>
+            {noun} &rarr; <strong>{label}</strong>
+          </span>
+          {description && (
+            <span className="opacity-70" style={{ fontWeight: 400 }}>
+              — {description}
+            </span>
+          )}
+        </span>
+        {timestamp && (
+          <span className="text-[9px]" style={{ color: 'var(--c-text-5)' }}>
+            {timestamp}
+          </span>
+        )}
+        <div className="flex-1 h-px" style={{ background: 'var(--c-border-2)' }} />
+      </div>
+    </div>
+  );
+}
+
 // ── SystemEventChip ──
 export function SystemEventChip({
   message,

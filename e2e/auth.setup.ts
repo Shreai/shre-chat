@@ -5,12 +5,46 @@ const AUTH_FILE = '/tmp/shre-chat-auth.json';
 
 setup('authenticate', async ({ page }) => {
   setup.setTimeout(90_000);
+  const baseOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5510').origin;
   const loginViaApi = async () => {
     const res = await page.request.post('/api/auth/login', {
       data: { username: 'rapidnir', password: 'rapid@nir' },
-      headers: { Origin: 'http://localhost:5510' },
+      headers: { Origin: baseOrigin },
     });
-    return res.ok();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok()) return null;
+
+    if (data?.requiresTwoFactor || data?.requires2FA) {
+      const code = process.env.E2E_OTP_CODE || process.env.DEV_OTP_BYPASS_CODE || '123456';
+      const verifyRes = await page.request.post('/api/auth/verify-2fa', {
+        data: {
+          username: 'rapidnir',
+          code,
+          challengeToken: data.challengeToken,
+          challengeJwt: data.challengeJwt,
+          trustDevice: true,
+        },
+        headers: { Origin: baseOrigin },
+      });
+      if (!verifyRes.ok()) return null;
+      return verifyRes.json();
+    }
+
+    return data?.token ? data : null;
+  };
+
+  const installApiAuth = async (loginData: any) => {
+    await page.evaluate((data) => {
+      sessionStorage.setItem('shre-auth-token', data.token);
+      localStorage.setItem('shre-auth-token', data.token);
+      localStorage.setItem('shre-auth-user', JSON.stringify(data.user));
+      if (data.workspace) {
+        localStorage.setItem('shre-auth-workspace', JSON.stringify(data.workspace));
+      }
+      if (data.workspaces) {
+        localStorage.setItem('shre-auth-workspaces', JSON.stringify(data.workspaces));
+      }
+    }, loginData);
   };
 
   // Reuse recent auth state if available (less than 10 minutes old)
@@ -19,11 +53,15 @@ setup('authenticate', async ({ page }) => {
     const age = Date.now() - statSync(AUTH_FILE).mtimeMs;
     if (age < 10 * 60_000) {
       // Verify the saved auth state still works
-      await page.context().addCookies(
-        JSON.parse((await import('node:fs')).readFileSync(AUTH_FILE, 'utf-8')).cookies || [],
-      );
+      await page
+        .context()
+        .addCookies(
+          JSON.parse((await import('node:fs')).readFileSync(AUTH_FILE, 'utf-8')).cookies || [],
+        );
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      const textarea = page.locator('textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]');
+      const textarea = page.locator(
+        'textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]',
+      );
       const valid = await textarea.isVisible({ timeout: 10_000 }).catch(() => false);
       if (valid) {
         // Auth state still works — no need to re-login
@@ -45,7 +83,9 @@ setup('authenticate', async ({ page }) => {
 
   // Wait for either login form or chat textarea (already authenticated)
   const loginDetector = page.locator('text=Sign in to continue');
-  const chatTextarea = page.locator('textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]');
+  const chatTextarea = page.locator(
+    'textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]',
+  );
 
   const which = await Promise.race([
     loginDetector.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'login' as const),
@@ -54,9 +94,14 @@ setup('authenticate', async ({ page }) => {
 
   if (which === 'login') {
     // First try non-UI API login for stability in CI/local flaky UI boot.
-    if (await loginViaApi()) {
+    const apiLogin = await loginViaApi();
+    if (apiLogin) {
+      await installApiAuth(apiLogin);
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      await page.waitForSelector('textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]', { timeout: 40_000 });
+      await page.waitForSelector(
+        'textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]',
+        { timeout: 40_000 },
+      );
       await page.context().storageState({ path: AUTH_FILE });
       return;
     }
@@ -105,21 +150,32 @@ setup('authenticate', async ({ page }) => {
         console.log('WARN: Login rate-limited, reusing stale auth state');
         return;
       }
-      throw new Error('Login rate-limited and no cached auth state available. Wait 15 minutes and retry.');
+      throw new Error(
+        'Login rate-limited and no cached auth state available. Wait 15 minutes and retry.',
+      );
     }
 
     // Wait for chat app to load after login
-    await page.waitForSelector('textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]', { timeout: 40_000 });
+    await page.waitForSelector(
+      'textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]',
+      { timeout: 40_000 },
+    );
   } else if (which === 'chat') {
     // Already authenticated
   } else {
     // Fallback: attempt API login, then verify chat.
-    const ok = await loginViaApi();
-    if (!ok) {
-      throw new Error('Auth setup failed: neither login UI nor chat became ready, and API login failed.');
+    const apiLogin = await loginViaApi();
+    if (!apiLogin) {
+      throw new Error(
+        'Auth setup failed: neither login UI nor chat became ready, and API login failed.',
+      );
     }
+    await installApiAuth(apiLogin);
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await page.waitForSelector('textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]', { timeout: 40_000 });
+    await page.waitForSelector(
+      'textarea#shre-chat-textarea, textarea[placeholder*="Message" i], textarea[aria-label*="Message" i]',
+      { timeout: 40_000 },
+    );
   }
 
   await page.context().storageState({ path: AUTH_FILE });

@@ -196,6 +196,19 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
         category: 'session',
       },
       {
+        name: 'skill',
+        description: 'Apply a named skill to a task (via orchestrator)',
+        usage: '/skill <name> [task]',
+        hasArg: true,
+        category: 'platform',
+      },
+      {
+        name: 'skills',
+        description: 'List or search ecosystem skills',
+        usage: '/skills [query]',
+        category: 'platform',
+      },
+      {
         name: 'run',
         description: 'Execute a shell command on the host',
         usage: '/run <command>',
@@ -339,6 +352,85 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
     }
   }, [slashIndex, slashOpen]);
 
+  // Shared orchestrator call used by /execute and /skill — POSTs to the
+  // router's /v1/execute, which decomposes the prompt into subtasks and runs
+  // local executors in parallel, then renders the subtask breakdown.
+  const runOrchestrator = useCallback(
+    (prompt: string, userLine: string) => {
+      const sid = ensureSession();
+      actions.addMessage(sid, { role: 'user', content: userLine, timestamp: Date.now() });
+      actions.setStatusLine('Orchestrating...');
+      const routerBase = import.meta.env?.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
+      fetch(`${routerBase}/v1/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, agentId: activeAgentId || 'shre', stream: false }),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const e = await (r.json() as Promise<{ error: string }>).catch(() => ({
+              error: `HTTP ${r.status}`,
+            }));
+            throw new Error(e.error || `Execute failed: ${r.status}`);
+          }
+          return r.json();
+        })
+        .then(
+          (result: {
+            status: string;
+            orchestratorModel: string;
+            executorModel: string;
+            totalDurationMs: number;
+            subtasks?: { id: string; description: string }[];
+            results?: {
+              subtaskId: string;
+              status: string;
+              durationMs: number;
+              iterations: number;
+              toolsUsed?: string[];
+              output?: string;
+            }[];
+          }) => {
+            const lines: string[] = [];
+            lines.push(`**Executor Result** — ${result.status}`);
+            lines.push(
+              `Orchestrator: \`${result.orchestratorModel}\` | Executor: \`${result.executorModel}\` | Duration: ${result.totalDurationMs}ms`,
+            );
+            lines.push('');
+            if (result.subtasks?.length && result.subtasks.length > 1) {
+              lines.push(`**Subtasks** (${result.subtasks.length}):`);
+              for (const st of result.subtasks) lines.push(`- \`${st.id}\`: ${st.description}`);
+              lines.push('');
+            }
+            for (const r of result.results || []) {
+              const icon = r.status === 'success' ? '+' : r.status === 'error' ? 'x' : '!';
+              lines.push(
+                `**[${icon}] ${r.subtaskId}** (${r.durationMs}ms, ${r.iterations} iteration${r.iterations !== 1 ? 's' : ''})`,
+              );
+              if (r.toolsUsed?.length) lines.push(`Tools: ${r.toolsUsed.join(', ')}`);
+              if (r.output) lines.push(`\n${r.output.slice(0, 2000)}`);
+              lines.push('');
+            }
+            actions.addMessage(sid, {
+              role: 'assistant',
+              content: lines.join('\n'),
+              timestamp: Date.now(),
+            });
+            actions.setStatusLine(null);
+          },
+        )
+        .catch((err: Error) => {
+          actions.addMessage(sid, {
+            role: 'assistant',
+            content: `**Execute error:** ${err.message}`,
+            timestamp: Date.now(),
+          });
+          actions.setStatusLine(null);
+        });
+    },
+    [actions, ensureSession, activeAgentId],
+  );
+
   const executeSlashCommand = useCallback(
     (commandStr: string) => {
       const parts = commandStr.trim().split(/\s+/);
@@ -437,9 +529,16 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             '',
             ...sections,
             '',
-            '**Mentions:** Type `@@` to tag an agent (e.g. `@@shre fix the build`)',
+            '**Composer shortcuts:**',
             '',
-            '*Type `/` for the command menu. `@@` to mention an agent.*',
+            '| Prefix | Does |',
+            '|--------|------|',
+            '| `/command` | Run a slash command (this menu) |',
+            '| `@@agent` | Route the message to a specific agent |',
+            '| `#tool` | Arm a specific tool for the next message |',
+            '| `/skill <name>` | Apply an ecosystem skill via the orchestrator |',
+            '',
+            '*Type `/`, `@@`, or `#` to open the matching menu.*',
           ].join('\n');
           actions.addMessage(helpSessionId, {
             role: 'assistant',
@@ -487,84 +586,83 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
             setTimeout(() => actions.setStatusLine(null), 4000);
             break;
           }
-          const execSessionId = ensureSession();
-          actions.addMessage(execSessionId, {
+          runOrchestrator(arg, `/execute ${arg}`);
+          break;
+        }
+        case 'skill': {
+          // `/skill <name> [task]` — apply a named ecosystem skill to the task by
+          // routing it through the orchestrator (the real execution surface).
+          const skillParts = arg.split(/\s+/);
+          const skillName = skillParts[0];
+          const skillTask = skillParts.slice(1).join(' ');
+          if (!skillName) {
+            actions.setStatusLine('Usage: /skill <name> [task]  ·  /skills to list');
+            setTimeout(() => actions.setStatusLine(null), 4000);
+            break;
+          }
+          const prompt = skillTask
+            ? `Apply the "${skillName}" skill to this task: ${skillTask}`
+            : `Apply the "${skillName}" skill.`;
+          runOrchestrator(prompt, `/skill ${arg}`);
+          break;
+        }
+        case 'skills': {
+          const skillsSid = ensureSession();
+          actions.addMessage(skillsSid, {
             role: 'user',
-            content: `/execute ${arg}`,
+            content: `/skills${arg ? ' ' + arg : ''}`,
             timestamp: Date.now(),
           });
-          actions.setStatusLine('Orchestrating...');
-
-          const routerBase =
-            import.meta.env?.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
-          fetch(`${routerBase}/v1/execute`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: arg,
-              agentId: activeAgentId || 'shre',
-              stream: false,
-            }),
-          })
-            .then(async (res) => {
-              if (!res.ok) {
-                const errBody = await (res.json() as Promise<{ error: string }>).catch(() => ({
-                  error: `HTTP ${res.status}`,
-                }));
-                throw new Error(errBody.error || `Execute failed: ${res.status}`);
-              }
-              return res.json();
-            })
+          actions.setStatusLine('Loading skills...');
+          type SkillEntry = { key: string; level?: number; description?: string };
+          type SkillsResponse = { error?: string; skills?: SkillEntry[] };
+          fetch('/api/skills')
             .then(
-              (result: {
-                status: string;
-                orchestratorModel: string;
-                executorModel: string;
-                totalDurationMs: number;
-                subtasks?: { id: string; description: string }[];
-                results?: {
-                  subtaskId: string;
-                  status: string;
-                  durationMs: number;
-                  iterations: number;
-                  toolsUsed?: string[];
-                  output?: string;
-                }[];
-              }) => {
-                const lines: string[] = [];
-                lines.push(`**Executor Result** — ${result.status}`);
-                lines.push(
-                  `Orchestrator: \`${result.orchestratorModel}\` | Executor: \`${result.executorModel}\` | Duration: ${result.totalDurationMs}ms`,
+              async (r): Promise<SkillsResponse> =>
+                r.ok ? (r.json() as Promise<SkillsResponse>) : { error: `HTTP ${r.status}` },
+            )
+            .then((data: SkillsResponse) => {
+              if (data.error) {
+                actions.addMessage(skillsSid, {
+                  role: 'assistant',
+                  content: `**Skills unavailable:** ${data.error}`,
+                  timestamp: Date.now(),
+                });
+              } else {
+                const q = arg.toLowerCase();
+                const list = (data.skills || []).filter(
+                  (s) =>
+                    !q ||
+                    s.key.toLowerCase().includes(q) ||
+                    (s.description || '').toLowerCase().includes(q),
                 );
-                lines.push('');
-                if (result.subtasks?.length && result.subtasks.length > 1) {
-                  lines.push(`**Subtasks** (${result.subtasks.length}):`);
-                  for (const st of result.subtasks) {
-                    lines.push(`- \`${st.id}\`: ${st.description}`);
-                  }
-                  lines.push('');
-                }
-                for (const r of result.results || []) {
-                  const icon = r.status === 'success' ? '+' : r.status === 'error' ? 'x' : '!';
-                  lines.push(
-                    `**[${icon}] ${r.subtaskId}** (${r.durationMs}ms, ${r.iterations} iteration${r.iterations !== 1 ? 's' : ''})`,
-                  );
-                  if (r.toolsUsed?.length) lines.push(`Tools: ${r.toolsUsed.join(', ')}`);
-                  if (r.output) lines.push(`\n${r.output.slice(0, 2000)}`);
-                  lines.push('');
-                }
-                actions.addMessage(execSessionId, {
+                const lines = list.length
+                  ? [
+                      arg ? `**Skills matching "${arg}":**` : '**Ecosystem skills:**',
+                      '',
+                      ...list
+                        .slice(0, 30)
+                        .map((s: SkillEntry) => {
+                          const lvl = s.level != null ? ` _(L${s.level})_` : '';
+                          const desc = s.description ? ` — ${s.description}` : '';
+                          return `- **${s.key}**${lvl}${desc}`;
+                        }),
+                      '',
+                      '*Run one with `/skill <name> [task]`.*',
+                    ]
+                  : [`*No skills found${arg ? ` for "${arg}"` : ''}.*`];
+                actions.addMessage(skillsSid, {
                   role: 'assistant',
                   content: lines.join('\n'),
                   timestamp: Date.now(),
                 });
-                actions.setStatusLine(null);
-              },
-            )
-            .catch((err: Error) => {
-              actions.addMessage(execSessionId, {
+              }
+              actions.setStatusLine(null);
+            })
+            .catch(() => {
+              actions.addMessage(skillsSid, {
                 role: 'assistant',
-                content: `**Execute error:** ${err.message}`,
+                content: '**Error:** Could not fetch skills',
                 timestamp: Date.now(),
               });
               actions.setStatusLine(null);
@@ -1524,6 +1622,7 @@ export function useSlashCommands(params: UseSlashCommandsParams): UseSlashComman
       setInput,
       setCliMode,
       setCliContinue,
+      runOrchestrator,
     ],
   );
 

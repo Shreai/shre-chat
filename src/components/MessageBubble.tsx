@@ -42,7 +42,12 @@ import { CitationLinks } from './message-parts/CitationLinks';
 import { usePreferences } from '../preferences-store';
 
 // Re-export extracted components so existing imports from MessageBubble still work
-export { Lightbox, StableMarkdownBlock, SystemEventChip } from './message-parts/SystemEventChip';
+export {
+  Lightbox,
+  StableMarkdownBlock,
+  SystemEventChip,
+  SwitchNoticeChip,
+} from './message-parts/SystemEventChip';
 export { ToolExecutionChip, ToolExecutionGroup } from './message-parts/ToolExecutionChip';
 export type { ToolExecStep } from './message-parts/ToolExecutionChip';
 

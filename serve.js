@@ -33,6 +33,7 @@ import { registerReportRoutes, checkDueReports } from "./routes/reports.js";
 import { registerHandoffRoutes } from "./routes/handoff.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerPushRoutes } from "./routes/push.js";
+import { registerAgentWorkspaceRoutes } from "./routes/agent-workspace.js";
 import { initVoiceQualityMonitor, recordVoiceFailure, getVoiceQualityStats } from "./routes/voice-quality-monitor.js";
 import { createConversationEvaluator } from "./routes/conversation-evaluator.js";
 import { registerCliLedgerRoutes, createSession, getOrCreateActiveSession, appendUserMessage, appendCliResponse, appendToolEvent, buildSessionContext } from "./routes/cli-ledger.js";
@@ -741,6 +742,23 @@ async function skillsPost(path, body, headers = {}) {
     try { json = await r.json(); } catch { /* non-json */ }
     return { ok: r.status < 400, status: r.status, json };
   } catch { return { ok: false, status: 0, json: null }; }
+}
+
+// HTTPS GET to localhost services with self-signed certs
+function localHttpsGet(port, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest({ hostname: "127.0.0.1", port, path, method: "GET", headers }, (res) => {
+      let buf = "";
+      res.on("data", (c) => buf += c);
+      res.on("end", () => {
+        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, json: JSON.parse(buf) }); }
+        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, json: null }); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.end();
+  });
 }
 
 async function extractAndLogSkills(agentId, conversationText) {
@@ -1774,6 +1792,7 @@ const handleNotifications = registerNotificationRoutes({ log, eventBus, chatDb }
 const { handlePushRoute, sendPushToAll } = registerPushRoutes({ log, chatDb });
 const handleCliLedger = registerCliLedgerRoutes({ log });
 const handleCliHandoff = registerCliHandoffRoutes({ log });
+const handleAgentWorkspace = registerAgentWorkspaceRoutes({ log, pgPool: cortexPool });
 
 // ── Request handler ──────────────────────────────────────────────────
 
@@ -1893,6 +1912,11 @@ async function requestHandler(req, res) {
     return json(res, { error: "Origin not allowed" }, 403);
   }
 
+  const isLoopbackTerminalBridge =
+    /^\/api\/agent-workspace\/orchestration-runs\/[^/]+\/executor-events$/.test(url.pathname)
+    && req.headers["x-channel"] === "shre-terminal"
+    && ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket?.remoteAddress || "");
+
   // ── GET /api/csrf-token — issue a CSRF token for the current session ──
   if (url.pathname === "/api/csrf-token" && req.method === "GET") {
     const cookies = (req.headers["cookie"] || "").split(";").map(c => c.trim());
@@ -1915,7 +1939,8 @@ async function requestHandler(req, res) {
       || url.pathname.startsWith("/v1/")
       || isEmbedPath  // Embedded apps (storepulse, city, marketplace, etc.) enforce their own CSRF
       || req.headers["authorization"]?.startsWith("Bearer ")
-      || req.headers["x-channel"] === "cli";
+      || req.headers["x-channel"] === "cli"
+      || isLoopbackTerminalBridge;
     if (!csrfExempt) {
       const csrfToken = req.headers["x-csrf-token"] || "";
       if (!validateCsrfToken(req, csrfToken)) {
@@ -1961,7 +1986,8 @@ async function requestHandler(req, res) {
   }
   const isRouterProxy = url.pathname.startsWith("/api/router/");
   const isCliLocal = url.pathname.startsWith("/api/cli/") && req.headers["x-channel"] === "cli";
-  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isCliLocal) {
+  const isTerminalBridge = isLoopbackTerminalBridge;
+  if (url.pathname.startsWith("/api/") && !isPublic && !isRouterProxy && !isCliLocal && !isTerminalBridge) {
     if (!authClaims) {
       // Emit structured auth failure event for security dashboard
       try {
@@ -1981,6 +2007,7 @@ async function requestHandler(req, res) {
 
   // Health routes (after auth for readyz, but health is in PUBLIC_PATHS)
   if (await handleHealth(req, res, url, _routeUtils)) return;
+  if (await handleAgentWorkspace(req, res, url, _routeUtils)) return;
 
   // Trace endpoints
   if (url.pathname === "/v1/traces" && req.method === "GET") {
@@ -2271,6 +2298,34 @@ async function requestHandler(req, res) {
     } catch (err) {
       log.warn("Usage summary proxy failed:", err.message);
       json(res, { error: "shre-meter unreachable" }, 502);
+    }
+    return;
+  }
+
+  // ── Skills discovery proxy → shre-skills core-skills catalog ──
+  // Returns a flat {key, level, description} skill list; the client filters by
+  // query. (shre-skills /v1/report is markdown and /v1/match needs a
+  // "skills=docker:4" param, so neither fits a free-text search — core-skills
+  // is the JSON catalog.)
+  if (url.pathname === "/api/skills" && req.method === "GET") {
+    if (!SKILLS_KEY) return json(res, { error: "Skills service not configured", skills: [] }, 200);
+    try {
+      const r = await localHttpsGet(SKILLS_PORT, "/v1/core-skills", { Authorization: `Bearer ${SKILLS_KEY}` });
+      const data = r.json || {};
+      const skills = [];
+      for (const v of Object.values(data)) {
+        if (Array.isArray(v)) {
+          for (const s of v) {
+            if (s && typeof s === "object" && s.key) {
+              skills.push({ key: s.key, level: s.level, description: s.description });
+            }
+          }
+        }
+      }
+      json(res, { skills, version: data.version }, r.status || 200);
+    } catch (err) {
+      log.warn("Skills proxy failed:", err.message);
+      json(res, { error: "Skills service unreachable", skills: [] }, 502);
     }
     return;
   }

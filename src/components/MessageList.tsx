@@ -3,7 +3,7 @@ import type { Virtualizer } from '@tanstack/react-virtual';
 import type { ChatMessage } from '../router-client';
 import type { UserProfile } from '../store';
 import type { ProcessRun } from './process-bar/types';
-import MessageBubble, { SystemEventChip, ToolExecutionChip } from './MessageBubble';
+import MessageBubble, { SystemEventChip, SwitchNoticeChip, ToolExecutionChip } from './MessageBubble';
 import { BrowserApprovalCard } from './message-parts/BrowserApprovalCard';
 import type { ToolExecStep } from './MessageBubble';
 import { WelcomeScreen } from './WelcomeScreen';
@@ -299,6 +299,10 @@ export function MessageList(props: MessageListProps) {
 
     for (let i = 0; i < filteredMessages.length; i++) {
       const msg = filteredMessages[i];
+      // Switch-notice chips are standalone status messages — they must NOT be
+      // folded into the preceding message's progress trail (that would hide the
+      // SwitchNoticeChip), nor become a trail anchor themselves.
+      if (msg.meta?.kind === 'switch') continue;
       if (isStatusMessage(msg) && !isBrowserApproval(msg)) {
         if (anchorIdx >= 0) {
           if (!trailMap.has(anchorIdx)) trailMap.set(anchorIdx, []);
@@ -447,6 +451,8 @@ export function MessageList(props: MessageListProps) {
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
+                  ) : isStatusMessage(msg) && msg.meta?.kind === 'switch' ? (
+                    <SwitchNoticeChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) ? (
                     <SystemEventChip
                       message={msg}
@@ -494,6 +500,8 @@ export function MessageList(props: MessageListProps) {
                     <BrowserApprovalCard message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) && msg.meta?.type === 'tool_exec' ? (
                     <ToolExecutionChip step={toToolExecStep(msg)} />
+                  ) : isStatusMessage(msg) && msg.meta?.kind === 'switch' ? (
+                    <SwitchNoticeChip message={msg} timestamp={formatTime(msg.timestamp)} />
                   ) : isStatusMessage(msg) ? (
                     <SystemEventChip
                       message={msg}

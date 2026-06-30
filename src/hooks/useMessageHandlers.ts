@@ -6,6 +6,7 @@ import { getAgent, type UploadedFile, type Session, type AppActions } from '../s
 import { playNotifSound } from '../chat-utils';
 import { streamViaCLI } from './cli-streaming';
 import { fetchSuggestions, verifyIdentityCode, sendFeedbackToServer } from './message-utils';
+import { extractToolTokens } from '../lib/composer-grammar';
 
 // ── Extracted modules ──
 import { buildDefaultSystemPrompt, SYSTEM_PROMPT_VERSION } from './message-handlers/handler-utils';
@@ -265,7 +266,14 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
     const effectiveAgentId = extractMention
       ? extractMention(text).agentId || activeAgentId
       : activeAgentId;
-    const sendText = extractMention ? extractMention(text).cleanText : text;
+    const mentionCleanText = extractMention ? extractMention(text).cleanText : text;
+    // Strip any free-typed `#tool` tokens and merge them into the tools armed
+    // for this request (dropdown-armed tools already live in selectedTools).
+    const { cleanText: sendText, toolIds: typedToolIds } = extractToolTokens(mentionCleanText);
+    const effectiveTools =
+      typedToolIds.length > 0
+        ? [...new Set([...selectedTools, ...typedToolIds])]
+        : selectedTools;
 
     if (compareMode && compareModels.length > 0) {
       const cmpSid = ensureSession();
@@ -408,15 +416,15 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
       });
     }
 
-    if (selectedTools.length > 0) {
+    if (effectiveTools.length > 0) {
       actions.addMessage(sessionId, {
         role: 'assistant',
-        content: `[system] Active tools for this request: ${selectedTools.join(', ')}`,
+        content: `[system] Active tools for this request: ${effectiveTools.join(', ')}`,
         timestamp: Date.now(),
         meta: { system: 'true' },
       });
-      actions.addFeed(sessionId, 'gateway', `Tools: ${selectedTools.join(', ')}`, {
-        tools: String(selectedTools.length),
+      actions.addFeed(sessionId, 'gateway', `Tools: ${effectiveTools.join(', ')}`, {
+        tools: String(effectiveTools.length),
       });
     }
 
@@ -554,7 +562,7 @@ export function useMessageHandlers(params: UseMessageHandlersParams): UseMessage
         false,
         conversationMode,
         activeAppId,
-        selectedTools,
+        effectiveTools,
         { profile: ragProfile, depth: ragDepth },
       );
     } catch {

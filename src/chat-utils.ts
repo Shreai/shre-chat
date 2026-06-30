@@ -557,7 +557,7 @@ export const ECOSYSTEM_APPS = [
     id: 'api',
     name: 'API',
     icon: 'A',
-    url: 'https://api.nirtek.net',
+    url: 'https://api.shre.ai',
     color: 'from-yellow-500 to-amber-500',
     description: 'Platform API',
   },
