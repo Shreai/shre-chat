@@ -15,7 +15,21 @@ import { buildChatRequest } from '@shreai/client/chat';
 
 const _RESPONSES_URL = '/v1/responses';
 // Route through serve.js proxy to avoid self-signed cert issues in the browser
-const SHRE_ROUTER_URL = import.meta.env.VITE_ROUTER_URL ?? `${window.location.origin}/api/router`;
+function resolveRouterUrl(): string {
+  const envUrl = import.meta.env.VITE_ROUTER_URL as string | undefined;
+  const proxyUrl = `${window.location.origin}/api/router`;
+  if (!envUrl) return proxyUrl;
+  try {
+    const parsed = new URL(envUrl, window.location.origin);
+    const localRouter = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+    const localPage = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+    return localRouter && !localPage ? proxyUrl : envUrl;
+  } catch {
+    return proxyUrl;
+  }
+}
+
+const SHRE_ROUTER_URL = resolveRouterUrl();
 
 // App version sent via X-App-Version header for device metadata tracking
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.0.0';
@@ -512,6 +526,26 @@ export interface RouterApp {
   category?: string;
   activated: boolean;
   skillCount: number;
+}
+
+/**
+ * Activate an app's skills for the workspace via serve.js → shre-skills
+ * `POST /v1/apps/:id/activate` (symlinks the app's skills into each assigned
+ * agent's dir; the proxy also nudges the router to reload its skill cache).
+ */
+export async function activateApp(appId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/apps/${encodeURIComponent(appId)}/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(12000),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || `activate failed (${res.status})` };
+    return { ok: data.ok !== false, ...(data.error ? { error: data.error } : {}) };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }
 
 /** Fetch available apps via serve.js proxy to shre-skills /v1/apps. */

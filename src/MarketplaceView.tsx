@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { activateApp } from './router-client';
 import { mib007Link } from './chat-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -170,6 +171,8 @@ export function MarketplaceView() {
   const [selectedType, setSelectedType] = useState<'app' | 'agent' | 'bundle' | 'node'>('app');
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [activateMsg, setActivateMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   // ── Fetch catalog from shre-marketplace via serve.js proxy ──
@@ -1007,10 +1010,28 @@ export function MarketplaceView() {
             {/* Actions */}
             <div className="flex gap-2 mt-2">
               <button
-                onClick={() => {
-                  alert(
-                    `${selectedType === 'bundle' ? 'Bundle' : selectedType === 'agent' ? 'Agent' : 'App'} "${selectedItem.name}" activation requested.\n\nThis will provision the workspace and wire the pipeline.`,
+                disabled={selectedItem.status === 'coming_soon' || activating}
+                onClick={async () => {
+                  if (selectedItem.status === 'coming_soon' || activating) return;
+                  // Activation is wired for apps (symlinks the app's skills to
+                  // assigned agents). Agents/bundles are not yet wired.
+                  if (selectedType !== 'app') {
+                    setActivateMsg({
+                      ok: false,
+                      text: 'Activation is available for apps today; agents & bundles are coming.',
+                    });
+                    return;
+                  }
+                  setActivating(true);
+                  setActivateMsg(null);
+                  const r = await activateApp(selectedItem.id);
+                  setActivating(false);
+                  setActivateMsg(
+                    r.ok
+                      ? { ok: true, text: `Activated "${selectedItem.name}" — skills linked to your agents.` }
+                      : { ok: false, text: `Activation failed: ${r.error ?? 'unknown error'}` },
                   );
+                  if (r.ok) setSelectedItem({ ...selectedItem, activated: true });
                 }}
                 className="flex-1 py-2 rounded-lg text-[12px] font-semibold text-center transition-colors"
                 style={{
@@ -1019,21 +1040,28 @@ export function MarketplaceView() {
                       ? 'var(--c-bg-3)'
                       : 'var(--c-accent, #6366f1)',
                   color: selectedItem.status === 'coming_soon' ? 'var(--c-text-5)' : '#fff',
-                  cursor: selectedItem.status === 'coming_soon' ? 'default' : 'pointer',
+                  cursor:
+                    selectedItem.status === 'coming_soon' || activating ? 'default' : 'pointer',
+                  opacity: activating ? 0.7 : 1,
                 }}
               >
                 {selectedItem.status === 'coming_soon'
                   ? 'Coming Soon'
-                  : selectedType === 'bundle'
-                    ? 'Subscribe'
-                    : selectedType === 'agent'
-                      ? 'Activate Agent'
-                      : 'Activate'}
+                  : activating
+                    ? 'Activating…'
+                    : selectedItem.activated
+                      ? 'Re-activate'
+                      : selectedType === 'bundle'
+                        ? 'Subscribe'
+                        : selectedType === 'agent'
+                          ? 'Activate Agent'
+                          : 'Activate'}
               </button>
               <button
                 onClick={() => {
                   setSelectedItem(null);
                   setDetail(null);
+                  setActivateMsg(null);
                 }}
                 className="px-4 py-2 rounded-lg text-[12px] transition-colors"
                 style={{
@@ -1045,6 +1073,19 @@ export function MarketplaceView() {
                 Close
               </button>
             </div>
+            {activateMsg && (
+              <div
+                className="mt-2 text-[11px] rounded-lg px-3 py-2"
+                style={{
+                  background: 'var(--c-bg-2)',
+                  color: activateMsg.ok ? 'var(--c-success, #16a34a)' : 'var(--c-danger, #dc2626)',
+                  border: '1px solid var(--c-border-2)',
+                }}
+              >
+                {activateMsg.ok ? '✅ ' : '⚠️ '}
+                {activateMsg.text}
+              </div>
+            )}
           </div>
         </div>
       )}
